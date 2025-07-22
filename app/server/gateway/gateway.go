@@ -502,7 +502,7 @@ func (g Gateway) ShiftExpiredTreasures(ctx context.Context, in *hydrapb.ShiftExp
 	if howMany == 0 {
 		// set the howMany to the default value because it is zero and if the value is zero, the user wants ALL the
 		// expired treasures
-		howMany = 1000000000
+		howMany = 1000000000 // 1 billion, this is a very large number, so it will return all the expired treasures
 	}
 
 	// clone and delete the expired treasures from the swamp

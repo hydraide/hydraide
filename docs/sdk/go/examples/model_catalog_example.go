@@ -25,7 +25,29 @@ type CatalogCreditLog struct {
 	// - Primitive types: string, bool, int8–64, uint8–64, float32, float64
 	// - Structs (encoded via GOB)
 	// - Pointer to struct (also GOB-encoded)
+	//
 	// ⚠️ Use the SMALLEST type possible for space efficiency.
+	//
+	// ⚠️ DO NOT use `any` / `interface{}` types without a concrete underlying type!
+	//    HydrAIDE requires serializable, type-safe values. All values must have:
+	//    - A concrete Go type (e.g. `*MyStruct`, `map[string]int`)
+	//    - A known GOB encoding path (automatically handled for structs and pointers)
+	//
+	// ❌ This will NOT work:
+	//     Value any `hydraide:"value"`               // ❌ rejected: type unknown at runtime
+	//
+	// ✅ This will work:
+	//     Value *MyStruct `hydraide:"value"`         // ✅ pointer to struct
+	//     Value MyStruct  `hydraide:"value"`         // ✅ struct value
+	//     Value string     `hydraide:"value"`        // ✅ primitive
+	//
+	// 💡 If you need to store dynamic or unknown structure data:
+	//    - Serialize it to JSON and store it as a string:
+	//         Value string `hydraide:"value"`  // JSON string payload
+	//    - Or encode it into a custom binary format and store it as []byte:
+	//         Value []byte `hydraide:"value"`  // custom binary blob
+	//
+	// ❗ HydrAIDE does not support raw interface{} storage — values must always be strongly typed.
 	Log struct {
 		Amount   int16  // ✅ Small integer: better memory & disk usage than int
 		Reason   string // Reason for the credit log (e.g. "bonus")
@@ -33,8 +55,22 @@ type CatalogCreditLog struct {
 	} `hydraide:"value"`
 
 	// ⏳ OPTIONAL
-	// The logical expiration of this entry.
-	// Must be a valid non-zero time.Time.
+	// The logical expiration timestamp of this Treasure.
+	//
+	// When set, this field indicates when the data is considered "expired"
+	// and eligible for deletion or TTL-based operations like CatalogShiftExpired.
+	//
+	// ❗IMPORTANT:
+	//   - Must be a valid, non-zero `time.Time`
+	//   - Strongly recommended to set it in **UTC**, e.g., using `time.Now().UTC()`
+	//   - HydrAIDE internally compares expiration using `time.Now().UTC()`
+	//   - If the given value is in a different timezone, HydrAIDE will automatically convert it to UTC,
+	//     but relying on implicit conversion is discouraged to avoid logic errors or timezone drift
+	//
+	// ✅ Example:
+	//   ExpireAt: time.Now().UTC().Add(10 * time.Minute)
+	//
+	// If omitted or zero, this Treasure is considered non-expirable.
 	ExpireAt time.Time `hydraide:"expireAt"`
 
 	// 🧾 OPTIONAL METADATA — useful for tracking/audit purposes

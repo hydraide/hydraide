@@ -66,6 +66,7 @@ type Hydraidego interface {
 	CatalogSave(ctx context.Context, swampName name.Name, model any) (eventStatus EventStatus, err error)
 	CatalogSaveMany(ctx context.Context, swampName name.Name, models []any, iterator CatalogSaveManyIteratorFunc) error
 	CatalogSaveManyToMany(ctx context.Context, request []*CatalogManyToManyRequest, iterator CatalogSaveManyToManyIteratorFunc) error
+	CatalogShiftExpired(ctx context.Context, swampName name.Name, howMany int32, model any, iterator CatalogShiftExpiredIteratorFunc) error
 	ProfileSave(ctx context.Context, swampName name.Name, model any) (err error)
 	ProfileRead(ctx context.Context, swampName name.Name, model any) (err error)
 	Count(ctx context.Context, swampName name.Name) (int32, error)
@@ -2021,6 +2022,115 @@ func (h *hydraidego) CatalogSaveManyToMany(ctx context.Context, request []*Catal
 
 	// All operations completed successfully
 	return nil
+}
+
+// CatalogShiftExpiredIteratorFunc is used to stream per-Treasure result feedback in CatalogShiftExpired.
+//
+// Parameters:
+//   - `swampName`: The Swamp in which the key was saved
+//   - `key`: The unique identifier of the Treasure
+//   - `status`: The result of the operation (New, Modified, NothingChanged)
+//
+// Returning an error aborts the entire shift operation immediately.
+type CatalogShiftExpiredIteratorFunc func(model any) error
+
+// CatalogShiftExpired performs a deterministic TTL-based data shift from a single Swamp.
+//
+// This function identifies and extracts expired Treasures from the specified Swamp based on their `expiredAt` metadata,
+// deleting them in the same operation. It acts as a zero-waste, time-sensitive queue popper, ideal for timed workflows,
+// scheduling systems, or real-time cleanup logic.
+//
+// ✅ Use when:
+//   - You want to fetch and delete expired Treasures in one atomic operation
+//   - You’re implementing a time-based queue, delayed job processor, or TTL-backed store
+//   - You want thread-safe, lock-safe logic that ensures exclusive access to expired items
+//
+// ⚙️ Behavior:
+//   - Scans the Swamp for Treasures whose `expiredAt` timestamp has **already passed**
+//   - Requires each Treasure to have a properly defined and set `expireAt` field:
+//     `ExpireAt time.Time \`hydraide:"expireAt"\“
+//   - ⚠️ The `ExpireAt` value **must be set in UTC** — HydrAIDE internally compares using `time.Now().UTC()`
+//   - Shifts (removes) up to `howMany` expired Treasures, ordered by expiry time
+//   - If `howMany == 0`, all expired Treasures are returned and removed
+//   - Returns each expired Treasure as a fully unmarshaled struct (via iterator callback)
+//   - The operation is atomic and **thread-safe**, guaranteeing no double-processing
+//
+// 🛡️ Guarantees:
+//   - No duplicate returns even under concurrent calls
+//   - Deleted Treasures are permanently removed from the Swamp
+//   - Treasures without an `expireAt` field or with a future expiry (based on UTC) are ignored
+//   - Treasures that do not exist or failed unmarshaling are silently skipped
+//
+// 💡 Ideal for implementing:
+//   - Delayed messaging queues
+//   - Expiring session dispatchers
+//   - Time-triggered workflow engines
+//
+// 💬 If the iterator function returns an error, the operation halts immediately.
+//
+// ❌ Will not return Treasures that:
+//   - Lack an `expireAt` field
+//   - Have an `expireAt` value that is in the future **(as measured by `time.Now().UTC()`)**
+func (h *hydraidego) CatalogShiftExpired(ctx context.Context, swampName name.Name, howMany int32, model any, iterator CatalogShiftExpiredIteratorFunc) error {
+
+	// send a ShiftExpiredTreasures request to the HydrAIDE service
+	response, err := h.client.GetServiceClient(swampName).ShiftExpiredTreasures(ctx, &hydraidepbgo.ShiftExpiredTreasuresRequest{
+		IslandID:  swampName.GetIslandID(h.client.GetAllIslands()),
+		SwampName: swampName.Get(),
+		HowMany:   howMany,
+	})
+
+	// Handle gRPC or internal errors with detailed messages
+	if err != nil {
+
+		if s, ok := status.FromError(err); ok {
+			switch s.Code() {
+			case codes.Unavailable:
+				return NewError(ErrCodeConnectionError, errorMessageConnectionError)
+			case codes.DeadlineExceeded:
+				return NewError(ErrCodeCtxTimeout, errorMessageCtxTimeout)
+			case codes.Canceled:
+				return NewError(ErrCodeCtxClosedByClient, errorMessageCtxClosedByClient)
+			case codes.Internal:
+				return NewError(ErrCodeInternalDatabaseError, fmt.Sprintf("%s: %v", errorMessageInternalError, s.Message()))
+			default:
+				return NewError(ErrCodeUnknown, fmt.Sprintf("%s: %v", errorMessageUnknown, err))
+			}
+		}
+
+		// Non-gRPC error
+		return NewError(ErrCodeUnknown, fmt.Sprintf("%s: %v", errorMessageUnknown, err))
+	}
+
+	// Process response and trigger iterator if defined
+	if iterator != nil {
+		// Iterate through each returned Treasure and convert it into a usable model instance
+		for _, treasure := range response.GetTreasures() {
+
+			// Skip non-existent records
+			if treasure.IsExist == false {
+				continue
+			}
+
+			// Create a fresh instance of the model (we clone the type, not the original value)
+			modelValue := reflect.New(reflect.TypeOf(model)).Interface()
+
+			// Unmarshal the Treasure into the model using the internal conversion logic
+			if convErr := convertProtoTreasureToCatalogModel(treasure, modelValue); convErr != nil {
+				return NewError(ErrCodeInvalidModel, convErr.Error())
+			}
+
+			// Pass the result to the user-provided iterator function
+			// If it returns an error, halt iteration and return the error
+			if iterErr := iterator(modelValue); iterErr != nil {
+				return iterErr
+			}
+		}
+	}
+
+	// All operations completed successfully
+	return nil
+
 }
 
 // ProfileSave stores a full profile-like struct in the given Swamp as a set of key-value pairs.

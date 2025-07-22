@@ -32,6 +32,12 @@ import "time"
 //   - Save() will write all non-empty fields to the Swamp
 //   - Load() will populate all matching fields from the Swamp
 //   - You cannot update or retrieve a single field independently
+//
+// ⚠️ DO NOT use `any` / `interface{}` types without a concrete underlying type!
+//
+//	HydrAIDE requires serializable, type-safe values. All values must have:
+//	- A concrete Go type (e.g. `*MyStruct`, `map[string]int`)
+//	- A known GOB encoding path (automatically handled for structs and pointers)
 type ProfileUser struct {
 
 	// UserUUID is typically used to construct the Swamp name.
