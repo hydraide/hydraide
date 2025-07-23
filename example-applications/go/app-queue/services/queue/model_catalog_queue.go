@@ -44,8 +44,8 @@ package queue
 
 import (
 	"errors"
-	"github.com/hydraide/hydraide/example-applications/go/webapp/utils/hydraidehelper"
-	"github.com/hydraide/hydraide/example-applications/go/webapp/utils/repo"
+	"github.com/hydraide/hydraide/example-applications/go/app-queue/utils/hydraidehelper"
+	"github.com/hydraide/hydraide/example-applications/go/app-queue/utils/repo"
 	"github.com/hydraide/hydraide/sdk/go/hydraidego"
 	"github.com/hydraide/hydraide/sdk/go/hydraidego/name"
 	"log/slog"
@@ -128,9 +128,15 @@ func (m *ModelCatalogQueue) LoadExpired(repo repo.Repo, queueName string, howMan
 	// Initialize the return slice to hold expired tasks
 	mcq = make([]*ModelCatalogQueue, 0)
 
-	// Use HydrAIDE's CatalogShiftExpired, which atomically reads + deletes expired Treasures
-	// This operation is thread-safe and uses FIFO ordering for expired entries
-	err = h.CatalogShiftExpired(ctx, modelCatalogName, howMany, m, func(model any) error {
+	// Use HydrAIDE's CatalogShiftExpired, which atomically reads + deletes expired Treasures.
+	// This operation is thread-safe and uses FIFO ordering for expired entries.
+	//
+	// Important:
+	// The third parameter (e.g., ModelCatalogQueue{}) MUST be a non-pointer instance.
+	// It's only used to determine the model type for decoding internally,
+	// so passing a pointer (e.g., &ModelCatalogQueue{}) would cause incorrect type inference
+	// and may break unmarshal logic. Always pass a value, not a pointer.
+	err = h.CatalogShiftExpired(ctx, modelCatalogName, howMany, ModelCatalogQueue{}, func(model any) error {
 
 		// Convert the generic returned model into our typed ModelCatalogQueue
 		queueTask, ok := model.(*ModelCatalogQueue)
@@ -167,6 +173,24 @@ func (m *ModelCatalogQueue) Count(repo repo.Repo, queueName string) int {
 		return 0
 	}
 	return int(elements)
+}
+
+// DestroyQueue completely removes a queue (Swamp) from HydrAIDE, including all its data.
+// Primarily intended for cleanup in testing environments or temporary systems.
+func (m *ModelCatalogQueue) DestroyQueue(repo repo.Repo, queueName string) error {
+	// Access the HydrAIDE SDK instance
+	h := repo.GetHydraidego()
+
+	// Create a bounded Hydra context with a safe timeout
+	ctx, cancelFunc := hydraidehelper.CreateHydraContext()
+	defer cancelFunc()
+
+	// Destroy the entire Swamp — this deletes all Treasures and removes the folder from disk
+	// The Swamp will also be unloaded from memory immediately
+	if err := h.Destroy(ctx, m.createModelCatalogQueueSwampName(queueName)); err != nil {
+		return err
+	}
+	return nil
 }
 
 // RegisterPattern registers the Swamp pattern for all queues in HydrAIDE.
@@ -211,24 +235,6 @@ func (m *ModelCatalogQueue) RegisterPattern(repo repo.Repo) error {
 		return hydraidehelper.ConcatErrors(errorResponses)
 	}
 
-	return nil
-}
-
-// DestroyQueue completely removes a queue (Swamp) from HydrAIDE, including all its data.
-// Primarily intended for cleanup in testing environments or temporary systems.
-func (m *ModelCatalogQueue) DestroyQueue(repo repo.Repo, queueName string) error {
-	// Access the HydrAIDE SDK instance
-	h := repo.GetHydraidego()
-
-	// Create a bounded Hydra context with a safe timeout
-	ctx, cancelFunc := hydraidehelper.CreateHydraContext()
-	defer cancelFunc()
-
-	// Destroy the entire Swamp — this deletes all Treasures and removes the folder from disk
-	// The Swamp will also be unloaded from memory immediately
-	if err := h.Destroy(ctx, m.createModelCatalogQueueSwampName(queueName)); err != nil {
-		return err
-	}
 	return nil
 }
 

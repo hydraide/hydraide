@@ -2,7 +2,7 @@ package queue
 
 import (
 	"fmt"
-	"github.com/hydraide/hydraide/example-applications/go/webapp/utils/repo"
+	"github.com/hydraide/hydraide/example-applications/go/app-queue/utils/repo"
 	"github.com/hydraide/hydraide/sdk/go/hydraidego/client"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
@@ -24,7 +24,10 @@ func (s *TestModelCatalogQueue) SetupSuite() {
 	// to verify whether the connection is properly established.
 	s.repoInterface = repo.New([]*client.Server{
 		{
-			// The Hydraidego SDK requires the server address where HydrAIDE is running
+			// The Hydraidego SDK requires the server address where HydrAIDE is running.
+			// This can be a hostname or IP address with port, e.g., "localhost:5444".
+			// If you're using Docker and mapped the internal 4444 port to 5444 on the host,
+			// then use "localhost:5444" or "remote-ip:5444" as the HYDRA_HOST value.
 			Host: os.Getenv("HYDRA_HOST"),
 
 			// FromIsland and ToIsland are required parameters for the Hydraidego SDK.
@@ -33,13 +36,15 @@ func (s *TestModelCatalogQueue) SetupSuite() {
 			FromIsland: 1,
 			ToIsland:   100,
 
-			// This is the path to the client certificate (typically ca.crt),
-			// which is required by Hydraidego for establishing a secure connection.
-			// To generate the certificate, refer to the install guide and use
-			// the certificate generation script provided with the installation.
+			// This is the path to the client certificate file (typically ca.crt),
+			// which is required by Hydraidego to establish a secure TLS connection.
+			// The value of HYDRA_CERT must include the full filename and extension, e.g.:
+			// "/etc/hydraide/certs/ca.crt"
+			// For generating the certificate, refer to the install guide and use
+			// the official script provided during HydrAIDE installation.
 			CertFilePath: os.Getenv("HYDRA_CERT"),
 		},
-	}, 100, 10485760, true)
+	}, 100, 10485760, false)
 
 	// Register the model in the HydraIDE test database that we want to test
 	mcq := &ModelCatalogQueue{}
@@ -55,10 +60,8 @@ func (s *TestModelCatalogQueue) SetupSuite() {
 }
 
 func (s *TestModelCatalogQueue) TearDownSuite() {
-
 	// Destroy the test Swamp at the end of the test suite
 	nonExpiredTask := &ModelCatalogQueue{}
-
 	// Delete the entire queue named "testQueue"
 	err := nonExpiredTask.DestroyQueue(s.repoInterface, "testQueue")
 	assert.Nil(s.T(), err)
@@ -68,11 +71,11 @@ func (s *TestModelCatalogQueue) TestQueueOperations() {
 
 	// creates 5 new tasks. 2 of them are expired, 3 of them are not.
 	tasks := []*ModelCatalogQueue{
-		{TaskUUID: "task1", TaskData: []byte(`{"info": "data1"}`), ExpireAt: time.Now().UTC().Add(-time.Minute * 2)},
-		{TaskUUID: "task2", TaskData: []byte(`{"info": "data2"}`), ExpireAt: time.Now().UTC().Add(-time.Minute * 1)},
-		{TaskUUID: "task3", TaskData: []byte(`{"info": "data3"}`), ExpireAt: time.Now().UTC().Add(time.Hour)},
-		{TaskUUID: "task4", TaskData: []byte(`{"info": "data4"}`), ExpireAt: time.Now().UTC().Add(2 * time.Hour)},
-		{TaskUUID: "task5", TaskData: []byte(`{"info": "data5"}`), ExpireAt: time.Now().UTC().Add(3 * time.Hour)},
+		{TaskUUID: "task1", TaskData: []byte(`{"info": "data1"}`), ExpireAt: time.Now().Add(-time.Minute * 2)},
+		{TaskUUID: "task2", TaskData: []byte(`{"info": "data2"}`), ExpireAt: time.Now().Add(-time.Minute * 1)},
+		{TaskUUID: "task3", TaskData: []byte(`{"info": "data3"}`), ExpireAt: time.Now().Add(time.Hour)},
+		{TaskUUID: "task4", TaskData: []byte(`{"info": "data4"}`), ExpireAt: time.Now().Add(2 * time.Hour)},
+		{TaskUUID: "task5", TaskData: []byte(`{"info": "data5"}`), ExpireAt: time.Now().Add(3 * time.Hour)},
 	}
 
 	queueName := "testQueue"
@@ -83,9 +86,14 @@ func (s *TestModelCatalogQueue) TestQueueOperations() {
 		assert.Nil(s.T(), err)
 	}
 
+	counter := &ModelCatalogQueue{}
+	// Count the number of tasks in the queue
+	count := counter.Count(s.repoInterface, queueName)
+	assert.Equal(s.T(), 5, count)
+
 	// load expired tasks from the queue
 	loadedTask := &ModelCatalogQueue{}
-	tasks, err := loadedTask.LoadExpired(s.repoInterface, queueName, 2)
+	tasks, err := loadedTask.LoadExpired(s.repoInterface, queueName, 0)
 
 	for _, task := range tasks {
 		slog.Info("task loaded",

@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   hydraide-test-server:
     image: ghcr.io/hydraide/hydraide:latest  # Pulls the latest HydrAIDE image from GitHub Container Registry

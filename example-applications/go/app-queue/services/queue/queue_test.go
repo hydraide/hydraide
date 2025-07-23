@@ -2,7 +2,7 @@ package queue
 
 import (
 	"fmt"
-	"github.com/hydraide/hydraide/example-applications/go/webapp/utils/repo"
+	"github.com/hydraide/hydraide/example-applications/go/app-queue/utils/repo"
 	"github.com/hydraide/hydraide/sdk/go/hydraidego/client"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
@@ -26,7 +26,10 @@ func (s *TestQueueService) SetupSuite() {
 	// to verify whether the connection is properly established.
 	s.repoInterface = repo.New([]*client.Server{
 		{
-			// The Hydraidego SDK requires the server address where HydrAIDE is running
+			// The Hydraidego SDK requires the server address where HydrAIDE is running.
+			// This can be a hostname or IP address with port, e.g., "localhost:5444".
+			// If you're using Docker and mapped the internal 4444 port to 5444 on the host,
+			// then use "localhost:5444" or "remote-ip:5444" as the HYDRA_HOST value.
 			Host: os.Getenv("HYDRA_HOST"),
 
 			// FromIsland and ToIsland are required parameters for the Hydraidego SDK.
@@ -35,18 +38,22 @@ func (s *TestQueueService) SetupSuite() {
 			FromIsland: 1,
 			ToIsland:   100,
 
-			// This is the path to the client certificate (typically ca.crt),
-			// which is required by Hydraidego for establishing a secure connection.
-			// To generate the certificate, refer to the install guide and use
-			// the certificate generation script provided with the installation.
+			// This is the path to the client certificate file (typically ca.crt),
+			// which is required by Hydraidego to establish a secure TLS connection.
+			// The value of HYDRA_CERT must include the full filename and extension, e.g.:
+			// "/etc/hydraide/certs/ca.crt"
+			// For generating the certificate, refer to the install guide and use
+			// the official script provided during HydrAIDE installation.
 			CertFilePath: os.Getenv("HYDRA_CERT"),
 		},
-	}, 100, 10485760, true)
+	}, 100, 10485760, false)
 
+	// create a name for the queue
 	s.queueName = "queueServiceTestQueue"
+	// destroy the queue if it exists
 	mcu := &ModelCatalogQueue{}
 	if err := mcu.DestroyQueue(s.repoInterface, s.queueName); err != nil {
-		log.Fatal(err)
+		slog.Error("Failed to destroy test queue", "error", err)
 	}
 
 }
@@ -71,28 +78,30 @@ func (s *TestQueueService) TestQueueService() {
 		Message  string
 	}
 
-	// Létrehozunk 5 feladatot, 2 lejárt és 3 nem lejárt határidővel
+	// create 3 tasks
 	tasks := []*Task{
 		{"first command", "1", "first message"},
 		{"second command", "2", "second message"},
 		{"third command", "3", "third message"},
 	}
 
-	// Feladatok mentése a queue-ba
+	// save tasks into the queue
 	for _, task := range tasks {
 		taskId, err := qs.Add(s.queueName, task, time.Now())
 		assert.NotNil(s.T(), taskId)
 		assert.Nil(s.T(), err)
 	}
 
-	time.Sleep(2000 * time.Millisecond)
+	// wait for the task expiration to 2 seconds
+	// it means, there will be 2 expired tasks and 1 non-expired task
+	time.Sleep(2 * time.Second)
 
 	loadedTasks, err := qs.Get(s.queueName, Task{}, 2)
 	assert.Equal(s.T(), 2, len(loadedTasks))
 	assert.Nil(s.T(), err)
 
 	for taskUUID, task := range loadedTasks {
-		fmt.Println(taskUUID, task)
+		assert.NotEmpty(s.T(), taskUUID)
 		assert.NotNil(s.T(), task)
 		// check if the task type is *Task
 		_, ok := task.(*Task)
@@ -118,7 +127,7 @@ func (s *TestQueueService) TestQueueServiceAddMany() {
 		task := &Task{
 			fmt.Sprintf("task %d", i),
 			"1",
-			"first message",
+			fmt.Sprintf("message %d", i),
 		}
 
 		taskUUID, err := qs.Add(s.queueName, task, time.Now())
@@ -142,7 +151,7 @@ func (s *TestQueueService) TestQueueServiceAddMany() {
 
 	// try to ge all tasks from the queue
 	loadedTasks, err := qs.Get(s.queueName, Task{}, allTasks)
-	assert.Equal(s.T(), allTasks, len(loadedTasks))
+	assert.Equal(s.T(), allTasks, int32(len(loadedTasks)))
 	assert.Nil(s.T(), err)
 
 	// count the tasks

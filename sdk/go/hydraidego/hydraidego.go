@@ -2048,12 +2048,18 @@ type CatalogShiftExpiredIteratorFunc func(model any) error
 // ⚙️ Behavior:
 //   - Scans the Swamp for Treasures whose `expiredAt` timestamp has **already passed**
 //   - Requires each Treasure to have a properly defined and set `expireAt` field:
-//     `ExpireAt time.Time \`hydraide:"expireAt"\“
+//     `ExpireAt time.Time ` + "`hydraide:\"expireAt\"`"
 //   - ⚠️ The `ExpireAt` value **must be set in UTC** — HydrAIDE internally compares using `time.Now().UTC()`
 //   - Shifts (removes) up to `howMany` expired Treasures, ordered by expiry time
 //   - If `howMany == 0`, all expired Treasures are returned and removed
 //   - Returns each expired Treasure as a fully unmarshaled struct (via iterator callback)
 //   - The operation is atomic and **thread-safe**, guaranteeing no double-processing
+//
+// 📦 `model` usage:
+//   - This must be a **non-pointer, empty struct instance**, e.g. `ModelCatalogQueue{}`
+//   - It is used internally to infer the type to which expired Treasures should be unmarshaled
+//   - ❌ Passing a pointer (e.g. `&ModelCatalogQueue{}`) will break internal decoding and must be avoided
+//   - ✅ Always pass the same struct type here that was used when saving the original Treasure
 //
 // 🛡️ Guarantees:
 //   - No duplicate returns even under concurrent calls
@@ -4078,7 +4084,7 @@ func convertProtoTreasureToCatalogModel(treasure *hydraidepbgo.Treasure, model a
 
 	v := reflect.ValueOf(model)
 	if v.Kind() != reflect.Ptr || v.Elem().Kind() != reflect.Struct {
-		return errors.New("input must be a pointer to a struct")
+		return errors.New("input must be a pointer to a struct at convertProtoTreasureToCatalogModel")
 	}
 
 	t := v.Elem().Type()
