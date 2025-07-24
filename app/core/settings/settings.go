@@ -4,13 +4,15 @@ package settings
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"path"
+	"path/filepath"
+	"sync"
+	"time"
+
 	"github.com/hydraide/hydraide/app/core/settings/setting"
 	"github.com/hydraide/hydraide/app/name"
 	log "github.com/sirupsen/logrus"
-	"os"
-	"path"
-	"sync"
-	"time"
 )
 
 // Settings is the interface for managing configuration settings
@@ -35,10 +37,13 @@ type Settings interface {
 }
 
 const (
-	hydraDataFolderPath     = "/hydraide/data"
-	hydraSettingsFolderPath = "/hydraide/settings"
-	fileName                = "settings.json"
-	writetestFile           = "writetest"
+	fileName      = "settings.json"
+	writetestFile = "writetest"
+)
+
+var (
+	hydraDataFolderPath     = ""
+	hydraSettingsFolderPath = ""
 )
 
 type settings struct {
@@ -76,6 +81,9 @@ func New(maxDepthOfFolders int, maxFoldersPerLevel int) Settings {
 
 	// ellenőrizzük, hogy az alapvető mentési könyvtárak léteznek-e és írhatóak-e
 	// ha nem léteznek, akkor létrehozzuk azokat írható formában
+	hydraDataFolderPath = filepath.Join(os.Getenv("HYDRAIDE_ROOT_PATH"), "data")
+	hydraSettingsFolderPath = filepath.Join(os.Getenv("HYDRAIDE_ROOT_PATH"), "settings")
+
 	checkFolder(hydraDataFolderPath)
 	checkFolder(hydraSettingsFolderPath)
 
