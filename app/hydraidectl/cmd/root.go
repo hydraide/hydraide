@@ -20,9 +20,11 @@ Usage:
 
 Try:
   hydraidectl init
-  hydraidectl doctor
+  hydraidectl start
   hydraidectl restart
+  hydraidectl stop
   hydraidectl destroy
+  hydraidectl list
 `,
 	Run: func(cmd *cobra.Command, args []string) {
 		_ = cmd.Help()

@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -26,30 +25,6 @@ var initCmd = &cobra.Command{
 		reader := bufio.NewReader(os.Stdin)
 
 		fmt.Println("🚀 Starting HydrAIDE install wizard...\n")
-
-		// Check if Docker is installed and accessible
-		dockerCheck := exec.Command("docker", "version")
-		if err := dockerCheck.Run(); err != nil {
-			fmt.Println("❌ Docker is not installed or not running on this system.")
-			fmt.Println()
-			fmt.Println("HydrAIDE is installed and managed as a Docker container.")
-			fmt.Println("The 'hydractl init' wizard launches this container automatically —")
-			fmt.Println("but we could not detect a working Docker environment.")
-			fmt.Println()
-			fmt.Println("👉 Please install and start Docker before continuing.")
-			fmt.Println("Without it, the installation cannot proceed.")
-			return
-		}
-
-		// Check if OpenSSL is installed
-		opensslCheck := exec.Command("openssl", "version")
-		if err := opensslCheck.Run(); err != nil {
-			fmt.Println("❌ OpenSSL is not installed or not found in your PATH.")
-			fmt.Println()
-			fmt.Println("HydrAIDE uses TLS for secure communication, and requires OpenSSL to generate the server certificate.")
-			fmt.Println("Please install OpenSSL and make sure it is accessible via command line before continuing.")
-			return
-		}
 
 		var cert CertConfig
 
@@ -135,6 +110,8 @@ var initCmd = &cobra.Command{
 			basePath = "/mnt/hydraide"
 		}
 
+		// todo: get information for the .env file
+
 		// configuration summary
 		fmt.Println("\n🔧 Configuration Summary:")
 		fmt.Println("  • CN:         ", cert.CN)
@@ -154,6 +131,8 @@ var initCmd = &cobra.Command{
 		fmt.Println("  • Port:       ", port)
 		fmt.Println("  • Base Path:  ", basePath)
 
+		// todo: print the .env file content
+
 		fmt.Print("\n✅ Proceed with installation? (y/n): ")
 		confirm, _ := reader.ReadString('\n')
 		confirm = strings.ToLower(strings.TrimSpace(confirm))
@@ -162,16 +141,17 @@ var initCmd = &cobra.Command{
 			return
 		}
 
-		// [IDE JÖN A KÖVETKEZŐ LÉPÉS: cert-generálás, fájlírás, docker compose, futtatás]
 		fmt.Println("\n✅ Starting installation...")
 
-		// step 1 create the necessary directories
+		// todo: start the instance installation process
 
-		// step 2 generate the TLS certificate to the temp folder
-
-		// step 3 copy the cert files to the given base path
-
-		// step 4 install the docker container
+		// - todo: create the necessary directories
+		// - todo: generate the TLS certificate
+		// - todo: copy the server and client TLS certificate to the certificate directory
+		// - todo: create the .env file (based on the .env_sample) to base path and fill in the values
+		// - todo: download the latest binary (or the tagged one) from the github releases
+		// - todo: create a service file based on the user's operating system
+		// - todo: start the service
 
 	},
 }
