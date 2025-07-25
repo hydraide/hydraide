@@ -10,7 +10,7 @@ import (
 	"github.com/hydraide/hydraide/app/core/hydra/swamp/treasure/guard"
 	"github.com/hydraide/hydraide/app/core/hydra/swamp/vigil"
 	"github.com/hydraide/hydraide/app/name"
-	log "github.com/sirupsen/logrus"
+	"log/slog"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -2433,7 +2433,7 @@ func (s *swamp) buildBeacon(beaconASC beacon.Beacon, beaconDESC beacon.Beacon, b
 		}
 		if err != nil {
 			beaconASC.SetInitialized(false)
-			log.WithField("error", err).Error("failed to sort keyBeaconASC")
+			slog.Error("failed to sort keyBeaconASC", "error", err)
 		}
 	}
 
@@ -2477,7 +2477,7 @@ func (s *swamp) buildBeacon(beaconASC beacon.Beacon, beaconDESC beacon.Beacon, b
 		}
 		if err != nil {
 			beaconDESC.SetInitialized(false)
-			log.WithField("error", err).Error("failed to sort keyBeaconDESC")
+			slog.Error("failed to sort keyBeaconDESC", "error", err)
 		}
 	}
 
@@ -2492,12 +2492,12 @@ func (s *swamp) addToKeyBeacon(treasureInterface treasure.Treasure) {
 	s.keyBeaconASC.Add(treasureInterface)
 	err := s.keyBeaconASC.SortByKeyAsc()
 	if err != nil {
-		log.WithField("error", err).Error("failed to sort keyBeaconASC")
+		slog.Error("failed to sort keyBeaconASC", "error", err)
 	}
 	s.keyBeaconDESC.Add(treasureInterface)
 	err = s.keyBeaconDESC.SortByKeyDesc()
 	if err != nil {
-		log.WithField("error", err).Error("failed to sort keyBeaconDESC")
+		slog.Error("failed to sort keyBeaconDESC", "error", err)
 	}
 }
 
@@ -2512,12 +2512,12 @@ func (s *swamp) addToCreationTimeBeacon(treasureInterface treasure.Treasure) {
 	s.creationTimeBeaconASC.Add(treasureInterface)
 	err := s.creationTimeBeaconASC.SortByCreationTimeAsc()
 	if err != nil {
-		log.WithField("error", err).Error("failed to sort creationTimeBeaconASC")
+		slog.Error("failed to sort creationTimeBeaconASC", "error", err)
 	}
 	s.creationTimeBeaconDESC.Add(treasureInterface)
 	err = s.creationTimeBeaconDESC.SortByCreationTimeDesc()
 	if err != nil {
-		log.WithField("error", err).Error("failed to sort creationTimeBeaconDESC")
+		slog.Error("failed to sort creationTimeBeaconDESC", "error", err)
 	}
 }
 func (s *swamp) addToUpdateTimeBeacon(treasureInterface treasure.Treasure) {
@@ -2529,12 +2529,12 @@ func (s *swamp) addToUpdateTimeBeacon(treasureInterface treasure.Treasure) {
 	s.updateTimeBeaconASC.Add(treasureInterface)
 	err := s.updateTimeBeaconASC.SortByUpdateTimeAsc()
 	if err != nil {
-		log.WithField("error", err).Error("failed to sort updateTimeBeaconASC")
+		slog.Error("failed to sort updateTimeBeaconASC", "error", err)
 	}
 	s.updateTimeBeaconDESC.Add(treasureInterface)
 	err = s.updateTimeBeaconDESC.SortByUpdateTimeDesc()
 	if err != nil {
-		log.WithField("error", err).Error("failed to sort updateTimeBeaconDESC")
+		slog.Error("failed to sort updateTimeBeaconDESC", "error", err)
 	}
 
 }
@@ -2547,13 +2547,13 @@ func (s *swamp) addToExpirationTimeBeacon(treasureInterface treasure.Treasure) {
 	s.expirationTimeBeaconASC.Add(treasureInterface)
 	err := s.expirationTimeBeaconASC.SortByExpirationTimeAsc()
 	if err != nil {
-		log.WithField("error", err).Error("failed to sort expirationTimeBeaconASC")
+		slog.Error("failed to sort expirationTimeBeaconASC", "error", err)
 	}
 
 	s.expirationTimeBeaconDESC.Add(treasureInterface)
 	err = s.expirationTimeBeaconDESC.SortByExpirationTimeDesc()
 	if err != nil {
-		log.WithField("error", err).Error("failed to sort expirationTimeBeaconDESC")
+		slog.Error("failed to sort expirationTimeBeaconDESC", "error", err)
 	}
 
 }
@@ -2566,12 +2566,12 @@ func (s *swamp) addToValueBeacon(treasureInterface treasure.Treasure) {
 	s.valueBeaconASC.Add(treasureInterface)
 	err := s.valueBeaconASC.SortByValueInt64ASC()
 	if err != nil {
-		log.WithField("error", err).Error("failed to sort valueIntBeaconASC")
+		slog.Error("failed to sort valueIntBeaconASC", "error", err)
 	}
 	s.valueBeaconDESC.Add(treasureInterface)
 	err = s.valueBeaconDESC.SortByValueInt64DESC()
 	if err != nil {
-		log.WithField("error", err).Error("failed to sort valueIntBeaconDESC")
+		slog.Error("failed to sort valueIntBeaconDESC", "error", err)
 	}
 }
 

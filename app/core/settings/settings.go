@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"github.com/hydraide/hydraide/app/core/settings/setting"
 	"github.com/hydraide/hydraide/app/name"
-	log "github.com/sirupsen/logrus"
+	"log/slog"
 	"os"
 	"path"
 	"sync"
@@ -90,9 +90,7 @@ func New(maxDepthOfFolders int, maxFoldersPerLevel int) Settings {
 
 	// load the saved settings from the filesystem at the startup
 	if err := t.loadSettingsFromFilesystem(); err != nil {
-		log.WithFields(log.Fields{
-			"error": err,
-		}).Error("failed to load settings from filesystem")
+		slog.Error("failed to load settings from filesystem", "error", err)
 	}
 
 	return t
@@ -183,16 +181,12 @@ func (s *settings) RegisterPattern(pattern name.Name, inMemorySwamp bool, closeA
 		s.model.Patterns[pattern.Get()] = pm
 
 		if err := s.SaveSettingsToFilesystem(); err != nil {
-			log.WithFields(log.Fields{
-				"error": err.Error(),
-			}).Error("failed to save settings to filesystem")
+			slog.Error("failed to save settings to filesystem", "error", err)
 		}
 
 	}()
 
-	log.WithFields(log.Fields{
-		"pattern": pattern.Get(),
-	}).Info("swamp pattern registered")
+	slog.Info("swamp pattern registered", "pattern", pattern.Get())
 
 }
 
@@ -207,9 +201,7 @@ func (s *settings) DeregisterPattern(pattern name.Name) {
 		defer s.modelMutex.Unlock()
 		delete(s.model.Patterns, pattern.Get())
 		if err := s.SaveSettingsToFilesystem(); err != nil {
-			log.WithFields(log.Fields{
-				"error": err.Error(),
-			}).Error("failed to save settings to filesystem")
+			slog.Error("failed to save settings to filesystem", "error", err)
 		}
 	}()
 
@@ -298,9 +290,7 @@ func (s *settings) loadSettingsFromFilesystem() error {
 	}
 
 	// Debug: Print the raw JSON data read from the file
-	log.WithFields(log.Fields{
-		"mainSettings": string(formattedSettings),
-	}).Info("main settings loaded from filesystem successfully")
+	slog.Info("main settings loaded from filesystem successfully", "mainSettings", string(formattedSettings))
 
 	// visszatöltjük a beállításokat a memóriába
 	if s.model != nil {
@@ -334,29 +324,21 @@ func (s *settings) loadSettingsFromFilesystem() error {
 func checkFolder(folderPath string) {
 	// ellenőrizzük, hogy a folder létezik-e és írható-e
 	if _, err := os.Stat(folderPath); os.IsNotExist(err) {
-		log.WithFields(log.Fields{
-			"folder": folderPath,
-		}).Info("Hydra folder does not exist")
+		slog.Info("Hydra folder does not exist", "folder", folderPath)
 		// létrehozzuk a foldert minden subfolderrel együtt
 		if err := os.MkdirAll(folderPath, 0755); err != nil {
-			log.WithFields(log.Fields{
-				"error":  err,
-				"folder": folderPath,
-			}).Fatal("failed to create Hydra folder")
+			slog.Error("failed to create Hydra folder", "folder", folderPath, "error", err)
+			panic("failed to create Hydra folder")
 		}
 	}
 	// ellenőrizzük, hogy a folder írható-e
 	if err := os.WriteFile(path.Join(folderPath, writetestFile), []byte("test"), 0644); err != nil {
-		log.WithFields(log.Fields{
-			"error":  err,
-			"folder": folderPath,
-		}).Fatal("Hydraide folder is not writable")
+		slog.Error("Hydraide folder is not writable", "folder", folderPath, "error", err)
+		panic("Hydraide folder is not writable")
 	}
 	// töröljük a teszt fájlt
 	if err := os.Remove(path.Join(folderPath, writetestFile)); err != nil {
-		log.WithFields(log.Fields{
-			"error":  err,
-			"folder": folderPath,
-		}).Fatal("failed to remove test file")
+		slog.Error("failed to remove test file", "error", err, "folder", folderPath)
+		panic("failed to remove test file")
 	}
 }

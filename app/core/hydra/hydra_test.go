@@ -10,8 +10,8 @@ import (
 	"github.com/hydraide/hydraide/app/core/safeops"
 	"github.com/hydraide/hydraide/app/core/settings"
 	"github.com/hydraide/hydraide/app/name"
-	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
+	"log/slog"
 	"sync"
 	"testing"
 	"time"
@@ -202,10 +202,7 @@ func TestHydra_SummonSwamp(t *testing.T) {
 
 				swampInterface, err := hydraInterface.SummonSwamp(swampCtx, 10, name.New().Sanctuary(sanctuaryForQuickTest).Realm("test-words-to-domains").Swamp(workingWord))
 				if err != nil {
-					// amikor a hydra leáll, akkor a summon errort ad vissza
-					log.WithFields(log.Fields{
-						"error": err.Error(),
-					}).Error("error while summoning swamp")
+					slog.Error("error while summoning swamp", "error", err)
 					return
 				}
 

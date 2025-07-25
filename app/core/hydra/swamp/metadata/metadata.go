@@ -13,7 +13,7 @@ package metadata
 import (
 	"encoding/gob"
 	"github.com/hydraide/hydraide/app/name"
-	log "github.com/sirupsen/logrus"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
@@ -110,9 +110,7 @@ func (m *metadata) SaveToFile() {
 		return
 	}
 	if err := m.save(); err != nil {
-		log.WithFields(log.Fields{
-			"error": err,
-		}).Error("failed to save metadata to file")
+		slog.Error("failed to save metadata to file", "error", err)
 	}
 }
 
@@ -205,18 +203,14 @@ func (m *metadata) load() {
 
 	defer func() {
 		if err := file.Close(); err != nil {
-			log.WithFields(log.Fields{
-				"error": err,
-			}).Error("failed to close metadata file")
+			slog.Error("failed to close metadata file", "error", err)
 		}
 	}()
 
 	// Unmarshal the GOB encoded file into m.meta
 	decoder := gob.NewDecoder(file)
 	if err := decoder.Decode(&m.meta); err != nil {
-		log.WithFields(log.Fields{
-			"error": err,
-		}).Error("failed to decode metadata from GOB")
+		slog.Error("failed to decode metadata from GOB", "error", err)
 		m.meta = &Meta{KeyValuePairs: make(map[string]string)} // default
 	}
 }
@@ -229,27 +223,20 @@ func (m *metadata) save() error {
 	// IMPORTANT!! We do NOT create the folder structure here — it's the swamp's responsibility to create it.
 	file, err := os.Create(mFile)
 	if err != nil {
-		log.WithFields(log.Fields{
-			"error":         err,
-			"metadata file": mFile,
-		}).Error("failed to create metadata file")
+		slog.Error("failed to create metadata file", "error", err, "metadata_file", mFile)
 		return err
 	}
 
 	defer func() {
 		if err := file.Close(); err != nil {
-			log.WithFields(log.Fields{
-				"error": err,
-			}).Error("failed to close metadata file")
+			slog.Error("failed to close metadata file", "error", err)
 		}
 	}()
 
 	// gob encoder
 	encoder := gob.NewEncoder(file)
 	if err := encoder.Encode(m.meta); err != nil {
-		log.WithFields(log.Fields{
-			"error": err,
-		}).Error("failed to encode metadata to GOB")
+		slog.Error("failed to encode metadata to GOB", "error", err)
 		return err
 	}
 
