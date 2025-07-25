@@ -7,7 +7,7 @@ import (
 	"github.com/hydraide/hydraide/app/core/hydra/lock"
 	"github.com/hydraide/hydraide/app/core/safeops"
 	"github.com/hydraide/hydraide/app/core/settings"
-	log "github.com/sirupsen/logrus"
+	"log/slog"
 	"os"
 )
 
@@ -82,7 +82,7 @@ func (z *zeus) GetHydra() hydra.Hydra {
 
 func (z *zeus) StartHydra() {
 
-	log.Info("Start summoning the Hydra...")
+	slog.Info("HydrAIDE DataEngine is starting...")
 
 	z.safeopsInterface = safeops.New()
 
@@ -90,7 +90,7 @@ func (z *zeus) StartHydra() {
 		for {
 			select {
 			case <-z.safeopsInterface.MonitorPanic():
-				log.Error("Zeus is stopping the hydra because there was a panic in the system")
+				slog.Error("Zeus is stopping the HydrAIDE because there was a panic in the system")
 				z.StopHydra()
 				return
 			}

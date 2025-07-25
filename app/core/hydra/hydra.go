@@ -13,7 +13,7 @@ import (
 	"github.com/hydraide/hydraide/app/core/settings"
 	"github.com/hydraide/hydraide/app/core/settings/setting"
 	"github.com/hydraide/hydraide/app/name"
-	log "github.com/sirupsen/logrus"
+	"log/slog"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -413,9 +413,7 @@ func (h *hydra) SummonSwamp(ctx context.Context, islandID uint64, swampName name
 
 			// we can not wait the summoning to finish, because the caller context is done
 			// maybe this is a very long-running process, and the caller context is done meanwhile
-			log.WithFields(log.Fields{
-				"swampName": swampName,
-			}).Warn("the summoning context is done, summoning is cancelled")
+			slog.Warn("the summoning context is done, summoning is cancelled", "swampName", swampName)
 
 			return nil, errors.New("context is done")
 
@@ -454,10 +452,7 @@ func (h *hydra) SummonSwamp(ctx context.Context, islandID uint64, swampName name
 						// 2. If the swamp is not closing at all, for some reason.
 						// In both cases, the swamp must be discarded, as it cannot be closed and the code cannot proceed.
 						if closeErr := swampObject.WaitForGracefulClose(waitingCtx); closeErr != nil {
-							log.WithFields(log.Fields{
-								"swampName":  swampName,
-								"closeError": closeErr.Error(),
-							}).Error("the swamp can not be closed in 30 seconds, so we need to drop it")
+							slog.Error("the swamp can not be closed in 30 seconds, so we need to drop it", "swampName", swampName, "closeError", closeErr)
 							swampCloseError = err
 							return
 						}
@@ -681,7 +676,7 @@ func (h *hydra) UnsubscribeFromSwampEvents(clientID uuid.UUID, swampName name.Na
 // mutexes: clean
 func (h *hydra) GracefulStop() {
 
-	log.Info("Graceful stop of the hydra executed")
+	slog.Info("Graceful stop of the hydra executed")
 
 	// set the shutting down flag to true and prevent the creation of new swamps
 	// and all public functions will return error, because the hydra is shutting down
@@ -695,7 +690,7 @@ func (h *hydra) GracefulStop() {
 	// start a new routine and close all swamps
 	go h.tryToCloseAllSwamps()
 
-	log.Info("waiting for graceful stop")
+	slog.Info("waiting for graceful stop")
 
 	// wait until all swamps are closed then return
 	iterationCounter := 0
@@ -703,20 +698,19 @@ func (h *hydra) GracefulStop() {
 
 		// check the opened swamps
 		openedSwamps := h.CountActiveSwamps()
-		log.Trace("opened swamps:", openedSwamps)
+
+		slog.Info("opened swamps", "count", openedSwamps)
 
 		// if there is no opened swamps and the there is no process that destroying swamps - kill the server
 		if openedSwamps == 0 {
-			log.Info("all swamps are gracefully closed")
+			slog.Info("all swamps are gracefully closed, hydra is shutting down")
 			return
 		}
 
 		// if we can't close the swamp within 10 seconds....
 		if iterationCounter >= 10 {
 
-			log.WithFields(log.Fields{
-				"activeSwamps": strings.Join(h.ListActiveSwamps(), ", "),
-			}).Error("can not close all swamps within 10 seconds, Force close all swamps")
+			slog.Error("can not close all swamps within 10 seconds, Force close all swamps", "activeSwamps", strings.Join(h.ListActiveSwamps(), ", "))
 
 			go func() {
 				// iterating over the swamps and close them
@@ -728,35 +722,32 @@ func (h *hydra) GracefulStop() {
 					s.StopSendingEvents()
 
 					// log the error, because we can't close the swamp
-					log.WithFields(log.Fields{
-						"SwampName":                 s.GetName(),
-						"SwampIsClosing":            s.IsClosing(),
-						"AllTreasures":              s.CountTreasures(),
-						"TreasuresWaitingForWriter": s.CountTreasuresWaitingForWriter(),
-						"IsFileSystemInitiated":     s.GetChronicler().IsFilesystemInitiated(),
-					}).Error("the swamp still opened and try to write all treasures to the filesystem again")
+					slog.Error("the swamp still opened and try to write all treasures to the filesystem again",
+						"swampName", s.GetName(),
+						"swampIsClosing", s.IsClosing(),
+						"allTreasures", s.CountTreasures(),
+						"treasuresWaitingForWriter", s.CountTreasuresWaitingForWriter(),
+						"isFileSystemInitiated", s.GetChronicler().IsFilesystemInitiated())
 
 					// Write treasures to the filesystem
 					s.WriteTreasuresToFilesystem()
 
-					log.WithFields(log.Fields{
-						"SwampName":                 s.GetName(),
-						"SwampIsClosing":            s.IsClosing(),
-						"AllTreasures":              s.CountTreasures(),
-						"TreasuresWaitingForWriter": s.CountTreasuresWaitingForWriter(),
-						"IsFileSystemInitiated":     s.GetChronicler().IsFilesystemInitiated(),
-					}).Info("the swamp still opened and all treasures are written to the filesystem again, and try to close it again")
+					slog.Info("the swamp still opened and all treasures are written to the filesystem again, and try to close it again",
+						"swampName", s.GetName(),
+						"swampIsClosing", s.IsClosing(),
+						"allTreasures", s.CountTreasures(),
+						"treasuresWaitingForWriter", s.CountTreasuresWaitingForWriter(),
+						"isFileSystemInitiated", s.GetChronicler().IsFilesystemInitiated())
 
 					// try to close it again
 					s.Close()
 
-					log.WithFields(log.Fields{
-						"SwampName":                 s.GetName(),
-						"SwampIsClosing":            s.IsClosing(),
-						"AllTreasures":              s.CountTreasures(),
-						"TreasuresWaitingForWriter": s.CountTreasuresWaitingForWriter(),
-						"IsFileSystemInitiated":     s.GetChronicler().IsFilesystemInitiated(),
-					}).Info("the swamp is closed successfully")
+					slog.Info("the swamp is closed successfully",
+						"swampName", s.GetName(),
+						"swampIsClosing", s.IsClosing(),
+						"allTreasures", s.CountTreasures(),
+						"treasuresWaitingForWriter", s.CountTreasuresWaitingForWriter(),
+						"isFileSystemInitiated", s.GetChronicler().IsFilesystemInitiated())
 
 					return true
 
@@ -781,7 +772,7 @@ func (h *hydra) GracefulStop() {
 
 func (h *hydra) tryToCloseAllSwamps() {
 
-	log.Info("try to closing all open swamps.....")
+	slog.Info("try to closing all open swamps.....")
 
 	// iterating over the swamps and close them
 	h.swamps.Range(func(key, value interface{}) bool {
@@ -908,12 +899,13 @@ func (h *hydra) eventCallbackFunction(event *swamp.Event) {
 		subscribers.(*sync.Map).Range(func(key, value interface{}) bool {
 
 			if value == nil {
-				log.WithFields(log.Fields{
-					"swampName":           swampName,
-					"subscriberID":        key,
-					"eventTreasureKey":    treasureID,
-					"eventOldTreasureKey": oldTreasureID,
-				}).Error("the callback function is nil, this is a bug, the callback function should not be nil")
+
+				slog.Error("the callback function is nil, this is a bug, the callback function should not be nil",
+					"swampName", swampName,
+					"subscriberID", key,
+					"eventTreasureKey", treasureID,
+					"eventOldTreasureKey", oldTreasureID)
+
 				return true
 			}
 
@@ -927,26 +919,27 @@ func (h *hydra) eventCallbackFunction(event *swamp.Event) {
 
 				clientUUID, err := uuid.Parse(key.(string))
 				if err != nil {
-					log.WithFields(log.Fields{
-						"swampName":    swampName,
-						"subscriberID": key,
-					}).Error("can not parse the subscriberID to UUID")
+
+					slog.Error("can not parse the subscriberID to UUID",
+						"swampName", swampName,
+						"subscriberID", key)
+
 					return true
 				}
 
 				// unsubscribe the client from the event channel, because the channel is full or closed
 				if err := h.UnsubscribeFromSwampEvents(clientUUID, event.SwampName); err != nil {
-					log.WithFields(log.Fields{
-						"swampName":    swampName,
-						"subscriberID": key,
-					}).Error("can not unsubscribe the client from the event channel")
+
+					slog.Error("can not unsubscribe the client from the event channel",
+						"swampName", swampName,
+						"subscriberID", key)
+
 					return true
 				}
 
-				log.WithFields(log.Fields{
-					"swampName":    swampName,
-					"subscriberID": key,
-				}).Warning("can not send event to the subscribed user because the callback function is not a func(event *swamp.Event) type. The client forced to unsubscribe from the event channel.")
+				slog.Warn("can not send event to the subscribed user because the callback function is not a func(event *swamp.Event) type. The client forced to unsubscribe from the event channel.",
+					"swampName", swampName,
+					"subscriberID", key)
 
 				return true
 
@@ -966,11 +959,12 @@ func (h *hydra) infoCallbackFunction(si *swamp.Info) {
 		subscribers.(*sync.Map).Range(func(key, value interface{}) bool {
 
 			if value == nil {
-				log.WithFields(log.Fields{
-					"swampName":    si.SwampName,
-					"subscriberID": key,
-					"nfo":          si.AllElements,
-				}).Error("the callback function is nil, this is a bug, the callback function should not be nil")
+
+				slog.Error("the callback function is nil, this is a bug, the callback function should not be nil",
+					"swampName", si.SwampName,
+					"subscriberID", key,
+					"info", si.AllElements)
+
 				return true
 			}
 
@@ -981,24 +975,25 @@ func (h *hydra) infoCallbackFunction(si *swamp.Info) {
 				// unsubscribe the client from the event channel if the swamp is closing
 				clientUUID, err := uuid.Parse(key.(string))
 				if err != nil {
-					log.WithFields(log.Fields{
-						"swampName":    si.SwampName,
-						"subscriberID": key,
-					}).Error("can not parse the subscriberID to UUID")
+
+					slog.Error("can not parse the subscriberID to UUID",
+						"swampName", si.SwampName,
+						"subscriberID", key)
+
 					return true
 				}
 				// unsubscribe the client from the event channel, because the channel is full or closed
 				if err := h.UnsubscribeFromSwampInfo(clientUUID, si.SwampName); err != nil {
-					log.WithFields(log.Fields{
-						"swampName":    si.SwampName,
-						"subscriberID": key,
-					}).Error("can not unsubscribe the client from the swamp informations")
+
+					slog.Error("can not unsubscribe the client from the swamp information",
+						"swampName", si.SwampName,
+						"subscriberID", key)
+
 					return true
 				}
-				log.WithFields(log.Fields{
-					"swampName": si.SwampName,
-				}).Warning("can not send info to the subscribed user because the callback function is not a " +
-					"func(info *swamp.Info) type. The client forced to unsubscribe from the swamp informations.")
+
+				slog.Warn("can not send info to the subscribed user because the callback function is not a func(info *swamp.Info) type. The client forced to unsubscribe from the swamp informations.",
+					"swampName", si.SwampName)
 
 				return true
 

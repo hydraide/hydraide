@@ -14,7 +14,7 @@ import (
 	"github.com/hydraide/hydraide/app/core/hydra/swamp/treasure"
 	"github.com/hydraide/hydraide/app/core/hydra/swamp/treasure/guard"
 	"github.com/hydraide/hydraide/app/name"
-	log "github.com/sirupsen/logrus"
+	"log/slog"
 	"math"
 	"os"
 	"path/filepath"
@@ -118,9 +118,7 @@ func (c *chronicler) CreateDirectoryIfNotExists() {
 	defer c.mu.Unlock()
 
 	if err := c.filesystemInterface.CreateFolder(c.swampDataFolderPath); err != nil {
-		log.WithFields(log.Fields{
-			"error": err,
-		}).Error("can not create the directory for the swamp")
+		slog.Error("can not create the directory for the swamp", "error", err)
 	}
 
 	c.filesystemInitiated = true
@@ -136,17 +134,13 @@ func (c *chronicler) Destroy() {
 	defer c.mu.Unlock()
 
 	if err := c.filesystemInterface.DeleteAllFiles(c.swampDataFolderPath); err != nil {
-		log.WithFields(log.Fields{
-			"error": err,
-		}).Error("can not delete the swamp directory")
+		slog.Error("can not delete the swamp directory", "error", err)
 		return
 	}
 
 	// delete all unnecessary folders from the filesystem
 	if err := c.filesystemInterface.DeleteFolder(c.swampDataFolderPath, c.maxDepth); err != nil {
-		log.WithFields(log.Fields{
-			"error": err,
-		}).Error("can not delete the swamp directory with all empty folders")
+		slog.Error("can not delete the swamp directory with all empty folders", "error", err)
 	}
 
 }
@@ -165,9 +159,7 @@ func (c *chronicler) Load(indexObj beacon.Beacon) {
 
 	contents, err := c.filesystemInterface.GetAllFileContents(c.swampDataFolderPath, metadata.MetaFile)
 	if err != nil {
-		log.WithFields(log.Fields{
-			"error": err,
-		}).Error("can not read the actual file")
+		slog.Error("can not read the actual file", "error", err)
 		return
 	}
 
@@ -304,9 +296,7 @@ func (c *chronicler) writeNewTreasures(newTreasures []treasure.Treasure) {
 
 	// write the data to filesystem
 	if err := c.filesystemInterface.SaveFile(workingFile, byteContent, true); err != nil {
-		log.WithFields(log.Fields{
-			"error": err,
-		}).Error("can not write the new treasures to the filesystem")
+		slog.Error("can not write the new treasures to the filesystem", "error", err)
 		return
 	}
 
@@ -338,9 +328,7 @@ func (c *chronicler) writeModifiedTreasures(fileName string, treasures map[strin
 
 	byteTreasures, err := c.filesystemInterface.GetFile(fp)
 	if err != nil {
-		log.WithFields(log.Fields{
-			"error": err,
-		}).Error("can not read the file")
+		slog.Error("can not read the file", "file absolute path", fp, "error", err)
 		return
 	}
 
@@ -353,9 +341,7 @@ func (c *chronicler) writeModifiedTreasures(fileName string, treasures map[strin
 		loadErr := treasureObject.LoadFromByte(lockerID, treasureData, fileName)
 		treasureObject.ReleaseTreasureGuard(lockerID)
 		if loadErr != nil {
-			log.WithFields(log.Fields{
-				"error": loadErr,
-			}).Error("can not load the treasure from the binary data")
+			slog.Error("can not load the treasure from the binary data", "error", loadErr)
 			continue
 		}
 
@@ -368,9 +354,7 @@ func (c *chronicler) writeModifiedTreasures(fileName string, treasures map[strin
 			modifiedBytes, convertErr := modifiedTreasure.ConvertToByte(treasureGuardID)
 			modifiedTreasure.ReleaseTreasureGuard(treasureGuardID)
 			if convertErr != nil {
-				log.WithFields(log.Fields{
-					"error": convertErr,
-				}).Error("can not convert the modified treasure to byte")
+				slog.Error("can not convert the modified treasure to byte", "error", convertErr)
 				continue
 			}
 
@@ -401,9 +385,7 @@ func (c *chronicler) writeModifiedTreasures(fileName string, treasures map[strin
 
 	// Write the modified treasures back to the file.
 	if err := c.filesystemInterface.SaveFile(fp, modifiedTreasures, false); err != nil {
-		log.WithFields(log.Fields{
-			"error": err,
-		}).Error("can not write the modified treasures to the filesystem")
+		slog.Error("can not write the modified treasures to the filesystem", "error", err, "file absolute path", fp)
 		return
 	}
 
@@ -412,10 +394,7 @@ func (c *chronicler) writeModifiedTreasures(fileName string, treasures map[strin
 func (c *chronicler) deleteFile(filePath string) {
 
 	if err := c.filesystemInterface.DeleteFile(filePath); err != nil {
-		log.WithFields(log.Fields{
-			"error":                err,
-			"folder absolute path": filePath,
-		}).Error("can not delete the file")
+		slog.Error("can not delete the file", "error", err, "file absolute path", filePath)
 	}
 
 }
@@ -424,10 +403,7 @@ func (c *chronicler) decompressFile(fp string) []byte {
 
 	compressedByteContent, err := os.ReadFile(fp)
 	if err != nil {
-		log.WithFields(log.Fields{
-			"error":              err,
-			"file absolute path": fp,
-		}).Panic("can not read the compressed folder")
+		slog.Error("can not read the compressed file", "error", err, "file absolute path", fp)
 		return nil
 	}
 
@@ -440,10 +416,7 @@ func (c *chronicler) decompressFile(fp string) []byte {
 	byteContent, err := compressorInterface.Decompress(compressedByteContent)
 
 	if err != nil {
-		log.WithFields(log.Fields{
-			"error":              err,
-			"file absolute path": fp,
-		}).Panic("can not decompress the compressed folder")
+		slog.Error("can not decompress the compressed file", "error", err, "file absolute path", fp)
 		return nil
 	}
 
@@ -467,9 +440,7 @@ func (c *chronicler) createActualFile() (filePath string) {
 	filePath = filepath.Join(c.swampDataFolderPath, actualFileUUID)
 
 	if err := c.filesystemInterface.SaveFile(filePath, nil, false); err != nil {
-		log.WithFields(log.Fields{
-			"error": err,
-		}).Error("can not create the actual file")
+		slog.Error("can not create the actual file", "error", err, "file absolute path", filePath)
 		return ""
 	}
 

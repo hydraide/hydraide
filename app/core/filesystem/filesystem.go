@@ -20,8 +20,8 @@ import (
 	"encoding/binary"
 	"errors"
 	"github.com/hydraide/hydraide/app/core/compressor"
-	log "github.com/sirupsen/logrus"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
@@ -336,7 +336,7 @@ func (fs *filesystem) GetFile(filePath string) ([][]byte, error) {
 	fileContent, err := io.ReadAll(file)
 	if err != nil {
 		if err := file.Close(); err != nil {
-			log.WithField("file", filePath).Error("Error closing file")
+			slog.Error("Error closing file after read failure", "file", filePath, "error", err.Error())
 		}
 		return nil, err
 	}
@@ -418,10 +418,7 @@ func (fs *filesystem) GetAllFileContents(folderPath string, excludedFiles ...str
 		if err != nil {
 			func() {
 				if closeErr := file.Close(); closeErr != nil {
-					log.WithFields(log.Fields{
-						"file":  filePath,
-						"error": closeErr,
-					}).Error("Error closing file after read failure")
+					slog.Error("Error closing file after read failure", "file", filePath, "error", closeErr.Error())
 				}
 			}()
 
@@ -519,10 +516,7 @@ func encodeBinaryLength(data []byte) []byte {
 	buf := new(bytes.Buffer)
 	// Write length in binary format
 	if err := binary.Write(buf, binary.LittleEndian, length); err != nil {
-		log.WithFields(log.Fields{
-			"error":       err,
-			"data_length": len(data),
-		}).Error("Failed to encode binary length")
+		slog.Error("Failed to encode binary length, returning nil", "error", err.Error(), "data_length", len(data))
 		return nil // Return nil if encoding fails
 	}
 	return buf.Bytes() // Return length bytes
@@ -549,10 +543,7 @@ func (fs *filesystem) deleteIfEmpty(folderPath string) error {
 	}
 	defer func() {
 		if closeErr := dir.Close(); closeErr != nil {
-			log.WithFields(log.Fields{
-				"folder": folderPath,
-				"error":  closeErr,
-			}).Error("Error closing directory after checking emptiness")
+			slog.Error("Error closing directory after checking emptiness", "folder", folderPath, "error", closeErr.Error())
 		}
 	}()
 
