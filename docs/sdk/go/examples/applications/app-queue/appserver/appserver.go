@@ -2,8 +2,8 @@ package appserver
 
 import (
 	"fmt"
-	"github.com/hydraide/hydraide/example-applications/go/app-queue/services/queue"
-	"github.com/hydraide/hydraide/example-applications/go/app-queue/utils/repo"
+	"github.com/hydraide/hydraide/docs/sdk/go/examples/applications/app-queue/services/queue"
+	"github.com/hydraide/hydraide/docs/sdk/go/examples/applications/app-queue/utils/repo"
 	"log/slog"
 	"time"
 )

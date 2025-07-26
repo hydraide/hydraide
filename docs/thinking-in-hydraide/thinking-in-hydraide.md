@@ -90,17 +90,18 @@ HydrAIDE has its own logic, and it pays off to learn the flow before diving into
 
 Here’s the sequence we recommend:
 
-| Step | Topic                                                     | Why It Matters                                          |
-| ---- | --------------------------------------------------------- |---------------------------------------------------------|
-| 1️⃣  | [Naming Convention](./naming-convention.md)               | Structure is defined by naming, not by schema files.    |
-| 2️⃣  | [Swamp Pattern](./swamp-pattern.md)                       | You define how memory, disk, and time interact.         |
-| 3️⃣  | [Treasures](./treasures.md)                               | Learn what lives in a Swamp, and how to control it.     |
-| 4️⃣  | [Indexing](./indexing.md)                                 | Discover how HydrAIDE creates instant, in-memory views. |
-| 5️⃣  | [Subscriptions](./subscriptions.md)                       | Build reactive systems with zero middleware.            |
-| 6️⃣  | [Locking](./locking.md)                                   | Coordinate writes safely across processes.              |
-| 7️⃣  | [Clean System](./clean-system.md)                         | Let go of cleanup scripts, HydrAIDE self-manages.       |
-| 8️⃣  | [Distributed Architecture](./distributed-architecture.md) | Scale by moving folders, not redesigning systems.       |
-| 9️⃣  | [Install & Update](./how-to-install-update-hydraide.md)   | Simple deployment, zero risk updates.                   |
+| Step                                             | Section                                                                               | Description                                                     |
+|--------------------------------------------------|---------------------------------------------------------------------------------------|-----------------------------------------------------------------|
+| 1️⃣                                            | [📍 Naming Convention](/docs/thinking-in-hydraide/naming-convention.md)               | Learn how data structure begins with naming. Not schemas.       |
+| 2️⃣                                           | [🌿 Swamp Pattern](/docs/thinking-in-hydraide/swamp-pattern.md)                       | Configure persistence, memory, and lifespan directly from code. |
+| 3️⃣                                              | [💎 Treasures](/docs/thinking-in-hydraide/treasures.md)                               | Understand the smallest, most powerful unit of data.            |
+| 4️⃣                                              | [🧩 Indexing](/docs/thinking-in-hydraide/indexing.md)                                 | Discover ephemeral, in-memory indexing that feels like magic.   |
+| 5️⃣                                              | [🔄 Subscriptions](/docs/thinking-in-hydraide/subscriptions.md)                       | Build reactive systems natively with HydrAIDE’s event engine.   |
+| 6️⃣                                              | [🔐 Locking](/docs/thinking-in-hydraide/locking.md)                                   | Achieve true concurrency without fear.                          |
+| 7️⃣                                              | [🧹 Clean System](/docs/thinking-in-hydraide/clean-system.md)                         | Never think about cleanup again, because HydrAIDE already did.  |
+| 8️⃣                                              | [🧬 Migration](/docs/thinking-in-hydraide/migration.md)                               | Struct Evolution Without Fear                                                                |
+| 9️⃣                                              | [🌐 Distributed Architecture](/docs/thinking-in-hydraide/distributed-architecture.md) | Scale horizontally without orchestration pain.                  |
+| 🔟 | [🚀 Install & Update](/installation/README.md)                                        | Deploy HydrAIDE in minutes, not days.                           |
 
 You can get through the whole thing in under 90 minutes. And once you do, writing production-grade logic in HydrAIDE becomes natural.
 

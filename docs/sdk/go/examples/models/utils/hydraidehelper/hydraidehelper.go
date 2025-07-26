@@ -6,7 +6,7 @@ package hydraidehelper
 import (
 	"context"
 	"errors"
-	"github.com/hydraide/hydraide/example-applications/go/app-queue/utils/repo"
+	"github.com/hydraide/hydraide/docs/sdk/go/examples/applications/app-queue/utils/repo"
 	log "github.com/sirupsen/logrus"
 	"strings"
 	"time"

@@ -9,7 +9,7 @@ I know you're probably curious about how this works in practice, so let’s star
 HydrAIDE stores all data in structures called **Swamps**.
 A Swamp is basically a **storage unit** (or container), and each one lives in its own folder with its own file structure.
 
-> **Learn more about Swamps** in the [Thinking in HydrAIDE](/docs/thinking-in-hydraide/swamp-pattern.md) section.
+> **Learn more about Swamps** in the [swamp-pattern.md](../../thinking-in-hydraide/swamp-pattern.md) section.
 
 There are two types of Swamps:
 
@@ -378,4 +378,4 @@ func (m *ModelCompanyProfile) createName(domain string) name.Name {
 
 ---
 
-> **Read more about the SDK** in the [Go SDK documentation](/docs/sdk/go/go-sdk.md).
+> **Read more about the SDK** in the [Full Go SDK documentation with implementation examples](go-sdk.md).

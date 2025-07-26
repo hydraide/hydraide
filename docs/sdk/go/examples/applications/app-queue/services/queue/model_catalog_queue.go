@@ -44,8 +44,8 @@ package queue
 
 import (
 	"errors"
-	"github.com/hydraide/hydraide/example-applications/go/app-queue/utils/hydraidehelper"
-	"github.com/hydraide/hydraide/example-applications/go/app-queue/utils/repo"
+	"github.com/hydraide/hydraide/docs/sdk/go/examples/applications/app-queue/utils/hydraidehelper"
+	"github.com/hydraide/hydraide/docs/sdk/go/examples/applications/app-queue/utils/repo"
 	"github.com/hydraide/hydraide/sdk/go/hydraidego"
 	"github.com/hydraide/hydraide/sdk/go/hydraidego/name"
 	"log/slog"
