@@ -30,12 +30,14 @@ repos:
     hooks:
       - id: ruff-check
         files: ^sdk/python/hydraidepy
-        args: [--extend-select, I, --fix]
+        args: [--config, sdk/python/hydraidepy/pyproject.toml, --extend-select, I, --fix]
       - id: ruff-format
         files: ^sdk/python/hydraidepy
+        args: [--config, sdk/python/hydraidepy/pyproject.toml]
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.17.0
     hooks:
       - id: mypy
-        args: [--strict, --ignore-missing-imports]
+        pass_filenames: false
+        args: [sdk/python/hydraidepy/., --strict, --ignore-missing-imports, --config-file, sdk/python/hydraidepy/pyproject.toml]
         files: ^sdk/python/hydraidepy
