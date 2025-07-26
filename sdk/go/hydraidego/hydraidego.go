@@ -387,40 +387,40 @@ func (h *hydraidego) RegisterSwamp(ctx context.Context, request *RegisterSwampRe
 // - Nil if deregistration completes successfully across all relevant servers
 func (h *hydraidego) DeRegisterSwamp(ctx context.Context, swampName name.Name) []error {
 
-	// Container to collect any errors during deregistration.
+	// Container to collect any errors during the deregistration process.
 	allErrors := make([]error, 0)
 
-	// Validate that SwampPattern is provided.
+	// Validate that a SwampPattern (name) is provided.
 	if swampName == nil {
 		allErrors = append(allErrors, fmt.Errorf("SwampPattern is required"))
 		return allErrors
 	}
 
-	// List of servers where the Swamp pattern will be registered.
+	// Determine the list of servers from which the Swamp pattern should be deregistered.
 	selectedServers := make([]hydraidepbgo.HydraideServiceClient, 0)
 
-	// Wildcard patterns must be registered on all servers,
-	// because we don’t know in advance which server will handle each resolved Swamp.
+	// If the pattern includes wildcards, deregistration must be broadcast to all known servers,
+	// since the Swamp may have been registered on any of them.
 	if swampName.IsWildcardPattern() {
 		selectedServers = h.client.GetUniqueServiceClients()
 	} else {
-		// For non-wildcard patterns, we determine the responsible server
-		// using HydrAIDE’s name-based routing logic.
+		// If the pattern is fully qualified (non-wildcard),
+		// we resolve it to a specific server based on HydrAIDE's name hashing logic.
 		selectedServers = append(selectedServers, h.client.GetServiceClient(swampName))
 	}
 
-	// Iterate through the selected servers and register the Swamp on each.
+	// Perform the actual deregistration request on each selected server.
 	for _, serviceClient := range selectedServers {
 
-		// Construct the RegisterSwampRequest payload for the gRPC call.
+		// Build the DeregisterSwampRequest payload for the gRPC call.
 		rsr := &hydraidepbgo.DeRegisterSwampRequest{
 			SwampPattern: swampName.Get(),
 		}
 
-		// Attempt to Deregister the Swamp pattern on the current server.
+		// Send the deregistration request to the server.
 		_, err := serviceClient.DeRegisterSwamp(ctx, rsr)
 
-		// Handle any errors returned from the gRPC call.
+		// Handle any errors returned by the gRPC layer and convert them to SDK error codes.
 		if err != nil {
 			if s, ok := status.FromError(err); ok {
 				switch s.Code() {
@@ -443,14 +443,13 @@ func (h *hydraidego) DeRegisterSwamp(ctx context.Context, swampName name.Name) [
 		}
 	}
 
-	// If any server failed, return the list of errors.
+	// Return any collected errors if deregistration failed on one or more servers.
 	if len(allErrors) > 0 {
 		return allErrors
 	}
 
-	// All servers responded successfully – registration complete.
+	// Deregistration completed successfully on all target servers.
 	return nil
-
 }
 
 // Lock acquires a distributed business-level lock for a specific domain/key.

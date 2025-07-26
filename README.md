@@ -18,20 +18,23 @@ It’s a purpose-built engine that replaces traditional architecture with clean,
 
 ---
 
-### ⚙️ What HydrAIDE Does - In One Stack
+### ⚙️ What HydrAIDE Does – In One Stack
 
-- 🗂️ **Database Engine** — A NoSQL-like structure-first store, but without query languages or schemas. Just save your structs, and go.
-- 🔄 **Built-in Reactivity** — Native real-time subscriptions on every write/update/delete (like Redis Pub/Sub, but smarter).
-- 📡 **Subscriber Logic** — Built-in event awareness (like Firebase listeners, but deterministic).
-- 🧠 **Memory-Efficient** — Swamps live in memory only when summoned. They hydrate instantly, and vanish when unused.
-- ✍️ **No More Queries** — Forget SELECT, WHERE... Your code *is* the query.
-- 🛰️ **Pure gRPC Control** — HydrAIDE is fully gRPC-powered. Use it with or without SDKs. Perfect for CLI tools, edge nodes, or IoT devices.
-- 🧹 **Zero Garbage** — No daemons, no cron jobs, no cleanup scripts. Just intent-based lifecycles.
-- 🌐 **Effortless Scaling** — Distributed horizontally using deterministic folder logic. No orchestrators. No magic.
-- 🔒 **Concurrency-Safe** — Per-object locking and business-safe critical sections without deadlocks or race conditions.
-- 💵 **Cost-Efficient by Design** — Minimal RAM, no cache layers, fewer moving parts, which means fewer servers.
-- 🔍 **Optimized for Search** — But not limited to it. HydrAIDE powers search engines, dashboards, ML pipelines, and reactive apps.
-- 🤯 **Less Infrastructure Headache** — No more gluing Redis + Kafka + Mongo + schedulers. HydrAIDE is your backend stack.
+| Feature                   | Description |
+|---------------------------|-------------|
+| 🗂️ **Database Engine**     | A NoSQL-like, structure-first data store — no schemas, no query language. Just save your Go structs. |
+| 🔄 **Built-in Reactivity** | Native real-time subscriptions on every write/update/delete. Like Redis Pub/Sub, but smarter. |
+| 📡 **Subscriber Logic**    | Built-in event-awareness for all data. Like Firebase listeners — but deterministic and controlled. |
+| 🧠 **Memory-Efficient**    | Swamps live in memory only when accessed. Instant hydration, automatic disposal when idle. |
+| ✍️ **No More Queries**     | No SELECT, no WHERE. Your struct *is* the query. |
+| 🛰️ **Pure gRPC Control**   | Fully gRPC-native. Works with or without SDKs. Ideal for CLI tools, edge services, and IoT nodes. |
+| 🧹 **Zero Garbage**        | No daemons. No cron jobs. No cleanup scripts. Swamps manage themselves via lifecycle logic. |
+| 🌐 **Effortless Scaling**  | Deterministic folder-based distribution. No orchestrators. Just spawn instances where needed. |
+| 🔒 **Concurrency-Safe**    | Per-object locking with deadlock-free critical sections. Easy and safe for business rules. |
+| 💵 **Cost-Efficient**      | Minimal RAM usage. No cache layers. Fewer components = fewer servers. |
+| 🔍 **Search Optimized**    | Great for search engines and ML pipelines — but not limited to them. Perfect for dashboards and reactive apps. |
+| 🤯 **Less Infra Headache** | No need to combine Redis + Kafka + Mongo + scheduler. HydrAIDE is the backend stack itself. |
+
 
 ---
 
@@ -66,6 +69,19 @@ These examples are a great starting point to learn how to:
 
 ---
 
+### ✅ Primary SDK: Go
+
+HydrAIDE is written in Go, and `hydraidego` is the **reference SDK**, powering production systems today.
+
+- Supports full functionality: save/read, subscriptions, locking, expiration, indexing
+- Works out-of-the-box with all HydrAIDE 2.0 servers
+- Fully typed, fast, and deeply integrated
+
+* 👉 [Quick overview on how to use the Go SDK in production](docs/sdk/go/README.md)
+* 👉 [Full HydrAIDE Go SDK documentation with implementation examples](docs/sdk/go/go-sdk.md)
+
+---
+
 ## 📚 Start Here: The HydrAIDE Documentation
 
 To truly understand HydrAIDE, start with its **core philosophy and architecture**:
@@ -75,17 +91,18 @@ To truly understand HydrAIDE, start with its **core philosophy and architecture*
 
 ### Then continue the 9-step journey:
 
-| Step | Section                                                                              | Description                                                     |
-|------|--------------------------------------------------------------------------------------|-----------------------------------------------------------------|
-| 1️⃣ | [📍 Naming Convention](docs/thinking-in-hydraide/naming-convention.md)               | Learn how data structure begins with naming. Not schemas.       |
-| 2️⃣ | [🌿 Swamp Pattern](docs/thinking-in-hydraide/swamp-pattern.md)                       | Configure persistence, memory, and lifespan directly from code. |
-| 3️⃣ | [💎 Treasures](docs/thinking-in-hydraide/treasures.md)                               | Understand the smallest, most powerful unit of data.            |
-| 4️⃣ | [🧩 Indexing](docs/thinking-in-hydraide/indexing.md)                                 | Discover ephemeral, in-memory indexing that feels like magic.   |
-| 5️⃣ | [🔄 Subscriptions](docs/thinking-in-hydraide/subscriptions.md)                       | Build reactive systems natively with HydrAIDE’s event engine.   |
-| 6️⃣ | [🔐 Locking](docs/thinking-in-hydraide/locking.md)                                   | Achieve true concurrency without fear.                          |
-| 7️⃣ | [🧹 Clean System](docs/thinking-in-hydraide/clean-system.md)                         | Never think about cleanup again, because HydrAIDE already did.  |
-| 8️⃣ | [🌐 Distributed Architecture](docs/thinking-in-hydraide/distributed-architecture.md) | Scale horizontally without orchestration pain.                  |
-| 9️⃣ | [🚀 Install & Update](installation/README.md)                                        | Deploy HydrAIDE in minutes, not days.                           |
+| Step                                             | Section                                                                              | Description                                                     |
+|--------------------------------------------------|--------------------------------------------------------------------------------------|-----------------------------------------------------------------|
+| 1️⃣                                            | [📍 Naming Convention](docs/thinking-in-hydraide/naming-convention.md)               | Learn how data structure begins with naming. Not schemas.       |
+| 2️⃣                                           | [🌿 Swamp Pattern](docs/thinking-in-hydraide/swamp-pattern.md)                       | Configure persistence, memory, and lifespan directly from code. |
+| 3️⃣                                              | [💎 Treasures](docs/thinking-in-hydraide/treasures.md)                               | Understand the smallest, most powerful unit of data.            |
+| 4️⃣                                              | [🧩 Indexing](docs/thinking-in-hydraide/indexing.md)                                 | Discover ephemeral, in-memory indexing that feels like magic.   |
+| 5️⃣                                              | [🔄 Subscriptions](docs/thinking-in-hydraide/subscriptions.md)                       | Build reactive systems natively with HydrAIDE’s event engine.   |
+| 6️⃣                                              | [🔐 Locking](docs/thinking-in-hydraide/locking.md)                                   | Achieve true concurrency without fear.                          |
+| 7️⃣                                              | [🧹 Clean System](docs/thinking-in-hydraide/clean-system.md)                         | Never think about cleanup again, because HydrAIDE already did.  |
+| 8️⃣                                              | [🧬 Migration](docs/thinking-in-hydraide/migration.md)                                | Struct Evolution Without Fear                                                                |
+| 9️⃣                                              | [🌐 Distributed Architecture](docs/thinking-in-hydraide/distributed-architecture.md) | Scale horizontally without orchestration pain.                  |
+| 🔟 | [🚀 Install & Update](installation/README.md)                                        | Deploy HydrAIDE in minutes, not days.                           |
 
 ---
 
@@ -111,15 +128,7 @@ docker-compose up -d
 
 HydrAIDE communicates over **gRPC**, and all SDKs share a common `.proto` contract, ensuring cross-language consistency.
 
-### ✅ Primary SDK: Go
 
-HydrAIDE is written in Go, and `hydraidego` is the **reference SDK**, powering production systems today.
-
-- Supports full functionality: save/read, subscriptions, locking, expiration, indexing
-- Works out-of-the-box with all HydrAIDE 2.0 servers
-- Fully typed, fast, and deeply integrated
-
-👉 [Hydraidego sdk and Go examples](docs/sdk/go/README.md) > Production-ready and actively maintained
 
 ---
 
