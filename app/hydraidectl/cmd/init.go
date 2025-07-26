@@ -8,6 +8,8 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils"
+	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/certificate"
 	"github.com/spf13/cobra"
 )
 
@@ -146,8 +148,47 @@ var initCmd = &cobra.Command{
 		// todo: start the instance installation process
 
 		// - todo: create the necessary directories
+
+		folders := []string{"certificate", "data", "settings"}
+		fmt.Println("📂 Creating application folders...", folders)
+		err := utils.CreateFolders(basePath, folders)
+		if err != nil {
+			fmt.Println("❌ Error creating application folders:", err)
+			return
+		}
+		// double check if Directory created or not
+		if verbose, err := utils.CheckDirectoryExists(basePath, folders); err != nil {
+			fmt.Println("❌ Error checking directories:", err)
+			return
+		} else {
+			fmt.Println(verbose)
+		}
+
 		// - todo: generate the TLS certificate
+		fmt.Println("🔒 Generating TLS certificate...")
+		certGen := certificate.New(cert.CN, cert.DNS, cert.IP)
+		if err = certGen.Generate(); err != nil {
+			fmt.Println("❌ Error generating TLS certificate:", err)
+			return
+		}
+		fmt.Println("✅ TLS certificate generated successfully.")
+		clientCRT, serverCRT, serverKEY := certGen.Files()
+		fmt.Println("  • Client CRT: ", clientCRT)
+		fmt.Println("  • Server CRT: ", serverCRT)
+		fmt.Println("  • Server KEY: ", serverKEY)
+
 		// - todo: copy the server and client TLS certificate to the certificate directory
+
+		fmt.Println("📂 Copying TLS certificates to the certificate directory...")
+		fmt.Printf("  • Client CRT: From %s  to  %s \n", clientCRT, filepath.Join(basePath, "certificate", filepath.Base(clientCRT)))
+		utils.MoveFile(clientCRT, filepath.Join(basePath, "certificate", filepath.Base(clientCRT)))
+		fmt.Printf("  • Server CRT: From %s  to  %s \n", serverCRT, filepath.Join(basePath, "certificate", filepath.Base(serverCRT)))
+		utils.MoveFile(serverCRT, filepath.Join(basePath, "certificate", filepath.Base(serverCRT)))
+		fmt.Printf("  • Server KEY: From %s  to  %s \n", serverKEY, filepath.Join(basePath, "certificate", filepath.Base(serverKEY)))
+		utils.MoveFile(serverKEY, filepath.Join(basePath, "certificate", filepath.Base(serverKEY)))
+
+		fmt.Println("✅ TLS certificates copied successfully.")
+
 		// - todo: create the .env file (based on the .env_sample) to base path and fill in the values
 		// - todo: download the latest binary (or the tagged one) from the github releases
 		// - todo: create a service file based on the user's operating system
