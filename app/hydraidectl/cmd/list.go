@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+
 	"github.com/spf13/cobra"
 )
 
@@ -25,5 +26,5 @@ var listCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.AddCommand(restartCmd)
+	rootCmd.AddCommand(listCmd)
 }
