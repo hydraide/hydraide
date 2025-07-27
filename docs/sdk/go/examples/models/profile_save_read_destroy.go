@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// kiszerveztük konstansokba a Sanctuary és a Realm neveket
+// UserSanctuaryName and UserRealmName define the naming convention for user Profile Swamps.
 const (
 	UserSanctuaryName = "users"
 	UserRealmName     = "profiles"

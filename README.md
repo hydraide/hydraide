@@ -71,14 +71,18 @@ These examples are a great starting point to learn how to:
 
 ### ✅ Primary SDK: Go
 
-HydrAIDE is written in Go, and `hydraidego` is the **reference SDK**, powering production systems today.
+HydrAIDE is written in Go — and `hydraidego` is the **official SDK powering production at scale**.
 
-- Supports full functionality: save/read, subscriptions, locking, expiration, indexing
-- Works out-of-the-box with all HydrAIDE 2.0 servers
-- Fully typed, fast, and deeply integrated
+- Supports everything: save/read, locking, subscriptions, TTLs, indexes – all native
+- Zero boilerplate: just write structs, and it *just works*
+- Fast, typed, reactive – built to feel like part of Go itself
 
-* 👉 [Quick overview on how to use the Go SDK in production](docs/sdk/go/README.md)
-* 👉 [Full HydrAIDE Go SDK documentation with implementation examples](docs/sdk/go/go-sdk.md)
+> 🧠 Designed for real-time systems.  
+> 🔥 Used in live infrastructure today.  
+> 📚 Comes with full docs, examples, and patterns.
+
+* 👉 [`docs/sdk/go/README.md`](docs/sdk/go/README.md) – Quick overview & getting started
+* 👉 [`docs/sdk/go/go-sdk.md`](docs/sdk/go/go-sdk.md) – Full documentation with real-world examples
 
 ---
 
@@ -177,8 +181,6 @@ We’re building a full series of deep comparisons, mindset-first, not config-fi
 | HydrAIDE vs Neo4j              | 🔜 In progress      | *coming soon*                                                                   |
 | HydrAIDE vs TimescaleDB        | 🔜 In progress      | *coming soon*                                                                   |
 | HydrAIDE vs Apache Kafka       | 🔜 In progress      | *coming soon* (stream vs native pub-sub)                                        |
-
-
 
 ---
 

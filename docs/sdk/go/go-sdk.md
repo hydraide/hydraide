@@ -6,9 +6,24 @@ distributed, real-time systems using the HydrAIDE engine.
 This SDK provides programmatic access to HydrAIDE's powerful features such as swamp-based data structures,
 lock-free operations, real-time subscriptions, and stateless routing, all tailored to Go developers.
 
+
+## 📚 Table of Contents
+
+1. [🔌 Connect to the HydrAIDE Server Using the SDK](#connect-to-the-hydraide-server-using-the-sdk)
+2. [📦 At a Glance](#-at-a-glance)
+3. [🧠 System](#-system)
+4. [🔐 Business Logic](#-business-logic)
+5. [🌿 Swamp & Treasure](#-swamp--treasure)
+6. [🧬 Profile Swamps](#-profile-swamps)
+7. [🗂️ Catalog Swamps](#-catalog-swamps)
+8. [📚 Good to Know: Split Catalogs When Needed](#-good-to-know-split-catalogs-when-needed)
+9. [🧯 When Not to Use Catalogs](#-when-not-to-use-catalogs)
+10. [➕ Increment / Decrement – Atomic State Without the Overhead](#-increment--decrement--atomic-state-without-the-overhead)
+11. [📌 Slice & Reverse Indexing in HydrAIDE](#-slice--reverse-indexing-in-hydraide)
+
 ---
 
-## Connect to the HydrAIDE Server Using the SDK
+## 🔌 Connect to the HydrAIDE Server Using the SDK
 
 The first and most essential step is establishing a connection to the HydrAIDE server using the Go SDK.
 
@@ -431,17 +446,75 @@ It applies to **all numeric increment types**, from `int8` to `float64`.
 
 ---
 
-### 📌 Slice & Reverse Proxy
+### 📌 Slice & Reverse Indexing in HydrAIDE
 
-These are specialized functions for managing `uint32` slices in an atomic and deduplicated way — mainly
-used as **reverse index proxies** within Swamps. Perfect for scenarios like tag mapping, reverse lookups,
-and set-style relationships.
+HydrAIDE provides native support for atomic operations on `[]uint32` slices within Swamps — enabling highly efficient and scalable **reverse indexing**.
 
-| Function                | SDK Status | Example Go Models and Docs |
-| ----------------------- | ------- |-----------------------------------------------------------|
-| Uint32SlicePush         | ✅ Ready | ⏳ in progress     |
-| Uint32SliceDelete       | ✅ Ready | ⏳ in progress     |
-| Uint32SliceSize         | ✅ Ready | ⏳ in progress     |
-| Uint32SliceIsValueExist | ✅ Ready | ⏳ in progress     |
+#### 🧠 What is a Reverse Index?
 
-Each of these functions will be documented in detail, explaining how they work and how to use them in real-world Go applications.
+A reverse index is a structure that **maps from a value back to its references**.
+
+Instead of storing “Product X was viewed by User A” as a one-way event, we store:
+
+```text
+→ Product X → [UserA, UserB, UserC]
+→ Product Y → [UserA, UserF]
+```
+
+This allows you to instantly answer questions like:
+
+* *Who interacted with this product?*
+* *Which users engaged with this tag?*
+* *How many users are linked to this entity?*
+
+Reverse indexes are especially powerful when:
+
+* There are **many-to-many** relationships
+* You need **fast set membership** or **frequency analytics**
+* You want to **avoid full scans** of large datasets
+
+#### 🗂️ Reverse Index in a Catalog Context
+
+In HydrAIDE, reverse indexes are stored in **Catalog Swamps**, and the key-value logic looks like this:
+
+```
+Swamp name:     tags/products/<tag>
+Treasure key:   product-ID
+Treasure value: []uint32 (user IDs)
+```
+
+This gives you:
+
+* One Swamp per tag
+* One Treasure per product
+* One slice per product: listing all user IDs who interacted
+
+#### 🧰 Available Functions (all in one model-based demo)
+
+HydrAIDE offers atomic, in-place operations for managing `[]uint32` values under each key.
+These are implemented **in a single documented Go model**, not as separate files.
+
+| Function Name             | Description                                                               |
+| ------------------------- | ------------------------------------------------------------------------- |
+| `Uint32SlicePush`         | Adds unique values to a slice (append-only, deduplicated)                 |
+| `Uint32SliceDelete`       | Removes values from a slice (with auto-GC for empty Treasures and Swamps) |
+| `Uint32SliceSize`         | Returns the number of elements in the slice (slice length)                |
+| `Uint32SliceIsValueExist` | Checks whether a specific value exists in a slice                         |
+
+All of these are demonstrated in the [ModelTagProductViewers](examples/models/slice_and_reverse_index.go) Go model, which shows how to:
+
+* Index users under tagged products
+* Query reverse relationships
+* Manage slice contents atomically and efficiently
+
+#### 🚀 Why it matters
+
+This slice-based reverse indexing system gives you:
+
+* **High performance** (no reads needed for write)
+* **Thread safety** (atomic updates)
+* **Real-time cleanup** (empty slices and Swamps vanish instantly)
+* **Minimal storage footprint** (no duplication, no bloat)
+
+Whether you're building recommender systems, behavioral logs, or tag-driven interactions,
+this is HydrAIDE's way of giving you **database-native reverse sets**, without the overhead of external joins or slow full scans.
