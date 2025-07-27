@@ -360,7 +360,7 @@ Catalogs are not suitable when:
 | CatalogRead               | ✅ Ready | [catalog_read.go](examples/models/catalog_read.go)              |
 | CatalogReadMany           | ✅ Ready | [catalog_read_many.go](examples/models/catalog_read_many.go)            |
 | CatalogUpdate             | ✅ Ready | [catalog_update.go](examples/models/catalog_update.go)              |
-| CatalogUpdateMany         | ✅ Ready | ⏳ in progress              |
+| CatalogUpdateMany         | ✅ Ready | [catalog_update_many.go](examples/models/catalog_update_many.go)              |
 | CatalogDelete             | ✅ Ready | ⏳ in progress              |
 | CatalogDeleteMany         | ✅ Ready | ⏳ in progress              |
 | CatalogDeleteManyFromMany | ✅ Ready | ⏳ in progress              |
