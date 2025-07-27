@@ -350,7 +350,7 @@ Catalogs are not suitable when:
 * You need to increment or patch partial values → use custom logic or ProfileMerge
 * You want full relational joins — HydrAIDE is NoSQL by design
 
-📂 **SDK Example Files**:
+📂 **SDK Example Files and documentation**:
 
 | Function                  | SDK Status | Example Go Models and Docs |
 |---------------------------| ------- |----------------------------|
@@ -361,9 +361,9 @@ Catalogs are not suitable when:
 | CatalogReadMany           | ✅ Ready | [catalog_read_many.go](examples/models/catalog_read_many.go)            |
 | CatalogUpdate             | ✅ Ready | [catalog_update.go](examples/models/catalog_update.go)              |
 | CatalogUpdateMany         | ✅ Ready | [catalog_update_many.go](examples/models/catalog_update_many.go)              |
-| CatalogDelete             | ✅ Ready | ⏳ in progress              |
-| CatalogDeleteMany         | ✅ Ready | ⏳ in progress              |
-| CatalogDeleteManyFromMany | ✅ Ready | ⏳ in progress              |
+| CatalogDelete             | ✅ Ready | [catalog_delete.go](examples/models/catalog_delete.go)              |
+| CatalogDeleteMany         | ✅ Ready | [catalog_delete.go](examples/models/catalog_delete.go)              |
+| CatalogDeleteManyFromMany | ✅ Ready | [catalog_delete_many_from_many.go](examples/models/catalog_delete_many_from_many.go)            |
 | CatalogSave               | ✅ Ready | [catalog_save.go](examples/models/catalog_save.go)             |
 | CatalogSaveMany           | ✅ Ready | ⏳ in progress              |
 | CatalogSaveManyToMany     | ✅ Ready | ⏳ in progress              |
