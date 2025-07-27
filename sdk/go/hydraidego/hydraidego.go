@@ -818,7 +818,7 @@ func (h *hydraidego) CatalogCreate(ctx context.Context, swampName name.Name, mod
 		}
 	}
 
-	// ha a kulcs már létezik...
+	// if the key already exists, the status will be NOTHIN_CHANGED
 	for _, swamp := range setResponse.GetSwamps() {
 		for _, kv := range swamp.GetKeysAndStatuses() {
 			if kv.GetStatus() == hydraidepbgo.Status_NOTHING_CHANGED {

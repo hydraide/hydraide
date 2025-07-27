@@ -163,8 +163,8 @@ like a list of users, logs, or events. Each Swamp acts like a collection of stru
 e.g., user ID as the key and last login time as the value.
 
 | Function                  | SDK Status | Example Go Models and Docs |
-| ------------------------- | ------- |----------------------------|
-| CatalogCreate             | ✅ Ready | ⏳ in progress              |
+|---------------------------| ------- |----------------------------|
+| CatalogCreate             | ✅ Ready | [catalog_create.go](examples/models/catalog_create.go)             |
 | CatalogCreateMany         | ✅ Ready | ⏳ in progress              |
 | CatalogCreateManyToMany   | ✅ Ready | ⏳ in progress              |
 | CatalogRead               | ✅ Ready | ⏳ in progress              |
@@ -174,10 +174,10 @@ e.g., user ID as the key and last login time as the value.
 | CatalogDelete             | ✅ Ready | ⏳ in progress              |
 | CatalogDeleteMany         | ✅ Ready | ⏳ in progress              |
 | CatalogDeleteManyFromMany | ✅ Ready | ⏳ in progress              |
-| CatalogSave               | ✅ Ready | ⏳ in progress              |
+| CatalogSave               | ✅ Ready | [catalog_save.go](examples/models/catalog_save.go)             |
 | CatalogSaveMany           | ✅ Ready | ⏳ in progress              |
 | CatalogSaveManyToMany     | ✅ Ready | ⏳ in progress              |
-
+| CatalogShiftExpired       | ✅ Ready | ⏳ in progress              |
 --- 
 
 ### ➕ Increments / Decrements
