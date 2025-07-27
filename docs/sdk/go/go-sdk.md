@@ -156,11 +156,201 @@ timestamps, and struct pointers for user avatars, preferences, and security.
 
 ---
 
-### 📚 Catalog
+### 🗂️ Catalog Swamps
 
-Catalog functions are used when you want to store key-value-like entries where every item shares a similar structure,
-like a list of users, logs, or events. Each Swamp acts like a collection of structured records,
-e.g., user ID as the key and last login time as the value.
+**Catalog Swamps** are optimized for storing *structured, queryable lists* of entries — such as users, logs, tags, messages, or domain entries — where each item follows a common schema and is stored using a **unique key** inside a shared Swamp.
+
+This model fits best when you need to:
+
+* 💾 Store hundreds, thousands, or millions of typed entries
+* 🔍 Query individual entries by key (CatalogRead)
+* 📊 Filter or stream entries based on time or value (CatalogReadMany)
+* ✍️ Write or update entries using predictable logic (Create, Save, Update)
+* 🧠 Keep track of creation/update time and metadata (e.g. who added it)
+
+#### ✅ Key Characteristics
+
+* 🔑 Accessed by **record key**, within a named Swamp
+* 🔁 Supports one-to-many and many-to-many storage patterns
+* 📌 Highly efficient for *appendable*, *reactive* data types (e.g. events, logs)
+* 🧩 Can use metadata decorators: `createdBy`, `createdAt`, `updatedBy`, `updatedAt`
+* 🧪 Index-based read operations with configurable order & limit
+* 🧠 Ideal for structured slices, trees, or versioned record lists
+  🔄 Fully reactive: supports real-time streaming via Subscribe()
+
+> 💡 Catalog Swamps are the most reactive data structures in HydrAIDE.
+> They are the primary targets for Subscribe() operations, making it easy to listen to individual keys (Treasure-level events), filtered value changes, or full Swamp activity.
+> This makes Catalogs ideal for building live dashboards, notification systems, audit pipelines, and streaming analytics.
+
+#### 📌 Common Use Cases
+
+* 👥 **Users catalog** – keyed by userID, stores last login, ban status, etc.
+* 📓 **Notes or messages** – keyed by noteID, stores message text, timestamps
+* 🧠 **Tags or references** – documents stored under tag-named Swamps
+* 📈 **Event logs** – every entry is append-only, searchable by creation time
+* 🔐 **Lock tables** – key is the lock, value is who holds it and until when
+
+#### 📦 Example: Storing Users in a Catalog
+
+```go
+user := &CatalogModelUser{
+	UserUUID: "user-123",
+	Payload: &Payload{
+		LastLogin: time.Now(),
+		IsBanned:  false,
+	},
+	CreatedBy: "auth-service",
+	CreatedAt: time.Now(),
+}
+
+_ = user.Save(repo) // Upserts the record
+```
+
+This stores a Treasure in:
+
+```
+/users/catalog/all → key: user-123 → value: Payload + metadata
+```
+
+HydrAIDE will track when and who wrote the data, and can later stream or react to changes over time.
+
+#### 🔎 Indexed Reads
+
+You can stream entries by time using:
+
+```go
+index := &hydraidego.Index{
+	IndexType:  hydraidego.IndexCreationTime,
+	IndexOrder: hydraidego.IndexOrderDesc,
+	Limit:      10,
+}
+_ = h.CatalogReadMany(ctx, swampName, index, CatalogModelUser{}, func(m any) error { ... })
+```
+
+Unlike relational databases, **HydrAIDE builds indexes in memory on-demand** using fast, in-memory hashing — reducing storage duplication and ensuring sub-ms reads in hydrated Swamps.
+To keep performance high, consider keeping the Swamp in memory longer (e.g. `CloseAfterIdle: 1h`).
+
+
+Tökéletes ötlet, Peti. Itt egy javasolt `#### 📚 Good to Know` szekció, amit **közvetlenül a `🧯 When Not to Use Catalogs`** után tudsz beilleszteni.
+
+Ez a rész segít a skálázhatósági problémák kezelésében, és gyakorlati példákon keresztül mutatja meg, hogyan lehet a Catalog Swampokat *logikailag szegmentálni*:
+
+
+---
+
+### 📚 Good to Know: Split Catalogs When Needed
+
+While Catalog Swamps are highly scalable, **putting too many entries into a single Swamp** can reduce performance 
+— especially for real-time filtering, event subscriptions, and storage efficiency.
+
+To keep things fast and clean:
+
+> 📦 **Segment large catalogs into multiple logical Swamps**, based on a meaningful key like prefix, user, region, or time window.
+
+#### 🧩 Practical Sharding Strategies
+
+| Use Case                | Strategy                         | Swamp Pattern Example                           | Why it Helps                                       |
+| ----------------------- | -------------------------------- |-------------------------------------------------| -------------------------------------------------- |
+| 🌍 Millions of tags     | Split by first letter            | `tags/catalog/a`, `tags/catalog/b`, ...         | Limits Swamp size; enables faster reads and writes |
+| 👥 User session logs    | Split by user ID + month         | `sessions/<userID>/<YYYYMM>`                    | Natural time + user partition; simplifies cleanup  |
+| 📈 Logs or events       | Split by time or service         | `logs/api/202507`, `logs/db/202507`             | Enables stream isolation and easier archiving      |
+| 🏷️ Document references | Use tag as Swamp name            | `tags/references/ai`, `tags/references/go`      | Natural many-to-many model; easy reverse lookup    |
+| 🧠 Search term tracking | Split by language or word length | `search/terms-en/short`, `search/terms-fr/long` | Reduces per-Swamp memory; isolates data logically  |
+
+#### 💡 Design Tip
+
+When deciding on a segmentation scheme, ask:
+
+* 🔸 *Would I ever need to read or stream all entries at once?*
+  → If not, you can safely split into smaller Swamps.
+
+* 🔸 *Is my query logic scoped to a subset (e.g. one user, one month)?*
+  → Then use that scope in your Swamp name!
+
+* 🔸 *Will this Catalog grow indefinitely (e.g. logs, metrics)?*
+  → Use time-based sharding: monthly or weekly Swamps make cleanup easier.
+
+---
+
+#### 📇 Shard Index Catalog: Track Your Shards
+
+If you decide to segment a Catalog into multiple Swamps (e.g., by letter, user ID, or month), it's **often helpful to maintain a *central Catalog* that tracks all used shard keys**.
+
+> This way, you always know what Swamps exist — even if they were created dynamically.
+
+##### 📌 Example: Tag Shard Index
+
+Suppose you split your tag Catalog by starting letter:
+
+* `tags/catalog/a`
+* `tags/catalog/b`
+* …
+* `tags/catalog/z`
+
+You can maintain a separate Swamp like:
+
+```go
+// CatalogModelTagShardIndex represents a known shard for tags.
+type CatalogModelTagShardIndex struct {
+	Letter string `hydraide:"key"` // e.g. "a", "b", "c", ...
+}
+```
+
+Then store entries in a central index Swamp:
+
+```go
+/tags/shard-index/main
+```
+
+This Catalog tells your app which Swamps are known and can be iterated for:
+
+* 🧭 Admin panels that list all existing shards
+* ⚙️ Cron jobs that clean or export each Swamp
+* 📊 Dashboards that show per-shard stats
+
+##### 📌 Example: Session Logs by Month
+
+For time-based segmentation, you can store a tracker like:
+
+```go
+// CatalogModelMonthShardIndex tracks known months used for session storage.
+type CatalogModelMonthShardIndex struct {
+	YearMonth string `hydraide:"key"` // Format: "2025-07", "2025-08"
+}
+```
+
+Stored under:
+
+```
+/sessions/shard-index/by-month
+```
+
+This allows you to:
+
+* Show a list of available months
+* Stream sessions per month
+* Archive or purge old data confidently
+
+#### 🧠 Why This Matters
+
+Keeping a central index of used shards gives you:
+
+* 🔍 Discoverability: You don’t have to scan disk or guess swamp names
+* 🛠️ Automation: Background jobs can iterate shards easily
+* 💡 Analytics: You can measure growth per shard
+* ✅ Reliability: Safer to purge or process known Swamps
+
+---
+
+#### 🧯 When Not to Use Catalogs
+
+Catalogs are not suitable when:
+
+* You only want to store *a single record per Swamp* → use **Profiles** instead
+* You need to increment or patch partial values → use custom logic or ProfileMerge
+* You want full relational joins — HydrAIDE is NoSQL by design
+
+📂 **SDK Example Files**:
 
 | Function                  | SDK Status | Example Go Models and Docs |
 |---------------------------| ------- |----------------------------|
@@ -169,7 +359,7 @@ e.g., user ID as the key and last login time as the value.
 | CatalogCreateManyToMany   | ✅ Ready | [catalog_create_many_to_many.go](examples/models/catalog_create_many_to_many.go)             |
 | CatalogRead               | ✅ Ready | [catalog_read.go](examples/models/catalog_read.go)              |
 | CatalogReadMany           | ✅ Ready | [catalog_read_many.go](examples/models/catalog_read_many.go)            |
-| CatalogUpdate             | ✅ Ready | ⏳ in progress              |
+| CatalogUpdate             | ✅ Ready | [catalog_update.go](examples/models/catalog_update.go)              |
 | CatalogUpdateMany         | ✅ Ready | ⏳ in progress              |
 | CatalogDelete             | ✅ Ready | ⏳ in progress              |
 | CatalogDeleteMany         | ✅ Ready | ⏳ in progress              |
