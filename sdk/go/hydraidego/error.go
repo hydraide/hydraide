@@ -146,3 +146,7 @@ func IsInvalidModel(err error) bool {
 func IsUnknown(err error) bool {
 	return GetErrorCode(err) == ErrCodeUnknown
 }
+
+func IsConditionNotMet(err error) bool {
+	return GetErrorCode(err) == ErrConditionNotMet
+}

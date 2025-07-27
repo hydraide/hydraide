@@ -92,14 +92,16 @@ type ModelCatalogQueue struct {
 // This guarantees that no two processes can pick up the same task concurrently.
 // If a process fails to process the task, it must explicitly re-save it into the queue.
 // The operation is thread-safe due to HydrAIDE's per-Swamp write lock mechanism.
-func (m *ModelCatalogQueue) LoadExpired(repo repo.Repo, queueName string, howMany int32) (mcq []*ModelCatalogQueue, err error) {
+func (m *ModelCatalogQueue) LoadExpired(r repo.Repo, queueName string, howMany int32) (mcq []*ModelCatalogQueue, err error) {
 
-	// Create a bounded context for the HydrAIDE operation (safe timeout for gRPC)
+	// Create a context with a default timeout using the helper.
+	// This ensures the request is cancelled if it takes too long,
+	// preventing hangs or leaking resources.
 	ctx, cancelFunc := hydraidehelper.CreateHydraContext()
 	defer cancelFunc()
 
-	// Get the HydrAIDE client instance
-	h := repo.GetHydraidego()
+	// Retrieve the HydrAIDE SDK instance from the repository.
+	h := r.GetHydraidego()
 
 	// Construct the Swamp name used for storing queue tasks
 	modelCatalogName := m.createModelCatalogQueueSwampName(queueName)
