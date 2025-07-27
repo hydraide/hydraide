@@ -6,24 +6,9 @@ distributed, real-time systems using the HydrAIDE engine.
 This SDK provides programmatic access to HydrAIDE's powerful features such as swamp-based data structures,
 lock-free operations, real-time subscriptions, and stateless routing, all tailored to Go developers.
 
-
-## 📚 Table of Contents
-
-1. [🔌 Connect to the HydrAIDE Server Using the SDK](#connect-to-the-hydraide-server-using-the-sdk)
-2. [📦 At a Glance](#-at-a-glance)
-3. [🧠 System](#-system)
-4. [🔐 Business Logic](#-business-logic)
-5. [🌿 Swamp & Treasure](#-swamp--treasure)
-6. [🧬 Profile Swamps](#-profile-swamps)
-7. [🗂️ Catalog Swamps](#-catalog-swamps)
-8. [📚 Good to Know: Split Catalogs When Needed](#-good-to-know-split-catalogs-when-needed)
-9. [🧯 When Not to Use Catalogs](#-when-not-to-use-catalogs)
-10. [➕ Increment / Decrement – Atomic State Without the Overhead](#-increment--decrement--atomic-state-without-the-overhead)
-11. [📌 Slice & Reverse Indexing in HydrAIDE](#-slice--reverse-indexing-in-hydraide)
-
 ---
 
-## 🔌 Connect to the HydrAIDE Server Using the SDK
+## Connect to the HydrAIDE Server Using the SDK
 
 The first and most essential step is establishing a connection to the HydrAIDE server using the Go SDK.
 
@@ -171,350 +156,61 @@ timestamps, and struct pointers for user avatars, preferences, and security.
 
 ---
 
-### 🗂️ Catalog Swamps
+### 📚 Catalog
 
-**Catalog Swamps** are optimized for storing *structured, queryable lists* of entries — such as users, logs, tags, messages, or domain entries — where each item follows a common schema and is stored using a **unique key** inside a shared Swamp.
-
-This model fits best when you need to:
-
-* 💾 Store hundreds, thousands, or millions of typed entries
-* 🔍 Query individual entries by key (CatalogRead)
-* 📊 Filter or stream entries based on time or value (CatalogReadMany)
-* ✍️ Write or update entries using predictable logic (Create, Save, Update)
-* 🧠 Keep track of creation/update time and metadata (e.g. who added it)
-
-#### ✅ Key Characteristics
-
-* 🔑 Accessed by **record key**, within a named Swamp
-* 🔁 Supports one-to-many and many-to-many storage patterns
-* 📌 Highly efficient for *appendable*, *reactive* data types (e.g. events, logs)
-* 🧩 Can use metadata decorators: `createdBy`, `createdAt`, `updatedBy`, `updatedAt`
-* 🧪 Index-based read operations with configurable order & limit
-* 🧠 Ideal for structured slices, trees, or versioned record lists
-  🔄 Fully reactive: supports real-time streaming via Subscribe()
-
-> 💡 Catalog Swamps are the most reactive data structures in HydrAIDE.
-> They are the primary targets for Subscribe() operations, making it easy to listen to individual keys (Treasure-level events), filtered value changes, or full Swamp activity.
-> This makes Catalogs ideal for building live dashboards, notification systems, audit pipelines, and streaming analytics.
-
-#### 📌 Common Use Cases
-
-* 👥 **Users catalog** – keyed by userID, stores last login, ban status, etc.
-* 📓 **Notes or messages** – keyed by noteID, stores message text, timestamps
-* 🧠 **Tags or references** – documents stored under tag-named Swamps
-* 📈 **Event logs** – every entry is append-only, searchable by creation time
-* 🔐 **Lock tables** – key is the lock, value is who holds it and until when
-
-#### 📦 Example: Storing Users in a Catalog
-
-```go
-user := &CatalogModelUser{
-	UserUUID: "user-123",
-	Payload: &Payload{
-		LastLogin: time.Now(),
-		IsBanned:  false,
-	},
-	CreatedBy: "auth-service",
-	CreatedAt: time.Now(),
-}
-
-_ = user.Save(repo) // Upserts the record
-```
-
-This stores a Treasure in:
-
-```
-/users/catalog/all → key: user-123 → value: Payload + metadata
-```
-
-HydrAIDE will track when and who wrote the data, and can later stream or react to changes over time.
-
-#### 🔎 Indexed Reads
-
-You can stream entries by time using:
-
-```go
-index := &hydraidego.Index{
-	IndexType:  hydraidego.IndexCreationTime,
-	IndexOrder: hydraidego.IndexOrderDesc,
-	Limit:      10,
-}
-_ = h.CatalogReadMany(ctx, swampName, index, CatalogModelUser{}, func(m any) error { ... })
-```
-
-Unlike relational databases, **HydrAIDE builds indexes in memory on-demand** using fast, in-memory hashing — reducing storage duplication and ensuring sub-ms reads in hydrated Swamps.
-To keep performance high, consider keeping the Swamp in memory longer (e.g. `CloseAfterIdle: 1h`).
-
-
-Tökéletes ötlet, Peti. Itt egy javasolt `#### 📚 Good to Know` szekció, amit **közvetlenül a `🧯 When Not to Use Catalogs`** után tudsz beilleszteni.
-
-Ez a rész segít a skálázhatósági problémák kezelésében, és gyakorlati példákon keresztül mutatja meg, hogyan lehet a Catalog Swampokat *logikailag szegmentálni*:
-
-
----
-
-### 📚 Good to Know: Split Catalogs When Needed
-
-While Catalog Swamps are highly scalable, **putting too many entries into a single Swamp** can reduce performance 
-— especially for real-time filtering, event subscriptions, and storage efficiency.
-
-To keep things fast and clean:
-
-> 📦 **Segment large catalogs into multiple logical Swamps**, based on a meaningful key like prefix, user, region, or time window.
-
-#### 🧩 Practical Sharding Strategies
-
-| Use Case                | Strategy                         | Swamp Pattern Example                           | Why it Helps                                       |
-| ----------------------- | -------------------------------- |-------------------------------------------------| -------------------------------------------------- |
-| 🌍 Millions of tags     | Split by first letter            | `tags/catalog/a`, `tags/catalog/b`, ...         | Limits Swamp size; enables faster reads and writes |
-| 👥 User session logs    | Split by user ID + month         | `sessions/<userID>/<YYYYMM>`                    | Natural time + user partition; simplifies cleanup  |
-| 📈 Logs or events       | Split by time or service         | `logs/api/202507`, `logs/db/202507`             | Enables stream isolation and easier archiving      |
-| 🏷️ Document references | Use tag as Swamp name            | `tags/references/ai`, `tags/references/go`      | Natural many-to-many model; easy reverse lookup    |
-| 🧠 Search term tracking | Split by language or word length | `search/terms-en/short`, `search/terms-fr/long` | Reduces per-Swamp memory; isolates data logically  |
-
-#### 💡 Design Tip
-
-When deciding on a segmentation scheme, ask:
-
-* 🔸 *Would I ever need to read or stream all entries at once?*
-  → If not, you can safely split into smaller Swamps.
-
-* 🔸 *Is my query logic scoped to a subset (e.g. one user, one month)?*
-  → Then use that scope in your Swamp name!
-
-* 🔸 *Will this Catalog grow indefinitely (e.g. logs, metrics)?*
-  → Use time-based sharding: monthly or weekly Swamps make cleanup easier.
-
----
-
-#### 📇 Shard Index Catalog: Track Your Shards
-
-If you decide to segment a Catalog into multiple Swamps (e.g., by letter, user ID, or month), it's **often helpful to maintain a *central Catalog* that tracks all used shard keys**.
-
-> This way, you always know what Swamps exist — even if they were created dynamically.
-
-##### 📌 Example: Tag Shard Index
-
-Suppose you split your tag Catalog by starting letter:
-
-* `tags/catalog/a`
-* `tags/catalog/b`
-* …
-* `tags/catalog/z`
-
-You can maintain a separate Swamp like:
-
-```go
-// CatalogModelTagShardIndex represents a known shard for tags.
-type CatalogModelTagShardIndex struct {
-	Letter string `hydraide:"key"` // e.g. "a", "b", "c", ...
-}
-```
-
-Then store entries in a central index Swamp:
-
-```go
-/tags/shard-index/main
-```
-
-This Catalog tells your app which Swamps are known and can be iterated for:
-
-* 🧭 Admin panels that list all existing shards
-* ⚙️ Cron jobs that clean or export each Swamp
-* 📊 Dashboards that show per-shard stats
-
-##### 📌 Example: Session Logs by Month
-
-For time-based segmentation, you can store a tracker like:
-
-```go
-// CatalogModelMonthShardIndex tracks known months used for session storage.
-type CatalogModelMonthShardIndex struct {
-	YearMonth string `hydraide:"key"` // Format: "2025-07", "2025-08"
-}
-```
-
-Stored under:
-
-```
-/sessions/shard-index/by-month
-```
-
-This allows you to:
-
-* Show a list of available months
-* Stream sessions per month
-* Archive or purge old data confidently
-
-#### 🧠 Why This Matters
-
-Keeping a central index of used shards gives you:
-
-* 🔍 Discoverability: You don’t have to scan disk or guess swamp names
-* 🛠️ Automation: Background jobs can iterate shards easily
-* 💡 Analytics: You can measure growth per shard
-* ✅ Reliability: Safer to purge or process known Swamps
-
----
-
-#### 🧯 When Not to Use Catalogs
-
-Catalogs are not suitable when:
-
-* You only want to store *a single record per Swamp* → use **Profiles** instead
-* You need to increment or patch partial values → use custom logic or ProfileMerge
-* You want full relational joins — HydrAIDE is NoSQL by design
-
-📂 **SDK Example Files and documentation**:
+Catalog functions are used when you want to store key-value-like entries where every item shares a similar structure,
+like a list of users, logs, or events. Each Swamp acts like a collection of structured records,
+e.g., user ID as the key and last login time as the value.
 
 | Function                  | SDK Status | Example Go Models and Docs |
 |---------------------------| ------- |----------------------------|
 | CatalogCreate             | ✅ Ready | [catalog_create.go](examples/models/catalog_create.go)             |
-| CatalogCreateMany         | ✅ Ready | [catalog_create_many.go](examples/models/catalog_create_many.go)             |
-| CatalogCreateManyToMany   | ✅ Ready | [catalog_create_many_to_many.go](examples/models/catalog_create_many_to_many.go)             |
-| CatalogRead               | ✅ Ready | [catalog_read.go](examples/models/catalog_read.go)              |
-| CatalogReadMany           | ✅ Ready | [catalog_read_many.go](examples/models/catalog_read_many.go)            |
-| CatalogUpdate             | ✅ Ready | [catalog_update.go](examples/models/catalog_update.go)              |
-| CatalogUpdateMany         | ✅ Ready | [catalog_update_many.go](examples/models/catalog_update_many.go)              |
-| CatalogDelete             | ✅ Ready | [catalog_delete.go](examples/models/catalog_delete.go)              |
-| CatalogDeleteMany         | ✅ Ready | [catalog_delete.go](examples/models/catalog_delete.go)              |
-| CatalogDeleteManyFromMany | ✅ Ready | [catalog_delete_many_from_many.go](examples/models/catalog_delete_many_from_many.go)            |
+| CatalogCreateMany         | ✅ Ready | ⏳ in progress              |
+| CatalogCreateManyToMany   | ✅ Ready | ⏳ in progress              |
+| CatalogRead               | ✅ Ready | ⏳ in progress              |
+| CatalogReadMany           | ✅ Ready | ⏳ in progress              |
+| CatalogUpdate             | ✅ Ready | ⏳ in progress              |
+| CatalogUpdateMany         | ✅ Ready | ⏳ in progress              |
+| CatalogDelete             | ✅ Ready | ⏳ in progress              |
+| CatalogDeleteMany         | ✅ Ready | ⏳ in progress              |
+| CatalogDeleteManyFromMany | ✅ Ready | ⏳ in progress              |
 | CatalogSave               | ✅ Ready | [catalog_save.go](examples/models/catalog_save.go)             |
-| CatalogSaveMany           | ✅ Ready | [catalog_save_many.go](examples/models/catalog_save_many.go)             |
-| CatalogSaveManyToMany     | ✅ Ready | [catalog_save_many_to_many.go](examples/models/catalog_save_many_to_many.go)             |
-| CatalogShiftExpired       | ✅ Ready | [catalog_shift_expired.go](examples/models/catalog_shift_expired.go)              |
+| CatalogSaveMany           | ✅ Ready | ⏳ in progress              |
+| CatalogSaveManyToMany     | ✅ Ready | ⏳ in progress              |
+| CatalogShiftExpired       | ✅ Ready | ⏳ in progress              |
+--- 
+
+### ➕ Increments / Decrements
+
+These functions allow atomic, strongly-typed modifications of numeric fields, optionally guarded by conditions,
+ideal for updating counters, scores, balances, or state values in a safe and concurrent environment.
+
+| Function         | SDK Status | Example Go Models and Docs |
+| ---------------- | ------- |-------------------------------------------------------------|
+| IncrementInt8    | ✅ Ready | ⏳ in progress     |
+| IncrementInt16   | ✅ Ready | ⏳ in progress     |
+| IncrementInt32   | ✅ Ready | ⏳ in progress     |
+| IncrementInt64   | ✅ Ready | ⏳ in progress     |
+| IncrementUint8   | ✅ Ready | ⏳ in progress     |
+| IncrementUint16  | ✅ Ready | ⏳ in progress     |
+| IncrementUint32  | ✅ Ready | ⏳ in progress     |
+| IncrementUint64  | ✅ Ready | ⏳ in progress     |
+| IncrementFloat32 | ✅ Ready | ⏳ in progress     |
+| IncrementFloat64 | ✅ Ready | ⏳ in progress     |
 
 ---
 
-### ➕ Increment / Decrement – Atomic State Without the Overhead
+### 📌 Slice & Reverse Proxy
 
-HydrAIDE’s `Increment*` family of functions enables **atomic, type-safe updates** of numeric values — without reading, locking, or overwriting state manually.
+These are specialized functions for managing `uint32` slices in an atomic and deduplicated way — mainly
+used as **reverse index proxies** within Swamps. Perfect for scenarios like tag mapping, reverse lookups,
+and set-style relationships.
 
-Whether you're updating:
+| Function                | SDK Status | Example Go Models and Docs |
+| ----------------------- | ------- |-----------------------------------------------------------|
+| Uint32SlicePush         | ✅ Ready | ⏳ in progress     |
+| Uint32SliceDelete       | ✅ Ready | ⏳ in progress     |
+| Uint32SliceSize         | ✅ Ready | ⏳ in progress     |
+| Uint32SliceIsValueExist | ✅ Ready | ⏳ in progress     |
 
-* a user's **rate limit**,
-* a device's **event count**,
-* a game **score**,
-* a financial **balance**,
-* or a processing **threshold**,
-
-…you can do it with **one intent-first operation** — optionally guarded by conditions like *“only increment if current value < 100”*.
-
-#### 🧠 Why this is a game-changer:
-
-* ⚡ **Atomic execution** — no race conditions, no read-modify-write logic
-* 🔒 **Treasure-level locking only** — never blocks the entire Swamp
-* 🧬 **Strongly typed** — choose from `int8`, `uint32`, `float64`, etc.
-* ✅ **Condition-aware** — support for rich comparisons:
-  `Equal`, `NotEqual`, `GreaterThan`, `LessThanOrEqual`, etc.
-
-> This isn’t just math — it’s **concurrent state mutation**, encoded as intention.
-
-#### 📌 One demo to rule them all
-
-All `Increment*` functions work the same way — only the type changes.
-
-To see a complete example in action (including conditional logic and memory-only Swamps), check out:
-
-👉 [Catalog Model Rate Limit Counter](examples/models/increment.go)
-
-This single model demonstrates how to:
-
-* atomically update a counter,
-* guard the operation with a relational condition,
-* scale to thousands of users with no locks or I/O,
-* and reset the state via `Destroy()`.
-
-It applies to **all numeric increment types**, from `int8` to `float64`.
-
-### Available Increment Functions
-
-| Function         | SDK Status | Example Demo Model                  |
-| ---------------- | ---------- | ----------------------------------- |
-| IncrementInt8    | ✅ Ready    | ✅ `RateLimitCounter` (shared logic) |
-| IncrementInt16   | ✅ Ready    | ✅ `RateLimitCounter` (shared logic) |
-| IncrementInt32   | ✅ Ready    | ✅ `RateLimitCounter` (shared logic) |
-| IncrementInt64   | ✅ Ready    | ✅ `RateLimitCounter` (shared logic) |
-| IncrementUint8   | ✅ Ready    | ✅ `RateLimitCounter` (demonstrated) |
-| IncrementUint16  | ✅ Ready    | ✅ `RateLimitCounter` (shared logic) |
-| IncrementUint32  | ✅ Ready    | ✅ `RateLimitCounter` (shared logic) |
-| IncrementUint64  | ✅ Ready    | ✅ `RateLimitCounter` (shared logic) |
-| IncrementFloat32 | ✅ Ready    | ✅ `RateLimitCounter` (shared logic) |
-| IncrementFloat64 | ✅ Ready    | ✅ `RateLimitCounter` (shared logic) |
-
-> 💡 Only the numeric type changes — the logic stays the same.
-
----
-
-### 📌 Slice & Reverse Indexing in HydrAIDE
-
-HydrAIDE provides native support for atomic operations on `[]uint32` slices within Swamps — enabling highly efficient and scalable **reverse indexing**.
-
-#### 🧠 What is a Reverse Index?
-
-A reverse index is a structure that **maps from a value back to its references**.
-
-Instead of storing “Product X was viewed by User A” as a one-way event, we store:
-
-```text
-→ Product X → [UserA, UserB, UserC]
-→ Product Y → [UserA, UserF]
-```
-
-This allows you to instantly answer questions like:
-
-* *Who interacted with this product?*
-* *Which users engaged with this tag?*
-* *How many users are linked to this entity?*
-
-Reverse indexes are especially powerful when:
-
-* There are **many-to-many** relationships
-* You need **fast set membership** or **frequency analytics**
-* You want to **avoid full scans** of large datasets
-
-#### 🗂️ Reverse Index in a Catalog Context
-
-In HydrAIDE, reverse indexes are stored in **Catalog Swamps**, and the key-value logic looks like this:
-
-```
-Swamp name:     tags/products/<tag>
-Treasure key:   product-ID
-Treasure value: []uint32 (user IDs)
-```
-
-This gives you:
-
-* One Swamp per tag
-* One Treasure per product
-* One slice per product: listing all user IDs who interacted
-
-#### 🧰 Available Functions (all in one model-based demo)
-
-HydrAIDE offers atomic, in-place operations for managing `[]uint32` values under each key.
-These are implemented **in a single documented Go model**, not as separate files.
-
-| Function Name             | Description                                                               |
-| ------------------------- | ------------------------------------------------------------------------- |
-| `Uint32SlicePush`         | Adds unique values to a slice (append-only, deduplicated)                 |
-| `Uint32SliceDelete`       | Removes values from a slice (with auto-GC for empty Treasures and Swamps) |
-| `Uint32SliceSize`         | Returns the number of elements in the slice (slice length)                |
-| `Uint32SliceIsValueExist` | Checks whether a specific value exists in a slice                         |
-
-All of these are demonstrated in the [ModelTagProductViewers](examples/models/slice_and_reverse_index.go) Go model, which shows how to:
-
-* Index users under tagged products
-* Query reverse relationships
-* Manage slice contents atomically and efficiently
-
-#### 🚀 Why it matters
-
-This slice-based reverse indexing system gives you:
-
-* **High performance** (no reads needed for write)
-* **Thread safety** (atomic updates)
-* **Real-time cleanup** (empty slices and Swamps vanish instantly)
-* **Minimal storage footprint** (no duplication, no bloat)
-
-Whether you're building recommender systems, behavioral logs, or tag-driven interactions,
-this is HydrAIDE's way of giving you **database-native reverse sets**, without the overhead of external joins or slow full scans.
+Each of these functions will be documented in detail, explaining how they work and how to use them in real-world Go applications.
