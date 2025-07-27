@@ -165,7 +165,7 @@ e.g., user ID as the key and last login time as the value.
 | Function                  | SDK Status | Example Go Models and Docs |
 |---------------------------| ------- |----------------------------|
 | CatalogCreate             | ✅ Ready | [catalog_create.go](examples/models/catalog_create.go)             |
-| CatalogCreateMany         | ✅ Ready | ⏳ in progress              |
+| CatalogCreateMany         | ✅ Ready | [catalog_create_many.go](examples/models/catalog_create_many.go)             |
 | CatalogCreateManyToMany   | ✅ Ready | ⏳ in progress              |
 | CatalogRead               | ✅ Ready | ⏳ in progress              |
 | CatalogReadMany           | ✅ Ready | ⏳ in progress              |
@@ -178,6 +178,7 @@ e.g., user ID as the key and last login time as the value.
 | CatalogSaveMany           | ✅ Ready | ⏳ in progress              |
 | CatalogSaveManyToMany     | ✅ Ready | ⏳ in progress              |
 | CatalogShiftExpired       | ✅ Ready | ⏳ in progress              |
+
 --- 
 
 ### ➕ Increments / Decrements
