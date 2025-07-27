@@ -167,8 +167,8 @@ e.g., user ID as the key and last login time as the value.
 | CatalogCreate             | ✅ Ready | [catalog_create.go](examples/models/catalog_create.go)             |
 | CatalogCreateMany         | ✅ Ready | [catalog_create_many.go](examples/models/catalog_create_many.go)             |
 | CatalogCreateManyToMany   | ✅ Ready | [catalog_create_many_to_many.go](examples/models/catalog_create_many_to_many.go)             |
-| CatalogRead               | ✅ Ready | ⏳ in progress              |
-| CatalogReadMany           | ✅ Ready | ⏳ in progress              |
+| CatalogRead               | ✅ Ready | [catalog_read.go](examples/models/catalog_read.go)              |
+| CatalogReadMany           | ✅ Ready | [catalog_read_many.go](examples/models/catalog_read_many.go)            |
 | CatalogUpdate             | ✅ Ready | ⏳ in progress              |
 | CatalogUpdateMany         | ✅ Ready | ⏳ in progress              |
 | CatalogDelete             | ✅ Ready | ⏳ in progress              |
