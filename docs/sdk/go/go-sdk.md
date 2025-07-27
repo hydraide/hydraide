@@ -369,25 +369,65 @@ Catalogs are not suitable when:
 | CatalogSaveManyToMany     | ✅ Ready | [catalog_save_many_to_many.go](examples/models/catalog_save_many_to_many.go)             |
 | CatalogShiftExpired       | ✅ Ready | [catalog_shift_expired.go](examples/models/catalog_shift_expired.go)              |
 
---- 
+---
 
-### ➕ Increments / Decrements
+### ➕ Increment / Decrement – Atomic State Without the Overhead
 
-These functions allow atomic, strongly-typed modifications of numeric fields, optionally guarded by conditions,
-ideal for updating counters, scores, balances, or state values in a safe and concurrent environment.
+HydrAIDE’s `Increment*` family of functions enables **atomic, type-safe updates** of numeric values — without reading, locking, or overwriting state manually.
 
-| Function         | SDK Status | Example Go Models and Docs |
-| ---------------- | ------- |-------------------------------------------------------------|
-| IncrementInt8    | ✅ Ready | ⏳ in progress     |
-| IncrementInt16   | ✅ Ready | ⏳ in progress     |
-| IncrementInt32   | ✅ Ready | ⏳ in progress     |
-| IncrementInt64   | ✅ Ready | ⏳ in progress     |
-| IncrementUint8   | ✅ Ready | ⏳ in progress     |
-| IncrementUint16  | ✅ Ready | ⏳ in progress     |
-| IncrementUint32  | ✅ Ready | ⏳ in progress     |
-| IncrementUint64  | ✅ Ready | ⏳ in progress     |
-| IncrementFloat32 | ✅ Ready | ⏳ in progress     |
-| IncrementFloat64 | ✅ Ready | ⏳ in progress     |
+Whether you're updating:
+
+* a user's **rate limit**,
+* a device's **event count**,
+* a game **score**,
+* a financial **balance**,
+* or a processing **threshold**,
+
+…you can do it with **one intent-first operation** — optionally guarded by conditions like *“only increment if current value < 100”*.
+
+#### 🧠 Why this is a game-changer:
+
+* ⚡ **Atomic execution** — no race conditions, no read-modify-write logic
+* 🔒 **Treasure-level locking only** — never blocks the entire Swamp
+* 🧬 **Strongly typed** — choose from `int8`, `uint32`, `float64`, etc.
+* ✅ **Condition-aware** — support for rich comparisons:
+  `Equal`, `NotEqual`, `GreaterThan`, `LessThanOrEqual`, etc.
+
+> This isn’t just math — it’s **concurrent state mutation**, encoded as intention.
+
+#### 📌 One demo to rule them all
+
+All `Increment*` functions work the same way — only the type changes.
+
+To see a complete example in action (including conditional logic and memory-only Swamps), check out:
+
+👉 [Catalog Model Rate Limit Counter](examples/models/increment.go)
+
+This single model demonstrates how to:
+
+* atomically update a counter,
+* guard the operation with a relational condition,
+* scale to thousands of users with no locks or I/O,
+* and reset the state via `Destroy()`.
+
+It applies to **all numeric increment types**, from `int8` to `float64`.
+
+### Available Increment Functions
+
+| Function         | SDK Status | Example Demo Model                  |
+| ---------------- | ---------- | ----------------------------------- |
+| IncrementInt8    | ✅ Ready    | ✅ `RateLimitCounter` (shared logic) |
+| IncrementInt16   | ✅ Ready    | ✅ `RateLimitCounter` (shared logic) |
+| IncrementInt32   | ✅ Ready    | ✅ `RateLimitCounter` (shared logic) |
+| IncrementInt64   | ✅ Ready    | ✅ `RateLimitCounter` (shared logic) |
+| IncrementUint8   | ✅ Ready    | ✅ `RateLimitCounter` (demonstrated) |
+| IncrementUint16  | ✅ Ready    | ✅ `RateLimitCounter` (shared logic) |
+| IncrementUint32  | ✅ Ready    | ✅ `RateLimitCounter` (shared logic) |
+| IncrementUint64  | ✅ Ready    | ✅ `RateLimitCounter` (shared logic) |
+| IncrementFloat32 | ✅ Ready    | ✅ `RateLimitCounter` (shared logic) |
+| IncrementFloat64 | ✅ Ready    | ✅ `RateLimitCounter` (shared logic) |
+
+> 💡 Only the numeric type changes — the logic stays the same.
 
 ---
 
