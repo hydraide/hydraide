@@ -6,6 +6,7 @@ import (
 	"github.com/hydraide/hydraide/sdk/go/hydraidego"
 	"github.com/hydraide/hydraide/sdk/go/hydraidego/name"
 	"log/slog"
+	"time"
 )
 
 // CatalogModelUserCreateManyExample demonstrates how to insert multiple user Emails into
@@ -98,6 +99,38 @@ func (c *CatalogModelUserCreateManyExample) CreateMany(r repo.Repo) {
 			"error", err)
 	}
 
+}
+
+// RegisterPattern registers the Swamp for the given user catalog model.
+// ⚠️ This must be called once on system startup, before using SaveUserIfNotExist().
+func (c *CatalogModelUserCreateManyExample) RegisterPattern(repo repo.Repo) error {
+	h := repo.GetHydraidego()
+
+	ctx, cancelFunc := hydraidehelper.CreateHydraContext()
+	defer cancelFunc()
+
+	errorResponses := h.RegisterSwamp(ctx, &hydraidego.RegisterSwampRequest{
+		// The Swamp pattern name: users/catalog/all
+		SwampPattern: c.createCatalogName(),
+
+		// Keep Swamp in memory for 6 hours of idle time
+		CloseAfterIdle: time.Second * 21600,
+
+		// Use persistent, disk-backed storage
+		IsInMemorySwamp: false,
+
+		// Configure file writing: frequent small chunks
+		FilesystemSettings: &hydraidego.SwampFilesystemSettings{
+			WriteInterval: time.Second * 10, // flush changes every 10s
+			MaxFileSize:   8192,             // 8 KB max chunk size
+		},
+	})
+
+	if errorResponses != nil {
+		return hydraidehelper.ConcatErrors(errorResponses)
+	}
+
+	return nil
 }
 
 // createCatalogName defines the Swamp name used to store the imported users.
