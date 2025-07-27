@@ -365,9 +365,9 @@ Catalogs are not suitable when:
 | CatalogDeleteMany         | ✅ Ready | [catalog_delete.go](examples/models/catalog_delete.go)              |
 | CatalogDeleteManyFromMany | ✅ Ready | [catalog_delete_many_from_many.go](examples/models/catalog_delete_many_from_many.go)            |
 | CatalogSave               | ✅ Ready | [catalog_save.go](examples/models/catalog_save.go)             |
-| CatalogSaveMany           | ✅ Ready | ⏳ in progress              |
-| CatalogSaveManyToMany     | ✅ Ready | ⏳ in progress              |
-| CatalogShiftExpired       | ✅ Ready | ⏳ in progress              |
+| CatalogSaveMany           | ✅ Ready | [catalog_save_many.go](examples/models/catalog_save_many.go)             |
+| CatalogSaveManyToMany     | ✅ Ready | [catalog_save_many_to_many.go](examples/models/catalog_save_many_to_many.go)             |
+| CatalogShiftExpired       | ✅ Ready | [catalog_shift_expired.go](examples/models/catalog_shift_expired.go)              |
 
 --- 
 

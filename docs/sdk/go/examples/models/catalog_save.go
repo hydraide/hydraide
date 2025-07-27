@@ -144,10 +144,15 @@ func (c *CatalogModelUserSaveExample) Save(r repo.Repo) error {
 //
 // This setup is ideal for high-read catalogs that need occasional writes.
 func (c *CatalogModelUserSaveExample) RegisterPattern(repo repo.Repo) error {
-	h := repo.GetHydraidego()
 
+	// Create a context with a default timeout using the helper.
+	// This ensures the request is cancelled if it takes too long,
+	// preventing hangs or leaking resources.
 	ctx, cancelFunc := hydraidehelper.CreateHydraContext()
 	defer cancelFunc()
+
+	// Retrieve the HydrAIDE SDK instance from the repository.
+	h := r.GetHydraidego()
 
 	errorResponses := h.RegisterSwamp(ctx, &hydraidego.RegisterSwampRequest{
 		// The Swamp pattern name: users/catalog/all
