@@ -169,6 +169,18 @@ func (c *CatalogModelTagReference) RegisterPattern(repo repo.Repo) error {
 	ctx, cancelFunc := hydraidehelper.CreateHydraContext()
 	defer cancelFunc()
 
+	// RegisterSwamp always returns a []error.
+	// Each error (if any) represents a failure during Swamp registration on a HydrAIDE server.
+	//
+	// ⚠️ Even when only a single Swamp pattern is registered, HydrAIDE may attempt to replicate or validate
+	// the pattern across multiple server nodes (depending on your cluster).
+	//
+	// ➕ Return behavior:
+	// - If all servers succeeded → returns nil
+	// - If one or more servers failed → returns a non-nil []error
+	//
+	// 🧠 To convert this into a single `error`, you can use the helper:
+	//     hydraidehelper.ConcatErrors(errorResponses)
 	errorResponses := h.RegisterSwamp(ctx, &hydraidego.RegisterSwampRequest{
 		// 🧠 Wildcard pattern ensures all tag-based Swamps (e.g. tags/references/ai) share the same configuration.
 		SwampPattern: name.New().Sanctuary("tags").Realm("references").Swamp("*"),

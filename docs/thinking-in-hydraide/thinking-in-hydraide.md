@@ -101,7 +101,7 @@ Here’s the sequence we recommend:
 | 7️⃣                                              | [🧹 Clean System](/docs/thinking-in-hydraide/clean-system.md)                         | Never think about cleanup again, because HydrAIDE already did.  |
 | 8️⃣                                              | [🧬 Migration](/docs/thinking-in-hydraide/migration.md)                               | Struct Evolution Without Fear                                                                |
 | 9️⃣                                              | [🌐 Distributed Architecture](/docs/thinking-in-hydraide/distributed-architecture.md) | Scale horizontally without orchestration pain.                  |
-| 🔟 | [🚀 Install & Update](/installation/README.md)                                        | Deploy HydrAIDE in minutes, not days.                           |
+| 🔟 | [🚀 Install & Update](/docs/how-to-install-hydraide.md)                                        | Deploy HydrAIDE in minutes, not days.                           |
 
 You can get through the whole thing in under 90 minutes. And once you do, writing production-grade logic in HydrAIDE becomes natural.
 

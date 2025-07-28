@@ -4,7 +4,7 @@
 // This file provides a detailed example of a catalog-style model used with CatalogCreate().
 // It explains required fields, supported types, optional metadata, and best practices.
 
-package examples
+package models
 
 import "time"
 

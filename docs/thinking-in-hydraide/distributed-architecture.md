@@ -324,4 +324,4 @@ It just makes good architecture feel magical.
 
 ## 🗭 Navigation
 
-← [🧬 Migration](migration.md) | [Next 🚀 Install & Update](/installation/README.md)
+← [🧬 Migration](migration.md) | [Next 🚀 Install & Update](/docs/how-to-install-hydraide.md)

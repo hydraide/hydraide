@@ -1,4 +1,4 @@
-![HydrAIDE](images/hydraide-banner.jpg)
+![HydrAIDE – Adaptive Intelligent Data Engine](images/hydraide-banner.jpg)
 
 # HydrAIDE - The Adaptive, Intelligent Data Engine
 
@@ -55,6 +55,8 @@ Explore ready-to-run demo applications built in Go to better understand the Hydr
 
 All demo apps are located in the [example-applications/go](https://github.com/hydraide/hydraide/tree/main/example-applications/go) folder.
 
+> More demos coming soon: reactive dashboards, pub-sub listeners, real-time config editors...
+
 ### 📦 Available Demos
 
 * **Queue** – A simple task queue system that manages scheduled jobs with future `expireAt` timestamps.
@@ -81,8 +83,38 @@ HydrAIDE is written in Go — and `hydraidego` is the **official SDK powering pr
 > 🔥 Used in live infrastructure today.  
 > 📚 Comes with full docs, examples, and patterns.
 
-* 👉 [`docs/sdk/go/README.md`](docs/sdk/go/README.md) – Quick overview & getting started
 * 👉 [`docs/sdk/go/go-sdk.md`](docs/sdk/go/go-sdk.md) – Full documentation with real-world examples
+
+---
+
+## 🤖 ChatGPT Support: Learn & Build with HydrAIDE Faster
+
+The HydrAIDE documentation is purposefully structured to make it **fully compatible with LLM-based assistants like ChatGPT** — so you can focus on building instead of spending hours reading.
+
+> ⚠️ HydrAIDE was **not created using ChatGPT or any LLM**.
+> It is the result of years of real-world engineering experience.
+> However, we believe in **leveraging AI tools wherever they can accelerate your work** — especially when learning new architectures or building production-grade systems.
+
+### ✅ Turn ChatGPT into your personal HydrAIDE expert
+
+To do that, simply create a **ChatGPT project**, and upload the following files:
+
+| File Type             | Path                                                |
+| --------------------- |-----------------------------------------------------|
+| Installation Guide    |  [how-to-install-hydraide.md](docs/how-to-install-hydraide.md)                |
+| LLM-Friendly Q\&A Set |  [hydraide-questions-answers-for-llm.md](docs/hydraide-questions-answers-for-llm.md)   |
+| Go SDK Documentation  |  [go-sdk.md](docs/sdk/go/go-sdk.md)                            |
+| Go Example Models     | All `.go` files from [models](docs/sdk/go/examples/models) |
+| Go SDK Core Logic     |  [hydraidego.go](sdk/go/hydraidego/hydraidego.go)                  |
+
+Once uploaded, ChatGPT will be able to:
+
+* answer **any question** about HydrAIDE’s architecture or APIs,
+* help you **write HydrAIDE-style Go code** interactively,
+* explain example models, functions, and patterns,
+* and guide you through debugging, architecture design, or optimization steps.
+
+💡 The documentation is written to be **semantically consumable by AI**, which means ChatGPT will understand not just APIs, but **the design philosophy, naming logic, and intent** behind each HydrAIDE feature.
 
 ---
 
@@ -106,7 +138,7 @@ To truly understand HydrAIDE, start with its **core philosophy and architecture*
 | 7️⃣                                              | [🧹 Clean System](docs/thinking-in-hydraide/clean-system.md)                         | Never think about cleanup again, because HydrAIDE already did.  |
 | 8️⃣                                              | [🧬 Migration](docs/thinking-in-hydraide/migration.md)                                | Struct Evolution Without Fear                                                                |
 | 9️⃣                                              | [🌐 Distributed Architecture](docs/thinking-in-hydraide/distributed-architecture.md) | Scale horizontally without orchestration pain.                  |
-| 🔟 | [🚀 Install & Update](installation/README.md)                                        | Deploy HydrAIDE in minutes, not days.                           |
+| 🔟 | [🚀 Install & Update](docs/how-to-install-hydraide.md)                                        | Deploy HydrAIDE in minutes, not days.                           |
 
 ---
 
@@ -124,15 +156,13 @@ To get started:
 docker-compose up -d
 ````
 
-👉 [Full Installation Guide →](installation/README.md)
+👉 [Full Installation Guide →](docs/how-to-install-hydraide.md)
 
 ---
 
 ## 💻 SDKs - Native Integration in Your Language
 
 HydrAIDE communicates over **gRPC**, and all SDKs share a common `.proto` contract, ensuring cross-language consistency.
-
-
 
 ---
 
