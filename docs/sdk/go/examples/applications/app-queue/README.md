@@ -14,7 +14,7 @@ This pattern is ideal for implementing auto-expiring queue entries, message buff
 
 To run this project, you need a HydrAIDE test instance running either locally or remotely. Before starting, make sure to:
 
-* Review the [HydrAIDE Installation Guide](/installation/README.md) to set up your instance
+* Review the [HydrAIDE Installation Guide](/docs/how-to-install-hydraide.md) to set up your instance
 * Have access to the necessary TLS certificate files
 
 ### Required Environment Variables

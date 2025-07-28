@@ -94,15 +94,39 @@ What you might work on:
 ## 👶 Still Learning?
 
 Good. That means you're growing.
-This could be your first open source contribution, or even your first SDK. That’s not a bug. That’s a superpower.
-
-We welcome:
-
-* First-time contributors
-* Junior devs looking to level up
-* Self-taught builders who want reps in the real world
-
+...
 You’ll get mentorship, thoughtful code reviews, and a space where growth is baked in.
+
+## 🤖 Learn Fast. Build Deep. Use ChatGPT with HydrAIDE
+
+HydrAIDE wasn’t built with AI.  
+But it *was* designed so AI can understand it.
+
+> All of our docs, models, and SDK logic are written in a way that ChatGPT and similar tools can ingest semantically.
+
+So if you’re building an SDK, writing examples, or just trying to understand how this weird, beautiful engine works — **use ChatGPT as your copilot**.
+
+### How?
+
+Just create a ChatGPT project and upload:
+
+* [how-to-install-hydraide.md](docs/how-to-install-hydraide.md)
+* [hydraide-questions-answers-for-llm.md](docs/hydraide-questions-answers-for-llm.md)
+* [go-sdk.md](docs/sdk/go/go-sdk.md)
+* All `.go` models from [models](docs/sdk/go/examples/models)
+* [hydraidego.go](sdk/go/hydraidego/hydraidego.go) (SDK logic)
+
+Once that’s loaded, ChatGPT will be able to:
+
+- answer **architecture questions**,
+- help write **idiomatic SDK code**,
+- explain **example models and patterns**,
+- and debug or refactor **real HydrAIDE logic** with you.
+
+> 💡 Our docs were **deliberately** made AI-readable — so use that to your advantage.
+
+We’re not precious about ego. If AI helps you work faster and deeper, that’s a win.  
+The only thing that matters here is *building something that matters*.
 
 ---
 

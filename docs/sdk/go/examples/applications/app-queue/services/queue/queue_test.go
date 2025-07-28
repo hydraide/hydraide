@@ -43,7 +43,7 @@ func (s *TestQueueService) SetupSuite() {
 			// The value of HYDRA_CERT must include the full filename and extension, e.g.:
 			// "/etc/hydraide/certs/ca.crt"
 			// For generating the certificate, refer to the install guide and use
-			// the official script provided during HydrAIDE installation.
+			// the official script provided during HydrAIDE install-scripts.
 			CertFilePath: os.Getenv("HYDRA_CERT"),
 		},
 	}, 100, 10485760, false)

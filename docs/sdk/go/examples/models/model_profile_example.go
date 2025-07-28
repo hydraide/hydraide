@@ -10,7 +10,7 @@
 // — such as a user profile, a configuration object, or a settings page —
 // where all fields belong together, and you typically load/save them as one unit.
 
-package examples
+package models
 
 import "time"
 

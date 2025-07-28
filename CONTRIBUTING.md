@@ -17,6 +17,30 @@ Your voice matters here. Whether it's your first PR or your 100th, you're helpin
 2. **Create a new branch** for your fix or feature
 3. **Make your changes**
 4. **Open a Pull Request (PR)** – we’ll review it and celebrate with you 🎉
+5. *(Optional but highly recommended)*
+   **Use ChatGPT to accelerate your understanding of HydrAIDE** 🤖
+
+   > The HydrAIDE docs are *semantically optimized for LLMs*, so ChatGPT can act as your personal mentor.
+
+   To do this:
+
+    * Create a ChatGPT project (e.g. on [chat.openai.com](https://chat.openai.com))
+    * Upload these files to the chat:
+
+        * [how-to-install-hydraide.md](docs/how-to-install-hydraide.md)
+        * [hydraide-questions-answers-for-llm.md](docs/hydraide-questions-answers-for-llm.md)
+        * [go-sdk.md](docs/sdk/go/go-sdk.md)
+        * all `.go` example models from [models](docs/sdk/go/examples/models)
+        * [hydraidego.go](sdk/go/hydraidego/hydraidego.go)
+      
+    * ChatGPT will then be able to:
+
+        * answer questions about the architecture and SDK,
+        * explain model usage patterns,
+        * help you write valid Go code for HydrAIDE,
+        * and guide you through debugging or optimization.
+
+   ✅ This is optional, but can **dramatically shorten your learning curve**, especially for newcomers.
 
 ---
 

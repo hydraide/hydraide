@@ -145,6 +145,18 @@ func (c *CatalogModelTaskStatus) RegisterPattern(repo repo.Repo) error {
 	ctx, cancel := hydraidehelper.CreateHydraContext()
 	defer cancel()
 
+	// RegisterSwamp always returns a []error.
+	// Each error (if any) represents a failure during Swamp registration on a HydrAIDE server.
+	//
+	// ⚠️ Even when only a single Swamp pattern is registered, HydrAIDE may attempt to replicate or validate
+	// the pattern across multiple server nodes (depending on your cluster).
+	//
+	// ➕ Return behavior:
+	// - If all servers succeeded → returns nil
+	// - If one or more servers failed → returns a non-nil []error
+	//
+	// 🧠 To convert this into a single `error`, you can use the helper:
+	//     hydraidehelper.ConcatErrors(errorResponses)
 	errorResponses := h.RegisterSwamp(ctx, &hydraidego.RegisterSwampRequest{
 		SwampPattern: c.getSwampName(),
 

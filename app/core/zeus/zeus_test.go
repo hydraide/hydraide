@@ -172,3 +172,53 @@ func BenchmarkNew(b *testing.B) {
 	swampObject.CeaseVigil()
 
 }
+
+func BenchmarkRead(b *testing.B) {
+	settingsInterface := settings.New(maxDepthOfFolders, maxFoldersPerLevel)
+	fsInterface := filesystem.New()
+
+	settingsInterface.RegisterPattern(name.New().Sanctuary(sanctuaryForQuickTest).Realm("*").Swamp("*"), false, 10, &settings.FileSystemSettings{
+		WriteIntervalSec: 10,
+		MaxFileSizeByte:  8192, // 8KB
+	})
+
+	zeusInterface := New(settingsInterface, fsInterface)
+	zeusInterface.StartHydra()
+
+	hydraInterface := zeusInterface.GetHydra()
+	require.NotNil(b, hydraInterface)
+
+	swampObject, err := hydraInterface.SummonSwamp(context.Background(), 10, name.New().Sanctuary(sanctuaryForQuickTest).Realm("user").Swamp("petergebri"))
+	defer swampObject.Destroy()
+
+	require.NoError(b, err)
+	require.NotNil(b, swampObject)
+	swampObject.BeginVigil()
+
+	// --- Előkészítés: írjunk be b.N darab Treasure-t ---
+	const content = "trendizz.com"
+	for i := 1; i <= b.N; i++ {
+		treasureObj := swampObject.CreateTreasure(strconv.Itoa(i))
+		treasureGuardID := treasureObj.StartTreasureGuard(true)
+		treasureObj.SetContentString(treasureGuardID, content)
+		treasureObj.Save(treasureGuardID)
+		treasureObj.ReleaseTreasureGuard(treasureGuardID)
+	}
+
+	b.ResetTimer()
+
+	// --- Mérési szakasz: olvasás ---
+	for i := 1; i <= b.N; i++ {
+		key := strconv.Itoa(i)
+		treasure, err := swampObject.GetTreasure(key)
+		if err != nil {
+			b.Fatalf("failed to read treasure %s: %v", key, err)
+		}
+		_, err = treasure.GetContentString()
+		if err != nil {
+			b.Fatalf("failed to read content from treasure %s: %v", key, err)
+		}
+	}
+
+	swampObject.CeaseVigil()
+}

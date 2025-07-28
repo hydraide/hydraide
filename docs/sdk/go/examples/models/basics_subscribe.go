@@ -1,6 +1,3 @@
-//go:build ignore
-// +build ignore
-
 package models
 
 import (
@@ -165,10 +162,16 @@ func (m *ModelCatalogMessages) Subscribe(ctx context.Context, r repo.Repo, callb
 //
 // Note: Once destroyed, the Swamp must be re-registered before reuse.
 func (m *ModelCatalogMessages) Destroy(r repo.Repo) error {
+
+	// Create a context with a default timeout using the helper.
+	// This ensures the request is cancelled if it takes too long,
+	// preventing hangs or leaking resources.
 	ctx, cancelFunc := hydraidehelper.CreateHydraContext()
 	defer cancelFunc()
 
+	// Retrieve the HydrAIDE SDK instance from the repository.
 	h := r.GetHydraidego()
+
 	return h.Destroy(ctx, m.getName())
 }
 
@@ -185,10 +188,28 @@ func (m *ModelCatalogMessages) Destroy(r repo.Repo) error {
 // 🧠 Tip: For more examples of how Swamps can be configured — including disk persistence,
 // chunk sizes, TTLs, and compression — see the `basics_register_swamp.go` reference example.
 func (m *ModelCatalogMessages) RegisterPattern(r repo.Repo) error {
-	h := r.GetHydraidego()
+
+	// Create a context with a default timeout using the helper.
+	// This ensures the request is cancelled if it takes too long,
+	// preventing hangs or leaking resources.
 	ctx, cancelFunc := hydraidehelper.CreateHydraContext()
 	defer cancelFunc()
 
+	// Retrieve the HydrAIDE SDK instance from the repository.
+	h := r.GetHydraidego()
+
+	// RegisterSwamp always returns a []error.
+	// Each error (if any) represents a failure during Swamp registration on a HydrAIDE server.
+	//
+	// ⚠️ Even when only a single Swamp pattern is registered, HydrAIDE may attempt to replicate or validate
+	// the pattern across multiple server nodes (depending on your cluster).
+	//
+	// ➕ Return behavior:
+	// - If all servers succeeded → returns nil
+	// - If one or more servers failed → returns a non-nil []error
+	//
+	// 🧠 To convert this into a single `error`, you can use the helper:
+	//     hydraidehelper.ConcatErrors(errorResponses)
 	errorResponses := h.RegisterSwamp(ctx, &hydraidego.RegisterSwampRequest{
 		SwampPattern:    m.getName(),
 		CloseAfterIdle:  time.Second * 86400, // Keep alive for 1 day even if idle
