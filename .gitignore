@@ -41,3 +41,5 @@ vendor/
 
 # ---- Environment files ----
 .env
+
+db/

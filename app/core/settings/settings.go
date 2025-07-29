@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"path"
+	"path/filepath"
 	"sync"
 	"time"
 )
@@ -35,10 +36,13 @@ type Settings interface {
 }
 
 const (
-	hydraDataFolderPath     = "/hydraide/data"
-	hydraSettingsFolderPath = "/hydraide/settings"
-	fileName                = "settings.json"
-	writetestFile           = "writetest"
+	fileName      = "settings.json"
+	writetestFile = "writetest"
+)
+
+var (
+	hydraDataFolderPath     = ""
+	hydraSettingsFolderPath = ""
 )
 
 type settings struct {
@@ -76,6 +80,9 @@ func New(maxDepthOfFolders int, maxFoldersPerLevel int) Settings {
 
 	// ellenőrizzük, hogy az alapvető mentési könyvtárak léteznek-e és írhatóak-e
 	// ha nem léteznek, akkor létrehozzuk azokat írható formában
+	hydraDataFolderPath = filepath.Join(os.Getenv("HYDRAIDE_ROOT_PATH"), "data")
+	hydraSettingsFolderPath = filepath.Join(os.Getenv("HYDRAIDE_ROOT_PATH"), "settings")
+
 	checkFolder(hydraDataFolderPath)
 	checkFolder(hydraSettingsFolderPath)
 
