@@ -7,7 +7,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/shirou/gopsutil/cpu"
-	log "github.com/sirupsen/logrus"
+	"log/slog"
 	"math"
 	"runtime"
 	"runtime/debug"
@@ -67,10 +67,7 @@ func New(ctx context.Context, systemResourceLogging bool) Observer {
 			defer func() {
 				if r := recover(); r != nil {
 					stackTrace := debug.Stack()
-					log.WithFields(log.Fields{
-						"error": r,
-						"stack": string(stackTrace),
-					}).Error("caught panic while detecting memory and processor peak")
+					slog.Error("caught panic while detecting memory and processor peak", "error", r, "stack", string(stackTrace))
 				}
 			}()
 			o.detectMemoryAndProcessorPeak(ctx)
@@ -118,21 +115,18 @@ func (o *observer) WaitingForAllProcessesFinished() {
 	for {
 		o.mu.RLock()
 		if len(o.allProcesses) == 0 {
-			log.WithFields(log.Fields{
-				"processes": len(o.allProcesses),
-			}).Info("all processes finished successfully")
+			slog.Info("all processes finished successfully", "processes", len(o.allProcesses))
 			o.mu.RUnlock()
 			return
 		}
 
 		// log the processes that are still running
 		for _, p := range o.allProcesses {
-			log.WithFields(log.Fields{
-				"process":              p.name,
-				"uuid":                 p.uuid,
-				"subprocesses":         strings.Join(p.subprocesses, ", "),
-				"elapsedTimeInWaiting": time.Now().Sub(p.insertTime).String(),
-			}).Info("waiting for process to finish to shutdown the server....")
+			slog.Debug("waiting for process to finish to shutdown the server....",
+				"process", p.name,
+				"uuid", p.uuid,
+				"subprocesses", strings.Join(p.subprocesses, ", "),
+				"elapsedTimeInWaiting", time.Now().Sub(p.insertTime).String())
 		}
 		o.mu.RUnlock()
 		time.Sleep(1 * time.Second)
@@ -161,9 +155,7 @@ func (o *observer) detectMemoryAndProcessorPeak(ctx context.Context) {
 
 			percent, err := cpu.Percent(5*time.Second, false)
 			if err != nil {
-				log.WithFields(log.Fields{
-					"error": err.Error(),
-				}).Error("error while getting cpu percent")
+				slog.Error("error while getting cpu percent", "error", err)
 				continue
 			}
 
@@ -203,15 +195,15 @@ func (o *observer) logMemoryPeak() {
 		diff = 0
 	}
 
-	log.WithFields(log.Fields{
-		"Act_Alloc":          bytesToReadable(m.Alloc),
-		"Act_Diff":           fmt.Sprintf("%s%s", prefix, bytesToReadable(diff)),
-		"Act_GoRoutines":     runtime.NumGoroutine(),
-		"Peak_Goroutine":     goroutinePeak,
-		"Peak_ProcessorLoad": processorLoadPeak,
-		"Peak_AllocMemory":   bytesToReadable(allocMemoryPeak),
-		"num_GC":             m.NumGC,
-	}).Info(fmt.Sprintf("system-resource-log"))
+	slog.Info("system resource log",
+		slog.String("Act_Alloc", bytesToReadable(m.Alloc)),
+		slog.String("Act_Diff", fmt.Sprintf("%s%s", prefix, bytesToReadable(diff))),
+		slog.Int("Act_GoRoutines", runtime.NumGoroutine()),
+		slog.Int("Peak_Goroutine", goroutinePeak),
+		slog.Float64("Peak_ProcessorLoad", processorLoadPeak),
+		slog.String("Peak_AllocMemory", bytesToReadable(allocMemoryPeak)),
+		slog.Uint64("num_GC", uint64(m.NumGC)),
+	)
 
 	allocMemoryBefore = m.Alloc
 
