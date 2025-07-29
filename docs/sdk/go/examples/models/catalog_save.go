@@ -1,6 +1,3 @@
-//go:build ignore
-// +build ignore
-
 package models
 
 import (
@@ -143,7 +140,7 @@ func (c *CatalogModelUserSaveExample) Save(r repo.Repo) error {
 // - persistence model (disk-backed)
 //
 // This setup is ideal for high-read catalogs that need occasional writes.
-func (c *CatalogModelUserSaveExample) RegisterPattern(repo repo.Repo) error {
+func (c *CatalogModelUserSaveExample) RegisterPattern(r repo.Repo) error {
 
 	// Create a context with a default timeout using the helper.
 	// This ensures the request is cancelled if it takes too long,
