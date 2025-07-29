@@ -7,7 +7,7 @@ import (
 	"context"
 	"errors"
 	"github.com/hydraide/hydraide/docs/sdk/go/examples/applications/app-queue/utils/repo"
-	log "github.com/sirupsen/logrus"
+	"log/slog"
 	"strings"
 	"time"
 )
@@ -41,10 +41,7 @@ func Lock(r repo.Repo, lockName string, ttl time.Duration) (lockID string) {
 	defer cancelFunc()
 	lockID, err := r.GetHydraidego().Lock(ctx, lockName, ttl)
 	if err != nil {
-		log.WithFields(log.Fields{
-			"lockName": lockName,
-			"error":    err,
-		}).Error("failed to create hydra lock")
+		slog.Error("failed to create hydra lock", "err", err.Error(), lockName, lockName)
 		return ""
 	}
 	return lockID
@@ -57,11 +54,7 @@ func Unlock(r repo.Repo, lockName, lockID string) {
 	ctx, cancelFunc := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancelFunc()
 	if err := r.GetHydraidego().Unlock(ctx, lockName, lockID); err != nil {
-		log.WithFields(log.Fields{
-			"lockName": lockName,
-			"lockID":   lockID,
-			"error":    err,
-		}).Error("failed to unlock the hydra lock")
+		slog.Error("failed to unlock the hydra lock", "lockName", lockName, "lockID", lockID, "error", err.Error())
 		return
 	}
 }

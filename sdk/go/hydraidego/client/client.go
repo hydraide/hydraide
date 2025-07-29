@@ -5,11 +5,11 @@ import (
 	"errors"
 	"github.com/hydraide/hydraide/generated/hydraidepbgo"
 	"github.com/hydraide/hydraide/sdk/go/hydraidego/name"
-	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/grpclog"
 	"google.golang.org/grpc/keepalive"
+	"log/slog"
 	"net"
 	"os"
 	"os/exec"
@@ -208,12 +208,7 @@ func (c *client) Connect(connectionLog bool) error {
 			creds, certErr := credentials.NewClientTLSFromFile(server.CertFilePath, "")
 			if certErr != nil {
 
-				log.WithFields(log.Fields{
-					"error":      certErr,
-					"server":     server.Host,
-					"fromIsland": server.FromIsland,
-					"toIsland":   server.ToIsland,
-				}).Error("error while loading TLS credentials")
+				slog.Error("error while loading TLS credentials: ", "error", certErr, "server", server.Host, "fromIsland", server.FromIsland, "toIsland", server.ToIsland)
 
 				errorMessages = append(errorMessages, certErr)
 
@@ -243,12 +238,7 @@ func (c *client) Connect(connectionLog bool) error {
 			conn, err = grpc.NewClient(server.Host, opts...)
 			if err != nil {
 
-				log.WithFields(log.Fields{
-					"serverAddress": server.Host,
-					"fromIsland":    server.FromIsland,
-					"toIsland":      server.ToIsland,
-					"error":         err,
-				}).Error("error while connecting to the server")
+				slog.Error("error while connecting to the server: ", "error", err, "server", server.Host, "fromIsland", server.FromIsland, "toIsland", server.ToIsland)
 
 				errorMessages = append(errorMessages, err)
 
@@ -264,23 +254,20 @@ func (c *client) Connect(connectionLog bool) error {
 			pong, err := serviceClient.Heartbeat(ctx, &hydraidepbgo.HeartbeatRequest{Ping: "beat"})
 			if err != nil || pong == nil || pong.Pong != "beat" {
 
-				log.WithFields(log.Fields{
-					"error":         err,
-					"serverAddress": server.Host,
-					"fromIsland":    server.FromIsland,
-					"toIsland":      server.ToIsland,
-					"pongMessage":   pong,
-					"errorMessages": errorMessages,
-				}).Error("error while sending heartbeat request")
+				slog.Error("error while sending heartbeat request: ",
+					"error", err,
+					"server", server.Host,
+					"fromIsland", server.FromIsland,
+					"toIsland", server.ToIsland,
+					"pongMessage", pong,
+					"errorMessages", errorMessages)
 
 				errorMessages = append(errorMessages, err)
 
 				return
 			}
 
-			log.WithFields(log.Fields{
-				"serverAddress": server.Host,
-			}).Info("connected to the hydra server successfully")
+			slog.Info("connected to the hydra server successfully")
 
 			for island := server.FromIsland; island <= server.ToIsland; island++ {
 				c.serviceClients[island] = &ServiceClient{
@@ -326,9 +313,7 @@ func (c *client) CloseConnection() {
 	for _, conn := range c.connections {
 		if conn != nil {
 			if err := conn.Close(); err != nil {
-				log.WithFields(log.Fields{
-					"error": err,
-				}).Error("error while closing connection")
+				slog.Error("error while closing connection", "error", err)
 			}
 		}
 	}
@@ -373,11 +358,8 @@ func (c *client) GetServiceClient(swampName name.Name) hydraidepbgo.HydraideServ
 		return serviceClient.GrpcClient
 	}
 
-	log.WithFields(log.Fields{
-		"error":     errorNoConnection,
-		"swampName": swampName.Get(),
-	}).Error("error while getting service client by swamp name")
-
+	slog.Error("error while getting service client by swamp name",
+		"swampName", swampName.Get())
 	return nil
 
 }
@@ -428,10 +410,9 @@ func (c *client) GetServiceClientAndHost(swampName name.Name) *ServiceClient {
 		return serviceClient
 	}
 
-	log.WithFields(log.Fields{
-		"error":     errorNoConnection,
-		"swampName": swampName.Get(),
-	}).Error("error while getting service client by swamp name")
+	slog.Error("error while getting service client by swamp name",
+		"swampName", swampName.Get(),
+		"error", errorNoConnection)
 
 	return nil
 
@@ -469,10 +450,7 @@ func ping(ip string) bool {
 	if err != nil {
 		return false
 	}
-	log.WithFields(log.Fields{
-		"Host": ip,
-		"out":  string(out),
-	}).Info("pinging the Host")
+	slog.Info("pinging the Host", "output", string(out))
 	return true
 }
 
@@ -485,33 +463,22 @@ func pingHost(hostnameOrIP string) {
 	if isIP(hostnameOrIP) {
 		// If input is an IP address, just ping it
 		if ping(hostnameOrIP) {
-			log.WithFields(log.Fields{
-				"Host": hostnameOrIP,
-			}).Info("the Host ping without error")
+			slog.Info("the Host ping without error", "Host", hostnameOrIP)
 		} else {
-			log.WithFields(log.Fields{
-				"Host": hostnameOrIP,
-			}).Warning("the Host does not ping")
+			slog.Warn("the Host does not ping", "Host", hostnameOrIP)
 		}
 
 	} else {
 		ip, err := resolveHostname(hostnameOrIP)
 		if err != nil {
-			log.WithFields(log.Fields{
-				"Host": hostnameOrIP,
-				"err":  err,
-			}).Error("could not resolve hostname")
+			slog.Error("could not resolve hostname", "Host", hostnameOrIP, "error", err)
 		}
 
 		// If input is an IP address, just ping it
 		if ping(ip) {
-			log.WithFields(log.Fields{
-				"Host": ip,
-			}).Info("the Host ping without error")
+			slog.Info("the Host ping without error", "Host", ip)
 		} else {
-			log.WithFields(log.Fields{
-				"Host": ip,
-			}).Warning("the Host does not ping")
+			slog.Warn("the Host does not ping", "Host", ip)
 		}
 	}
 }
