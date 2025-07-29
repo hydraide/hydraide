@@ -60,7 +60,8 @@ import (
 	"context"
 	"github.com/hydraide/hydraide/sdk/go/hydraidego"
 	"github.com/hydraide/hydraide/sdk/go/hydraidego/name"
-	log "github.com/sirupsen/logrus"
+	"log/slog"
+
 	"time"
 )
 
@@ -203,16 +204,12 @@ func (h *hydrex) Save(ctx context.Context, indexName string, domain string, item
 
 	// add new key to the core data
 	if err := h.hydraidegoInterface.CatalogSaveMany(ctx, coreDataName, itemsForSave, nil); err != nil {
-		log.WithFields(log.Fields{
-			"error": err,
-		}).Error("Error while saving core data")
+		slog.Error("Error while saving core data", "error", err)
 	}
 
 	// save all domains to the indexes
 	if err := h.hydraidegoInterface.CatalogSaveManyToMany(ctx, saveManyToManyReq, nil); err != nil {
-		log.WithFields(log.Fields{
-			"error": err,
-		}).Error("Error while saving hydrex")
+		slog.Error("Error while saving hydrex", "error", err)
 	}
 
 }
@@ -277,9 +274,7 @@ func (h *hydrex) GetIndexData(ctx context.Context, indexName string, key string)
 	})
 
 	if err != nil {
-		log.WithFields(log.Fields{
-			"error": err,
-		}).Error("Error while reading hydrex")
+		slog.Error("Error while reading hydrex", "error", err)
 	}
 
 	return cd
@@ -347,9 +342,7 @@ func (h *hydrex) registerPattern() {
 	})
 
 	if err != nil {
-		log.WithFields(log.Fields{
-			"error": err,
-		}).Error("Error while registering hydrunIndex pattern")
+		slog.Error("Error while registering hydrunIndex pattern", "error", err)
 	}
 
 	err = h.hydraidegoInterface.RegisterSwamp(ctx, &hydraidego.RegisterSwampRequest{
@@ -363,9 +356,7 @@ func (h *hydrex) registerPattern() {
 	})
 
 	if err != nil {
-		log.WithFields(log.Fields{
-			"error": err,
-		}).Error("Error while registering hydrunCoreData pattern")
+		slog.Error("Error while registering hydrunCoreData pattern", "error", err)
 	}
 
 }
