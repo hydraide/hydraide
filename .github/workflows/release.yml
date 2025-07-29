@@ -2,13 +2,11 @@ name: Build and Release
 
 on:
   push:
-    branches:
-      - main
-
+    tags:
+      - 'v*'  # Triggers on tags like v1.0, v1.2.3, etc.
 
 jobs:
   release:
-    if: contains(github.event.head_commit.message, 'releaseV')
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
@@ -34,9 +32,8 @@ jobs:
       id: extract_version
       shell: bash
       run: |
-        echo "Commit message: ${{ github.event.head_commit.message }}"
-        # Extract version from commit message, e.g., releaseV1.8 → v1.8
-        VERSION=$(echo "${{ github.event.head_commit.message }}" | sed -n 's/.*releaseV\([0-9\.]*\).*/v\1/p')
+        # Extract version from git tag ref
+        VERSION=${GITHUB_REF#refs/tags/}
         echo "version=$VERSION" >> $GITHUB_OUTPUT
         echo "Extracted version: $VERSION"
 
@@ -62,7 +59,8 @@ jobs:
   create_release:
     needs: release
     runs-on: ubuntu-latest
-    if: contains(github.event.head_commit.message, 'releaseV')
+    permissions:
+      contents: write
     
     steps:
     - name: Checkout code
@@ -71,39 +69,19 @@ jobs:
     - name: Extract version
       id: extract_version
       run: |
-        VERSION=$(echo "${{ github.event.head_commit.message }}" | sed -n 's/.*releaseV\([0-9\.]*\).*/v\1/p')
+        VERSION=${GITHUB_REF#refs/tags/}
         echo "version=$VERSION" >> $GITHUB_OUTPUT
 
     - name: Download all artifacts
       uses: actions/download-artifact@v4
 
-    - name: Create GitHub release
-      id: create_release
-      uses: actions/create-release@v1
+    - name: Create GitHub release with assets
+      uses: ncipollo/release-action@v1
       with:
-        tag_name: ${{ steps.extract_version.outputs.version }}
-        release_name: Release ${{ steps.extract_version.outputs.version }}
+        tag: ${{ steps.extract_version.outputs.version }}
+        name: Release ${{ steps.extract_version.outputs.version }}
+        artifacts: "hydraide-linux-amd64/hydraide-linux-amd64,hydraide-windows-amd64.exe/hydraide-windows-amd64.exe"
+        generateReleaseNotes: true
         draft: false
         prerelease: false
-      env:
-        GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
-
-    - name: Upload Linux binary
-      uses: actions/upload-release-asset@v1
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./hydraide-linux-amd64/hydraide-linux-amd64
-        asset_name: hydraide-linux-amd64
-        asset_content_type: application/octet-stream
-      env:
-        GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
-
-    - name: Upload Windows binary
-      uses: actions/upload-release-asset@v1
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./hydraide-windows-amd64.exe/hydraide-windows-amd64.exe
-        asset_name: hydraide-windows-amd64.exe
-        asset_content_type: application/octet-stream
-      env:
-        GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        token: ${{ secrets.RELEASE_TOKEN }}
