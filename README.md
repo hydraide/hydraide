@@ -116,6 +116,11 @@ Once uploaded, ChatGPT will be able to:
 
 💡 The documentation is written to be **semantically consumable by AI**, which means ChatGPT will understand not just APIs, but **the design philosophy, naming logic, and intent** behind each HydrAIDE feature.
 
+> A prebuilt ChatGPT is also available for the HydrAIDE Knowledge Engine. You can use it via the ChatGPT store
+or directly through this link: https://chatgpt.com/g/g-688779751c988191b975beaf7f68801d-hydraide-knowledge-engine
+Feel free to ask it anything! If it can’t answer your question, open an issue, or build your own custom GPT project
+with enhanced responses, as we described above.
+
 ---
 
 ## 📚 Start Here: The HydrAIDE Documentation
