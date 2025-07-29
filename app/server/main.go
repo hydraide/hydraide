@@ -68,6 +68,12 @@ func init() {
 		slog.Error("server certificate file server.crt are not found", "error", err.Error())
 		panic(fmt.Sprintf("server certificate file server.crt are not found in %s", serverCrtPath))
 	}
+
+	// check if the server key and certificate files exist
+	if _, err := os.Stat(serverCrtPath); os.IsNotExist(err) {
+		slog.Error("server certificate file server.crt are not found", "error", err.Error())
+		panic(fmt.Sprintf("server certificate file server.crt are not found in %s", serverCrtPath))
+	}
 	if _, err := os.Stat(serverKeyPath); os.IsNotExist(err) {
 		slog.Error("server certificate file server.key are not found", "error", err.Error())
 		panic(fmt.Sprintf("server certificate file server.key are not found in %s", serverKeyPath))

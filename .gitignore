@@ -43,3 +43,4 @@ vendor/
 .env
 
 db/
+fallback.log
