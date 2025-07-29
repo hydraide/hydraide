@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
-
 )
 
 var serverInterface server.Server
@@ -34,8 +33,8 @@ var (
 	systemResourceLogging = false
 	serverCrtPath         = ""
 	serverKeyPath         = ""
-	hydraServerPort       = int(0)
-	healthCheckPort       = int(0)
+	hydraServerPort       = int(4444)
+	healthCheckPort       = int(4445)
 )
 
 func init() {
@@ -43,45 +42,27 @@ func init() {
 	// Load environment variables from .env files before anything else
 	_ = godotenv.Load()
 
-	// check if the server key and certificate files exist
-	isServerCertificateCrtOk := true
-	isServerCertificateKeyOk := true
-
 	// check if the HYDRAIDE_SERVER_PORT and HEALTH_CHECK_PORT environment variables are set
 	var err error
-	if os.Getenv("HYDRAIDE_SERVER_PORT") == "" {
-		logrus.WithFields(logrus.Fields{
-			"error": "HYDRAIDE_SERVER_PORT is not set",
-		}).Panic("HYDRAIDE_SERVER_PORT environment variable is not set")
+	if os.Getenv("HYDRAIDE_SERVER_PORT") != "" {
+		if hydraServerPort, err = strconv.Atoi(os.Getenv("HYDRAIDE_SERVER_PORT")); err != nil {
+			panic(fmt.Sprintf("HYDRAIDE_SERVER_PORT must be a number without any string characters: %v", err))
+		}
 	}
-	if os.Getenv("HEALTH_CHECK_PORT") == "" {
-		logrus.WithFields(logrus.Fields{
-			"error": "HEALTH_CHECK_PORT is not set",
-		}).Panic("HEALTH_CHECK_PORT environment variable is not set")
-	}
-
-	// convert the HYDRAIDE_SERVER_PORT and HEALTH_CHECK_PORT environment variables to integers
-	if hydraServerPort, err = strconv.Atoi(os.Getenv("HYDRAIDE_SERVER_PORT")); err != nil {
-		logrus.WithFields(logrus.Fields{
-			"error": err,
-		}).Panic("HYDRAIDE_SERVER_PORT must be a number without any string characters")
-	}
-
-	if healthCheckPort, err = strconv.Atoi(os.Getenv("HEALTH_CHECK_PORT")); err != nil {
-		logrus.WithFields(logrus.Fields{
-			"error": err,
-		}).Panic("HEALTH_CHECK_PORT must be a number without any string characters")
+	if os.Getenv("HEALTH_CHECK_PORT") != "" {
+		if healthCheckPort, err = strconv.Atoi(os.Getenv("HEALTH_CHECK_PORT")); err != nil {
+			panic(fmt.Sprintf("HEALTH_CHECK_PORT must be a number without any string characters: %v", err))
+		}
 	}
 
 	if os.Getenv("HYDRAIDE_ROOT_PATH") == "" {
-		logrus.WithFields(logrus.Fields{
-			"error": "HYDRAIDE_ROOT_PATH is not set",
-		}).Panic("HYDRAIDE_ROOT_PATH environment variable is not set")
+		slog.Error("HYDRAIDE_ROOT_PATH environment variable is not set")
+		panic("HYDRAIDE_ROOT_PATH environment variable is not set")
 	}
 
 	// should be handled these for linux and windows
-	serverCrtPath = filepath.Join(os.Getenv("HYDRAIDE_ROOT_PATH"), "certificate", "ca.crt")
-	serverKeyPath = filepath.Join(os.Getenv("HYDRAIDE_ROOT_PATH"), "certificate", "ca.key")
+	serverCrtPath = filepath.Join(os.Getenv("HYDRAIDE_ROOT_PATH"), "certificate", "server.crt")
+	serverKeyPath = filepath.Join(os.Getenv("HYDRAIDE_ROOT_PATH"), "certificate", "server.key")
 
 	if _, err := os.Stat(serverCrtPath); os.IsNotExist(err) {
 		slog.Error("server certificate file server.crt are not found", "error", err.Error())
