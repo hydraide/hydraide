@@ -7,9 +7,9 @@ import (
 	"github.com/hydraide/hydraide/generated/hydraidepbgo"
 	"github.com/hydraide/hydraide/sdk/go/hydraidego/client"
 	"github.com/hydraide/hydraide/sdk/go/hydraidego/name"
-	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"log/slog"
 	"os"
 	"sync"
 	"testing"
@@ -38,16 +38,19 @@ func setup() {
 
 	serverGlobalName = name.New().Sanctuary("server").Realm("global").Swamp("name")
 
-	log.SetLevel(log.TraceLevel)
+	slog.SetLogLoggerLevel(slog.LevelDebug)
 
 	if os.Getenv("HYDRA_SERVER_CRT") == "" {
-		log.Fatal("HYDRA_SERVER_CRT environment variable is not set")
+		slog.Error("HYDRA_SERVER_CRT environment variable is not set")
+		panic("HYDRA_SERVER_CRT environment variable is not set")
 	}
 	if os.Getenv("HYDRA_SERVER_KEY") == "" {
-		log.Fatal("HYDRA_SERVER_KEY environment variable is not set")
+		slog.Error("HYDRA_SERVER_KEY environment variable is not set")
+		panic("HYDRA_SERVER_KEY environment variable is not set")
 	}
 	if os.Getenv("HYDRA_CLIENT_CA_CRT") == "" {
-		log.Fatal("HYDRA_CLIENT_CA_CRT environment variable is not set")
+		slog.Error("HYDRA_CLIENT_CA_CRT environment variable is not set")
+		panic("HYDRA_CLIENT_CA_CRT environment variable is not set")
 	}
 
 	// start the new Hydra server
@@ -59,7 +62,8 @@ func setup() {
 	})
 
 	if err := serverInterface.Start(); err != nil {
-		log.Fatal(err)
+		slog.Error("error while starting the server", "error", err)
+		panic(fmt.Sprintf("error while starting the server: %v", err))
 	}
 
 	createGrpcClient()
@@ -69,7 +73,7 @@ func setup() {
 func teardown() {
 	// stop the microservice and exit the program
 	serverInterface.Stop()
-	log.Info("server stopped gracefully. Program is exiting...")
+	slog.Info("server stopped gracefully. Program is exiting...")
 	// waiting for logs to be written to the file
 	time.Sleep(1 * time.Second)
 	// exit the program if the microservice is stopped gracefully
@@ -91,9 +95,7 @@ func createGrpcClient() {
 	// 100 folders and 2 gig message size
 	clientInterface = client.New(servers, 100, 2147483648)
 	if err := clientInterface.Connect(true); err != nil {
-		log.WithFields(log.Fields{
-			"error": err,
-		}).Error("error while connecting to the server")
+		slog.Error("error while connecting to the server", "error", err)
 	}
 
 }
@@ -176,9 +178,7 @@ func TestGateway_Set(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, response)
 
-	log.WithFields(log.Fields{
-		"response": response,
-	}).Trace("response from the server")
+	slog.Debug("response from the server", "response", response)
 
 	assert.Equal(t, 1, len(response.GetSwamps()), "response should contain one swamp")
 	assert.Equal(t, 10, len(response.GetSwamps()[0].GetKeysAndStatuses()), "the swamp should contain 10 keys")
@@ -200,21 +200,14 @@ func TestGateway_Set(t *testing.T) {
 	treasureExistCounter := 0
 	treasureNotExistCounter := 0
 	for _, getResponseValue := range getResponse.GetSwamps() {
-		log.WithFields(log.Fields{
-			"swamp": getResponseValue.GetSwampName(),
-		}).Trace("swamp found")
+		slog.Debug("swamp found", "swamp", getResponseValue.GetSwampName())
 		for _, treasure := range getResponseValue.GetTreasures() {
 			if treasure.IsExist {
 				fmt.Printf("Key: %s, Value: %s\n", treasure.GetKey(), treasure.GetStringVal())
-				log.WithFields(log.Fields{
-					"key":   treasure.GetKey(),
-					"value": treasure.GetStringVal(),
-				}).Trace("treasure found")
+				slog.Debug("treasure found", "key", treasure.GetKey(), "value", treasure.GetStringVal())
 				treasureExistCounter++
 			} else {
-				log.WithFields(log.Fields{
-					"key": treasure.GetKey(),
-				}).Trace("treasure not found")
+				slog.Debug("treasure not found")
 				treasureNotExistCounter++
 			}
 		}
@@ -258,9 +251,7 @@ func TestGateway_SubscribeToEvent(t *testing.T) {
 	destroySwamp(clientInterface.GetServiceClient(swampPattern), swampPattern)
 	defer func() {
 		destroySwamp(clientInterface.GetServiceClient(swampPattern), swampPattern)
-		log.WithFields(log.Fields{
-			"swamp": swampPattern.Get(),
-		}).Info("swamp destroyed at the end of the test")
+		slog.Info("swamp destroyed at the end of the test", "swamp", swampPattern.Get())
 	}()
 
 	selectedClient := clientInterface.GetServiceClient(swampPattern)
@@ -295,10 +286,7 @@ func TestGateway_SubscribeToEvent(t *testing.T) {
 					continue
 				}
 
-				log.WithFields(log.Fields{
-					"treasure key":   event.Treasure.GetKey(),
-					"treasure value": event.Treasure.GetStringVal(),
-				}).Trace("event received")
+				slog.Debug("event received", "treasure key", event.Treasure.GetKey(), "treasure value", event.Treasure.GetStringVal())
 
 				wg.Done()
 			}
@@ -332,7 +320,7 @@ func TestGateway_SubscribeToEvent(t *testing.T) {
 
 	wg.Wait()
 
-	log.Info("all events received successfully")
+	slog.Info("all events received successfully")
 
 }
 
@@ -343,9 +331,7 @@ func destroySwamp(selectedClient hydraidepbgo.HydraideServiceClient, swampName n
 	})
 
 	if err != nil {
-		log.WithFields(log.Fields{
-			"error": err,
-		}).Error("error while destroying swamp")
+		slog.Error("error while destroying swamp", "swamp", swampName.Get(), "error", err)
 		return
 	}
 
