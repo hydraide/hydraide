@@ -11,13 +11,13 @@ import (
 	"github.com/hydraide/hydraide/app/server/gateway"
 	"github.com/hydraide/hydraide/app/server/observer"
 	hydrapb "github.com/hydraide/hydraide/generated/hydraidepbgo"
-	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
+	"log/slog"
 	"net"
 	"os"
 	"runtime/debug"
@@ -75,8 +75,7 @@ func (s *server) IsHydraRunning() bool {
 
 func (s *server) Start() error {
 
-	log.Info("starting the hydra server...")
-
+	slog.Info("starting the hydra server...")
 	// check if the server is already running
 	s.mu.Lock()
 	if s.serverRunning {
@@ -123,49 +122,40 @@ func (s *server) Start() error {
 			// Logging GRPC Server error
 			if os.Getenv("GRPC_SERVER_ERROR_LOGGING") == "true" {
 				if grpcErr, ok := status.FromError(err); ok {
-					logFields := log.Fields{
-						"method":   info.FullMethod,
-						"clientIP": clientIP,
-						"error":    grpcErr.Message(),
-					}
 					switch grpcErr.Code() {
 					case codes.PermissionDenied:
-						log.WithFields(logFields).Error("client request rejected: permission denied")
+						slog.Error("client request rejected: permission denied", "method", info.FullMethod, "clientIP", clientIP, "error", grpcErr.Message())
 					case codes.Unauthenticated:
-						log.WithFields(logFields).Error("client request rejected: unauthenticated")
+						slog.Error("client request rejected: unauthenticated", "method", info.FullMethod, "clientIP", clientIP, "error", grpcErr.Message())
 					case codes.InvalidArgument:
-						log.WithFields(logFields).Trace("client request rejected: invalid argument")
+						slog.Debug("client request rejected: invalid argument", "method", info.FullMethod, "clientIP", clientIP, "error", grpcErr.Message())
 					case codes.ResourceExhausted:
-						log.WithFields(logFields).Error("client request rejected: resource exhausted")
+						slog.Error("client request rejected: resource exhausted", "method", info.FullMethod, "clientIP", clientIP, "error", grpcErr.Message())
 					case codes.FailedPrecondition:
-						log.WithFields(logFields).Trace("client request rejected: failed precondition")
+						slog.Debug("client request rejected: failed precondition", "method", info.FullMethod, "clientIP", clientIP, "error", grpcErr.Message())
 					case codes.Aborted:
-						log.WithFields(logFields).Trace("client request rejected: aborted")
+						slog.Debug("client request rejected: aborted", "method", info.FullMethod, "clientIP", clientIP, "error", grpcErr.Message())
 					case codes.OutOfRange:
-						log.WithFields(logFields).Trace("client request rejected: out of range")
+						slog.Debug("client request rejected: out of range", "method", info.FullMethod, "clientIP", clientIP, "error", grpcErr.Message())
 					case codes.Unavailable:
-						log.WithFields(logFields).Error("client request rejected: unavailable")
+						slog.Error("client request rejected: unavailable", "method", info.FullMethod, "clientIP", clientIP, "error", grpcErr.Message())
 					case codes.DataLoss:
-						log.WithFields(logFields).Error("client request rejected: data loss")
+						slog.Error("client request rejected: data loss", "method", info.FullMethod, "clientIP", clientIP, "error", grpcErr.Message())
 					case codes.Unknown:
-						log.WithFields(logFields).Trace("client request rejected: unknown error")
+						slog.Debug("client request rejected: unknown error", "method", info.FullMethod, "clientIP", clientIP, "error", grpcErr.Message())
 					case codes.Internal:
-						log.WithFields(logFields).Error("client request rejected: internal server error")
+						slog.Error("client request rejected: internal server error", "method", info.FullMethod, "clientIP", clientIP, "error", grpcErr.Message())
 					case codes.Unimplemented:
-						log.WithFields(logFields).Warn("client request rejected: unimplemented")
+						slog.Warn("client request rejected: unimplemented", "method", info.FullMethod, "clientIP", clientIP, "error", grpcErr.Message())
 					case codes.DeadlineExceeded:
-						log.WithFields(logFields).Trace("client request rejected: deadline exceeded")
+						slog.Debug("client request rejected: deadline exceeded", "method", info.FullMethod, "clientIP", clientIP, "error", grpcErr.Message())
 					case codes.Canceled:
-						log.WithFields(logFields).Trace("client request rejected: canceled by client")
+						slog.Debug("client request rejected: canceled by client", "method", info.FullMethod, "clientIP", clientIP, "error", grpcErr.Message())
 					default:
-						log.WithFields(logFields).Error("client request rejected: unknown grpc error code")
+						slog.Error("client request rejected: unknown grpc error code", "method", info.FullMethod, "clientIP", clientIP, "error", grpcErr.Message())
 					}
 				} else {
-					log.WithFields(log.Fields{
-						"method":   info.FullMethod,
-						"clientIP": clientIP,
-						"error":    err.Error(),
-					}).Warn("client request rejected: non-gRPC error")
+					slog.Warn("client request rejected: non-gRPC error", "method", info.FullMethod, "clientIP", clientIP, "error", err.Error())
 				}
 			}
 		}
@@ -177,28 +167,24 @@ func (s *server) Start() error {
 
 		defer func() {
 			if r := recover(); r != nil {
-				// Lekérjük a stack trace-t
+				// get the stack trace
 				stackTrace := debug.Stack()
-				// Logoljuk a pánikot és a stack trace-t
-				log.WithFields(log.Fields{
-					"error": r,
-					"stack": string(stackTrace),
-				}).Error("caught panic in hydra gRPC server")
+				slog.Error("caught panic in hydra gRPC server", "error", r, "stack", string(stackTrace))
 			}
 		}()
 
 		// start the gRPC server
 		lis, err := net.Listen("tcp", fmt.Sprintf(":%d", s.configuration.HydraServerPort))
 		if err != nil {
-			log.WithFields(log.Fields{
-				"error": err.Error(),
-			}).Panic("can not create listener for the hydra server")
+			slog.Error("can not create listener for the hydra server", "error", err)
+			panic("can not create listener for the hydra server")
 		}
 
 		// load cert and key files for the server
 		creds, err := credentials.NewServerTLSFromFile(s.configuration.CertificateCrtFile, s.configuration.CertificateKeyFile)
 		if err != nil {
-			log.Fatalf("failed to load TLS credentials: %v", err)
+			slog.Error("failed to load TLS credentials", "error", err)
+			panic("failed to load TLS credentials")
 		}
 
 		kaParams := keepalive.ServerParameters{
@@ -221,13 +207,10 @@ func (s *server) Start() error {
 		// registering the server
 		hydrapb.RegisterHydraideServiceServer(s.grpcServer, &grpcServer)
 
-		log.Infof("hydra server is listening on port: %d", s.configuration.HydraServerPort)
-
+		slog.Info(fmt.Sprintf("HydrAIDE server is listening on port: %d", s.configuration.HydraServerPort))
 		// create the server and start listening for requests
 		if err = s.grpcServer.Serve(lis); err != nil {
-			log.WithFields(log.Fields{
-				"error": err.Error(),
-			}).Error("can not serve the server")
+			slog.Error("can not start the HydrAIDE server", "error", err)
 		}
 
 	}()
@@ -239,13 +222,12 @@ func (s *server) Start() error {
 // Stop stops the microservice gracefully
 func (s *server) Stop() {
 
-	log.Info("server is stopping...")
-
+	slog.Info("stopping the HydrAIDE server...")
 	// check if the server is already stopped
 	s.mu.Lock()
 	if !s.serverRunning {
 		s.mu.Unlock()
-		log.Info("server is already stopped")
+		slog.Info("hydra server stopped gracefully. Program is exiting...")
 		return
 	}
 	s.serverRunning = false
@@ -254,20 +236,19 @@ func (s *server) Stop() {
 	if s.grpcServer != nil {
 		// stops the gRPC server gracefully because we don't want to get new requests from the crawler
 		s.grpcServer.GracefulStop()
-		log.Info("grpcServer has been stopped gracefully")
 	}
 
 	// waiting for all processes to finish. This is a blocker function until all processes are finished
 	if s.observerInterface != nil {
-		log.Info("waiting for all processes to finish in the background")
+		slog.Info("waiting for all processes to finish in the background")
 		s.observerInterface.WaitingForAllProcessesFinished()
-		log.Info("all processes are finished in the background")
+		slog.Info("all processes are finished in the background")
 	}
 
 	if s.zeusInterface != nil {
 		// stop the Hydra gracefully. This is a blocker function until all swamps are stopped gracefully
 		s.zeusInterface.StopHydra()
-		log.Info("hydra has been stopped gracefully")
+		slog.Info("HydrAIDE server stopped gracefully. Program is exiting...")
 	}
 
 	// stop the observer's monitoring process

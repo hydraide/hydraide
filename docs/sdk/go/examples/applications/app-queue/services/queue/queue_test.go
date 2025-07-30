@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/hydraide/hydraide/docs/sdk/go/examples/applications/app-queue/utils/repo"
 	"github.com/hydraide/hydraide/sdk/go/hydraidego/client"
-	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 	"log/slog"
@@ -63,7 +62,8 @@ func (s *TestQueueService) tearDownSuite() {
 	mcu := &ModelCatalogQueue{}
 	// destroy test queue after the tests
 	if err := mcu.DestroyQueue(s.repoInterface, s.queueName); err != nil {
-		log.Fatal(err)
+		slog.Error("Failed to destroy test queue", "error", err)
+		panic(fmt.Sprintf("Failed to destroy test queue %s", s.queueName))
 	}
 
 }
@@ -145,9 +145,7 @@ func (s *TestQueueService) TestQueueServiceAddMany() {
 
 	}
 
-	log.WithFields(log.Fields{
-		"queueSize": qs.GetSize(s.queueName),
-	}).Info("added all tasks successfully")
+	slog.Info("added all tasks successfully", "queueSize", qs.GetSize(s.queueName))
 
 	// try to ge all tasks from the queue
 	loadedTasks, err := qs.Get(s.queueName, Task{}, allTasks)

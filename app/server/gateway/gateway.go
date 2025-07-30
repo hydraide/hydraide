@@ -13,10 +13,10 @@ import (
 	"github.com/hydraide/hydraide/app/name"
 	"github.com/hydraide/hydraide/app/server/observer"
 	hydrapb "github.com/hydraide/hydraide/generated/hydraidepbgo"
-	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"log/slog"
 	"runtime/debug"
 	"strings"
 	"time"
@@ -552,16 +552,8 @@ func (g Gateway) Destroy(ctx context.Context, in *hydrapb.DestroyRequest) (*hydr
 		return nil, status.Error(codes.Internal, fmt.Sprintf("internal server error in hydra: %s", err.Error()))
 	}
 
-	log.WithFields(log.Fields{
-		"swamp": swampName.Get(),
-	}).Trace("the swamp summoned successfully before destroying it")
-
 	// destroy the swamp
 	swampInterface.Destroy()
-
-	log.WithFields(log.Fields{
-		"swamp": swampName.Get(),
-	}).Trace("the swamp Successfully destroyed")
 
 	return &hydrapb.DestroyResponse{}, nil
 
@@ -794,9 +786,6 @@ func (g Gateway) SubscribeToEvents(in *hydrapb.SubscribeToEventsRequest, eventSe
 	eventCallbackFunction := func(event *swamp.Event) {
 
 		if event == nil {
-			log.WithFields(log.Fields{
-				"uuid": subscriberUUID,
-			}).Error("the event is nil")
 			return
 		}
 
@@ -852,9 +841,9 @@ func (g Gateway) SubscribeToEvents(in *hydrapb.SubscribeToEventsRequest, eventSe
 			DeletedTreasure: convertedDeletedTreasure,
 			EventTime:       convertedEventTime,
 		}); sendErr != nil {
-			log.WithFields(log.Fields{
-				"error": sendErr.Error(),
-			}).Error("failed to send the event to the client")
+			slog.Error("failed to send the event to the client",
+				"error", sendErr.Error(),
+				"swamp_name", eventSwampName)
 		}
 
 	}
@@ -865,26 +854,24 @@ func (g Gateway) SubscribeToEvents(in *hydrapb.SubscribeToEventsRequest, eventSe
 
 	for {
 		select {
-		// ha a kliens bezárja a kapcsolatot, akkor kilépünk a ciklusból, ezzel lefut az unsubscribe is
+		// we are waiting for the client to close the connection
 		case <-eventServer.Context().Done():
 
 			err := eventServer.Context().Err()
 			if err != nil && !errors.Is(err, context.Canceled) {
-				log.WithFields(log.Fields{
-					"uuid":  subscriberUUID,
-					"error": err.Error(),
-				}).Warn("connection closed with an unexpected error")
+				slog.Warn("connection closed with an unexpected error",
+					"uuid", subscriberUUID,
+					"error", err.Error())
 			} else {
-				log.WithFields(log.Fields{
-					"uuid": subscriberUUID,
-				}).Trace("the client closed the connection gracefully")
+				slog.Debug("the client closed the connection gracefully",
+					"uuid", subscriberUUID)
 			}
 
 			// Unsubscribe logic
 			if err := hydraInterface.UnsubscribeFromSwampEvents(subscriberUUID, swampName); err != nil {
-				log.WithFields(log.Fields{
-					"error": err.Error(),
-				}).Error("failed to unsubscribe the subscriber from the swamp")
+				slog.Error("failed to unsubscribe the subscriber from the swamp",
+					"uuid", subscriberUUID,
+					"error", err.Error())
 			}
 
 			return nil
@@ -923,9 +910,9 @@ func (g Gateway) SubscribeToInfo(in *hydrapb.SubscribeToInfoRequest, infoServer 
 				SwampName:   infoSwampName,
 				AllElements: info.AllElements,
 			}); sendErr != nil {
-				log.WithFields(log.Fields{
-					"error": sendErr.Error(),
-				}).Error("failed to send the info to the client")
+				slog.Error("failed to send the info to the client",
+					"error", sendErr.Error(),
+					"swamp_name", infoSwampName)
 			}
 
 		}()
@@ -941,35 +928,26 @@ func (g Gateway) SubscribeToInfo(in *hydrapb.SubscribeToInfoRequest, infoServer 
 		handlePanic()
 		// remove the subscriber from the swamp when the client closes the connection
 		if err := hydraInterface.UnsubscribeFromSwampInfo(subscriberUUID, swampName); err != nil {
-			log.WithFields(log.Fields{
-				"error": err.Error(),
-			}).Error("failed to unsubscribe the subscriber from the swamp")
+			slog.Error("failed to unsubscribe the subscriber from the swamp",
+				"uuid", subscriberUUID,
+				"error", err.Error())
 		}
-		log.WithFields(log.Fields{
-			"uuid": subscriberUUID,
-		}).Trace("the subscriber is removed from the swamp")
+		slog.Debug("the subscriber is removed from the swamp",
+			"uuid", subscriberUUID,
+		)
 	}()
 
 	for {
 		select {
 		// várunk arra, hogy a user bezárja a kapcsolatot
 		case <-infoServer.Context().Done():
-
-			// the client closed the connection
-			log.WithFields(log.Fields{
-				"uuid": subscriberUUID,
-			}).Trace("the client closed the connection")
-
 			// remove the subscriber from the swamp when the client closes the connection
 			if err := hydraInterface.UnsubscribeFromSwampInfo(subscriberUUID, swampName); err != nil {
-				log.WithFields(log.Fields{
-					"error": err.Error(),
-				}).Error("failed to unsubscribe the subscriber from the swamp")
+				slog.Error("failed to unsubscribe the subscriber from the swamp",
+					"uuid", subscriberUUID,
+					"error", err.Error(),
+				)
 			}
-			log.WithFields(log.Fields{
-				"uuid": subscriberUUID,
-			}).Trace("the subscriber is removed from the swamp")
-
 			return nil
 
 		}
@@ -1851,9 +1829,7 @@ func keyValuesToTreasure(keyValuePair *hydrapb.KeyValuePair, treasureInterface t
 	case keyValuePair.Uint32Slice != nil:
 
 		if err := treasureInterface.Uint32SlicePush(keyValuePair.Uint32Slice); err != nil {
-			log.WithFields(log.Fields{
-				"error": err.Error(),
-			}).Error("failed to push the uint32 slice to the treasure")
+			slog.Error("failed to push the uint32 slice to the treasure", "error", err.Error())
 		}
 	case keyValuePair.VoidVal != nil && *keyValuePair.VoidVal:
 		// set the content to void
@@ -2018,13 +1994,10 @@ func convertTreasureStatusToPbStatus(treasureStatus treasure.TreasureStatus) hyd
 // handle all the panics in the gateway
 func handlePanic() {
 	if r := recover(); r != nil {
-		// Lekérjük a stack trace-t
+		// get the stack trace
 		stackTrace := debug.Stack()
-		// Logoljuk a pánikot és a stack trace-t
-		log.WithFields(log.Fields{
-			"error": r,
-			"stack": string(stackTrace),
-		}).Error("grpc gateway panic")
+		// log the panic with the error and stack trace
+		slog.Error("grpc gateway panic", "error", r, "stack", string(stackTrace))
 	}
 }
 
