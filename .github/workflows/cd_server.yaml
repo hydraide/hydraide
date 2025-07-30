@@ -3,7 +3,7 @@ name: Build and Release
 on:
   push:
     tags:
-      - 'v*'  # Triggers on tags like v1.0, v1.2.3, etc.
+      - 'server:v*'  # Triggers on tags like v1.0, v1.2.3, etc.
 
 jobs:
   release:
