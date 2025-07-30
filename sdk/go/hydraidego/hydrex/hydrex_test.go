@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"github.com/hydraide/hydraide/sdk/go/hydraidego"
 	"github.com/hydraide/hydraide/sdk/go/hydraidego/client"
-	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
+	"log/slog"
 	"os"
 	"testing"
 	"time"
@@ -42,7 +42,7 @@ func setup() {
 func teardown() {
 	// stop the microservice and exit the program
 	clientInterface.CloseConnection()
-	log.Info("server stopped gracefully. Program is exiting...")
+	slog.Info("HydrAIDE server stopped gracefully. Program is exiting...")
 	// waiting for logs to be written to the file
 	time.Sleep(1 * time.Second)
 	// exit the program if the microservice is stopped gracefully
