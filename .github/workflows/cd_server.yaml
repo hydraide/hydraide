@@ -84,4 +84,4 @@ jobs:
         generateReleaseNotes: true
         draft: false
         prerelease: false
-        token: ${{ secrets.RELEASE_TOKEN }}
+        token: ${{ secrets.GITHUB_TOKEN }}
