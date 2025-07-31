@@ -6,7 +6,9 @@ services:
     ports:
       - "4900:4444"  # HostPort:ContainerPort – gRPC port to expose
     environment:
-      - LOG_LEVEL=info  # Log level: trace | debug | info | warn | error
+      - PUID=1000        # your Linux user ID (e.g. run: id -u)
+      - PGID=1000        # your group ID (e.g. run: id -g)
+      - LOG_LEVEL=info  # Log level: debug | info | warn | error
       - LOG_TIME_FORMAT=2006-01-02T15:04:05Z07:00  # Go time format for logs
       - SYSTEM_RESOURCE_LOGGING=false  # Enable system metrics logging (goroutines, memory)
       - GRAYLOG_ENABLED=false  # Enable external logging to Graylog (true/false)

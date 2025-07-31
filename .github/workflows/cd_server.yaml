@@ -101,7 +101,7 @@ jobs:
         id: extract_version
         shell: bash
         run: |
-          VERSION=${GITHUB_REF#refs/tags/}
+          VERSION=${GITHUB_REF#refs/tags/server/v}
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Set up Docker Buildx

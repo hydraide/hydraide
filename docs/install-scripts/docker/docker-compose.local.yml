@@ -4,6 +4,8 @@ services:
     ports:
       - "4900:4444"  # Exposes gRPC port 4444 on localhost:4900
     environment:
+      - PUID=1000        # your Linux user ID (e.g. run: id -u)
+      - PGID=1000        # your group ID (e.g. run: id -g)
       - LOG_LEVEL=debug  # Log verbosity: use 'debug' or 'trace' during testing
       - LOG_TIME_FORMAT=2006-01-02T15:04:05Z07:00  # Timestamp format for log lines (Go time layout)
       - SYSTEM_RESOURCE_LOGGING=false  # Disables CPU/memory metrics logging (set to true if you want periodic logs)
@@ -26,6 +28,8 @@ services:
     ports:
       - "4901:4444"  # Maps gRPC port 4444 to 4901 for the live instance
     environment:
+      - PUID=1000        # your Linux user ID (e.g. run: id -u)
+      - PGID=1000        # your group ID (e.g. run: id -g)
       - LOG_LEVEL=error  # Less verbose logs in production (only errors)
       - LOG_TIME_FORMAT=2006-01-02T15:04:05Z07:00
       - SYSTEM_RESOURCE_LOGGING=true  # Enable periodic logging of goroutines, memory, etc.

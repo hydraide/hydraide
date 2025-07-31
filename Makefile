@@ -50,13 +50,6 @@ push:
 # Build the Docker image with both versioned tag and latest tag
 build-push: build push
 
-debug-env:
-	@echo "HYDRAIDE_DOCKER_USERNAME = $${HYDRAIDE_DOCKER_USERNAME}"
-	@echo "HYDRAIDE_DOCKER_TOKEN = $${HYDRAIDE_DOCKER_TOKEN}"
-	@echo "IMAGE_TAG = $(IMAGE_TAG)"
-
-
-
 # Build from proto files
 # =============================================================================
 
