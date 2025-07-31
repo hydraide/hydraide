@@ -253,15 +253,31 @@ var initCmd = &cobra.Command{
 		}
 
 		// HEALTH CHECK PORT
-		fmt.Println("\n❤️‍🩹 Health Check Endpoint")
-		fmt.Println("   Separate port for health checks and monitoring")
-		fmt.Print("Health check port [default: 4901]: ")
-		healthPort, _ := reader.ReadString('\n')
-		healthPort = strings.TrimSpace(healthPort)
-		if healthPort == "" {
-			healthPort = "4901"
+		for {
+			fmt.Println("\n❤️‍🩹 Health Check Endpoint")
+			fmt.Println("   Separate port for health checks and monitoring")
+			fmt.Print("Health check port [default: 4901]: ")
+			healthPort, _ := reader.ReadString('\n')
+			healthPort = strings.TrimSpace(healthPort)
+			if healthPort == "" {
+				healthPort = "4901"
+				envCfg.HealthCheckPort = healthPort
+				break
+			}
+			port, err := strconv.Atoi(healthPort)
+			if err != nil || port < 1 || port > 65535 {
+				fmt.Printf("\n❌ Invalid port %s. Please enter a valid port number between 1 and 65535.", healthPort)
+				continue
+			}
+
+			if healthPort == envCfg.HydraidePort {
+				fmt.Printf("\n⚠️  Port %s is already used by the main HydrAIDE server. Please choose a different one.", healthPort)
+				continue
+			}
+
+			envCfg.HealthCheckPort = healthPort
+			break
 		}
-		envCfg.HealthCheckPort = healthPort
 
 		// ======================
 		// CONFIGURATION SUMMARY
