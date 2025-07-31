@@ -85,3 +85,31 @@ jobs:
         draft: false
         prerelease: false
         token: ${{ secrets.GITHUB_TOKEN }}
+
+  docker:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Extract version
+        id: extract_version
+        shell: bash
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push Docker image using GitHub Secrets
+        env:
+          HYDRAIDE_DOCKER_USERNAME: ${{ secrets.HYDRAIDE_DOCKER_USERNAME }}
+          HYDRAIDE_DOCKER_TOKEN: ${{ secrets.HYDRAIDE_DOCKER_TOKEN }}
+          IMAGE_TAG: ${{ steps.extract_version.outputs.version }}
+        run: make build-push

@@ -1,14 +1,5 @@
 FROM golang:1.24.2 AS builder
 
-ARG GIT_USERNAME
-ARG GIT_EMAIL
-
-RUN --mount=type=secret,id=git_token \
-    git_token=$(cat /run/secrets/git_token) && \
-    git config --global user.name "${GIT_USERNAME}" && \
-    git config --global user.email "${GIT_EMAIL}" && \
-    git config --global url."https://${git_token}:x-oauth-basic@github.com/".insteadOf "https://github.com/"
-
 WORKDIR /app
 
 COPY . .
@@ -24,8 +15,6 @@ RUN apk --no-cache add ca-certificates curl
 WORKDIR /hydraide/
 
 COPY --from=builder /app/hydraide .
-
-RUN apk --no-cache add ca-certificates
 
 CMD ["./hydraide"]
 
