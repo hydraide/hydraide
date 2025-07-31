@@ -14,6 +14,21 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// validatePort validates that the provided port string is a valid integer between 1 and 65535
+func validatePort(portStr string) (string, error) {
+	if portStr == "" {
+		return "", fmt.Errorf("port cannot be empty")
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		return "", fmt.Errorf("port must be a valid integer")
+	}
+	if port < 1 || port > 65535 {
+		return "", fmt.Errorf("port must be between 1 and 65535")
+	}
+	return portStr, nil
+}
+
 type CertConfig struct {
 	CN  string
 	DNS []string
@@ -44,7 +59,8 @@ var initCmd = &cobra.Command{
 
 		reader := bufio.NewReader(os.Stdin)
 
-		fmt.Println("🚀 Starting HydrAIDE install wizard...\n")
+		fmt.Println("🚀 Starting HydrAIDE install wizard...")
+		fmt.Println()
 
 		var cert CertConfig
 		var envCfg EnvConfig
@@ -104,13 +120,27 @@ var initCmd = &cobra.Command{
 		}
 
 		fmt.Println("\n🔌 Port Configuration")
-		fmt.Println("This is the external port on your host machine that will map to the HydrAIDE container.")
-		fmt.Println("Clients will use this port to communicate with the HydrAIDE server.")
-		fmt.Print("Which port should HydrAIDE listen on? (default: 4900): ")
-		envCfg.HydraidePort, _ = reader.ReadString('\n')
-		envCfg.HydraidePort = strings.TrimSpace(envCfg.HydraidePort)
-		if envCfg.HydraidePort == "" {
-			envCfg.HydraidePort = "4900"
+		fmt.Println("This is the port where the HydrAIDE binary server will listen for client connections.")
+		fmt.Println("Set the bind port for the HydrAIDE server instance.")
+		
+		// Port validation loop for main port
+		for {
+			fmt.Print("Which port should HydrAIDE listen on? (default: 4900): ")
+			portInput, _ := reader.ReadString('\n')
+			portInput = strings.TrimSpace(portInput)
+			
+			if portInput == "" {
+				envCfg.HydraidePort = "4900"
+				break
+			}
+			
+			if validPort, err := validatePort(portInput); err != nil {
+				fmt.Printf("❌ Invalid port: %v. Please try again.\n", err)
+				continue
+			} else {
+				envCfg.HydraidePort = validPort
+				break
+			}
 		}
 
 		fmt.Println("\n📁 Base Path for HydrAIDE")
@@ -255,13 +285,26 @@ var initCmd = &cobra.Command{
 		// HEALTH CHECK PORT
 		fmt.Println("\n❤️‍🩹 Health Check Endpoint")
 		fmt.Println("   Separate port for health checks and monitoring")
-		fmt.Print("Health check port [default: 4901]: ")
-		healthPort, _ := reader.ReadString('\n')
-		healthPort = strings.TrimSpace(healthPort)
-		if healthPort == "" {
-			healthPort = "4901"
+		
+		// Port validation loop for health check port
+		for {
+			fmt.Print("Health check port [default: 4901]: ")
+			healthPortInput, _ := reader.ReadString('\n')
+			healthPortInput = strings.TrimSpace(healthPortInput)
+			
+			if healthPortInput == "" {
+				envCfg.HealthCheckPort = "4901"
+				break
+			}
+			
+			if validPort, err := validatePort(healthPortInput); err != nil {
+				fmt.Printf("❌ Invalid port: %v. Please try again.\n", err)
+				continue
+			} else {
+				envCfg.HealthCheckPort = validPort
+				break
+			}
 		}
-		envCfg.HealthCheckPort = healthPort
 
 		// ======================
 		// CONFIGURATION SUMMARY
