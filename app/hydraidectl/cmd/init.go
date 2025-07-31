@@ -122,25 +122,26 @@ var initCmd = &cobra.Command{
 		fmt.Println("\n🔌 Port Configuration")
 		fmt.Println("This is the port where the HydrAIDE binary server will listen for client connections.")
 		fmt.Println("Set the bind port for the HydrAIDE server instance.")
-		
+
 		// Port validation loop for main port
 		for {
 			fmt.Print("Which port should HydrAIDE listen on? (default: 4900): ")
 			portInput, _ := reader.ReadString('\n')
 			portInput = strings.TrimSpace(portInput)
-			
+
 			if portInput == "" {
 				envCfg.HydraidePort = "4900"
 				break
 			}
-			
-			if validPort, err := validatePort(portInput); err != nil {
+
+			validPort, err := validatePort(portInput)
+			if err != nil {
 				fmt.Printf("❌ Invalid port: %v. Please try again.\n", err)
 				continue
-			} else {
-				envCfg.HydraidePort = validPort
-				break
 			}
+
+			envCfg.HydraidePort = validPort
+			break
 		}
 
 		fmt.Println("\n📁 Base Path for HydrAIDE")
@@ -285,25 +286,26 @@ var initCmd = &cobra.Command{
 		// HEALTH CHECK PORT
 		fmt.Println("\n❤️‍🩹 Health Check Endpoint")
 		fmt.Println("   Separate port for health checks and monitoring")
-		
+
 		// Port validation loop for health check port
 		for {
 			fmt.Print("Health check port [default: 4901]: ")
 			healthPortInput, _ := reader.ReadString('\n')
 			healthPortInput = strings.TrimSpace(healthPortInput)
-			
+
 			if healthPortInput == "" {
 				envCfg.HealthCheckPort = "4901"
 				break
 			}
-			
-			if validPort, err := validatePort(healthPortInput); err != nil {
+
+			validPort, err := validatePort(healthPortInput)
+			if err != nil {
 				fmt.Printf("❌ Invalid port: %v. Please try again.\n", err)
 				continue
-			} else {
-				envCfg.HealthCheckPort = validPort
-				break
 			}
+
+			envCfg.HealthCheckPort = validPort
+			break
 		}
 
 		// ======================
