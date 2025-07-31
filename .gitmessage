@@ -1,0 +1,35 @@
+# type(scope): short summary
+#
+# Optional body. Use this to explain what and why, not how.
+# Try to keep it concise and relevant.
+#
+# Examples:
+#   feat(server): add TLS support to HTTP interface
+#   fix(sdk/go): prevent panic in Catalog hydration
+#   docs: clarify Swamp registration flow
+#
+# Footer (e.g., closes #123)
+
+# Allowed types:
+#   feat     - a new feature
+#   fix      - a bug fix
+#   docs     - documentation changes only
+#   style    - formatting, missing semi colons, etc.
+#   refactor - code change that neither fixes a bug nor adds a feature
+#   perf     - performance improvements
+#   test     - adding or fixing tests
+#   chore    - changes to the build process or tooling
+#   ci       - CI/CD configuration and workflow changes
+#   build    - dependency or build system updates
+
+# Suggested scopes:
+#   server       - HydrAIDE server (./app/server)
+#   core         - core logic or shared modules (./app/core)
+#   cli          - HydrAIDE CLI (./app/hydraidectl)
+#   sdk/go       - Go SDK (./sdk/go)
+#   sdk/python   - Python SDK (./sdk/python)
+#   docs         - documentation (./docs)
+#   release      - version bump, changelog, or release artifacts
+
+# Scope is optional, but encouraged: (e.g. feat(server): ...)
+# Lines starting with '#' are ignored by Git

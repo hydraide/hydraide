@@ -81,7 +81,10 @@ If you're adding an SDK method, include a simple usage test (call + assert expec
 
 ## Pre-commit Hooks
 
-We use `pre-commit` for formatting and validation. Install it with:
+We use [pre-commit.ci](https://pre-commit.ci/) to run our pre-commit hooks automatically on every Pull Request.  
+It handles formatting, linting, and basic validation — and can fix issues automatically by committing changes to your PR.
+
+To run hooks locally before committing:
 
 ```bash
 uv tool install pre-commit
