@@ -3,7 +3,13 @@ name: Build and Release
 on:
   push:
     tags:
-      - 'server/v*'  # Triggers on tags like server/v1.2.3, etc.
+      - "server/v*" # Triggers on tags like server/v1.2.3, etc.
+
+env:
+  # Use docker.io for Docker Hub if empty
+  REGISTRY: ghcr.io
+  # github.repository as <account>/<repo>
+  IMAGE_NAME: ${{ github.repository }} # hydraide/hydraide
 
 jobs:
   release:
@@ -16,82 +22,18 @@ jobs:
             goarch: amd64
             binary_name: hydraide-linux-amd64
             asset_name: hydraide-linux-amd64
+          - os: ubuntu-latest
+            goos: linux
+            goarch: arm64
+            binary_name: hydraide-linux-arm64
+            asset_name: hydraide-linux-arm64
           - os: windows-latest
             goos: windows
             goarch: amd64
             binary_name: hydraide-windows-amd64.exe
             asset_name: hydraide-windows-amd64.exe
-    
+
     runs-on: ${{ matrix.os }}
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Extract version
-      id: extract_version
-      shell: bash
-      run: |
-        # Extract version from git tag ref
-        VERSION=${GITHUB_REF#refs/tags/}
-        echo "version=$VERSION" >> $GITHUB_OUTPUT
-        echo "Extracted version: $VERSION"
-
-    - name: Set up Go
-      uses: actions/setup-go@v5
-      with:
-        go-version: '1.23'
-
-    - name: Build binary
-      env:
-        GOOS: ${{ matrix.goos }}
-        GOARCH: ${{ matrix.goarch }}
-        CGO_ENABLED: 0
-      run: |
-        go build -a -installsuffix cgo -o ${{ matrix.binary_name }} ./app/server
-
-    - name: Upload artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: ${{ matrix.asset_name }}
-        path: ${{ matrix.binary_name }}
-
-  create_release:
-    needs: release
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Extract version
-      id: extract_version
-      run: |
-        VERSION=${GITHUB_REF#refs/tags/}
-        echo "version=$VERSION" >> $GITHUB_OUTPUT
-
-    - name: Download all artifacts
-      uses: actions/download-artifact@v4
-
-    - name: Create GitHub release with assets
-      uses: ncipollo/release-action@v1
-      with:
-        tag: ${{ steps.extract_version.outputs.version }}
-        name: Release ${{ steps.extract_version.outputs.version }}
-        artifacts: "hydraide-linux-amd64/hydraide-linux-amd64,hydraide-windows-amd64.exe/hydraide-windows-amd64.exe"
-        generateReleaseNotes: true
-        draft: false
-        prerelease: false
-        token: ${{ secrets.GITHUB_TOKEN }}
-
-  docker:
-    needs: release
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
 
     steps:
       - name: Checkout code
@@ -101,15 +43,135 @@ jobs:
         id: extract_version
         shell: bash
         run: |
-          VERSION=${GITHUB_REF#refs/tags/server/v}
+          # Extract version from git tag ref
+          VERSION=${GITHUB_REF#refs/tags/}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Extracted version: $VERSION"
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          go build -a -installsuffix cgo -o ${{ matrix.binary_name }} ./app/server
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset_name }}
+          path: ${{ matrix.binary_name }}
+
+  create_release:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Extract version
+        id: extract_version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
 
-      - name: Build and push Docker image using GitHub Secrets
+      - name: Create GitHub release with assets
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ steps.extract_version.outputs.version }}
+          name: Release ${{ steps.extract_version.outputs.version }}
+          artifacts: "hydraide-linux-amd64/hydraide-linux-amd64,hydraide-linux-arm64/hydraide-linux-arm64,hydraide-windows-amd64.exe/hydraide-windows-amd64.exe"
+          generateReleaseNotes: true
+          draft: false
+          prerelease: false
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  docker-publish:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      # This is used to complete the identity challenge
+      # with sigstore/fulcio when running outside of PRs.
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Install the cosign tool except on PR
+      # https://github.com/sigstore/cosign-installer
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3.9.2
+        with:
+          cosign-release: "v2.5.3"
+
+      # Install qemu binaries
+      # https://github.com/sigstore/cosign-installer
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3.6.0
+
+      # Set up BuildKit Docker container builder to be able to build
+      # multi-platform images and export cache
+      # https://github.com/docker/setup-buildx-action
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3.9.0
+
+      # Login against a Docker registry except on PR
+      # https://github.com/docker/login-action
+      - name: Log into registry ${{ env.REGISTRY }}
+        uses: docker/login-action@v3.4.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.HYDRAIDE_DOCKER_USERNAME }}
+          password: ${{ secrets.HYDRAIDE_DOCKER_TOKEN }}
+
+      # Extract metadata (tags, labels) for Docker
+      # https://github.com/docker/metadata-action
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5.7.0
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=match,pattern=.*/v(.*),group=1
+
+      # Build and push Docker image with Buildx (don't push on PR)
+      # https://github.com/docker/build-push-action
+      - name: Build and push Docker image
+        id: build-and-push
+        uses: docker/build-push-action@v6.9.0
+        with:
+          platforms: linux/amd64,linux/arm64
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Sign the resulting Docker image digest except on PRs.
+      # This will only write to the public Rekor transparency log when the Docker
+      # repository is public to avoid leaking data.  If you would like to publish
+      # transparency data even for private images, pass --force to cosign below.
+      # https://github.com/sigstore/cosign
+      - name: Sign the published Docker image
         env:
-          HYDRAIDE_DOCKER_USERNAME: ${{ secrets.HYDRAIDE_DOCKER_USERNAME }}
-          HYDRAIDE_DOCKER_TOKEN: ${{ secrets.HYDRAIDE_DOCKER_TOKEN }}
-          IMAGE_TAG: ${{ steps.extract_version.outputs.version }}
-        run: make build-push
+          # https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions#using-an-intermediate-environment-variable
+          TAGS: ${{ steps.meta.outputs.tags }}
+          DIGEST: ${{ steps.build-and-push.outputs.digest }}
+        # This step uses the identity token to provision an ephemeral certificate
+        # against the sigstore community Fulcio instance.
+        run: echo "${TAGS}" | xargs -I {} cosign sign --yes {}@${DIGEST}
