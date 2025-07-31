@@ -28,6 +28,20 @@ func validatePort(portStr string) (string, error) {
 	return portStr, nil
 }
 
+// validateLoglevel validates whether provided loglevel fits slog loglevels and returns a valid string
+func validateLoglevel(logLevel string) (string, error) {
+	logLevel = strings.ToLower(strings.TrimSpace(logLevel))
+	validLoglevels := map[string]bool{"debug": true, "info": true, "warn": true, "error": true}
+
+	if logLevel == "" {
+		return "info", nil
+	}
+	if validLoglevels[logLevel] {
+		return logLevel, nil
+	}
+	return "", fmt.Errorf("loglevel must be 'debug', 'info', 'warn' or 'error'")
+}
+
 type CertConfig struct {
 	CN  string
 	DNS []string
@@ -152,19 +166,26 @@ var initCmd = &cobra.Command{
 			envCfg.HydraideBasePath = "/mnt/hydraide"
 		}
 
-		fmt.Println("\n📝 Logging Configuration")
-
 		// LOG_LEVEL
-		fmt.Println("🔍 Log Level: Controls the amount of detail in system logs")
-		fmt.Println("   Options: trace, debug, info, warn, error, fatal, panic")
-		fmt.Println("   Recommended: 'info' for production, 'debug' for troubleshooting")
-		fmt.Print("Log level [default: info]: ")
-		logLevel, _ := reader.ReadString('\n')
-		logLevel = strings.TrimSpace(logLevel)
-		if logLevel == "" {
-			logLevel = "info"
+		fmt.Println("\n📝 Logging Configuration")
+		fmt.Println("   - Controls the verbosity of system logs.")
+		fmt.Println("   - Options: debug | info | warn | error")
+		fmt.Println("   - Default: info (recommended for production)")
+
+		// loglevel validation loop
+		for {
+			fmt.Print("Choose log level [default: info]: ")
+			logLevel, _ := reader.ReadString('\n')
+
+			logLevel, err := validateLoglevel(logLevel)
+			if err != nil {
+				fmt.Printf("\n ❌ Invalid loglevel: %v. Please try again.\n", err)
+				continue
+			}
+
+			envCfg.LogLevel = logLevel
+			break
 		}
-		envCfg.LogLevel = logLevel
 
 		// SYSTEM_RESOURCE_LOGGING
 		fmt.Println("\n💻 System Resource Monitoring")

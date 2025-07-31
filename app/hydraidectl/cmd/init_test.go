@@ -70,7 +70,7 @@ func TestValidatePort(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := validatePort(tt.input)
-			
+
 			if tt.hasError {
 				if err == nil {
 					t.Errorf("Expected error for input '%s', but got none", tt.input)
@@ -82,6 +82,44 @@ func TestValidatePort(t *testing.T) {
 				if result != tt.expected {
 					t.Errorf("Expected result '%s' for input '%s', but got '%s'", tt.expected, tt.input, result)
 				}
+			}
+		})
+	}
+}
+
+func TestValidateLoglevel(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+		hasError bool
+	}{
+		{"Lowercase debug", "debug", "debug", false},
+		{"Lowercase info", "info", "info", false},
+		{"Lowercase warn", "warn", "warn", false},
+		{"Lowercase error", "error", "error", false},
+		{"Uppercase INFO", "INFO", "info", false},
+		{"Mixed casing", "DeBuG", "debug", false},
+		{"With spaces", "  warn  ", "warn", false},
+		{"Empty string", "", "info", false},
+		{"Weird casing", "dEbUg", "debug", false},
+		{"Newline wrapped", "\ninfo\n", "info", false},
+		{"Unsupported trace", "trace", "", true},
+		{"Unsupported string", "invalid level", "", true},
+		{"Special characters", "@debug", "", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := validateLoglevel(tt.input)
+			if tt.hasError && err == nil {
+				t.Errorf("Expected error for input '%s', but got none", tt.input)
+			}
+			if !tt.hasError && err != nil {
+				t.Errorf("Expected no error for input '%s', but got: %v", tt.input, err)
+			}
+			if result != tt.expected {
+				t.Errorf("Expected result '%s' for input '%s', but got '%s'", tt.expected, tt.input, result)
 			}
 		})
 	}
