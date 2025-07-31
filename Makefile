@@ -42,7 +42,7 @@ build:
 
 # Push the Docker image to GitHub Container Registry
 push:
-	printf "%s" "$${HYDRAIDE_DOCKER_TOKEN}" | docker login ghcr.io -u "$${HYDRAIDE_DOCKER_USERNAME}" --password-stdin
+	printf "%s" "$${HYDRAIDE_DOCKER_TOKEN}" | docker login ghcr.io -u "$${HYDRAIDE_DOCKER_USERNAME}" --password-stdin || { echo "❌ Docker login failed. Please check your credentials."; exit 1; }
 	docker tag $(IMAGE_NAME):$(IMAGE_TAG) $(IMAGE_NAME):latest
 	docker push $(IMAGE_NAME):$(IMAGE_TAG)
 	docker push $(IMAGE_NAME):latest
