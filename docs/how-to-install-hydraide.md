@@ -294,7 +294,7 @@ To determine your current host user and group ID, run:
 ```bash
 id -u    # User ID (PUID)
 id -g    # Group ID (PGID)
-````
+```
 
 Include these values in your `docker-compose.yml`:
 
@@ -325,7 +325,7 @@ environment:
 | Variable                        | Description                                                                 | Type    | Default | Required |
 |---------------------------------|-----------------------------------------------------------------------------|---------|---------|---------|
 | `LOG_LEVEL`                    | Sets the global log level. Accepted values: `debug`, `info`, `warn`, `error` | String  | `debug` | No      |
-| `SYSTEM_RESOURCE_LOGGING`     | Enables system resource logging (CPU, RAM, etc.).                           | Bool    | `fale`  | No |
+| `SYSTEM_RESOURCE_LOGGING`     | Enables system resource logging (CPU, RAM, etc.).                           | Bool    | `false` | No |
 
 ---
 
@@ -353,7 +353,7 @@ environment:
 |--------------------------------------|-----------------------------------------------------------------------------|---------|---------|----------|
 | `HYDRAIDE_DEFAULT_CLOSE_AFTER_IDLE` | Default time (in seconds) after which an idle Swamp is flushed from memory. | Number  | `1`     | No       |
 | `HYDRAIDE_DEFAULT_WRITE_INTERVAL`   | Default write interval (in seconds) for flushing Swamp changes to disk.     | Number  | `10`     | No       |
-| `HYDRAIDE_DEFAULT_FILE_SIZE`        | Default chunk file size per Swamp, in kilobytes.                            | Number  | `8192`  | No       |
+| `HYDRAIDE_DEFAULT_FILE_SIZE`        | Default chunk file size per Swamp, in bytes.                                | Number  | `8192`  | No       |
 
 
 > 🧠 You can customize additional environment variables for logging, gRPC behavior, and Swamp defaults.

@@ -29,7 +29,7 @@ var (
 	hydraMaxMessageSize   = 104857600   // 100 MB
 	defaultCloseAfterIdle = int64(1)    // 1 second
 	defaultWriteInterval  = int64(10)   // 10 seconds
-	defaultFileSize       = int64(8192) // 1 GB
+	defaultFileSize       = int64(8192) // 8 KB
 	systemResourceLogging = false
 	serverCrtPath         = ""
 	serverKeyPath         = ""
