@@ -7,7 +7,9 @@ authors = [
     { name = "Ramon Vermeulen", email = "ramonvermeulen98@gmail.com" }
 ]
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "xxhash>=3.5.0",
+]
 
 [build-system]
 requires = ["uv_build>=0.8.0,<0.9"]
@@ -29,3 +31,7 @@ exclude = ["generated"]
 warn_return_any = true
 warn_unused_configs = true
 exclude = ["generated"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests/unit/hydraidepy"]
+pythonpath = ["src/hydraidepy"]

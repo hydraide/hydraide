@@ -2,6 +2,18 @@ default_install_hook_types:
   - pre-commit
   - commit-msg
 minimum_pre_commit_version: "4.0.0"
+ci:
+  autofix_commit_msg: |
+    [pre-commit.ci] auto fixes from pre-commit.com hooks
+    
+    for more information, see https://pre-commit.ci
+  autofix_prs: true
+  autoupdate_branch: ''
+  autoupdate_commit_msg: '[pre-commit.ci] pre-commit autoupdate'
+  autoupdate_schedule: weekly
+  skip: [
+    pytest,
+  ]
 repos:
   # general pre-commit hooks, valid for the whole repository
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -39,5 +51,15 @@ repos:
     hooks:
       - id: mypy
         pass_filenames: false
+        additional_dependencies: [pytest-mypy]
         args: [sdk/python/hydraidepy/., --strict, --ignore-missing-imports, --config-file, sdk/python/hydraidepy/pyproject.toml]
+        files: ^sdk/python/hydraidepy
+  - repo: local
+    hooks:
+      - id: pytest
+        name: pytest
+        entry: pytest
+        language: system
+        pass_filenames: false
+        always_run: true
         files: ^sdk/python/hydraidepy
