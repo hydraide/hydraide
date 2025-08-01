@@ -73,27 +73,33 @@ func parseMessageSize(input string) (int64, error) {
 	// Parse size with unit (case-insensitive)
 	input = strings.ToUpper(input)
 
-	// Extract number and unit
-	var numStr string
+	// Check for multiple decimal points
+	if strings.Count(input, ".") > 1 {
+		return 0, fmt.Errorf("invalid format: multiple decimal points not allowed")
+	}
+
+	// Extract number and unit using more robust parsing
+	var numStr strings.Builder
 	var unit string
 
 	for i, r := range input {
-		if r >= '0' && r <= '9' || r == '.' {
-			numStr += string(r)
+		if (r >= '0' && r <= '9') || r == '.' {
+			numStr.WriteRune(r)
 		} else {
 			unit = input[i:]
 			break
 		}
 	}
 
-	if numStr == "" {
-		return 0, fmt.Errorf("invalid format. Use raw bytes (e.g., 10485760) or size with unit (e.g., 100MB, 1GB)")
+	numStrFinal := numStr.String()
+	if numStrFinal == "" {
+		return 0, fmt.Errorf("invalid format: use raw bytes (e.g., 10485760) or size with unit (e.g., 100MB, 1GB)")
 	}
 
 	// Parse the numeric part
-	num, err := strconv.ParseFloat(numStr, 64)
+	num, err := strconv.ParseFloat(numStrFinal, 64)
 	if err != nil {
-		return 0, fmt.Errorf("invalid number: %s", numStr)
+		return 0, fmt.Errorf("invalid number: %s", numStrFinal)
 	}
 
 	if num < 0 {
@@ -112,11 +118,11 @@ func parseMessageSize(input string) (int64, error) {
 	case "GB":
 		multiplier = GB
 	default:
-		return 0, fmt.Errorf("unsupported unit '%s'. Supported units: B, KB, MB, GB", unit)
+		return 0, fmt.Errorf("unsupported unit '%s': supported units are B, KB, MB, GB", unit)
 	}
 
-	// Calculate total bytes
-	totalBytes := int64(num * float64(multiplier))
+	// Calculate total bytes with proper rounding to avoid floating-point precision issues
+	totalBytes := int64(num*float64(multiplier) + 0.5)
 
 	return validateMessageSize(totalBytes)
 }

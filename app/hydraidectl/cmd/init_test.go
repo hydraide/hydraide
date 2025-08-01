@@ -240,6 +240,24 @@ func TestParseMessageSize(t *testing.T) {
 			expected: 10 * GB,
 			hasError: false,
 		},
+		{
+			name:     "multiple decimal points",
+			input:    "1.5.2GB",
+			expected: 0,
+			hasError: true,
+		},
+		{
+			name:     "floating point precision test",
+			input:    "1.999GB",
+			expected: 2146409906, // actual result from int64(1.999*GB + 0.5)
+			hasError: false,
+		},
+		{
+			name:     "decimal point without digits",
+			input:    ".5GB",
+			expected: 536870912, // int64(0.5*GB + 0.5)
+			hasError: false,
+		},
 	}
 
 	for _, tt := range tests {
