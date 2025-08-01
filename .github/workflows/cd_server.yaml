@@ -182,7 +182,12 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
 
       - name: Sign the published Docker image
+        if: steps.build-and-push.outputs.digest != ''
         env:
           TAGS: ${{ steps.meta.outputs.tags }}
           DIGEST: ${{ steps.build-and-push.outputs.digest }}
-        run: echo "${TAGS}" | xargs -I {} cosign sign --yes {}@${DIGEST}
+        run: |
+          echo "$TAGS" | tr ',' '\n' | while read tag; do
+            echo "→ Signing $tag@$DIGEST"
+            cosign sign --yes "$tag@$DIGEST"
+          done
