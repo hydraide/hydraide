@@ -2,6 +2,43 @@
 
 Welcome to the official installation guide for **HydrAIDE** designed for zero-maintenance, secure, and fast deployments.
 
+## 📚 Table of Contents
+
+* [🚀 HydrAIDE Installation Guide](#-hydraide-installation-guide)
+
+  * [🧠 Summary](#-summary)
+  * [🖥️ System Requirements](#-system-requirements)
+
+    * [Minimum Requirements](#minimum-requirements)
+    * [Recommended Setup](#recommended-setup)
+    * [File System Recommendation](#file-system-recommendation)
+    * [Best Practice for ZFS Setup](#best-practice-for-zfs-setup)
+  * [🔢 Increase Max Open Files](#increase-max-open-files)
+
+    * [🔧 How to check your current limits](#-how-to-check-your-current-limits)
+    * [🛠️ How to increase](#-how-to-increase)
+  * [🔐 Create Certificate](#-create-certificate)
+
+    * [Why Certificates?](#why-certificates)
+    * [Steps to Generate](#steps-to-generate)
+  * [📁 Create Folders for Docker Mounts](#-create-folders-for-docker-mounts)
+
+    * [💡 ZFS Users](#-zfs-users)
+  * [🔐 Place Certificates](#-place-certificates)
+  * [🧪 Standalone Docker Install](#-standalone-docker-install)
+    * [Available environment variables for Docker](#available-environment-variables-for-docker)
+
+      * [👤 User Mapping for Docker (PUID / PGID)](#-user-mapping-for-docker-puid--pgid)
+      * [🔧 Core Configuration](#-core-configuration)
+      * [📊 Logging and Debugging](#-logging-and-debugging)
+      * [📡 Graylog Integration](#-graylog-integration)
+      * [🛰 gRPC Server Tuning](#-grpc-server-tuning)
+      * [💾 Default Swamp Configuration](#-default-swamp-configuration)
+     
+    * [🧾 Example `docker-compose.yml` snippet](#-example-docker-composeyml-snippet)
+  * [🐳 Swarm Docker Services Install](#-swarm-docker-services-install)
+  * [☁️ Kubernetes Support](#-kubernetes-support)
+
 ---
 
 ## 🧠 Summary
@@ -150,7 +187,7 @@ TLS ensures:
 
 ### Steps to Generate:
 
-1. Copy the contents of `/installation/certificate` to your local machine.
+1. Copy the contents of [certificate folder](install-scripts/certificate) to your local machine.
 2. Open `certificate-generator.sh` and edit the `CA_SUBJECT` variable.
 3. Copy `openssl-example.sh` to a new file called `openssl.sh`.
 4. Fill in the certificate subject values inside `openssl.sh`.
@@ -208,7 +245,7 @@ HydrAIDE for secure TLS communication.
 
 Use the provided compose file:
 
-1. Copy `/installation/docker/docker-compose.local.yml` to your machine.
+1. Copy [docker-compose.local.yml](install-scripts/docker/docker-compose.local.yml) to your machine.
 2. Rename it to `docker-compose.yml`.
 3. Edit all required fields as per the in-file comments.
 4. Run:
@@ -234,6 +271,8 @@ services:
       - /mnt/hydraide/settings:/hydraide/settings
       - /mnt/hydraide/data:/hydraide/data
     environment:
+      - PUID=1000        # your Linux user ID (e.g. run: id -u)
+      - PGID=1000        # your group ID (e.g. run: id -g)
       - LOG_LEVEL=debug
       - GRPC_SERVER_ERROR_LOGGING=true
       - HYDRAIDE_DEFAULT_CLOSE_AFTER_IDLE=10
@@ -241,6 +280,81 @@ services:
       - HYDRAIDE_DEFAULT_FILE_SIZE=8192
     stop_grace_period: 10m
 ```
+
+## Available environment variables for Docker
+
+### 👤 User Mapping for Docker (PUID / PGID)
+
+HydrAIDE supports non-root container execution using **PUID** and **PGID** variables. These define the **user and group ID** inside the container and must match the user running the container on the host system.
+
+This mechanism ensures that HydrAIDE can safely read and write to mounted volumes **without requiring root privileges**, preventing permission errors and improving security.
+
+To determine your current host user and group ID, run:
+
+```bash
+id -u    # User ID (PUID)
+id -g    # Group ID (PGID)
+```
+
+Include these values in your `docker-compose.yml`:
+
+```yaml
+environment:
+  - PUID=1000        # your Linux user ID (e.g. run: id -u)
+  - PGID=1000        # your group ID (e.g. run: id -g)
+```
+
+| Variable | Description                                                   | Type   | Default | Required |
+| -------- | ------------------------------------------------------------- | ------ | ------- | -------- |
+| `PUID`   | UID of the user inside the container. Must match host user.   | Number | `1000`  | No       |
+| `PGID`   | GID of the group inside the container. Must match host group. | Number | `1000`  | No       |
+
+
+### 🔧 Core Configuration
+
+| Variable                        | Description                                                                 | Type    | Default     | Required                     |
+|---------------------------------|-----------------------------------------------------------------------------|---------|-------------|------------------------------|
+| `HYDRAIDE_SERVER_PORT`          | Port on which the main HydrAIDE gRPC server will listen.                   | Number  | `4444`      | No                           |
+| `HEALTH_CHECK_PORT`            | Port for the internal health check HTTP server (used by Docker).          | Number  | `4445`      | No                           |
+| `HYDRAIDE_ROOT_PATH`           | Root directory used by HydrAIDE to locate all internal folders.            | Path    | `/hydraide` | DO NOT USE IT WITH DOCKER!!! |
+
+---
+
+### 📊 Logging and Debugging
+
+| Variable                        | Description                                                                 | Type    | Default | Required |
+|---------------------------------|-----------------------------------------------------------------------------|---------|---------|---------|
+| `LOG_LEVEL`                    | Sets the global log level. Accepted values: `debug`, `info`, `warn`, `error` | String  | `debug` | No      |
+| `SYSTEM_RESOURCE_LOGGING`     | Enables system resource logging (CPU, RAM, etc.).                           | Bool    | `false` | No |
+
+---
+
+### 📡 Graylog Integration
+
+| Variable                        | Description                                                                 | Type    | Default           | Required |
+|---------------------------------|-----------------------------------------------------------------------------|---------|-------------------|----------|
+| `GRAYLOG_ENABLED`             | Enables Graylog log streaming.                                              | Bool    | `false`           | No       |
+| `GRAYLOG_SERVER`              | The Graylog server address. Required if `GRAYLOG_ENABLED=true`.             | String  | `graylog:12201`   | Conditionally |
+| `GRAYLOG_SERVICE_NAME`       | Optional service name used in Graylog logs.                                 | String  | `HydrAIDE-Server` | No       |
+
+---
+
+### 🛰 gRPC Server Tuning
+
+| Variable                        | Description                                                                 | Type    | Default             | Required |
+|---------------------------------|-----------------------------------------------------------------------------|---------|---------------------|----------|
+| `GRPC_MAX_MESSAGE_SIZE`       | Maximum allowed gRPC message size in bytes. Used for large payloads.        | Number  | `104857600` (100MB) | No       |
+
+---
+
+### 💾 Default Swamp Configuration
+
+| Variable                             | Description                                                                 | Type    | Default | Required |
+|--------------------------------------|-----------------------------------------------------------------------------|---------|---------|----------|
+| `HYDRAIDE_DEFAULT_CLOSE_AFTER_IDLE` | Default time (in seconds) after which an idle Swamp is flushed from memory. | Number  | `1`     | No       |
+| `HYDRAIDE_DEFAULT_WRITE_INTERVAL`   | Default write interval (in seconds) for flushing Swamp changes to disk.     | Number  | `10`     | No       |
+| `HYDRAIDE_DEFAULT_FILE_SIZE`        | Default chunk file size per Swamp, in bytes.                                | Number  | `8192`  | No       |
+
 
 > 🧠 You can customize additional environment variables for logging, gRPC behavior, and Swamp defaults.
 > See full documentation inside the provided `docker-compose.local.yml` file.
@@ -251,7 +365,7 @@ services:
 
 For clustered environments:
 
-1. Copy `/installation/docker/docker-compose.swarm.yml` to your machine.
+1. Copy [docker-compose.swarm.yml](install-scripts/docker/docker-compose.swarm.yml) to your machine.
 2. Rename it to `docker-compose.yml`.
 3. Fill in the config values and cert mount paths.
 4. Deploy with:
@@ -267,7 +381,3 @@ This deploys the HydrAIDE service across your Docker Swarm cluster.
 ## ☁️ Kubernetes Support
 
 HydrAIDE Kubernetes installation is coming soon.
-
----
-
-Happy hydrating! 💧

@@ -1,20 +1,32 @@
 name: Bug Report
-description: Report a bug or unexpected behavior in HydrAIDE or its SDKs
-title: "Bug: <short description>"
+description: Report a bug or unexpected behavior in HydrAIDE, its core, CLI or SDKs.
+title: "Bug: <short summary>"
 labels: [bug]
 body:
-  - type: markdown
+  - type: dropdown
+    id: component
     attributes:
-      value: |
-        🐞 **Something broke? Let’s fix it together.**
+      label: Affected component
+      description: Which part of the HydrAIDE system is this bug related to?
+      options:
+        - server
+        - core
+        - hydraidectl
+        - go-sdk
+        - python-sdk
+        - other
+    validations:
+      required: true
 
-        Please give us as much detail as you can — we *love* precise reports.
-
-  - type: input
-    id: sdk
+  - type: textarea
+    id: description
     attributes:
-      label: Which part is affected?
-      placeholder: e.g. Go SDK, Node SDK, Core Engine
+      label: What is the problem?
+      description: Clearly describe the bug, error or unexpected behavior you encountered.
+      placeholder: |
+        - What is happening that shouldn’t?
+        - What are you trying to do?
+        - Include any relevant code snippets, error logs or CLI output.
     validations:
       required: true
 
@@ -22,33 +34,45 @@ body:
     id: expected
     attributes:
       label: What did you expect to happen?
-      placeholder: Tell us what you were hoping to see or get.
+      description: Describe the expected behavior or result.
+      placeholder: I expected the command to return a valid response, but instead it...
     validations:
-      required: true
-
-  - type: textarea
-    id: actual
-    attributes:
-      label: What actually happened?
-      placeholder: Copy any error messages, logs, or screenshots if possible.
-    validations:
-      required: true
+      required: false
 
   - type: textarea
     id: steps
     attributes:
-      label: Steps to reproduce
+      label: How can we reproduce it?
+      description: Provide a minimal, step-by-step way to trigger the bug.
       placeholder: |
-        1. Call `client.GetTreasure("key")`
-        2. Observe crash or empty result
-        3. Check logs...
-
-  - type: dropdown
-    id: blocker
-    attributes:
-      label: Is this blocking your work?
-      options:
-        - Yes
-        - No
+        1. Run this command / call this SDK method...
+        2. Observe the response / error / behavior
+        3. Include any flags, input parameters, or test data
     validations:
       required: true
+
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Do you have a suggestion for fixing it?
+      description: If you have an idea for how this could be resolved or improved, please describe it.
+      placeholder: I think this could be fixed by...
+    validations:
+      required: false
+
+  - type: input
+    id: version
+    attributes:
+      label: Relevant version(s)
+      description: Enter the exact version(s) of HydrAIDE or SDK you are using, if applicable.
+      placeholder: e.g. go-sdk v1.3.2, hydraidectl 0.6.0, core build 2025.07.18
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: confirmation
+    attributes:
+      label: Confirmation
+      options:
+        - label: I have searched the existing issues and this bug has not been reported before.
+        - label: This issue is reproducible and not environment-specific.

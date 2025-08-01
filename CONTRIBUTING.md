@@ -1,171 +1,107 @@
-# 🤝 Contributing to HydrAIDE
+# Contributing to HydrAIDE
 
-Welcome, builder! 🧠
+Thanks for your interest in contributing.  
+HydrAIDE is a production-ready system, what we're building now is the SDK and tooling ecosystem around it.
 
-Whether you’re here to squash a bug, suggest a feature, or shape a new SDK, you’re in the right place.
-
-HydrAIDE is not just code. It’s a mindset.  
-And we’re thrilled you’re thinking with us.
-
-Your voice matters here. Whether it's your first PR or your 100th, you're helping shape the future of data systems.
+We value clean, well-thought-out work. Whether you're improving documentation, shaping an SDK, 
+or refining CLI behavior, your contribution matters.
 
 ---
 
-## 🚀 Quickstart – How to Contribute
+## Quickstart
 
-1. **Fork** this repo
-2. **Create a new branch** for your fix or feature
-3. **Make your changes**
-4. **Open a Pull Request (PR)** – we’ll review it and celebrate with you 🎉
-5. *(Optional but highly recommended)*
-   **Use ChatGPT to accelerate your understanding of HydrAIDE** 🤖
+1. Fork the repository
+2. Create a feature or fix branch
+3. Make your changes
+4. Open a Pull Request
+5. We'll review and respond. Usually within a day or two
 
-   > The HydrAIDE docs are *semantically optimized for LLMs*, so ChatGPT can act as your personal mentor.
+If you're new to HydrAIDE, feel free to:
 
-   To do this:
-
-    * Create a ChatGPT project (e.g. on [chat.openai.com](https://chat.openai.com))
-    * Upload these files to the chat:
-
-        * [how-to-install-hydraide.md](docs/how-to-install-hydraide.md)
-        * [hydraide-questions-answers-for-llm.md](docs/hydraide-questions-answers-for-llm.md)
-        * [go-sdk.md](docs/sdk/go/go-sdk.md)
-        * all `.go` example models from [models](docs/sdk/go/examples/models)
-        * [hydraidego.go](sdk/go/hydraidego/hydraidego.go)
-      
-    * ChatGPT will then be able to:
-
-        * answer questions about the architecture and SDK,
-        * explain model usage patterns,
-        * help you write valid Go code for HydrAIDE,
-        * and guide you through debugging or optimization.
-
-   ✅ This is optional, but can **dramatically shorten your learning curve**, especially for newcomers.
+- Start with a `Contributor Application` issue
+- Ask for guidance on Discord: [discord.gg/aBfAuYjR](https://discord.gg/aBfAuYjR)
+- Explore the [HydrAIDE Knowledge Engine](https://chatgpt.com/g/g-688779751c988191b975beaf7f68801d-hydraide-knowledge-engine) 
+to better understand the system
 
 ---
 
-## 📂 Repository Structure
+## Docs & SDK Reference
 
-Each SDK lives in its own folder under `/docs/sdk/<language>`:
+- [Installation Guide](docs/how-to-install-hydraide.md)
+- [Go SDK reference](docs/sdk/go/go-sdk.md)
+- [Thinking in HydrAIDE](docs/thinking-in-hydraide/thinking-in-hydraide.md)
+- [FAQ for AI & SDK usage](docs/hydraide-questions-answers-for-llm.md)
 
-- `go` → actively developed
-- `nodejs`, `python`, `rust`, etc. → in design or planning
-
-> **Important:** SDK documentation must be 100% AI-readable.
-> Each file should be fully parseable by ChatGPT/Copilot — including clear function usage, struct layouts, and examples.
-
-If you’re contributing to an SDK:
-- Follow the structure and tone of `docs/sdk/go` as reference
-- Keep all functions and types documented in Markdown with example code blocks
-- Use a single `.md` file per SDK, but **clearly tagged and structured**
-
-If you’re contributing:
-- To core logic → edit [`hydraidego`](https://github.com/hydraide/hydraide/tree/main/docs/sdk/go/README.md)
-- To docs → edit `.md` files in `/docs`
-- To examples → add to `/examples/<your-language>`
+These are optimized for both humans and tools like ChatGPT — use whatever helps you learn faster.
 
 ---
 
-## 💡 Looking for ideas?
+## Project Layout
 
-Check the issues labeled [`good first issue`](https://github.com/hydraide/hydraide/issues?q=label%3A%22good+first+issue%22)
+- Docs: `/docs`
+- SDKs: `sdk/<language>`
+- Examples: `/docs/sdk/<language>/examples`
+- Main Applications: 
+  - HydrAIDE Core: `app/core`
+  - HydrAIDE Server: `app/hydraideserver`
+  - HydrAIDE CLI: `app/hydraidectl`
 
-Not sure where to start?  
-Browse the [Project Board](https://github.com/hydraide/hydraide/projects) or ask in an issue. 
-We’ll help match you to something meaningful.
-
-Or open a new one with your proposal!
-
----
-
-## ✅ Commit Style
-
-Use clear commit messages, ideally following the [Conventional Commits](https://www.conventionalcommits.org/) specification:
-
-- `fix: crash on empty Swamp hydration`
-- `feat: add IncrementFloat64 to Node SDK`
-- `docs: clarify metadata usage in Treasures`
+Please follow the Go SDK as a reference for structure, naming, and documentation style. SDK `.md` files should be 
+clear, parseable, and contain example code.
 
 ---
 
-## 🧪 Testing
+## Looking for a Task?
 
-Please make sure your changes:
-- Run locally without errors
-- Include tests (if logic-heavy)
-- Don’t break other SDKs or docs
-
-If you’re adding a new SDK function, include a simple usage test (e.g. call + assert result).  
-Docs-only PRs don’t require tests.
+- Check the **pinned issues** — these are the main areas we're actively working on, and help is always welcome there
+- Browse issues labeled [`help wanted`](https://github.com/hydraide/hydraide/issues?q=label%3A%22help+wanted%22) — these are larger or strategic tasks
+- See if there’s any [`good first issue`](https://github.com/hydraide/hydraide/issues?q=label%3A%22good+first+issue%22) available — smaller, self-contained starters
+- Or, if you have your own idea, feel free to open a new issue and suggest it
 
 ---
 
-## 🔧 Configuring pre-commit
-Before committing changes to github or raising a pull request, please run pre-commit hooks to ensure consistent code style and formatting.
-Installing pre-commit is best done via [uv](https://docs.astral.sh/uv/getting-started/installation/) (recommended) or [pipx](https://github.com/pypa/pipx).
+## Commit Style
+
+Use [Conventional Commits](https://www.conventionalcommits.org/) when possible:
+
+- `fix: handle empty Swamp hydration`
+- `feat: add TTL support to Python SDK`
+- `docs: clarify Catalog usage`
+
+---
+
+## Testing
+
+- All code should run locally without errors
+- Add tests for logic-heavy functions
+
+If you're adding an SDK method, include a simple usage test (call + assert expected result).
+
+---
+
+## Pre-commit Hooks
+
+We use [pre-commit.ci](https://pre-commit.ci/) to run our pre-commit hooks automatically on every Pull Request.  
+It handles formatting, linting, and basic validation — and can fix issues automatically by committing changes to your PR.
+
+To run hooks locally before committing:
 
 ```bash
 uv tool install pre-commit
-```
-
-or
-
-```bash
+# or
 pipx install pre-commit
 ```
-
-Then use the following command to install the hooks:
-
+Then activate hooks:
 ```bash
 pre-commit install
 ```
-
-To manually run the pre-commit hooks on all files, use:
-
+Run all hooks:
 ```bash
 pre-commit run --all-files
 ```
 
-Or on a specific file:
-
-```bash
-pre-commit run --files <file_name>
-```
-
-Or a specific hook on a specific file:
-
-```bash
-pre-commit run <hook_id> --files <file_name>
-```
-
-## 🤲 Community Values
-
-HydrAIDE is:
-- 🧠 Inclusive — everyone starts somewhere.
-- 🧼 Clean — clarity over cleverness.
-- 🔄 Reactive — always listening, always improving.
-
-If you’re kind, curious, and constructive — you belong here.
-
 ---
 
-## 📥 Need Help?
+Thank you for supporting HydrAIDE, and welcome to the team.
 
-Open an issue titled `Question: <your topic>`
-
----
-
-## 👑 Want to Become a Core Contributor?
-
-We welcome it! Start by:
-- Opening a `Contributor Application` issue
-- Telling us what excites you and what you'd love to build
-- Shipping your first PR
-
-We mentor. You grow.  
-Together we build something legendary.
-
----
-
-With gratitude,  
-**– The HydrAIDE Team**
+***– Péter Gebri***

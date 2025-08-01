@@ -1,0 +1,43 @@
+name: Example Request
+description: Ask for a concrete usage example using the HydrAIDE SDK, CLI or system primitives.
+title: "[EXAMPLE] <what you're trying to do>"
+labels: [example-request]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: What are you trying to do?
+      description: Describe what you're trying to build or achieve using HydrAIDE.
+      placeholder: I want to implement a leaderboard that updates in real time...
+    validations:
+      required: true
+
+  - type: textarea
+    id: attempted
+    attributes:
+      label: What have you tried so far?
+      description: If you've already experimented with some SDK methods or commands, share what worked or didn't.
+      placeholder: I tried using `CatalogRead` and `Subscribe` together, but...
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: interface
+    attributes:
+      label: Which interface(s) are you using?
+      options:
+        - label: Python SDK
+        - label: Go SDK
+        - label: hydraidectl CLI
+        - label: GRPC directly
+        - label: HydrAIDE Server Docker
+        - label: Other (please describe)
+
+  - type: textarea
+    id: details
+    attributes:
+      label: Anything else we should know?
+      description: Specific constraints, data model ideas, or expected behavior?
+      placeholder: It should scale across 3 tenants and TTL should be applied per entry.
+    validations:
+      required: false

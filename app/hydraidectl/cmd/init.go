@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 
@@ -13,6 +12,35 @@ import (
 	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/certificate"
 	"github.com/spf13/cobra"
 )
+
+// validatePort validates that the provided port string is a valid integer between 1 and 65535
+func validatePort(portStr string) (string, error) {
+	if portStr == "" {
+		return "", fmt.Errorf("port cannot be empty")
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		return "", fmt.Errorf("port must be a valid integer")
+	}
+	if port < 1 || port > 65535 {
+		return "", fmt.Errorf("port must be between 1 and 65535")
+	}
+	return portStr, nil
+}
+
+// validateLoglevel validates whether provided loglevel fits slog loglevels and returns a valid string
+func validateLoglevel(logLevel string) (string, error) {
+	logLevel = strings.ToLower(strings.TrimSpace(logLevel))
+	validLoglevels := map[string]bool{"debug": true, "info": true, "warn": true, "error": true}
+
+	if logLevel == "" {
+		return "info", nil
+	}
+	if validLoglevels[logLevel] {
+		return logLevel, nil
+	}
+	return "", fmt.Errorf("loglevel must be 'debug', 'info', 'warn' or 'error'")
+}
 
 type CertConfig struct {
 	CN  string
@@ -44,7 +72,8 @@ var initCmd = &cobra.Command{
 
 		reader := bufio.NewReader(os.Stdin)
 
-		fmt.Println("🚀 Starting HydrAIDE install wizard...\n")
+		fmt.Println("🚀 Starting HydrAIDE install wizard...")
+		fmt.Println()
 
 		var cert CertConfig
 		var envCfg EnvConfig
@@ -104,13 +133,28 @@ var initCmd = &cobra.Command{
 		}
 
 		fmt.Println("\n🔌 Port Configuration")
-		fmt.Println("This is the external port on your host machine that will map to the HydrAIDE container.")
-		fmt.Println("Clients will use this port to communicate with the HydrAIDE server.")
-		fmt.Print("Which port should HydrAIDE listen on? (default: 4900): ")
-		envCfg.HydraidePort, _ = reader.ReadString('\n')
-		envCfg.HydraidePort = strings.TrimSpace(envCfg.HydraidePort)
-		if envCfg.HydraidePort == "" {
-			envCfg.HydraidePort = "4900"
+		fmt.Println("This is the port where the HydrAIDE binary server will listen for client connections.")
+		fmt.Println("Set the bind port for the HydrAIDE server instance.")
+
+		// Port validation loop for main port
+		for {
+			fmt.Print("Which port should HydrAIDE listen on? (default: 4900): ")
+			portInput, _ := reader.ReadString('\n')
+			portInput = strings.TrimSpace(portInput)
+
+			if portInput == "" {
+				envCfg.HydraidePort = "4900"
+				break
+			}
+
+			validPort, err := validatePort(portInput)
+			if err != nil {
+				fmt.Printf("❌ Invalid port: %v. Please try again.\n", err)
+				continue
+			}
+
+			envCfg.HydraidePort = validPort
+			break
 		}
 
 		fmt.Println("\n📁 Base Path for HydrAIDE")
@@ -122,19 +166,26 @@ var initCmd = &cobra.Command{
 			envCfg.HydraideBasePath = "/mnt/hydraide"
 		}
 
-		fmt.Println("\n📝 Logging Configuration")
-
 		// LOG_LEVEL
-		fmt.Println("🔍 Log Level: Controls the amount of detail in system logs")
-		fmt.Println("   Options: trace, debug, info, warn, error, fatal, panic")
-		fmt.Println("   Recommended: 'info' for production, 'debug' for troubleshooting")
-		fmt.Print("Log level [default: info]: ")
-		logLevel, _ := reader.ReadString('\n')
-		logLevel = strings.TrimSpace(logLevel)
-		if logLevel == "" {
-			logLevel = "info"
+		fmt.Println("\n📝 Logging Configuration")
+		fmt.Println("   - Controls the verbosity of system logs.")
+		fmt.Println("   - Options: debug | info | warn | error")
+		fmt.Println("   - Default: info (recommended for production)")
+
+		// loglevel validation loop
+		for {
+			fmt.Print("Choose log level [default: info]: ")
+			logLevel, _ := reader.ReadString('\n')
+
+			logLevel, err := validateLoglevel(logLevel)
+			if err != nil {
+				fmt.Printf("\n ❌ Invalid loglevel: %v. Please try again.\n", err)
+				continue
+			}
+
+			envCfg.LogLevel = logLevel
+			break
 		}
-		envCfg.LogLevel = logLevel
 
 		// SYSTEM_RESOURCE_LOGGING
 		fmt.Println("\n💻 System Resource Monitoring")
@@ -255,13 +306,33 @@ var initCmd = &cobra.Command{
 		// HEALTH CHECK PORT
 		fmt.Println("\n❤️‍🩹 Health Check Endpoint")
 		fmt.Println("   Separate port for health checks and monitoring")
-		fmt.Print("Health check port [default: 4901]: ")
-		healthPort, _ := reader.ReadString('\n')
-		healthPort = strings.TrimSpace(healthPort)
-		if healthPort == "" {
-			healthPort = "4901"
+
+		// Port validation loop for health check port
+		for {
+			fmt.Print("Health check port [default: 4901]: ")
+			healthPortInput, _ := reader.ReadString('\n')
+			healthPortInput = strings.TrimSpace(healthPortInput)
+
+			if healthPortInput == "" {
+				envCfg.HealthCheckPort = "4901"
+				break
+			}
+
+			validPort, err := validatePort(healthPortInput)
+			if err != nil {
+				fmt.Printf("❌ Invalid port: %v. Please try again.\n", err)
+				continue
+			}
+
+			if validPort == envCfg.HydraidePort {
+				fmt.Println("❌ Health check port cannot be the same as the main port. Please choose a different port.")
+				continue
+			}
+
+			envCfg.HealthCheckPort = validPort
+			break
+
 		}
-		envCfg.HealthCheckPort = healthPort
 
 		// ======================
 		// CONFIGURATION SUMMARY
@@ -343,11 +414,20 @@ var initCmd = &cobra.Command{
 
 		fmt.Println("📂 Copying TLS certificates to the certificate directory...")
 		fmt.Printf("  • Client CRT: From %s  to  %s \n", clientCRT, filepath.Join(envCfg.HydraideBasePath, "certificate", filepath.Base(clientCRT)))
-		utils.MoveFile(clientCRT, filepath.Join(envCfg.HydraideBasePath, "certificate", filepath.Base(clientCRT)))
+		if err := utils.MoveFile(clientCRT, filepath.Join(envCfg.HydraideBasePath, "certificate", filepath.Base(clientCRT))); err != nil {
+			fmt.Println("❌ Error copying client certificate:", err)
+			return
+		}
 		fmt.Printf("  • Server CRT: From %s  to  %s \n", serverCRT, filepath.Join(envCfg.HydraideBasePath, "certificate", filepath.Base(serverCRT)))
-		utils.MoveFile(serverCRT, filepath.Join(envCfg.HydraideBasePath, "certificate", filepath.Base(serverCRT)))
+		if err := utils.MoveFile(serverCRT, filepath.Join(envCfg.HydraideBasePath, "certificate", filepath.Base(serverCRT))); err != nil {
+			fmt.Println("❌ Error copying server certificate:", err)
+			return
+		}
 		fmt.Printf("  • Server KEY: From %s  to  %s \n", serverKEY, filepath.Join(envCfg.HydraideBasePath, "certificate", filepath.Base(serverKEY)))
-		utils.MoveFile(serverKEY, filepath.Join(envCfg.HydraideBasePath, "certificate", filepath.Base(serverKEY)))
+		if err := utils.MoveFile(serverKEY, filepath.Join(envCfg.HydraideBasePath, "certificate", filepath.Base(serverKEY))); err != nil {
+			fmt.Println("❌ Error copying server key:", err)
+			return
+		}
 
 		fmt.Println("✅ TLS certificates copied successfully.")
 
@@ -396,7 +476,13 @@ var initCmd = &cobra.Command{
 			fmt.Println("❌ Error creating .env file:", err)
 			return
 		}
-		defer envFile.Close()
+		defer func() {
+			if err := envFile.Close(); err != nil {
+				fmt.Println("❌ Error closing .env file:", err)
+			} else {
+				fmt.Println("✅ .env file closed successfully.")
+			}
+		}()
 
 		// Write all environment variables
 		writer := bufio.NewWriter(envFile)
@@ -442,16 +528,4 @@ var initCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(initCmd)
-}
-
-func defaultInstallPath() string {
-	home, _ := os.UserHomeDir()
-	switch runtime.GOOS {
-	case "windows":
-		return filepath.Join(os.Getenv("APPDATA"), "HydrAIDE", "bin")
-	case "darwin":
-		return filepath.Join(home, "Library", "Application Support", "HydrAIDE", "bin")
-	default:
-		return filepath.Join(home, ".hydraide", "bin")
-	}
 }

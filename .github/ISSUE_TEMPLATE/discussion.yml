@@ -1,0 +1,30 @@
+name: 💬 Discussion / RFC / Idea
+description: Start an open discussion, propose a direction, or ask for feedback on architecture, design, or strategy.
+title: "[DISCUSSION] "
+labels: [discussion-needed]
+body:
+  - type: textarea
+    id: context
+    attributes:
+      label: Context / Background
+      description: What triggered this discussion? Please describe the context or the problem space.
+      placeholder: "I was thinking about whether we should…"
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal / Thought / Direction
+      description: Describe what you're proposing or questioning. This can be a rough idea or a high-level suggestion.
+      placeholder: "Maybe we could consider…"
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: feedback
+    attributes:
+      label: Ready for feedback?
+      options:
+        - label: Yes, I'm open to discussion and feedback on this topic.
+          required: true

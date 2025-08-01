@@ -1,179 +1,87 @@
-# 🤝 HydrAIDE Contributors – Help Build the Engine of a New Era
+# HydrAIDE Contributors Guide
 
-HydrAIDE isn't just another database.
-It's an **Adaptive Intelligent Data Engine (AIDE)**, something that blends search, memory, and messaging into a real-time, ephemeral, and surprisingly elegant system.
-
-And now, we're looking for the kind of people who get excited about building the weird stuff that ends up changing everything.
+HydrAIDE is a production-grade Adaptive Intelligent Data Engine.  
+The core system is stable. We're now focused on building idiomatic SDKs, real-world CLI tooling, and practical examples for developers.
 
 ---
 
-## 🌌 Why You Might Want to Join Us
+## Why Contribute
 
-Ever get frustrated with tools that:
+HydrAIDE is not an experiment. It’s a production-grade system already running in live environments.  
+Every day, it handles millions of SWAMPs and a zillion-billon amount of treasures in real time.
 
-* Force you to define schemas before you know the shape of your logic?
-* Need to run background daemons just to feel alive?
-* Eat up memory just sitting there idle?
-* Depend on brokers to be "reactive"?
+What we’re building now is the ecosystem around it. SDKs, CLI tools, real-world examples, and clear documentation.
 
-Then yeah. You might be one of us.
+By joining, you'll work on things that:
+- Help real developers in their actual day-to-day work
+- Contribute to the spread of a new kind of data engine
+- Influence how future developers think about flow and structure
 
-> HydrAIDE was built by asking: *What would data look like if it was designed for AI-native, multi-core, real-time systems from day zero?*
+In short: what you build matters, whether it’s small or big, you’re leaving a mark.
 
-The engine is ready. Now we’re building SDKs.
-We’re not looking for rockstars. We’re looking for **curious**, **intentional** devs who want to build something that actually matters.
+You don’t need to be perfect. It’s enough if you care about quality, love to learn, and want to understand what you’re building.  
+At HydrAIDE, there are no generic tickets. You’ll get meaningful challenges, and real access to how things work behind the scenes.
 
-> 🙋‍♀️ **New to SDKs?**
-> That’s fine. If you’ve built APIs, CLIs, or just like clean, expressive code, you’ll be right at home. We’ll guide you through.
+I’ll be here with you, along with the rest of the community.  
+Feedback is not control here! It’s collaboration. What you contribute doesn’t sit on a shelf; it gets integrated, 
+it runs, and others start using it right away.
 
----
+If you enjoy building purposeful systems, asking good questions, learning deeply, and contributing to something 
+bigger, you’ll feel at home here.
 
-## 🧭 What You'll Actually Do
+Thank you for supporting HydrAIDE,  
 
-We’re building official SDKs across multiple languages.
-Each one should be:
-
-* Idiomatic
-* Clean
-* Inspired by our Go reference SDK
-
-You're not just wrapping endpoints. You're translating a new kind of intelligence into the language you love.
-
-| 💻 Language | 🔗 Repo       | 🛠️ Status  | 📝 Notes                 |
-| ----------- | ------------- | ----------- | ------------------------ |
-| Go          | `hydraidego`  | ✅ Ready     | Your blueprint. Dive in. |
-| Node.js     | `hydraidejs`  | 🧪 Planning | First-contributor ready  |
-| Python      | `hydraidepy`  | 🧠 Design   | Great for scripts, ML    |
-| Rust        | `hydraiders`  | 🧠 Design   | Zero-cost abstractions   |
-| Java        | `hydraidejv`  | 🧠 Design   | Backend-scale strength   |
-| C# / .NET   | `hydraidecs`  | 🧠 Design   | Unity, services, etc.    |
-| C++         | `hydraidecpp` | 🧠 Design   | Bare metal control       |
-| Kotlin      | `hydraidekt`  | 🧠 Design   | Android + server blend   |
-| Swift       | `hydraidesw`  | 🧠 Design   | Native Apple stack       |
-
-> Want to build one in a language that’s not listed? Cool. You're officially a pioneer.
+**Péter Gebri**
 
 ---
 
-## 🔧 How to Contribute
+## What You Can Work On
 
-You’ll be starting from:
+| Area        | Description                                |
+|-------------|--------------------------------------------|
+| SDKs        | Python, Node.js, Rust, etc.                |
+| CLI         | `hydraidectl` enhancements, usability      |
+| Examples    | Real-world usage of Catalog, Profile, Lock |
+| Docs        | Installation, concepts, dev onboarding     |
+| Internal    | Subscriptions, TTL logic, GRPC flow        |
 
-* A production-grade Go SDK
-* Real systems using HydrAIDE
-* A clean gRPC interface
-
-So you won’t be guessing. You’ll be translating proven power into new stacks.
-
-What you might work on:
-
-* Wrap the HydrAIDE API idiomatically
-* Translate key helper utils (like struct <-> key/value converters)
-* Create usable examples
-* Push edge cases to test robustness
-* Improve docs, onboarding, and tests
-* Wire up real-time subscriptions
+Check the [pinned issues](https://github.com/hydraide/hydraide/issues) for current tracks.
 
 ---
 
-## 🎁 What You Get
+## How to Start
 
-| 🎉 Reward            | 💬 Description                       |
-| -------------------- | ------------------------------------ |
-| 🧠 Full license      | Lifetime access to HydrAIDE          |
-| 🏅 Portfolio boost   | SDKs used in prod by real teams      |
-| 👑 Recognition       | Featured in docs, site, and repos    |
-| 🎓 Contributor badge | GitHub-level credit                  |
-| 🗺️ Roadmap access   | Your voice matters here              |
-| 💼 Referrals         | Yes, real ones. Real mentorship too. |
-| 🤝 Private Discord   | Direct access to the team            |
-| 🧪 Early features    | You get them first                   |
+1. Open an issue titled: `Contributor Application`
+2. Include:
+    - Your GitHub handle
+    - Preferred language(s)
+    - Link to work or projects (if any)
+    - What you'd like to help with
+3. Join the Discord community: [discord.gg/aBfAuYjR](https://discord.gg/aBfAuYjR)
+4. Wait for access + onboarding (usually <48h)
+5. Pick an issue or ask for one
+6. Submit a PR → We review, merge, and credit you
 
----
-
-## 👶 Still Learning?
-
-Good. That means you're growing.
-...
-You’ll get mentorship, thoughtful code reviews, and a space where growth is baked in.
-
-## 🤖 Learn Fast. Build Deep. Use ChatGPT with HydrAIDE
-
-HydrAIDE wasn’t built with AI.  
-But it *was* designed so AI can understand it.
-
-> All of our docs, models, and SDK logic are written in a way that ChatGPT and similar tools can ingest semantically.
-
-So if you’re building an SDK, writing examples, or just trying to understand how this weird, beautiful engine works — **use ChatGPT as your copilot**.
-
-### How?
-
-Just create a ChatGPT project and upload:
-
-* [how-to-install-hydraide.md](docs/how-to-install-hydraide.md)
-* [hydraide-questions-answers-for-llm.md](docs/hydraide-questions-answers-for-llm.md)
-* [go-sdk.md](docs/sdk/go/go-sdk.md)
-* All `.go` models from [models](docs/sdk/go/examples/models)
-* [hydraidego.go](sdk/go/hydraidego/hydraidego.go) (SDK logic)
-
-Once that’s loaded, ChatGPT will be able to:
-
-- answer **architecture questions**,
-- help write **idiomatic SDK code**,
-- explain **example models and patterns**,
-- and debug or refactor **real HydrAIDE logic** with you.
-
-> 💡 Our docs were **deliberately** made AI-readable — so use that to your advantage.
-
-We’re not precious about ego. If AI helps you work faster and deeper, that’s a win.  
-The only thing that matters here is *building something that matters*.
+> 🧠 Need to understand how HydrAIDE works?
+> Explore the [HydrAIDE Knowledge Engine](https://chatgpt.com/g/g-688779751c988191b975beaf7f68801d-hydraide-knowledge-engine) on ChatGPT for architecture, usage, and code patterns.
 
 ---
 
-## 🧪 The Journey
+## Tools & Resources
 
-Here’s how joining looks:
+- [Installation Guide](docs/how-to-install-hydraide.md)
+- [Go SDK reference](docs/sdk/go/go-sdk.md)
+- [Thinking in HydrAIDE](docs/thinking-in-hydraide/thinking-in-hydraide.md)
+- [FAQ for AI & SDK usage](docs/hydraide-questions-answers-for-llm.md)
 
-1. You say hey (via GitHub issue)
-2. We say hey back, and check your intro
-3. You get access to the repo
-4. We send you the onboarding kit
-5. You pick an issue, or suggest one
-6. You send a PR. We celebrate. 🎉
-
-It’s async-friendly. No timezones to fight.
+You may use tools like ChatGPT to accelerate work, but code quality and architectural decisions are human-reviewed.
 
 ---
 
-## 🚪 How to Apply
+## Contact
 
-Open a GitHub issue titled: **"Contributor Application"**
-👉 [open one here](https://github.com/hydraide/hydraide/issues)
-
-Include:
-
-* Your name or handle
-* Programming language(s) you’re into (and level)
-* What excites you about HydrAIDE
-* Projects/repos (if you have any)
-* What you’d like to start with
-
-We usually reply in a day or two. Sometimes faster.
+Use GitHub issues to ask questions, or apply via `Contributor Application`.
 
 ---
 
-## 🌀 Final Words
-
-HydrAIDE isn’t an idea.
-It’s already powering live systems and real-time platforms.
-But the SDKs? They're just getting started.
-
-This is your chance to:
-
-* Shape the dev experience from the ground up
-* Influence thousands of future engineers
-* Set the bar for how data engines integrate
-
-Join us.
-Build different.
-Be legendary.
+HydrAIDE is ready. Now we build the ecosystem. Let’s make it excellent.
