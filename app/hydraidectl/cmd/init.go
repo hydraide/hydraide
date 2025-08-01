@@ -42,6 +42,116 @@ func validateLoglevel(logLevel string) (string, error) {
 	return "", fmt.Errorf("loglevel must be 'debug', 'info', 'warn' or 'error'")
 }
 
+// Message size constants
+const (
+	Byte = 1
+	KB   = 1024 * Byte
+	MB   = 1024 * KB
+	GB   = 1024 * MB
+)
+
+const (
+	MinMessageSize     = 10 * MB // 10MB
+	MaxMessageSize     = 10 * GB // 10GB
+	DefaultMessageSize = 10 * MB // 10MB (changed from 5GB)
+)
+
+// parseMessageSize parses human-readable message size input and returns bytes
+func parseMessageSize(input string) (int64, error) {
+	input = strings.TrimSpace(input)
+
+	// Handle empty input (default)
+	if input == "" {
+		return DefaultMessageSize, nil
+	}
+
+	// Try parsing as raw bytes first
+	if val, err := strconv.ParseInt(input, 10, 64); err == nil {
+		return validateMessageSize(val)
+	}
+
+	// Parse size with unit (case-insensitive)
+	input = strings.ToUpper(input)
+
+	// Check for multiple decimal points
+	if strings.Count(input, ".") > 1 {
+		return 0, fmt.Errorf("invalid format: multiple decimal points not allowed")
+	}
+
+	// Extract number and unit using more robust parsing
+	var numStr strings.Builder
+	var unit string
+
+	for i, r := range input {
+		if (r >= '0' && r <= '9') || r == '.' {
+			numStr.WriteRune(r)
+		} else {
+			unit = input[i:]
+			break
+		}
+	}
+
+	numStrFinal := numStr.String()
+	if numStrFinal == "" {
+		return 0, fmt.Errorf("invalid format: use raw bytes (e.g., 10485760) or size with unit (e.g., 100MB, 1GB)")
+	}
+
+	// Parse the numeric part
+	num, err := strconv.ParseFloat(numStrFinal, 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid number: %s", numStrFinal)
+	}
+
+	if num < 0 {
+		return 0, fmt.Errorf("size cannot be negative")
+	}
+
+	// Convert based on unit
+	var multiplier int64
+	switch unit {
+	case "", "B":
+		multiplier = Byte
+	case "KB":
+		multiplier = KB
+	case "MB":
+		multiplier = MB
+	case "GB":
+		multiplier = GB
+	default:
+		return 0, fmt.Errorf("unsupported unit '%s': supported units are B, KB, MB, GB", unit)
+	}
+
+	// Calculate total bytes with proper rounding to avoid floating-point precision issues
+	totalBytes := int64(num*float64(multiplier) + 0.5)
+
+	return validateMessageSize(totalBytes)
+}
+
+// validateMessageSize validates that the size is within acceptable bounds
+func validateMessageSize(size int64) (int64, error) {
+	if size < MinMessageSize {
+		return 0, fmt.Errorf("size too small: minimum is %s (%d bytes)", formatSize(MinMessageSize), MinMessageSize)
+	}
+	if size > MaxMessageSize {
+		return 0, fmt.Errorf("size too large: maximum is %s (%d bytes)", formatSize(MaxMessageSize), MaxMessageSize)
+	}
+	return size, nil
+}
+
+// formatSize converts bytes to human-readable format
+func formatSize(bytes int64) string {
+	if bytes >= GB {
+		return fmt.Sprintf("%.1fGB", float64(bytes)/float64(GB))
+	}
+	if bytes >= MB {
+		return fmt.Sprintf("%.1fMB", float64(bytes)/float64(MB))
+	}
+	if bytes >= KB {
+		return fmt.Sprintf("%.1fKB", float64(bytes)/float64(KB))
+	}
+	return fmt.Sprintf("%dB", bytes)
+}
+
 type CertConfig struct {
 	CN  string
 	DNS []string
@@ -225,20 +335,25 @@ var initCmd = &cobra.Command{
 		fmt.Println("\n📡 gRPC Settings")
 
 		// GRPC_MAX_MESSAGE_SIZE
-		fmt.Println("📏 Max Message Size: Maximum size for gRPC messages (bytes)")
-		fmt.Println("   Default: 5GB (5368709120) - Adjust for large data transfers")
-		fmt.Print("Max message size [default: 5368709120]: ")
-		maxSizeInput, _ := reader.ReadString('\n')
-		maxSizeInput = strings.TrimSpace(maxSizeInput)
-		if maxSizeInput == "" {
-			envCfg.GRPCMaxMessageSize = 5368709120
-		} else {
-			if size, err := strconv.ParseInt(maxSizeInput, 10, 64); err == nil {
-				envCfg.GRPCMaxMessageSize = size
-			} else {
-				fmt.Printf("⚠️ Invalid number, using default 5GB. Error: %v\n", err)
-				envCfg.GRPCMaxMessageSize = 5368709120
+		fmt.Println("📏 Max Message Size: Maximum size for gRPC messages")
+		fmt.Println("   Accepts raw bytes or human-readable format (e.g., 100MB, 1GB)")
+		fmt.Println("   Recommended: 100MB-1GB for large transfers")
+		fmt.Printf("   Valid range: %s to %s\n", formatSize(MinMessageSize), formatSize(MaxMessageSize))
+
+		// Message size validation loop
+		for {
+			fmt.Printf("Max message size [default: %s]: ", formatSize(DefaultMessageSize))
+			maxSizeInput, _ := reader.ReadString('\n')
+			maxSizeInput = strings.TrimSpace(maxSizeInput)
+
+			size, err := parseMessageSize(maxSizeInput)
+			if err != nil {
+				fmt.Printf("❌ Invalid input: %v. Please try again.\n", err)
+				continue
 			}
+
+			envCfg.GRPCMaxMessageSize = size
+			break
 		}
 
 		// GRPC_SERVER_ERROR_LOGGING
@@ -355,7 +470,7 @@ var initCmd = &cobra.Command{
 		}
 
 		fmt.Println("\n=== gRPC ===")
-		fmt.Printf("  • Max Message Size: %.2f GB\n", float64(envCfg.GRPCMaxMessageSize)/1024/1024/1024)
+		fmt.Printf("  • Max Message Size: %s (%d bytes)\n", formatSize(envCfg.GRPCMaxMessageSize), envCfg.GRPCMaxMessageSize)
 		fmt.Println("  • Error Logging:   ", envCfg.GRPCServerErrorLogging)
 
 		fmt.Println("\n=== STORAGE ===")
