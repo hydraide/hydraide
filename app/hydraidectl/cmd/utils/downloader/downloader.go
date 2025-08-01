@@ -279,8 +279,9 @@ func (d *DefaultDownloader) DownloadHydraServer(version string, basePath string)
 		return fmt.Errorf("binary %s not found in release %s", binaryName, version)
 	}
 
-	logger.Info("Found hydraserver binary", "name", binaryAsset.Name, "size_mb", float64(binaryAsset.Size)/1024/1024)
+	logger.Info("Found hydraserver binary", "name", binaryAsset.Name, "version", version, "size_mb", float64(binaryAsset.Size)/1024/1024)
 
+	version = strings.TrimPrefix(version, "server/")
 	// Check cache first
 	cacheFile := filepath.Join(d.cacheDir, fmt.Sprintf("%s_%s", version, binaryName))
 	if d.isCacheValid(cacheFile, binaryAsset.Size) {
@@ -639,7 +640,7 @@ func (d *DefaultDownloader) installFromCache(cacheFile, basePath, binaryName str
 		}
 	}
 
-	logger.Info("Hydraserver installed successfully", "path", targetPath)
+	logger.Info("Hydraserver downloaded successfully", "path", targetPath)
 	return nil
 }
 
