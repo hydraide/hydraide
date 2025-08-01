@@ -12,6 +12,21 @@
 // GetIslandID(allFolders) maps the current name to a consistent
 // server index (1-based), using a fast and collision-resistant hash.
 //
+// 🛑 Constraints:
+//
+//   - All three components — Sanctuary, Realm, and Swamp — are **required**.
+//   - Each part must be at least **1 character long**.
+//   - The `/` character is **not allowed** in any part of the name.
+//     It is reserved as a structural delimiter and must not be used within values.
+//   - The use of **alphanumeric characters** (a–z, A–Z, 0–9) is strongly recommended
+//     to ensure compatibility and predictable routing across all environments.
+//
+// ⚠️ Note: This package does **not** perform runtime validation of these constraints.
+// To keep the `name` package as fast as possible (ns-level execution),
+// no checks or sanitization are performed internally.
+// It is the responsibility of the caller to ensure valid input.
+// Adding validation would significantly degrade performance (10–20x).
+//
 // Example usage:
 //
 //	name := New().Sanctuary("users").Realm("profiles").Swamp("alice123")
@@ -24,10 +39,11 @@
 // - Determine data placement
 // - Support distributed architectures
 // - Enforce clean, intention-driven naming
+//
 // ----------------------------------------
 // 📘 HydrAIDE Go SDK
 // Full SDK documentation:
-// https://github.com/hydraide/hydraide/blob/main/docs/sdk/go/README.md
+// https://github.com/hydraide/hydraide/blob/main/docs/sdk/go/go-sdk.md
 // ----------------------------------------
 package name
 
