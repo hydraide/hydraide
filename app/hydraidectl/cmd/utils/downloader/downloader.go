@@ -18,24 +18,20 @@ import (
 
 var logger = slog.New(slog.NewTextHandler(os.Stdout, nil))
 
-// BinaryDownloader defines the interface for downloading  binaries from GitHub releases https://github.com/hydraide/hydraide/releases.
-
+// BinaryDownloader defines the interface for downloading hydraserver binaries from GitHub releases.
 // This interface abstracts the logic for:
 // - Downloading a hydraserver binary for a specific or latest version.
 // - Querying the latest available version.
 // - Setting a cache directory for downloads.
 // - Setting a progress callback for reporting download progress.
-
 // Implementations should use these methods to provide a consistent download experience, including caching and progress reporting.
-
 // Example usage:
-
-// 	var d downloader.BinaryDownloader = downloader.NewDownloader()
-// 	err := d.DownloadHydraServer("v1.2.3", "/usr/local/bin")
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-
+//
+//	var d downloader.BinaryDownloader = downloader.NewDownloader()
+//	err := d.DownloadHydraServer("v1.2.3", "/usr/local/bin")
+//	if err != nil {
+//		log.Fatal(err)
+//	}
 type BinaryDownloader interface {
 	// DownloadHydraServer downloads the hydraserver binary for the specified version
 	// If version is empty or "latest", it downloads the latest release
@@ -51,35 +47,25 @@ type BinaryDownloader interface {
 	SetProgressCallback(callback ProgressCallback)
 }
 
-// ProgressCallback is called during download to report progress
-
 // ProgressCallback is a function type used to report download progress.
-
 // Arguments:
 // - downloaded: Number of bytes downloaded so far.
 // - total: Total number of bytes to download.
 // - percent: Download progress as a percentage (0.0 to 100.0).
-
 // This allows the downloader to provide real-time feedback to the user interface or CLI.
-
 // Example:
-// 	func(progress, total int64, percent float64) {
-// 		fmt.Printf("Downloaded %d/%d bytes (%.2f%%)\n", progress, total, percent)
-// 	}
-
+//
+//	func(progress, total int64, percent float64) {
+//		fmt.Printf("Downloaded %d/%d bytes (%.2f%%)\n", progress, total, percent)
+//	}
 type ProgressCallback func(downloaded, total int64, percent float64)
 
-// GitHubRelease represents a GitHub release response from API
-
-// Asset represents a downloadable file (asset) attached to a GitHub release.
-
+// Asset represents a downloadable file attached to a GitHub release.
 // Fields:
 // - Name: The filename of the asset.
 // - BrowserDownloadURL: Direct URL to download the asset.
 // - Size: Size of the asset in bytes.
-
 // Used to identify and download the correct binary and checksum files from a release.
-
 type Asset struct {
 	Name               string `json:"name"`
 	BrowserDownloadURL string `json:"browser_download_url"`
@@ -88,32 +74,23 @@ type Asset struct {
 }
 
 // GitHubRelease represents a GitHub release response from the GitHub API.
-
 // Fields:
 // - TagName: The version tag of the release (e.g., "v1.2.3").
 // - Assets: List of assets (files) attached to the release.
-
 // Used to select the correct binary and checksum for a given version.
-
 type GitHubRelease struct {
 	TagName string  `json:"tag_name"`
 	Assets  []Asset `json:"assets"`
 }
 
-// DefaultDownloader implements BinaryDownloader using GitHub API
-
 // DefaultDownloader is the main implementation of the BinaryDownloader interface.
-
 // Purpose:
 // - Handles downloading hydraserver binaries from GitHub releases, including caching, progress reporting, and OS-specific logic.
-
 // Fields:
 // - cacheDir: Directory where downloaded binaries are cached to avoid redundant downloads.
 // - progressCallback: Optional callback for reporting download progress.
 // - httpClient: HTTP client used for all network requests (configurable for testing or custom timeouts).
-
 // This struct encapsulates all state and logic needed for robust, cross-platform binary downloads.
-
 type DefaultDownloader struct {
 	cacheDir         string
 	progressCallback ProgressCallback
@@ -121,15 +98,12 @@ type DefaultDownloader struct {
 }
 
 // Global constants for downloader package.
-
 // - OWNER, REPO: GitHub repository owner and name, used to construct API URLs for hydraide releases.
 // - TEMP_FILENAME: Name for the cache directory used for temporary downloads.
 // - LINUX_OS, WINDOWS_OS, MAC_OS: OS identifiers for platform-specific logic.
 // - WINDOWS_BINARY_NAME, LINUX_MAC_BINARY_NAME: Expected binary names for each OS, used to select the correct asset from GitHub releases.
 // - HTTP_TIMEOUT: Timeout (in minutes) for HTTP client requests.
-
 // These constants centralize configuration and platform-specific values, making the downloader logic portable and maintainable.
-
 const (
 	OWNER                 = "hydraide"
 	REPO                  = "hydraide"
@@ -142,27 +116,22 @@ const (
 	HTTP_TIMEOUT          = 10
 )
 
-// NewDownloader creates a new DefaultDownloader instance.
-
+// New creates a new DefaultDownloader instance.
 // Purpose:
 // - Constructs a DefaultDownloader with a pre-configured HTTP client and default timeout.
 // - Intended as the main entry point for users to obtain a BinaryDownloader implementation.
-
 // Recommended Temporary Cache Locations:
 // - Linux/macOS: /tmp/hydraide-cache
 // - Windows:     %TEMP%\hydraide-cache
-
 // Returns:
 // - BinaryDownloader: A new instance ready for use.
-
 // Example usage:
-
-// 	d := downloader.NewDownloader()
-// 	err := d.DownloadHydraServer("latest", "/usr/local/bin")
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-
+//
+//	d := downloader.NewDownloader()
+//	err := d.DownloadHydraServer("latest", "/usr/local/bin")
+//	if err != nil {
+//		log.Fatal(err)
+//	}
 func New() BinaryDownloader {
 	return &DefaultDownloader{
 		httpClient: &http.Client{
@@ -171,65 +140,50 @@ func New() BinaryDownloader {
 	}
 }
 
-// SetCacheDir sets the cache directory for downloaded files
-
 // SetCacheDir sets the directory where downloaded binaries will be cached.
-
 // Purpose:
 // - Allows the user or internal logic to specify a custom cache directory for storing downloaded files.
 // - Caching avoids redundant downloads and speeds up repeated operations.
-
 // Input:
 // - dir: Path to the directory to use for caching.
-
 // Example usage:
-// 	d.SetCacheDir("/tmp/hydraide-cache")
-
+//
+//	d.SetCacheDir("/tmp/hydraide-cache")
 func (d *DefaultDownloader) SetCacheDir(dir string) {
 	d.cacheDir = dir
 	fmt.Println("SetCacheDir executed")
 }
 
-// SetProgressCallback sets the progress callback function
-
 // SetProgressCallback sets the callback function to report download progress.
-
 // Purpose:
 // - Allows the user to receive real-time updates on download progress (bytes downloaded, total, percent).
-
 // Input:
 // - callback: Function of type ProgressCallback to be called during downloads.
-
 // Example usage:
-// 	d.SetProgressCallback(func(downloaded, total int64, percent float64) {
-// 		fmt.Printf("Progress: %d/%d (%.2f%%)\n", downloaded, total, percent)
-// 	})
-
+//
+//	d.SetProgressCallback(func(downloaded, total int64, percent float64) {
+//		fmt.Printf("Progress: %d/%d (%.2f%%)\n", downloaded, total, percent)
+//	})
 func (d *DefaultDownloader) SetProgressCallback(callback ProgressCallback) {
 	d.progressCallback = callback
 }
 
 // DownloadHydraServer downloads the hydraserver binary for the specified version.
-
 // Purpose:
 // - Downloads the hydraserver binary for a given version (or the latest if version is empty/"latest").
 // - Handles caching, checksum verification, and installation to the specified basePath.
 // - Reports progress if a callback is set.
-
 // Inputs:
 // - version: Version tag to download (e.g., "v1.2.3" or "latest").
 // - basePath: Directory where the binary should be installed.
-
 // Output:
 // - error: Non-nil if download, verification, or installation fails.
-
 // Example usage:
-
-// 	err := d.DownloadHydraServer("v1.2.3", "/usr/local/bin")
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-
+//
+//	err := d.DownloadHydraServer("v1.2.3", "/usr/local/bin")
+//	if err != nil {
+//		log.Fatal(err)
+//	}
 func (d *DefaultDownloader) DownloadHydraServer(version string, basePath string) error {
 	// Set up cache directory
 	cacheDir := filepath.Join(os.TempDir(), TEMP_FILENAME)
@@ -313,25 +267,20 @@ func (d *DefaultDownloader) DownloadHydraServer(version string, basePath string)
 }
 
 // GetLatestVersion returns the latest available version tag from the hydraide GitHub repository.
-
 // Purpose:
 // - Queries the GitHub API for the latest release version tag.
-
 // Inputs:
 // - None.
-
 // Outputs:
 // - string: The latest version tag (e.g., "v1.2.3").
 // - error: Non-nil if the API call or decoding fails.
-
 // Example usage:
-
-// 	latest, err := d.GetLatestVersion()
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-// 	fmt.Println("Latest version:", latest)
-
+//
+//	latest, err := d.GetLatestVersion()
+//	if err != nil {
+//		log.Fatal(err)
+//	}
+//	fmt.Println("Latest version:", latest)
 func (d *DefaultDownloader) GetLatestVersion() (string, error) {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest", OWNER, REPO)
 
@@ -358,25 +307,20 @@ func (d *DefaultDownloader) GetLatestVersion() (string, error) {
 }
 
 // getReleaseByTag fetches release information for a specific version tag from the hydraide GitHub repository.
-
 // Purpose:
 // - Queries the GitHub API for the release corresponding to the given tag.
-
 // Inputs:
 // - tag: Version tag to fetch (e.g., "v1.2.3").
-
 // Outputs:
 // - *GitHubRelease: Pointer to the release information (assets, tag name).
 // - error: Non-nil if the API call, decoding, or tag lookup fails.
-
 // Example usage:
-
-// 	release, err := d.getReleaseByTag("v1.2.3")
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-// 	fmt.Println("Assets:", release.Assets)
-
+//
+//	release, err := d.getReleaseByTag("v1.2.3")
+//	if err != nil {
+//		log.Fatal(err)
+//	}
+//	fmt.Println("Assets:", release.Assets)
 func (d *DefaultDownloader) getReleaseByTag(tag string) (*GitHubRelease, error) {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/tags/%s", OWNER, REPO, tag)
 
@@ -408,43 +352,33 @@ func (d *DefaultDownloader) getReleaseByTag(tag string) (*GitHubRelease, error) 
 }
 
 // getOS returns the current operating system name as a string.
-
 // Purpose:
 // - Provides a platform-agnostic way to determine the OS for binary selection and permission logic.
-
 // Inputs:
 // - None.
-
 // Outputs:
 // - string: The OS name (e.g., "linux", "windows", "darwin").
-
 // Example usage:
-
-// 	osName := d.getOS()
-// 	if osName == "windows" {
-// 		// Use Windows-specific logic
-// 	}
-
+//
+//	osName := d.getOS()
+//	if osName == "windows" {
+//		// Use Windows-specific logic
+//	}
 func (d *DefaultDownloader) getOS() string {
 	return runtime.GOOS
 }
 
 // getBinaryNameForOS returns the correct hydraserver binary filename for the current operating system.
-
 // Purpose:
 // - Selects the appropriate binary filename based on the OS, for use in asset selection and installation.
-
 // Inputs:
 // - None.
-
 // Outputs:
 // - string: The binary filename (e.g., "hydraide-windows-amd64.exe" or "hydraide-linux-amd64").
-
 // Example usage:
-
-// 	binaryName := d.getBinaryNameForOS()
-// 	fmt.Println("Download binary:", binaryName)
-
+//
+//	binaryName := d.getBinaryNameForOS()
+//	fmt.Println("Download binary:", binaryName)
 func (d *DefaultDownloader) getBinaryNameForOS() string {
 	switch d.getOS() {
 	case WINDOWS_OS:
@@ -459,23 +393,18 @@ func (d *DefaultDownloader) getBinaryNameForOS() string {
 }
 
 // isCacheValid checks if a cached file exists and matches the expected size.
-
 // Purpose:
 // - Determines whether a previously downloaded binary can be reused from cache.
-
 // Inputs:
 // - cacheFile: Path to the cached file.
 // - expectedSize: Expected file size in bytes.
-
 // Outputs:
 // - bool: true if the file exists and matches the expected size, false otherwise.
-
 // Example usage:
-
-// 	if d.isCacheValid("/tmp/hydraide-cache/v1.2.3_hydraide-linux-amd64", 12345678) {
-// 		// Use cached binary
-// 	}
-
+//
+//	if d.isCacheValid("/tmp/hydraide-cache/v1.2.3_hydraide-linux-amd64", 12345678) {
+//		// Use cached binary
+//	}
 func (d *DefaultDownloader) isCacheValid(cacheFile string, expectedSize int64) bool {
 	stat, err := os.Stat(cacheFile)
 	if err != nil {
@@ -485,25 +414,20 @@ func (d *DefaultDownloader) isCacheValid(cacheFile string, expectedSize int64) b
 }
 
 // downloadFile downloads a file from a URL to a destination path, with optional progress reporting.
-
 // Purpose:
 // - Handles the actual download of binary or checksum files, reporting progress if a callback is set.
-
 // Inputs:
 // - url: Source URL to download from.
 // - destination: Path to save the downloaded file.
 // - expectedSize: Expected size of the file in bytes (for progress reporting).
-
 // Outputs:
 // - error: Non-nil if the download or file write fails.
-
 // Example usage:
-
-// 	err := d.downloadFile(asset.BrowserDownloadURL, "/tmp/hydraide-cache/binary", asset.Size)
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-
+//
+//	err := d.downloadFile(asset.BrowserDownloadURL, "/tmp/hydraide-cache/binary", asset.Size)
+//	if err != nil {
+//		log.Fatal(err)
+//	}
 func (d *DefaultDownloader) downloadFile(url, destination string, expectedSize int64) error {
 	resp, err := d.httpClient.Get(url)
 	if err != nil {
@@ -645,21 +569,16 @@ func (d *DefaultDownloader) installFromCache(cacheFile, basePath, binaryName str
 }
 
 // ProgressReader wraps an io.Reader to report download progress
-
 // ProgressReader wraps an io.Reader to provide download progress reporting.
-
 // Purpose:
 // - Tracks the number of bytes read from an underlying reader (typically an HTTP response body).
 // - Calls a ProgressCallback with the current progress, total size, and percent complete.
-
 // Fields:
 // - Reader: The underlying io.Reader to read from.
 // - Total: Total number of bytes expected (for percent calculation).
 // - Downloaded: Number of bytes read so far.
 // - Callback: Function to call with progress updates.
-
 // Used internally by DefaultDownloader to provide real-time progress feedback during downloads.
-
 type ProgressReader struct {
 	Reader     io.Reader
 	Total      int64
@@ -668,32 +587,27 @@ type ProgressReader struct {
 }
 
 // Read implements io.Reader interface with progress reporting
-
 // Read implements the io.Reader interface for ProgressReader.
-
 // Behavior:
 // - Reads up to len(p) bytes from the underlying Reader.
 // - Updates the Downloaded field with the number of bytes read.
 // - If Callback is set and Total > 0, calls the callback with the current progress and percent complete.
-
 // Inputs:
 // - p: Byte slice to read data into.
-
 // Outputs:
 // - n: Number of bytes read.
 // - err: Any error encountered during reading.
-
 // Example usage:
-// 	var pr = &ProgressReader{Reader: resp.Body, Total: 1000, Callback: cb}
-// 	buf := make([]byte, 512)
-// 	for {
-// 		n, err := pr.Read(buf)
-// 		if err == io.EOF {
-// 			break
-// 		}
-// 		// process buf[:n]
-// 	}
-
+//
+//	var pr = &ProgressReader{Reader: resp.Body, Total: 1000, Callback: cb}
+//	buf := make([]byte, 512)
+//	for {
+//		n, err := pr.Read(buf)
+//		if err == io.EOF {
+//			break
+//		}
+//		// process buf[:n]
+//	}
 func (pr *ProgressReader) Read(p []byte) (int, error) {
 	n, err := pr.Reader.Read(p)
 	pr.Downloaded += int64(n)
