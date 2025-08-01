@@ -189,8 +189,8 @@ TLS ensures:
 
 1. Copy the contents of [certificate folder](install-scripts/certificate) to your local machine.
 2. Open `certificate-generator.sh` and edit the `CA_SUBJECT` variable.
-3. Copy `openssl-example.sh` to a new file called `openssl.sh`.
-4. Fill in the certificate subject values inside `openssl.sh`.
+3. Copy `openssl-example.cnf` to a new file called `openssl.cnf`.
+4. Fill in the certificate subject values inside `openssl.cnf`.
 5. Run `certificate-generator.sh`. It will create all required certificate files.
 6. Place the resulting files inside a mountable folder.
 

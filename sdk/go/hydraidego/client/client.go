@@ -205,7 +205,8 @@ func (c *client) Connect(connectionLog bool) error {
 			  }]
 			}`
 
-			creds, certErr := credentials.NewClientTLSFromFile(server.CertFilePath, "")
+			hostOnly := strings.Split(server.Host, ":")[0]
+			creds, certErr := credentials.NewClientTLSFromFile(server.CertFilePath, hostOnly)
 			if certErr != nil {
 
 				slog.Error("error while loading TLS credentials: ", "error", certErr, "server", server.Host, "fromIsland", server.FromIsland, "toIsland", server.ToIsland)
