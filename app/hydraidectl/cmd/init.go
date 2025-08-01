@@ -10,6 +10,8 @@ import (
 
 	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils"
 	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/certificate"
+	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/downloader"
+	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
 )
 
@@ -644,13 +646,13 @@ var initCmd = &cobra.Command{
 		// ===========================
 		// CREATE .ENV FILE
 		// ===========================
-		currentDir, err := os.Getwd()
+		// currentDir, err := os.Getwd()
 		if err != nil {
 			fmt.Println("❌ Error getting current directory:", err)
 			return
 		}
 
-		envPath := filepath.Join(currentDir, ".env")
+		envPath := filepath.Join(envCfg.HydraideBasePath, ".env")
 
 		// Check if .env exists and warn user
 		if _, err := os.Stat(envPath); err == nil {
@@ -729,6 +731,22 @@ var initCmd = &cobra.Command{
 		fmt.Println("✅ .env file created/updated successfully at:", envPath)
 
 		// - todo: download the latest binary (or the tagged one) from the github releases
+		serverDownloaderObject := downloader.New()
+		// 2. Define your progress callback function
+		var bar *progressbar.ProgressBar
+		progressFn := func(downloaded, total int64, percent float64) {
+			if bar == nil {
+				// Create bar when we first know the total
+				bar = progressbar.NewOptions64(total,
+					progressbar.OptionSetDescription("Downloading"),
+					progressbar.OptionShowBytes(true),
+				)
+			}
+			bar.Set64(downloaded)
+		}
+
+		serverDownloaderObject.SetProgressCallback(progressFn)
+		serverDownloaderObject.DownloadHydraServer("latest", envCfg.HydraideBasePath)
 		// - todo: create a service file based on the user's operating system
 		// - todo: start the service
 
