@@ -152,6 +152,96 @@ func formatSize(bytes int64) string {
 	return fmt.Sprintf("%dB", bytes)
 }
 
+// Fragment size constants
+const (
+	MinFragmentSize     = 8 * KB // 8KB
+	MaxFragmentSize     = 1 * GB // 1GB
+	DefaultFragmentSize = 8 * KB // 8KB
+)
+
+// parseFragmentSize parses human-readable fragment size input and returns bytes
+func parseFragmentSize(input string) (int, error) {
+	input = strings.TrimSpace(input)
+
+	// Handle empty input (default)
+	if input == "" {
+		return DefaultFragmentSize, nil
+	}
+
+	// Check for multiple decimal points
+	if strings.Count(input, ".") > 1 {
+		return 0, fmt.Errorf("invalid format: multiple decimal points not allowed")
+	}
+
+	// Extract number and unit using more robust parsing
+	var numStr strings.Builder
+	var unit string
+
+	for i, r := range input {
+		if (r >= '0' && r <= '9') || r == '.' {
+			numStr.WriteRune(r)
+		} else {
+			unit = input[i:]
+			break
+		}
+	}
+
+	numPart := numStr.String()
+	unit = strings.ToUpper(strings.TrimSpace(unit))
+
+	// Parse the number
+	var num float64
+	var err error
+	if numPart == "" {
+		return 0, fmt.Errorf("invalid format: no number found")
+	}
+
+	num, err = strconv.ParseFloat(numPart, 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid number format: %v", err)
+	}
+
+	if num < 0 {
+		return 0, fmt.Errorf("fragment size cannot be negative")
+	}
+
+	// Determine the multiplier based on unit
+	var multiplier int64
+	switch unit {
+	case "":
+		// Raw bytes
+		multiplier = 1
+	case "B":
+		multiplier = 1
+	case "KB":
+		multiplier = KB
+	case "MB":
+		multiplier = MB
+	case "GB":
+		multiplier = GB
+	default:
+		return 0, fmt.Errorf("unsupported unit '%s'. Supported units: B, KB, MB, GB (or raw bytes)", unit)
+	}
+
+	// Calculate total bytes with proper rounding to avoid floating-point precision issues
+	totalBytes := int64(num*float64(multiplier) + 0.5)
+
+	return validateFragmentSize(int(totalBytes))
+}
+
+// validateFragmentSize validates that the fragment size is within acceptable range
+func validateFragmentSize(size int) (int, error) {
+	if size < MinFragmentSize {
+		return 0, fmt.Errorf("fragment size must be at least %d bytes (8KB), got %d", MinFragmentSize, size)
+	}
+
+	if size > MaxFragmentSize {
+		return 0, fmt.Errorf("fragment size must be at most %d bytes (1GB), got %d", MaxFragmentSize, size)
+	}
+
+	return size, nil
+}
+
 type CertConfig struct {
 	CN  string
 	DNS []string
@@ -403,19 +493,23 @@ var initCmd = &cobra.Command{
 
 		// FILE_SIZE
 		fmt.Println("\n📦 Storage Fragment Size")
-		fmt.Println("   Size in bytes for Swamp storage fragments (default: 8KB)")
-		fmt.Print("File fragment size [default: 8192]: ")
-		sizeInput, _ := reader.ReadString('\n')
-		sizeInput = strings.TrimSpace(sizeInput)
-		if sizeInput == "" {
-			envCfg.FileSize = 8192
-		} else {
-			if size, err := strconv.Atoi(sizeInput); err == nil {
-				envCfg.FileSize = size
-			} else {
-				fmt.Printf("⚠️ Invalid number, using default 8192 bytes. Error: %v\n", err)
-				envCfg.FileSize = 8192
+		fmt.Println("   Controls the size of storage fragments for Swamp data")
+		fmt.Println("   Accepts human-readable format: 8KB, 64KB, 1MB, 512MB, 1GB")
+		fmt.Println("   Range: 8KB to 1GB (default: 8KB)")
+
+		// Fragment size validation loop
+		for {
+			fmt.Print("Storage fragment size [default: 8KB]: ")
+			sizeInput, _ := reader.ReadString('\n')
+
+			validSize, err := parseFragmentSize(sizeInput)
+			if err != nil {
+				fmt.Printf("❌ Invalid fragment size: %v. Please try again.\n", err)
+				continue
 			}
+
+			envCfg.FileSize = validSize
+			break
 		}
 
 		// HEALTH CHECK PORT
