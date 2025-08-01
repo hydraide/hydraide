@@ -14,6 +14,7 @@ COPY hydraide-${TARGETARCH} ./hydraide
 # Copy entrypoint script
 COPY scripts/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
+RUN chmod +x /hydraide/hydraide
 
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["./hydraide"]
