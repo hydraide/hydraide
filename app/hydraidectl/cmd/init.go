@@ -436,7 +436,7 @@ var initCmd = &cobra.Command{
 		fmt.Println("✅ .env file created/updated successfully at:", envPath)
 
 		// - todo: download the latest binary (or the tagged one) from the github releases
-		serverDownloaderObject := downloader.NewDownloader()
+		serverDownloaderObject := downloader.New()
 		// 2. Define your progress callback function
 		var bar *progressbar.ProgressBar
 		progressFn := func(downloaded, total int64, percent float64) {
