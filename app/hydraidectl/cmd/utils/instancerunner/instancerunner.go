@@ -7,8 +7,10 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -44,11 +46,84 @@ type InstanceController interface {
 	RestartInstance(ctx context.Context, instanceName string) error
 }
 
+// instanceLocker manages a file-based lock for a single HydrAIDE instance.
+// This provides an inter-process locking mechanism to ensure only one lifecycle
+// command can be executed for a given instance at a time, even across separate CLI processes.
+type instanceLocker struct {
+	lockFile *os.File
+}
+
+// newInstanceLocker creates a new file-based locker for a given instance name.
+// It creates the lock file in a standard location (~/.hydraide/locks) and returns
+// an error if it cannot be created or opened.
+func newInstanceLocker(instanceName string) (*instanceLocker, error) {
+	lockDir, err := getLockDirectory()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get lock directory: %w", err)
+	}
+
+	lockPath := filepath.Join(lockDir, fmt.Sprintf("%s.lock", instanceName))
+	lockFile, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0600)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open lock file %s: %w", lockPath, err)
+	}
+
+	return &instanceLocker{lockFile: lockFile}, nil
+}
+
+// lock acquires a file lock for the instance.
+// It will block until the lock is available.
+func (il *instanceLocker) lock() error {
+	// F_LOCK is an exclusive lock. It will block if another process holds the lock.
+	if err := syscall.Flock(int(il.lockFile.Fd()), syscall.LOCK_EX); err != nil {
+		return fmt.Errorf("failed to acquire file lock: %w", err)
+	}
+	return nil
+}
+
+// unlock releases the file lock.
+func (il *instanceLocker) unlock() error {
+	if err := syscall.Flock(int(il.lockFile.Fd()), syscall.LOCK_UN); err != nil {
+		return fmt.Errorf("failed to release file lock: %w", err)
+	}
+	il.lockFile.Close() // Also close the file handle after unlocking
+	return nil
+}
+
+// getLockDirectory returns the path to the directory where lock files are stored.
+// It creates the directory if it does not exist.
+func getLockDirectory() (string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to get user home directory: %w", err)
+	}
+	lockDir := filepath.Join(homeDir, ".hydraide", "locks")
+	if err := os.MkdirAll(lockDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create lock directory: %w", err)
+	}
+	return lockDir, nil
+}
+
 // systemdController implements InstanceController for Linux systems.
 type systemdController struct{}
 
 // StartInstance starts a systemd user service.
+// This function acquires a file-based lock to ensure exclusive access to the instance.
 func (c *systemdController) StartInstance(ctx context.Context, instance string) error {
+	locker, err := newInstanceLocker(instance)
+	if err != nil {
+		return err
+	}
+	if err := locker.lock(); err != nil {
+		return fmt.Errorf("failed to lock instance '%s': %w", instance, err)
+	}
+	// Use defer to ensure the lock is always released when the function exits.
+	defer locker.unlock()
+	return c.startInstanceOpe(ctx, instance)
+}
+
+// startInstanceOpe is the core logic for starting an instance, lock is held.
+func (c *systemdController) startInstanceOpe(ctx context.Context, instance string) error {
 	service := fmt.Sprintf("hydraserver-%s.service", instance)
 
 	// Pre-flight check: ensure the service file exists before attempting to start it.
@@ -81,8 +156,24 @@ func (c *systemdController) StartInstance(ctx context.Context, instance string) 
 	return nil
 }
 
-// StopInstance stops a systemd user service and waits for it to shut down gracefully.
+// StopInstance stops a systemd user service gracefully.
+// This function acquires a file-based lock to ensure exclusive access to the instance.
 func (c *systemdController) StopInstance(ctx context.Context, instance string) error {
+	locker, err := newInstanceLocker(instance)
+	if err != nil {
+		return err
+	}
+	if err := locker.lock(); err != nil {
+		return fmt.Errorf("failed to lock instance '%s': %w", instance, err)
+	}
+	// Use defer to ensure the lock is always released when the function exits.
+	defer locker.unlock()
+
+	return c.stopInstanceOpe(ctx, instance)
+}
+
+// stopInstanceOpe is the core logic for stopping an instance, lock is held.
+func (c *systemdController) stopInstanceOpe(ctx context.Context, instance string) error {
 	service := fmt.Sprintf("hydraserver-%s.service", instance)
 
 	// Pre-flight check: ensure the service file exists.
@@ -152,13 +243,23 @@ func (c *systemdController) StopInstance(ctx context.Context, instance string) e
 func (c *systemdController) RestartInstance(ctx context.Context, instanceName string) error {
 	logger.Printf("Attempting to restart instance '%s'...", instanceName)
 
+	// Acquire the lock for the entire restart operation.
+	locker, err := newInstanceLocker(instanceName)
+	if err != nil {
+		return err
+	}
+	if err := locker.lock(); err != nil {
+		return fmt.Errorf("failed to lock instance '%s': %w", instanceName, err)
+	}
+	defer locker.unlock()
+
 	// Stop the service gracefully.
-	if err := c.StopInstance(ctx, instanceName); err != nil {
+	if err := c.stopInstanceOpe(ctx, instanceName); err != nil {
 		return fmt.Errorf("failed to gracefully stop instance '%s' for restart: %w", instanceName, err)
 	}
 
 	// Start the service.
-	if err := c.StartInstance(ctx, instanceName); err != nil {
+	if err := c.startInstanceOpe(ctx, instanceName); err != nil {
 		return fmt.Errorf("failed to start instance '%s' after stop: %w", instanceName, err)
 	}
 
