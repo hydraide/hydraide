@@ -3,6 +3,7 @@ package instancerunner
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/exec"
@@ -11,14 +12,39 @@ import (
 	"time"
 )
 
-// InstanceController defines basic control operations for a HydrAIDE instance.
+// logger is the package's logger. By default, it is a silent logger that discards all output.
+// A custom logger can be set using the SetLogger function.
+var logger *log.Logger
+
+func init() {
+	// By default instance runner is silent. Logs are discarded.
+	logger = log.New(io.Discard, "", 0)
+}
+
+// SetupLogger allows a client to provide a custom logger for verbose output.
+func SetupLogger(customLogger *log.Logger) {
+	logger = customLogger
+}
+
+// InstanceController defines control operations for a HydrAIDE instances.
+// The interface provides methods to start, stop, and restart a named service.
 type InstanceController interface {
+	// StartInstance starts the system service for the given instanceName.
+	// It returns an error if the service file does not exist, or if the start command fails.
 	StartInstance(ctx context.Context, instanceName string) error
+
+	// StopInstance gracefully stops the system service for the given instanceName.
+	// It issues a stop command and then actively polls the service status
+	// to ensure it has fully shut down before returning.
+	// A 5-second timeout is used to prevent indefinite waiting.
 	StopInstance(ctx context.Context, instanceName string) error
+
+	// RestartInstance performs a graceful stop followed by a start of the service.
+	// It uses StopInstance and StartInstance methods to perform restart.
 	RestartInstance(ctx context.Context, instanceName string) error
 }
 
-// systemdController implements InstanceController for Linux.
+// systemdController implements InstanceController for Linux systems.
 type systemdController struct{}
 
 // StartInstance starts a systemd user service.
@@ -43,15 +69,15 @@ func (c *systemdController) StartInstance(ctx context.Context, instance string) 
 	cmd := exec.CommandContext(ctx, "systemctl", "--user", "start", service)
 	cmd.Env = env
 
-	log.Printf("Attempting to start service '%s'", service)
+	logger.Printf("Attempting to start service '%s'", service)
 
 	err = cmd.Run()
 	if err != nil {
-		log.Printf("failed to start service '%s'", service)
+		logger.Printf("failed to start service '%s'", service)
 		return fmt.Errorf("failed to start service '%s': %w", service, err)
 	}
 
-	log.Printf("Successfully started service '%s'", service)
+	logger.Printf("Successfully started service '%s'", service)
 	return nil
 }
 
@@ -71,11 +97,11 @@ func (c *systemdController) StopInstance(ctx context.Context, instance string) e
 	// Check if the service is already inactive.
 	isActive, err := c.isServiceActive(service)
 	if err != nil {
-		log.Printf("Failed to check status of '%s'", service)
+		logger.Printf("Failed to check status of '%s'", service)
 		return fmt.Errorf("failed to check status of '%s': %w", service, err)
 	}
 	if !isActive {
-		log.Printf("Service '%s' is already stopped. No action needed.", service)
+		logger.Printf("Service '%s' is already stopped. No action needed.", service)
 		return nil
 	}
 
@@ -87,7 +113,7 @@ func (c *systemdController) StopInstance(ctx context.Context, instance string) e
 	}
 	cmd.Env = env
 
-	log.Printf("Attempting to stop service '%s'", service)
+	logger.Printf("Attempting to stop service '%s'", service)
 
 	// Issue the stop command. The command itself doesn't wait for shutdown.
 	if err := cmd.Run(); err != nil {
@@ -95,7 +121,7 @@ func (c *systemdController) StopInstance(ctx context.Context, instance string) e
 	}
 
 	// Poll the service status to ensure it has fully shut down.
-	log.Printf("Waiting for service '%s' to be fully stopped...", service)
+	logger.Printf("Waiting for service '%s' to be fully stopped...", service)
 
 	// Default to a 5-second timeout for graceful shutdown.
 	// Todo: Configurable timeout
@@ -115,7 +141,7 @@ func (c *systemdController) StopInstance(ctx context.Context, instance string) e
 				return fmt.Errorf("failed to check service status during graceful stop: %w", checkErr)
 			}
 			if !isActive {
-				log.Printf("Service '%s' is confirmed stopped.", service)
+				logger.Printf("Service '%s' is confirmed stopped.", service)
 				return nil
 			}
 		}
@@ -124,7 +150,7 @@ func (c *systemdController) StopInstance(ctx context.Context, instance string) e
 
 // RestartInstance stops and then starts a systemd user service instance.
 func (c *systemdController) RestartInstance(ctx context.Context, instanceName string) error {
-	log.Printf("Attempting to restart instance '%s'...", instanceName)
+	logger.Printf("Attempting to restart instance '%s'...", instanceName)
 
 	// Stop the service gracefully.
 	if err := c.StopInstance(ctx, instanceName); err != nil {
@@ -136,7 +162,7 @@ func (c *systemdController) RestartInstance(ctx context.Context, instanceName st
 		return fmt.Errorf("failed to start instance '%s' after stop: %w", instanceName, err)
 	}
 
-	log.Printf("Successfully restarted instance '%s'.", instanceName)
+	logger.Printf("Successfully restarted instance '%s'.", instanceName)
 	return nil
 }
 
@@ -223,6 +249,7 @@ func (c *windowsController) RestartInstance(ctx context.Context, instance string
 }
 
 // NewInstanceController returns the appropriate controller based on the OS.
+// Currently, it supports "linux" and "windows". For any other OS, it returns nil.
 func NewInstanceController() InstanceController {
 	switch runtime.GOOS {
 	case "windows":
