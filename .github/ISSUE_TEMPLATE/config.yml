@@ -1,13 +1,11 @@
 blank_issues_enabled: false
 contact_links:
-  - name: 👋 Want to contribute to HydrAIDE?
+  - name: "👋 Want to contribute to HydrAIDE?"
     url: https://github.com/hydraide/hydraide/blob/main/CONTRIBUTORS.md
-    about: Start here if you're new — apply to become a contributor and learn how the system works.
-
-  - name: 🛠 Active Contributor Guidelines
+    about: Start here if you're new - apply to become a contributor and learn how the system works.
+  - name: "🛠 Active Contributor Guidelines"
     url: https://github.com/hydraide/hydraide/blob/main/CONTRIBUTING.md
     about: Already part of the team? Learn how we work triage, labels, review cycles and code expectations.
-
-  - name: 💬 Propose a Discussion, RFC or Idea
+  - name: "💬 Propose a Discussion, RFC or Idea"
     url: https://github.com/hydraide/hydraide/issues/new?template=discussion.yml
-    about: Use this to start open-ended or strategic issues — architectural, SDK-level, CLI design, or vision topics.
+    about: Use this to start open-ended or strategic issues - architectural, SDK-level, CLI design, or vision topics.
