@@ -2,247 +2,22 @@ package cmd
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 
-	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils"
+	buildmeta "github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/buildmetadata"
 	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/certificate"
 	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/downloader"
+	filesystem "github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/filesystem"
+	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/validator"
 	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
 )
-
-// validatePort validates that the provided port string is a valid integer between 1 and 65535
-func validatePort(portStr string) (string, error) {
-	if portStr == "" {
-		return "", fmt.Errorf("port cannot be empty")
-	}
-	port, err := strconv.Atoi(portStr)
-	if err != nil {
-		return "", fmt.Errorf("port must be a valid integer")
-	}
-	if port < 1 || port > 65535 {
-		return "", fmt.Errorf("port must be between 1 and 65535")
-	}
-	return portStr, nil
-}
-
-// validateLoglevel validates whether provided loglevel fits slog loglevels and returns a valid string
-func validateLoglevel(logLevel string) (string, error) {
-	logLevel = strings.ToLower(strings.TrimSpace(logLevel))
-	validLoglevels := map[string]bool{"debug": true, "info": true, "warn": true, "error": true}
-
-	if logLevel == "" {
-		return "info", nil
-	}
-	if validLoglevels[logLevel] {
-		return logLevel, nil
-	}
-	return "", fmt.Errorf("loglevel must be 'debug', 'info', 'warn' or 'error'")
-}
-
-// Message size constants
-const (
-	Byte = 1
-	KB   = 1024 * Byte
-	MB   = 1024 * KB
-	GB   = 1024 * MB
-)
-
-const (
-	MinMessageSize     = 10 * MB // 10MB
-	MaxMessageSize     = 10 * GB // 10GB
-	DefaultMessageSize = 10 * MB // 10MB (changed from 5GB)
-)
-
-// parseMessageSize parses human-readable message size input and returns bytes
-func parseMessageSize(input string) (int64, error) {
-	input = strings.TrimSpace(input)
-
-	// Handle empty input (default)
-	if input == "" {
-		return DefaultMessageSize, nil
-	}
-
-	// Try parsing as raw bytes first
-	if val, err := strconv.ParseInt(input, 10, 64); err == nil {
-		return validateMessageSize(val)
-	}
-
-	// Parse size with unit (case-insensitive)
-	input = strings.ToUpper(input)
-
-	// Check for multiple decimal points
-	if strings.Count(input, ".") > 1 {
-		return 0, fmt.Errorf("invalid format: multiple decimal points not allowed")
-	}
-
-	// Extract number and unit using more robust parsing
-	var numStr strings.Builder
-	var unit string
-
-	for i, r := range input {
-		if (r >= '0' && r <= '9') || r == '.' {
-			numStr.WriteRune(r)
-		} else {
-			unit = input[i:]
-			break
-		}
-	}
-
-	numStrFinal := numStr.String()
-	if numStrFinal == "" {
-		return 0, fmt.Errorf("invalid format: use raw bytes (e.g., 10485760) or size with unit (e.g., 100MB, 1GB)")
-	}
-
-	// Parse the numeric part
-	num, err := strconv.ParseFloat(numStrFinal, 64)
-	if err != nil {
-		return 0, fmt.Errorf("invalid number: %s", numStrFinal)
-	}
-
-	if num < 0 {
-		return 0, fmt.Errorf("size cannot be negative")
-	}
-
-	// Convert based on unit
-	var multiplier int64
-	switch unit {
-	case "", "B":
-		multiplier = Byte
-	case "KB":
-		multiplier = KB
-	case "MB":
-		multiplier = MB
-	case "GB":
-		multiplier = GB
-	default:
-		return 0, fmt.Errorf("unsupported unit '%s': supported units are B, KB, MB, GB", unit)
-	}
-
-	// Calculate total bytes with proper rounding to avoid floating-point precision issues
-	totalBytes := int64(num*float64(multiplier) + 0.5)
-
-	return validateMessageSize(totalBytes)
-}
-
-// validateMessageSize validates that the size is within acceptable bounds
-func validateMessageSize(size int64) (int64, error) {
-	if size < MinMessageSize {
-		return 0, fmt.Errorf("size too small: minimum is %s (%d bytes)", formatSize(MinMessageSize), MinMessageSize)
-	}
-	if size > MaxMessageSize {
-		return 0, fmt.Errorf("size too large: maximum is %s (%d bytes)", formatSize(MaxMessageSize), MaxMessageSize)
-	}
-	return size, nil
-}
-
-// formatSize converts bytes to human-readable format
-func formatSize(bytes int64) string {
-	if bytes >= GB {
-		return fmt.Sprintf("%.1fGB", float64(bytes)/float64(GB))
-	}
-	if bytes >= MB {
-		return fmt.Sprintf("%.1fMB", float64(bytes)/float64(MB))
-	}
-	if bytes >= KB {
-		return fmt.Sprintf("%.1fKB", float64(bytes)/float64(KB))
-	}
-	return fmt.Sprintf("%dB", bytes)
-}
-
-// Fragment size constants
-const (
-	MinFragmentSize     = 8 * KB // 8KB
-	MaxFragmentSize     = 1 * GB // 1GB
-	DefaultFragmentSize = 8 * KB // 8KB
-)
-
-// parseFragmentSize parses human-readable fragment size input and returns bytes
-func parseFragmentSize(input string) (int, error) {
-	input = strings.TrimSpace(input)
-
-	// Handle empty input (default)
-	if input == "" {
-		return DefaultFragmentSize, nil
-	}
-
-	// Check for multiple decimal points
-	if strings.Count(input, ".") > 1 {
-		return 0, fmt.Errorf("invalid format: multiple decimal points not allowed")
-	}
-
-	// Extract number and unit using more robust parsing
-	var numStr strings.Builder
-	var unit string
-
-	for i, r := range input {
-		if (r >= '0' && r <= '9') || r == '.' {
-			numStr.WriteRune(r)
-		} else {
-			unit = input[i:]
-			break
-		}
-	}
-
-	numPart := numStr.String()
-	unit = strings.ToUpper(strings.TrimSpace(unit))
-
-	// Parse the number
-	var num float64
-	var err error
-	if numPart == "" {
-		return 0, fmt.Errorf("invalid format: no number found")
-	}
-
-	num, err = strconv.ParseFloat(numPart, 64)
-	if err != nil {
-		return 0, fmt.Errorf("invalid number format: %v", err)
-	}
-
-	if num < 0 {
-		return 0, fmt.Errorf("fragment size cannot be negative")
-	}
-
-	// Determine the multiplier based on unit
-	var multiplier int64
-	switch unit {
-	case "":
-		// Raw bytes
-		multiplier = 1
-	case "B":
-		multiplier = 1
-	case "KB":
-		multiplier = KB
-	case "MB":
-		multiplier = MB
-	case "GB":
-		multiplier = GB
-	default:
-		return 0, fmt.Errorf("unsupported unit '%s'. Supported units: B, KB, MB, GB (or raw bytes)", unit)
-	}
-
-	// Calculate total bytes with proper rounding to avoid floating-point precision issues
-	totalBytes := int64(num*float64(multiplier) + 0.5)
-
-	return validateFragmentSize(int(totalBytes))
-}
-
-// validateFragmentSize validates that the fragment size is within acceptable range
-func validateFragmentSize(size int) (int, error) {
-	if size < MinFragmentSize {
-		return 0, fmt.Errorf("fragment size must be at least %d bytes (8KB), got %d", MinFragmentSize, size)
-	}
-
-	if size > MaxFragmentSize {
-		return 0, fmt.Errorf("fragment size must be at most %d bytes (1GB), got %d", MaxFragmentSize, size)
-	}
-
-	return size, nil
-}
 
 type CertConfig struct {
 	CN  string
@@ -261,7 +36,7 @@ type EnvConfig struct {
 	GRPCServerErrorLogging bool
 	CloseAfterIdle         int
 	WriteInterval          int
-	FileSize               int
+	FileSize               int64
 	HydraidePort           string
 	HydraideBasePath       string
 	HealthCheckPort        string
@@ -271,7 +46,6 @@ var initCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Run the quick install wizard",
 	Run: func(cmd *cobra.Command, args []string) {
-
 		reader := bufio.NewReader(os.Stdin)
 
 		fmt.Println("🚀 Starting HydrAIDE install wizard...")
@@ -279,6 +53,10 @@ var initCmd = &cobra.Command{
 
 		var cert CertConfig
 		var envCfg EnvConfig
+
+		fs := filesystem.New()
+		validator := validator.New()
+		ctx := context.Background()
 
 		// Certificate CN – default = localhost
 		fmt.Println("🌐 TLS Certificate Setup")
@@ -291,11 +69,11 @@ var initCmd = &cobra.Command{
 			cert.CN = "hydraide"
 		}
 
-		// localhost hozzáadása
+		// Add localhost
 		cert.DNS = append(cert.DNS, "localhost")
 		cert.IP = append(cert.IP, "127.0.0.1")
 
-		// IP-k:belső s külső címek
+		// Additional IP addresses
 		fmt.Println("\n🌐 Add additional IP addresses to the certificate?")
 		fmt.Println("By default, '127.0.0.1' is included for localhost access.")
 		fmt.Println()
@@ -349,7 +127,7 @@ var initCmd = &cobra.Command{
 				break
 			}
 
-			validPort, err := validatePort(portInput)
+			validPort, err := validator.ValidatePort(ctx, portInput)
 			if err != nil {
 				fmt.Printf("❌ Invalid port: %v. Please try again.\n", err)
 				continue
@@ -361,11 +139,15 @@ var initCmd = &cobra.Command{
 
 		fmt.Println("\n📁 Base Path for HydrAIDE")
 		fmt.Println("This is the main directory where HydrAIDE will store its core files.")
-		fmt.Print("Base path (default: /mnt/hydraide): ")
+		defaultBasePath := "/mnt/hydraide"
+		if runtime.GOOS == "windows" {
+			defaultBasePath = `C:\mnt\hydraide`
+		}
+		fmt.Printf("Base path (default: %s): ", defaultBasePath)
 		envCfg.HydraideBasePath, _ = reader.ReadString('\n')
 		envCfg.HydraideBasePath = strings.TrimSpace(envCfg.HydraideBasePath)
 		if envCfg.HydraideBasePath == "" {
-			envCfg.HydraideBasePath = "/mnt/hydraide"
+			envCfg.HydraideBasePath = defaultBasePath
 		}
 
 		// LOG_LEVEL
@@ -374,14 +156,14 @@ var initCmd = &cobra.Command{
 		fmt.Println("   - Options: debug | info | warn | error")
 		fmt.Println("   - Default: info (recommended for production)")
 
-		// loglevel validation loop
+		// Loglevel validation loop
 		for {
 			fmt.Print("Choose log level [default: info]: ")
 			logLevel, _ := reader.ReadString('\n')
 
-			logLevel, err := validateLoglevel(logLevel)
+			logLevel, err := validator.ValidateLoglevel(ctx, logLevel)
 			if err != nil {
-				fmt.Printf("\n ❌ Invalid loglevel: %v. Please try again.\n", err)
+				fmt.Printf("\n❌ Invalid loglevel: %v. Please try again.\n", err)
 				continue
 			}
 
@@ -430,15 +212,14 @@ var initCmd = &cobra.Command{
 		fmt.Println("📏 Max Message Size: Maximum size for gRPC messages")
 		fmt.Println("   Accepts raw bytes or human-readable format (e.g., 100MB, 1GB)")
 		fmt.Println("   Recommended: 100MB-1GB for large transfers")
-		fmt.Printf("   Valid range: %s to %s\n", formatSize(MinMessageSize), formatSize(MaxMessageSize))
 
 		// Message size validation loop
 		for {
-			fmt.Printf("Max message size [default: %s]: ", formatSize(DefaultMessageSize))
+			fmt.Printf("Max message size [default: %s]: ", "8KB")
 			maxSizeInput, _ := reader.ReadString('\n')
 			maxSizeInput = strings.TrimSpace(maxSizeInput)
 
-			size, err := parseMessageSize(maxSizeInput)
+			size, err := validator.ParseMessageSize(ctx, maxSizeInput)
 			if err != nil {
 				fmt.Printf("❌ Invalid input: %v. Please try again.\n", err)
 				continue
@@ -501,10 +282,10 @@ var initCmd = &cobra.Command{
 
 		// Fragment size validation loop
 		for {
-			fmt.Print("Storage fragment size [default: 8KB]: ")
+			fmt.Printf("Storage fragment size [default: %s]: ", "8KB")
 			sizeInput, _ := reader.ReadString('\n')
 
-			validSize, err := parseFragmentSize(sizeInput)
+			validSize, err := validator.ParseFragmentSize(ctx, sizeInput)
 			if err != nil {
 				fmt.Printf("❌ Invalid fragment size: %v. Please try again.\n", err)
 				continue
@@ -529,7 +310,7 @@ var initCmd = &cobra.Command{
 				break
 			}
 
-			validPort, err := validatePort(healthPortInput)
+			validPort, err := validator.ValidatePort(ctx, healthPortInput)
 			if err != nil {
 				fmt.Printf("❌ Invalid port: %v. Please try again.\n", err)
 				continue
@@ -542,12 +323,9 @@ var initCmd = &cobra.Command{
 
 			envCfg.HealthCheckPort = validPort
 			break
-
 		}
 
-		// ======================
 		// CONFIGURATION SUMMARY
-		// ======================
 		fmt.Println("\n🔧 Configuration Summary:")
 		fmt.Println("=== NETWORK ===")
 		fmt.Println("  • CN:         ", cert.CN)
@@ -566,7 +344,7 @@ var initCmd = &cobra.Command{
 		}
 
 		fmt.Println("\n=== gRPC ===")
-		fmt.Printf("  • Max Message Size: %s (%d bytes)\n", formatSize(envCfg.GRPCMaxMessageSize), envCfg.GRPCMaxMessageSize)
+		fmt.Printf("  • Max Message Size: %s (%d bytes)\n", validator.FormatSize(ctx, envCfg.GRPCMaxMessageSize), envCfg.GRPCMaxMessageSize)
 		fmt.Println("  • Error Logging:   ", envCfg.GRPCServerErrorLogging)
 
 		fmt.Println("\n=== STORAGE ===")
@@ -589,29 +367,102 @@ var initCmd = &cobra.Command{
 
 		fmt.Println("\n✅ Starting installation...")
 
-		// todo: start the instance installation process
-
-		// - todo: create the necessary directories
-
+		// Check and create necessary directories
 		folders := []string{"certificate", "data", "settings"}
-		fmt.Println("📂 Creating application folders...", folders)
-		err := utils.CreateFolders(envCfg.HydraideBasePath, folders)
-		if err != nil {
-			fmt.Println("❌ Error creating application folders:", err)
-			return
-		}
-		// double check if Directory created or not
-		if verbose, err := utils.CheckDirectoryExists(envCfg.HydraideBasePath, folders); err != nil {
-			fmt.Println("❌ Error checking directories:", err)
-			return
-		} else {
-			fmt.Println(verbose)
+		fmt.Println("📂 Checking application folders...", folders)
+
+		// Check if all required folders exist
+		allExist := true
+		var missingFolders []string
+		for _, folder := range folders {
+			fullPath := filepath.Join(envCfg.HydraideBasePath, folder)
+			exists, err := fs.CheckIfDirExists(ctx, fullPath)
+			if err != nil {
+				fmt.Printf("❌ Error checking directory %s: %v\n", fullPath, err)
+				return
+			}
+			if !exists {
+				allExist = false
+				missingFolders = append(missingFolders, fullPath)
+			}
 		}
 
-		// - todo: generate the TLS certificate
-		fmt.Println("🔒 Generating TLS certificate...")
+		// Handle missing folders
+		if !allExist {
+			fmt.Println("⚠️ The following folders are missing:", missingFolders)
+			fmt.Println("🔄 Attempting to create missing folders...")
+			for _, folder := range missingFolders {
+				if err := fs.CreateDir(ctx, folder, 0755); err != nil {
+					fmt.Printf("❌ Error creating directory %s: %v\n", folder, err)
+					return
+				}
+				fmt.Printf("✅ Created directory: %s\n", folder)
+			}
+		} else {
+			// All folders exist, warn about potential data loss
+			fmt.Println("\n⚠️ WARNING: All required folders already exist:", strings.Join(folders, ", "))
+			fmt.Println("🚨 Continuing may DELETE ALL EXISTING DATA in these folders!")
+			fmt.Println("This includes certificates, data, and settings, which could lead to loss of previous configurations.")
+
+			// First confirmation
+			fmt.Print("\n❓ Are you sure you want to proceed? This will DELETE all data in these folders. (y/n): ")
+			firstConfirm, _ := reader.ReadString('\n')
+			firstConfirm = strings.ToLower(strings.TrimSpace(firstConfirm))
+			if firstConfirm != "y" && firstConfirm != "yes" {
+				fmt.Println("🚫 Installation cancelled due to user choice.")
+				return
+			}
+
+			// Second confirmation: require typing "delete"
+			fmt.Print("\n❓ To confirm, type 'delete' to proceed with data deletion: ")
+			secondConfirm, _ := reader.ReadString('\n')
+			secondConfirm = strings.ToLower(strings.TrimSpace(secondConfirm))
+			if secondConfirm != "delete" {
+				fmt.Println("🚫 Installation cancelled. You did not type 'delete'.")
+				return
+			}
+
+			// Delete existing folders to ensure a clean slate
+			for _, folder := range folders {
+				fullPath := filepath.Join(envCfg.HydraideBasePath, folder)
+				if err := fs.RemoveDir(ctx, fullPath); err != nil {
+					fmt.Printf("❌ Error deleting directory %s: %v\n", fullPath, err)
+					return
+				}
+				fmt.Printf("🗑️ Deleted existing directory: %s\n", fullPath)
+			}
+
+			// Recreate the folders
+			for _, folder := range folders {
+				fullPath := filepath.Join(envCfg.HydraideBasePath, folder)
+				if err := fs.CreateDir(ctx, fullPath, 0755); err != nil {
+					fmt.Printf("❌ Error creating directory %s: %v\n", fullPath, err)
+					return
+				}
+				fmt.Printf("✅ Created directory: %s\n", fullPath)
+			}
+		}
+
+		// Verify all folders exist after creation
+		fmt.Println("\n📂 Verifying application folders...")
+		for _, folder := range folders {
+			fullPath := filepath.Join(envCfg.HydraideBasePath, folder)
+			exists, err := fs.CheckIfDirExists(ctx, fullPath)
+			if err != nil {
+				fmt.Printf("❌ Error checking directory %s: %v\n", fullPath, err)
+				return
+			}
+			if !exists {
+				fmt.Printf("❌ Directory does not exist: %s\n", fullPath)
+				return
+			}
+			fmt.Printf("✅ Directory exists: %s\n", fullPath)
+		}
+
+		// Generate the TLS certificate
+		fmt.Println("\n🔒 Generating TLS certificate...")
 		certGen := certificate.New(cert.CN, cert.DNS, cert.IP)
-		if err = certGen.Generate(); err != nil {
+		if err := certGen.Generate(); err != nil {
 			fmt.Println("❌ Error generating TLS certificate:", err)
 			return
 		}
@@ -621,43 +472,42 @@ var initCmd = &cobra.Command{
 		fmt.Println("  • Server CRT: ", serverCRT)
 		fmt.Println("  • Server KEY: ", serverKEY)
 
-		// - todo: copy the server and client TLS certificate to the certificate directory
-
-		fmt.Println("📂 Copying TLS certificates to the certificate directory...")
-		fmt.Printf("  • Client CRT: From %s  to  %s \n", clientCRT, filepath.Join(envCfg.HydraideBasePath, "certificate", filepath.Base(clientCRT)))
-		if err := utils.MoveFile(clientCRT, filepath.Join(envCfg.HydraideBasePath, "certificate", filepath.Base(clientCRT))); err != nil {
-			fmt.Println("❌ Error copying client certificate:", err)
-			return
-		}
-		fmt.Printf("  • Server CRT: From %s  to  %s \n", serverCRT, filepath.Join(envCfg.HydraideBasePath, "certificate", filepath.Base(serverCRT)))
-		if err := utils.MoveFile(serverCRT, filepath.Join(envCfg.HydraideBasePath, "certificate", filepath.Base(serverCRT))); err != nil {
-			fmt.Println("❌ Error copying server certificate:", err)
-			return
-		}
-		fmt.Printf("  • Server KEY: From %s  to  %s \n", serverKEY, filepath.Join(envCfg.HydraideBasePath, "certificate", filepath.Base(serverKEY)))
-		if err := utils.MoveFile(serverKEY, filepath.Join(envCfg.HydraideBasePath, "certificate", filepath.Base(serverKEY))); err != nil {
-			fmt.Println("❌ Error copying server key:", err)
+		// Copy the server and client TLS certificates to the certificate directory
+		fmt.Println("\n📂 Copying TLS certificates to the certificate directory...")
+		// Move client certificate
+		destClientCRT := filepath.Join(envCfg.HydraideBasePath, "certificate", filepath.Base(clientCRT))
+		fmt.Printf("  • Client CRT: From %s to %s\n", clientCRT, destClientCRT)
+		if err := fs.MoveFile(ctx, clientCRT, destClientCRT); err != nil {
+			fmt.Println("❌ Error moving client certificate:", err)
 			return
 		}
 
+		// Move server certificate
+		destServerCRT := filepath.Join(envCfg.HydraideBasePath, "certificate", filepath.Base(serverCRT))
+		fmt.Printf("  • Server CRT: From %s to %s\n", serverCRT, destServerCRT)
+		if err := fs.MoveFile(ctx, serverCRT, destServerCRT); err != nil {
+			fmt.Println("❌ Error moving server certificate:", err)
+			return
+		}
+
+		// Move server key
+		destServerKEY := filepath.Join(envCfg.HydraideBasePath, "certificate", filepath.Base(serverKEY))
+		fmt.Printf("  • Server KEY: From %s to %s\n", serverKEY, destServerKEY)
+		if err := fs.MoveFile(ctx, serverKEY, destServerKEY); err != nil {
+			fmt.Println("❌ Error moving server key:", err)
+			return
+		}
 		fmt.Println("✅ TLS certificates copied successfully.")
 
-		// - todo: create the .env file (based on the .env_sample) to base path and fill in the values
-		// ===========================
-		// CREATE .ENV FILE
-		// ===========================
-		// currentDir, err := os.Getwd()
+		// Create the .env file
+		envPath := filepath.Join(envCfg.HydraideBasePath, ".env")
+		exists, err := fs.CheckIfFileExists(ctx, envPath)
 		if err != nil {
-			fmt.Println("❌ Error getting current directory:", err)
+			fmt.Println("❌ Error checking .env file:", err)
 			return
 		}
-
-		envPath := filepath.Join(envCfg.HydraideBasePath, ".env")
-
-		// Check if .env exists and warn user
-		if _, err := os.Stat(envPath); err == nil {
-			fmt.Printf("\n⚠️  Found existing .env file at: %s\n", envPath)
-
+		if exists {
+			fmt.Printf("\n⚠️ Found existing .env file at: %s\n", envPath)
 			// Show current content
 			existingContent, err := os.ReadFile(envPath)
 			if err == nil {
@@ -671,72 +521,46 @@ var initCmd = &cobra.Command{
 			fmt.Print("\n❓ Do you want to overwrite this file? (y/n) [default: y]: ")
 			overwrite, _ := reader.ReadString('\n')
 			overwrite = strings.ToLower(strings.TrimSpace(overwrite))
-
 			if overwrite == "n" || overwrite == "no" {
-				fmt.Println("ℹ️  Keeping existing .env file")
+				fmt.Println("ℹ️ Keeping existing .env file")
 				fmt.Println("✅ Proceeding with installation using existing configuration")
 				return
 			}
-
 			fmt.Println("🔄 Overwriting existing .env file...")
 		}
 
-		// Create or truncate the .env file
-		envFile, err := os.Create(envPath) // This automatically clears the file if it exists
-		if err != nil {
-			fmt.Println("❌ Error creating .env file:", err)
+		// Write .env file
+		var sb strings.Builder
+		sb.WriteString("# HydrAIDE Configuration\n")
+		sb.WriteString("# Generated automatically - DO NOT EDIT MANUALLY\n\n")
+		sb.WriteString(fmt.Sprintf("LOG_LEVEL=%s\n", envCfg.LogLevel))
+		sb.WriteString("LOG_TIME_FORMAT=2006-01-02T15:04:05Z07:00\n")
+		sb.WriteString(fmt.Sprintf("SYSTEM_RESOURCE_LOGGING=%t\n", envCfg.SystemResourceLogging))
+		sb.WriteString(fmt.Sprintf("GRAYLOG_ENABLED=%t\n", envCfg.GraylogEnabled))
+		sb.WriteString(fmt.Sprintf("GRAYLOG_SERVER=%s\n", envCfg.GraylogServer))
+		sb.WriteString(fmt.Sprintf("GRAYLOG_SERVICE_NAME=%s\n", envCfg.GraylogServiceName))
+		sb.WriteString(fmt.Sprintf("GRPC_MAX_MESSAGE_SIZE=%d\n", envCfg.GRPCMaxMessageSize))
+		sb.WriteString(fmt.Sprintf("GRPC_SERVER_ERROR_LOGGING=%t\n", envCfg.GRPCServerErrorLogging))
+		sb.WriteString(fmt.Sprintf("HYDRAIDE_ROOT_PATH=%s\n", envCfg.HydraideBasePath))
+		sb.WriteString(fmt.Sprintf("HYDRAIDE_SERVER_PORT=%s\n", envCfg.HydraidePort))
+		sb.WriteString(fmt.Sprintf("HYDRAIDE_DEFAULT_CLOSE_AFTER_IDLE=%d\n", envCfg.CloseAfterIdle))
+		sb.WriteString(fmt.Sprintf("HYDRAIDE_DEFAULT_WRITE_INTERVAL=%d\n", envCfg.WriteInterval))
+		sb.WriteString(fmt.Sprintf("HYDRAIDE_DEFAULT_FILE_SIZE=%d\n", envCfg.FileSize))
+		sb.WriteString(fmt.Sprintf("HEALTH_CHECK_PORT=%s\n", envCfg.HealthCheckPort))
+		sb.WriteString("\n")
+
+		content := []byte(sb.String())
+		if err := fs.WriteFile(ctx, envPath, content, 0644); err != nil {
+			fmt.Println("❌ Error writing .env file:", err)
 			return
 		}
-		defer func() {
-			if err := envFile.Close(); err != nil {
-				fmt.Println("❌ Error closing .env file:", err)
-			} else {
-				fmt.Println("✅ .env file closed successfully.")
-			}
-		}()
-
-		// Write all environment variables
-		writer := bufio.NewWriter(envFile)
-		writeEnv := func(key, value string) {
-			_, _ = writer.WriteString(fmt.Sprintf("%s=%s\n", key, value))
-		}
-
-		// Write header comment
-		_, _ = writer.WriteString("# HydrAIDE Configuration\n")
-		_, _ = writer.WriteString("# Generated automatically - DO NOT EDIT MANUALLY\n\n")
-
-		// Write all configuration values
-		writeEnv("LOG_LEVEL", envCfg.LogLevel)
-		writeEnv("LOG_TIME_FORMAT", "2006-01-02T15:04:05Z07:00")
-		writeEnv("SYSTEM_RESOURCE_LOGGING", strconv.FormatBool(envCfg.SystemResourceLogging))
-		writeEnv("GRAYLOG_ENABLED", strconv.FormatBool(envCfg.GraylogEnabled))
-		writeEnv("GRAYLOG_SERVER", envCfg.GraylogServer)
-		writeEnv("GRAYLOG_SERVICE_NAME", envCfg.GraylogServiceName)
-		writeEnv("GRPC_MAX_MESSAGE_SIZE", strconv.FormatInt(envCfg.GRPCMaxMessageSize, 10))
-		writeEnv("GRPC_SERVER_ERROR_LOGGING", strconv.FormatBool(envCfg.GRPCServerErrorLogging))
-		writeEnv("HYDRAIDE_ROOT_PATH", envCfg.HydraideBasePath)
-		writeEnv("HYDRAIDE_SERVER_PORT", envCfg.HydraidePort)
-		writeEnv("HYDRAIDE_DEFAULT_CLOSE_AFTER_IDLE", strconv.Itoa(envCfg.CloseAfterIdle))
-		writeEnv("HYDRAIDE_DEFAULT_WRITE_INTERVAL", strconv.Itoa(envCfg.WriteInterval))
-		writeEnv("HYDRAIDE_DEFAULT_FILE_SIZE", strconv.Itoa(envCfg.FileSize))
-		writeEnv("HEALTH_CHECK_PORT", envCfg.HealthCheckPort)
-
-		// Add final newline and flush
-		_, _ = writer.WriteString("\n")
-		if err := writer.Flush(); err != nil {
-			fmt.Println("❌ Error writing to .env file:", err)
-			return
-		}
-
 		fmt.Println("✅ .env file created/updated successfully at:", envPath)
 
-		// - todo: download the latest binary (or the tagged one) from the github releases
+		// Download the latest binary
 		serverDownloaderObject := downloader.New()
-		// 2. Define your progress callback function
 		var bar *progressbar.ProgressBar
 		progressFn := func(downloaded, total int64, percent float64) {
 			if bar == nil {
-				// Create bar when we first know the total
 				bar = progressbar.NewOptions64(total,
 					progressbar.OptionSetDescription("Downloading"),
 					progressbar.OptionShowBytes(true),
@@ -747,9 +571,17 @@ var initCmd = &cobra.Command{
 
 		serverDownloaderObject.SetProgressCallback(progressFn)
 		serverDownloaderObject.DownloadHydraServer("latest", envCfg.HydraideBasePath)
-		// - todo: create a service file based on the user's operating system
-		// - todo: start the service
 
+		// Store the base path in buildmeta data
+		bm, err := buildmeta.New()
+		if err != nil {
+			fmt.Println("❌ Failed to load buildmeta:", err)
+			return
+		}
+		bm.Update("basepath", envCfg.HydraideBasePath)
+
+		// TODO: Create a service file based on the user's operating system
+		// TODO: Start the service
 	},
 }
 
