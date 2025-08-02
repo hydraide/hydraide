@@ -92,11 +92,21 @@ func (s *serviceManagerImpl) GenerateServiceFile(instanceName, basePath string) 
 func (s *serviceManagerImpl) generateSystemdService(instanceName, basePath string) error {
 	slog.Info("Creating systemd service for Linux")
 
-	serviceName := fmt.Sprintf("%s-%s", BASE_SERVICE_NAME, instanceName)
-	homeDir := os.Getenv("HOME")
-	if homeDir == "" {
-		return fmt.Errorf("HOME environment variable not set")
+	if os.Geteuid() != 0 {
+		return fmt.Errorf("this script must be run as root. Please use sudo")
 	}
+
+	serviceName := fmt.Sprintf("%s-%s", BASE_SERVICE_NAME, instanceName)
+
+	runCommand := func(name string, args ...string) error {
+		cmd := exec.Command(name, args...)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		return cmd.Run()
+	}
+
+	serviceFilePath := filepath.Join("/etc", "systemd", "system", fmt.Sprintf("%s.service", serviceName))
+	executablePath := filepath.Join(basePath, LINUX_MAC_BINARY_NAME)
 
 	// Ensure log directory exists
 	logFile, err := ensureLogDirectory(basePath)
@@ -104,25 +114,21 @@ func (s *serviceManagerImpl) generateSystemdService(instanceName, basePath strin
 		return err
 	}
 
-	serviceFilePath := filepath.Join(homeDir, ".config", "systemd", "user", fmt.Sprintf("%s.service", serviceName))
-	executablePath := filepath.Join(basePath, LINUX_MAC_BINARY_NAME)
-
 	serviceContent := fmt.Sprintf(`[Unit]
-            Description=HydrAIDE Service - %s
-            After=network.target
+Description=HydrAIDE Service - %s
+After=network.target
 
-            [Service]
-            ExecStart=%s
-            WorkingDirectory=%s
-            Restart=always
-            RestartSec=5
-            User=%s
-            StandardOutput=append:%s
-            StandardError=append:%s
+[Service]
+ExecStart=%s
+WorkingDirectory=%s
+Restart=always
+RestartSec=5
+StandardOutput=append:%s
+StandardError=append:%s
 
-            [Install]
-            WantedBy=default.target
-            `, instanceName, executablePath, basePath, os.Getenv("USER"), logFile, logFile)
+[Install]
+WantedBy=multi-user.target
+`, instanceName, executablePath, basePath, logFile, logFile)
 
 	// Create parent directories if they don't exist
 	if err := os.MkdirAll(filepath.Dir(serviceFilePath), 0755); err != nil {
@@ -138,6 +144,21 @@ func (s *serviceManagerImpl) generateSystemdService(instanceName, basePath strin
 	// Write the service file
 	if err := os.WriteFile(serviceFilePath, []byte(serviceContent), 0644); err != nil {
 		return fmt.Errorf("failed to write service file: %v", err)
+	}
+
+	// Reload systemd daemon (system-level, not user-level)
+	if err := runCommand("systemctl", "daemon-reload"); err != nil {
+		return fmt.Errorf("failed to reload systemd daemon: %v", err)
+	}
+
+	// Enable the service (system-level, not user-level)
+	if err := runCommand("systemctl", "enable", serviceName+".service"); err != nil {
+		return fmt.Errorf("failed to enable service: %v", err)
+	}
+
+	// Start the service (system-level, not user-level)
+	if err := runCommand("systemctl", "start", serviceName+".service"); err != nil {
+		return fmt.Errorf("failed to start service: %v", err)
 	}
 
 	slog.Info("Service file created successfully", "path", serviceFilePath)
@@ -261,7 +282,8 @@ func (s *serviceManagerImpl) ServiceExists(instanceName string) (bool, error) {
 
 	switch runtime.GOOS {
 	case LINUX_OS:
-		serviceFilePath := filepath.Join(os.Getenv("HOME"), ".config", "systemd", "user", fmt.Sprintf("%s.service", serviceName))
+		// Check system-level service file (consistent with creation)
+		serviceFilePath := filepath.Join("/etc", "systemd", "system", fmt.Sprintf("%s.service", serviceName))
 		_, err := os.Stat(serviceFilePath)
 		if err == nil {
 			slog.Info("Service file found", "path", serviceFilePath)
@@ -331,16 +353,18 @@ func (s *serviceManagerImpl) EnableAndStartService(instanceName, basePath string
 
 	switch runtime.GOOS {
 	case LINUX_OS:
+		// Use system-level systemd commands (consistent with creation)
+
 		// Reload systemd daemon first
 		slog.Info("Reloading systemd daemon")
-		cmd := exec.Command("systemctl", "--user", "daemon-reload")
+		cmd := exec.Command("systemctl", "daemon-reload")
 		if err := cmd.Run(); err != nil {
 			slog.Warn("Failed to reload systemd daemon", "error", err)
 		}
 
 		// Enable the service
 		slog.Info("Enabling service", "service", serviceName)
-		cmd = exec.Command("systemctl", "--user", "enable", fmt.Sprintf("%s.service", serviceName))
+		cmd = exec.Command("systemctl", "enable", fmt.Sprintf("%s.service", serviceName))
 		if output, err := cmd.CombinedOutput(); err != nil {
 			slog.Error("Failed to enable service", "error", err, "output", string(output))
 			return fmt.Errorf("failed to enable service: %v", err)
@@ -348,7 +372,7 @@ func (s *serviceManagerImpl) EnableAndStartService(instanceName, basePath string
 
 		// Start the service
 		slog.Info("Starting service", "service", serviceName)
-		cmd = exec.Command("systemctl", "--user", "start", fmt.Sprintf("%s.service", serviceName))
+		cmd = exec.Command("systemctl", "start", fmt.Sprintf("%s.service", serviceName))
 		if output, err := cmd.CombinedOutput(); err != nil {
 			slog.Error("Failed to start service", "error", err, "output", string(output))
 			return fmt.Errorf("failed to start service: %v", err)
@@ -356,9 +380,11 @@ func (s *serviceManagerImpl) EnableAndStartService(instanceName, basePath string
 
 		// Check service status
 		slog.Info("Checking service status", "service", serviceName)
-		cmd = exec.Command("systemctl", "--user", "status", fmt.Sprintf("%s.service", serviceName), "--no-pager")
+		cmd = exec.Command("systemctl", "status", fmt.Sprintf("%s.service", serviceName), "--no-pager")
 		if output, err := cmd.CombinedOutput(); err == nil {
 			slog.Info("Service status", "output", string(output))
+		} else {
+			slog.Warn("Failed to check service status", "error", err, "output", string(output))
 		}
 
 		slog.Info("Service enabled and started successfully", "service", serviceName)
@@ -433,11 +459,12 @@ func (s *serviceManagerImpl) RemoveService(instanceName string) error {
 
 	switch runtime.GOOS {
 	case LINUX_OS:
-		serviceFilePath := filepath.Join(os.Getenv("HOME"), ".config", "systemd", "user", fmt.Sprintf("%s.service", serviceName))
+		// Use system-level systemd commands (consistent with creation)
+		serviceFilePath := filepath.Join("/etc", "systemd", "system", fmt.Sprintf("%s.service", serviceName))
 
 		// Stop the service if running
 		slog.Info("Stopping service", "service", serviceName)
-		cmd := exec.Command("systemctl", "--user", "stop", fmt.Sprintf("%s.service", serviceName))
+		cmd := exec.Command("systemctl", "stop", fmt.Sprintf("%s.service", serviceName))
 		if output, err := cmd.CombinedOutput(); err != nil {
 			slog.Warn("Failed to stop service", "error", err, "output", string(output))
 		} else {
@@ -446,14 +473,14 @@ func (s *serviceManagerImpl) RemoveService(instanceName string) error {
 
 		// Disable the service
 		slog.Info("Disabling service", "service", serviceName)
-		cmd = exec.Command("systemctl", "--user", "disable", fmt.Sprintf("%s.service", serviceName))
+		cmd = exec.Command("systemctl", "disable", fmt.Sprintf("%s.service", serviceName))
 		if output, err := cmd.CombinedOutput(); err != nil {
 			slog.Warn("Failed to disable service", "error", err, "output", string(output))
 		} else {
 			slog.Info("Service disabled successfully", "service", serviceName)
 		}
 
-		// Remove the391 service file
+		// Remove the service file
 		slog.Info("Removing service file", "path", serviceFilePath)
 		if err := os.Remove(serviceFilePath); err != nil && !os.IsNotExist(err) {
 			slog.Error("Failed to remove service file", "error", err)
@@ -462,7 +489,7 @@ func (s *serviceManagerImpl) RemoveService(instanceName string) error {
 
 		// Reload systemd daemon
 		slog.Info("Reloading systemd daemon")
-		cmd = exec.Command("systemctl", "--user", "daemon-reload")
+		cmd = exec.Command("systemctl", "daemon-reload")
 		if err := cmd.Run(); err != nil {
 			slog.Warn("Failed to reload systemd daemon", "error", err)
 		}
