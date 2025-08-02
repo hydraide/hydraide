@@ -3,38 +3,27 @@ package instancerunner
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 )
 
-// IMPORTANT MANUAL STEP:
-// CREATE A VALID SERVICE FILE TO PERFORM THIS TEST OR MAKE SURE IT EXISTS.
-// Example:
-// Create a file named 'hydraserver-test5.service' in ~/.config/systemd/user/
-// with the following content:
-//
-// [Unit]
-// Description=HydrAIDE Test Service
-//
-// [Service]
-// ExecStart=/bin/bash -c "while true; do echo 'Service running...'; sleep 1; done"
-// Restart=always
-//
-// [Install]
-// WantedBy=default.target
-//
-// After creating the file, run 'systemctl --user daemon-reload'
-var serviceName = "hydraserver-test5.service"
-var instanceName = "test5"
+var instanceName = "temporary-test-service"
 
 func TestStartInstance(t *testing.T) {
-	// We make sure the service not already running
-	stopCmd := exec.Command("systemctl", "--user", "stop", serviceName)
-	stopCmd.Run()
-
+	// Setup service
+	serviceName, err := createTestServiceFile()
+	if err != nil {
+		fmt.Printf("Failed to create service file: %s", err.Error())
+		t.Error(err)
+	}
+	// Stop service and remove service file post-test
 	t.Cleanup(func() {
 		exec.Command("systemctl", "--user", "stop", serviceName).Run()
+		removeTestServiceFile()
 	})
 
 	instance := NewInstanceController()
@@ -46,7 +35,7 @@ func TestStartInstance(t *testing.T) {
 	defer cancel()
 
 	t.Logf("Calling StartInstance for '%s'", serviceName)
-	err := instance.StartInstance(ctx, instanceName)
+	err = instance.StartInstance(ctx, instanceName)
 	if err != nil {
 		t.Fatalf("StartInstance failed with error: %v", err)
 	}
@@ -68,6 +57,18 @@ func TestStartInstance(t *testing.T) {
 }
 
 func TestStopInstance(t *testing.T) {
+	// Setup service
+	serviceName, err := createTestServiceFile()
+	if err != nil {
+		fmt.Printf("Failed to create service file: %s", err.Error())
+		t.Error(err)
+	}
+	// Stop service and remove service file post-test
+	t.Cleanup(func() {
+		exec.Command("systemctl", "--user", "stop", serviceName).Run()
+		removeTestServiceFile()
+	})
+
 	instance := NewInstanceController()
 	if _, ok := instance.(*systemdController); !ok {
 		t.Fatal("Expected systemdController, got a different type")
@@ -82,13 +83,8 @@ func TestStopInstance(t *testing.T) {
 	}
 	time.Sleep(1 * time.Second) // Wait for complete start before proceeding.
 
-	t.Cleanup(func() {
-		// Clean up by stopping the service at the end, just in case
-		exec.Command("systemctl", "--user", "stop", serviceName).Run()
-	})
-
 	t.Logf("Calling StopInstance for '%s'", instanceName)
-	err := instance.StopInstance(ctx, instanceName)
+	err = instance.StopInstance(ctx, instanceName)
 	if err != nil {
 		t.Fatalf("StopInstance failed with unexpected error: %v", err)
 	}
@@ -102,21 +98,28 @@ func TestStopInstance(t *testing.T) {
 	if isActive {
 		t.Fatal("Service is still running after being stopped")
 	}
-
 	t.Logf("Service '%s' is successfully stopped.", serviceName)
 }
 
 func TestRestartInstance(t *testing.T) {
+	// Setup service
+	serviceName, err := createTestServiceFile()
+	if err != nil {
+		fmt.Printf("Failed to create service file: %s", err.Error())
+		t.Error(err)
+	}
+	// Stop service and remove service file post-test
+	t.Cleanup(func() {
+		exec.Command("systemctl", "--user", "stop", serviceName).Run()
+		removeTestServiceFile()
+	})
+
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
 	// Ensure the service is not running before the test.
 	stopCmd := exec.Command("systemctl", "--user", "stop", serviceName)
 	stopCmd.Run()
-
-	t.Cleanup(func() {
-		exec.Command("systemctl", "--user", "stop", serviceName).Run()
-	})
 
 	instance := NewInstanceController()
 	if _, ok := instance.(*systemdController); !ok {
@@ -155,7 +158,6 @@ func TestMissingService(t *testing.T) {
 	defer cancel()
 
 	missingInstanceName := "non-existent-test-service"
-
 	t.Logf("Testing StartInstance with a missing service '%s'", missingInstanceName)
 	err := instance.StartInstance(ctx, missingInstanceName)
 	if err == nil {
@@ -182,4 +184,67 @@ func isServiceActive(serviceName string) (bool, error) {
 		}
 	}
 	return false, err
+}
+
+// createTestServiceFile creates a dummy systemd user service file for testing purposes.
+// It returns the service name to the created service file.
+func createTestServiceFile() (string, error) {
+	if runtime.GOOS != "linux" {
+		return "", fmt.Errorf("Only linux OS is supported.")
+	}
+
+	content := `
+		[Unit]
+		Description=HydrAIDE Test Service
+		
+		[Service]
+		ExecStart=/bin/bash -c "while true; do echo 'Service running...'; sleep 1; done"
+		Restart=always
+		
+		[Install]
+		WantedBy=default.target
+	`
+
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to get user home directory: %w", err)
+	}
+
+	serviceDir := filepath.Join(homeDir, ".config", "systemd", "user")
+	serviceFile := fmt.Sprintf("hydraserver-%s.service", instanceName)
+	fullPath := filepath.Join(serviceDir, serviceFile)
+
+	// Create the directory if it doesn't exist
+	if err := os.MkdirAll(serviceDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create service directory: %w", err)
+	}
+
+	// Write the service file content
+	if err := os.WriteFile(fullPath, []byte(content), 0644); err != nil {
+		return "", fmt.Errorf("failed to write service file: %w", err)
+	}
+
+	// Reload the systemd daemon to pick up the new service file.
+	// This is a crucial step for the tests to work.
+	cmd := exec.Command("systemctl", "--user", "daemon-reload")
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("failed to run 'systemctl --user daemon-reload': %w", err)
+	}
+
+	return serviceFile, nil
+}
+
+// removeTestServiceFile stops the service and removes the file created by createTestServiceFile.
+func removeTestServiceFile() {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return
+	}
+	serviceFile := fmt.Sprintf("hydraserver-%s.service", instanceName)
+	fullPath := filepath.Join(homeDir, ".config", "systemd", "user", serviceFile)
+
+	// Stop the service before attempting to remove the file
+	exec.Command("systemctl", "--user", "stop", serviceFile).Run()
+	os.Remove(fullPath)
+	exec.Command("systemctl", "--user", "daemon-reload").Run()
 }
