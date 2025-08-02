@@ -71,7 +71,7 @@ var serviceCmd = &cobra.Command{
 			}
 		}
 
-		err = sp.EnableAndStartService(instanceName)
+		err = sp.EnableAndStartService(instanceName, basepath)
 		if err != nil {
 			fmt.Printf("Error enabling and starting service: %v\n", err)
 			return
