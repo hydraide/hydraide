@@ -1,7 +1,11 @@
 name: 💬 Discussion / RFC / Idea
 description: Start an open discussion, propose a direction, or ask for feedback on architecture, design, or strategy.
 title: "[DISCUSSION] "
-labels: [discussion-needed]
+labels:
+  - "triage:discussion"
+  - "type:idea"
+  - "meta:discussable"
+  - "priority:normal"
 body:
   - type: textarea
     id: context

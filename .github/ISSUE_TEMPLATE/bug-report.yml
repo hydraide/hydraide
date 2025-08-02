@@ -1,7 +1,10 @@
 name: Bug Report
 description: Report a bug or unexpected behavior in HydrAIDE, its core, CLI or SDKs.
 title: "Bug: <short summary>"
-labels: [bug]
+labels:
+  - "triage:new"
+  - "type:bug"
+  - "priority:normal"
 body:
   - type: dropdown
     id: component

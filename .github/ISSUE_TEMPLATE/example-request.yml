@@ -1,7 +1,11 @@
 name: Example Request
 description: Ask for a concrete usage example using the HydrAIDE SDK, CLI or system primitives.
 title: "[EXAMPLE] <what you're trying to do>"
-labels: [example-request]
+labels:
+  - "triage:new"
+  - "type:example"
+  - "meta:help-wanted"
+  - "priority:low"
 body:
   - type: textarea
     id: goal

@@ -1,0 +1,42 @@
+# === TYPE LABELS ===
+
+type:docs:
+  - 'docs/**'
+  - '**/*.md'
+  - '**/*.rst'
+
+type:refactor:
+  - 'app/**/refactor/**'
+  - '**/refactor_*.go'
+  - '**/refactor/**'
+
+type:chore:
+  - '.github/workflows/**'
+  - 'scripts/**'
+  - '**/Makefile'
+  - '**/*.sh'
+
+# === AREA LABELS ===
+
+area:core:
+  - 'app/core/**'
+
+area:server:
+  - 'app/server/**'
+
+area:hydraidectl:
+  - 'app/hydraidectl/**'
+  - 'docs/hydraidectl/**'
+
+area:sdk-go:
+  - 'sdk/go/**'
+  - 'docs/sdk/go/**'
+
+area:sdk-python:
+  - 'sdk/python/**'
+  - 'docs/sdk/python/**'
+
+area:docs:
+  - 'docs/**'
+  - '**/*.md'
+  - 'README.md'

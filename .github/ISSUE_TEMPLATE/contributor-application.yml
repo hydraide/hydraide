@@ -1,7 +1,11 @@
 name: Contributor Application
 description: Apply to become an official HydrAIDE contributor
 title: "Contributor Application: <your-name>"
-labels: [contributor, onboarding]
+labels:
+  - "triage:new"
+  - "meta:onboarding"
+  - "meta:help-wanted"
+  - "priority:normal"
 body:
   - type: markdown
     attributes:
