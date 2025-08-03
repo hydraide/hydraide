@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 
@@ -13,6 +12,145 @@ import (
 	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/certificate"
 	"github.com/spf13/cobra"
 )
+
+// validatePort validates that the provided port string is a valid integer between 1 and 65535
+func validatePort(portStr string) (string, error) {
+	if portStr == "" {
+		return "", fmt.Errorf("port cannot be empty")
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		return "", fmt.Errorf("port must be a valid integer")
+	}
+	if port < 1 || port > 65535 {
+		return "", fmt.Errorf("port must be between 1 and 65535")
+	}
+	return portStr, nil
+}
+
+// validateLoglevel validates whether provided loglevel fits slog loglevels and returns a valid string
+func validateLoglevel(logLevel string) (string, error) {
+	logLevel = strings.ToLower(strings.TrimSpace(logLevel))
+	validLoglevels := map[string]bool{"debug": true, "info": true, "warn": true, "error": true}
+
+	if logLevel == "" {
+		return "info", nil
+	}
+	if validLoglevels[logLevel] {
+		return logLevel, nil
+	}
+	return "", fmt.Errorf("loglevel must be 'debug', 'info', 'warn' or 'error'")
+}
+
+// Message size constants
+const (
+	Byte = 1
+	KB   = 1024 * Byte
+	MB   = 1024 * KB
+	GB   = 1024 * MB
+)
+
+const (
+	MinMessageSize     = 10 * MB // 10MB
+	MaxMessageSize     = 10 * GB // 10GB
+	DefaultMessageSize = 10 * MB // 10MB (changed from 5GB)
+)
+
+// parseMessageSize parses human-readable message size input and returns bytes
+func parseMessageSize(input string) (int64, error) {
+	input = strings.TrimSpace(input)
+
+	// Handle empty input (default)
+	if input == "" {
+		return DefaultMessageSize, nil
+	}
+
+	// Try parsing as raw bytes first
+	if val, err := strconv.ParseInt(input, 10, 64); err == nil {
+		return validateMessageSize(val)
+	}
+
+	// Parse size with unit (case-insensitive)
+	input = strings.ToUpper(input)
+
+	// Check for multiple decimal points
+	if strings.Count(input, ".") > 1 {
+		return 0, fmt.Errorf("invalid format: multiple decimal points not allowed")
+	}
+
+	// Extract number and unit using more robust parsing
+	var numStr strings.Builder
+	var unit string
+
+	for i, r := range input {
+		if (r >= '0' && r <= '9') || r == '.' {
+			numStr.WriteRune(r)
+		} else {
+			unit = input[i:]
+			break
+		}
+	}
+
+	numStrFinal := numStr.String()
+	if numStrFinal == "" {
+		return 0, fmt.Errorf("invalid format: use raw bytes (e.g., 10485760) or size with unit (e.g., 100MB, 1GB)")
+	}
+
+	// Parse the numeric part
+	num, err := strconv.ParseFloat(numStrFinal, 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid number: %s", numStrFinal)
+	}
+
+	if num < 0 {
+		return 0, fmt.Errorf("size cannot be negative")
+	}
+
+	// Convert based on unit
+	var multiplier int64
+	switch unit {
+	case "", "B":
+		multiplier = Byte
+	case "KB":
+		multiplier = KB
+	case "MB":
+		multiplier = MB
+	case "GB":
+		multiplier = GB
+	default:
+		return 0, fmt.Errorf("unsupported unit '%s': supported units are B, KB, MB, GB", unit)
+	}
+
+	// Calculate total bytes with proper rounding to avoid floating-point precision issues
+	totalBytes := int64(num*float64(multiplier) + 0.5)
+
+	return validateMessageSize(totalBytes)
+}
+
+// validateMessageSize validates that the size is within acceptable bounds
+func validateMessageSize(size int64) (int64, error) {
+	if size < MinMessageSize {
+		return 0, fmt.Errorf("size too small: minimum is %s (%d bytes)", formatSize(MinMessageSize), MinMessageSize)
+	}
+	if size > MaxMessageSize {
+		return 0, fmt.Errorf("size too large: maximum is %s (%d bytes)", formatSize(MaxMessageSize), MaxMessageSize)
+	}
+	return size, nil
+}
+
+// formatSize converts bytes to human-readable format
+func formatSize(bytes int64) string {
+	if bytes >= GB {
+		return fmt.Sprintf("%.1fGB", float64(bytes)/float64(GB))
+	}
+	if bytes >= MB {
+		return fmt.Sprintf("%.1fMB", float64(bytes)/float64(MB))
+	}
+	if bytes >= KB {
+		return fmt.Sprintf("%.1fKB", float64(bytes)/float64(KB))
+	}
+	return fmt.Sprintf("%dB", bytes)
+}
 
 type CertConfig struct {
 	CN  string
@@ -44,7 +182,8 @@ var initCmd = &cobra.Command{
 
 		reader := bufio.NewReader(os.Stdin)
 
-		fmt.Println("🚀 Starting HydrAIDE install wizard...\n")
+		fmt.Println("🚀 Starting HydrAIDE install wizard...")
+		fmt.Println()
 
 		var cert CertConfig
 		var envCfg EnvConfig
@@ -104,13 +243,28 @@ var initCmd = &cobra.Command{
 		}
 
 		fmt.Println("\n🔌 Port Configuration")
-		fmt.Println("This is the external port on your host machine that will map to the HydrAIDE container.")
-		fmt.Println("Clients will use this port to communicate with the HydrAIDE server.")
-		fmt.Print("Which port should HydrAIDE listen on? (default: 4900): ")
-		envCfg.HydraidePort, _ = reader.ReadString('\n')
-		envCfg.HydraidePort = strings.TrimSpace(envCfg.HydraidePort)
-		if envCfg.HydraidePort == "" {
-			envCfg.HydraidePort = "4900"
+		fmt.Println("This is the port where the HydrAIDE binary server will listen for client connections.")
+		fmt.Println("Set the bind port for the HydrAIDE server instance.")
+
+		// Port validation loop for main port
+		for {
+			fmt.Print("Which port should HydrAIDE listen on? (default: 4900): ")
+			portInput, _ := reader.ReadString('\n')
+			portInput = strings.TrimSpace(portInput)
+
+			if portInput == "" {
+				envCfg.HydraidePort = "4900"
+				break
+			}
+
+			validPort, err := validatePort(portInput)
+			if err != nil {
+				fmt.Printf("❌ Invalid port: %v. Please try again.\n", err)
+				continue
+			}
+
+			envCfg.HydraidePort = validPort
+			break
 		}
 
 		fmt.Println("\n📁 Base Path for HydrAIDE")
@@ -122,19 +276,26 @@ var initCmd = &cobra.Command{
 			envCfg.HydraideBasePath = "/mnt/hydraide"
 		}
 
-		fmt.Println("\n📝 Logging Configuration")
-
 		// LOG_LEVEL
-		fmt.Println("🔍 Log Level: Controls the amount of detail in system logs")
-		fmt.Println("   Options: trace, debug, info, warn, error, fatal, panic")
-		fmt.Println("   Recommended: 'info' for production, 'debug' for troubleshooting")
-		fmt.Print("Log level [default: info]: ")
-		logLevel, _ := reader.ReadString('\n')
-		logLevel = strings.TrimSpace(logLevel)
-		if logLevel == "" {
-			logLevel = "info"
+		fmt.Println("\n📝 Logging Configuration")
+		fmt.Println("   - Controls the verbosity of system logs.")
+		fmt.Println("   - Options: debug | info | warn | error")
+		fmt.Println("   - Default: info (recommended for production)")
+
+		// loglevel validation loop
+		for {
+			fmt.Print("Choose log level [default: info]: ")
+			logLevel, _ := reader.ReadString('\n')
+
+			logLevel, err := validateLoglevel(logLevel)
+			if err != nil {
+				fmt.Printf("\n ❌ Invalid loglevel: %v. Please try again.\n", err)
+				continue
+			}
+
+			envCfg.LogLevel = logLevel
+			break
 		}
-		envCfg.LogLevel = logLevel
 
 		// SYSTEM_RESOURCE_LOGGING
 		fmt.Println("\n💻 System Resource Monitoring")
@@ -174,20 +335,25 @@ var initCmd = &cobra.Command{
 		fmt.Println("\n📡 gRPC Settings")
 
 		// GRPC_MAX_MESSAGE_SIZE
-		fmt.Println("📏 Max Message Size: Maximum size for gRPC messages (bytes)")
-		fmt.Println("   Default: 5GB (5368709120) - Adjust for large data transfers")
-		fmt.Print("Max message size [default: 5368709120]: ")
-		maxSizeInput, _ := reader.ReadString('\n')
-		maxSizeInput = strings.TrimSpace(maxSizeInput)
-		if maxSizeInput == "" {
-			envCfg.GRPCMaxMessageSize = 5368709120
-		} else {
-			if size, err := strconv.ParseInt(maxSizeInput, 10, 64); err == nil {
-				envCfg.GRPCMaxMessageSize = size
-			} else {
-				fmt.Printf("⚠️ Invalid number, using default 5GB. Error: %v\n", err)
-				envCfg.GRPCMaxMessageSize = 5368709120
+		fmt.Println("📏 Max Message Size: Maximum size for gRPC messages")
+		fmt.Println("   Accepts raw bytes or human-readable format (e.g., 100MB, 1GB)")
+		fmt.Println("   Recommended: 100MB-1GB for large transfers")
+		fmt.Printf("   Valid range: %s to %s\n", formatSize(MinMessageSize), formatSize(MaxMessageSize))
+
+		// Message size validation loop
+		for {
+			fmt.Printf("Max message size [default: %s]: ", formatSize(DefaultMessageSize))
+			maxSizeInput, _ := reader.ReadString('\n')
+			maxSizeInput = strings.TrimSpace(maxSizeInput)
+
+			size, err := parseMessageSize(maxSizeInput)
+			if err != nil {
+				fmt.Printf("❌ Invalid input: %v. Please try again.\n", err)
+				continue
 			}
+
+			envCfg.GRPCMaxMessageSize = size
+			break
 		}
 
 		// GRPC_SERVER_ERROR_LOGGING
@@ -255,13 +421,33 @@ var initCmd = &cobra.Command{
 		// HEALTH CHECK PORT
 		fmt.Println("\n❤️‍🩹 Health Check Endpoint")
 		fmt.Println("   Separate port for health checks and monitoring")
-		fmt.Print("Health check port [default: 4901]: ")
-		healthPort, _ := reader.ReadString('\n')
-		healthPort = strings.TrimSpace(healthPort)
-		if healthPort == "" {
-			healthPort = "4901"
+
+		// Port validation loop for health check port
+		for {
+			fmt.Print("Health check port [default: 4901]: ")
+			healthPortInput, _ := reader.ReadString('\n')
+			healthPortInput = strings.TrimSpace(healthPortInput)
+
+			if healthPortInput == "" {
+				envCfg.HealthCheckPort = "4901"
+				break
+			}
+
+			validPort, err := validatePort(healthPortInput)
+			if err != nil {
+				fmt.Printf("❌ Invalid port: %v. Please try again.\n", err)
+				continue
+			}
+
+			if validPort == envCfg.HydraidePort {
+				fmt.Println("❌ Health check port cannot be the same as the main port. Please choose a different port.")
+				continue
+			}
+
+			envCfg.HealthCheckPort = validPort
+			break
+
 		}
-		envCfg.HealthCheckPort = healthPort
 
 		// ======================
 		// CONFIGURATION SUMMARY
@@ -284,7 +470,7 @@ var initCmd = &cobra.Command{
 		}
 
 		fmt.Println("\n=== gRPC ===")
-		fmt.Printf("  • Max Message Size: %.2f GB\n", float64(envCfg.GRPCMaxMessageSize)/1024/1024/1024)
+		fmt.Printf("  • Max Message Size: %s (%d bytes)\n", formatSize(envCfg.GRPCMaxMessageSize), envCfg.GRPCMaxMessageSize)
 		fmt.Println("  • Error Logging:   ", envCfg.GRPCServerErrorLogging)
 
 		fmt.Println("\n=== STORAGE ===")
@@ -343,11 +529,20 @@ var initCmd = &cobra.Command{
 
 		fmt.Println("📂 Copying TLS certificates to the certificate directory...")
 		fmt.Printf("  • Client CRT: From %s  to  %s \n", clientCRT, filepath.Join(envCfg.HydraideBasePath, "certificate", filepath.Base(clientCRT)))
-		utils.MoveFile(clientCRT, filepath.Join(envCfg.HydraideBasePath, "certificate", filepath.Base(clientCRT)))
+		if err := utils.MoveFile(clientCRT, filepath.Join(envCfg.HydraideBasePath, "certificate", filepath.Base(clientCRT))); err != nil {
+			fmt.Println("❌ Error copying client certificate:", err)
+			return
+		}
 		fmt.Printf("  • Server CRT: From %s  to  %s \n", serverCRT, filepath.Join(envCfg.HydraideBasePath, "certificate", filepath.Base(serverCRT)))
-		utils.MoveFile(serverCRT, filepath.Join(envCfg.HydraideBasePath, "certificate", filepath.Base(serverCRT)))
+		if err := utils.MoveFile(serverCRT, filepath.Join(envCfg.HydraideBasePath, "certificate", filepath.Base(serverCRT))); err != nil {
+			fmt.Println("❌ Error copying server certificate:", err)
+			return
+		}
 		fmt.Printf("  • Server KEY: From %s  to  %s \n", serverKEY, filepath.Join(envCfg.HydraideBasePath, "certificate", filepath.Base(serverKEY)))
-		utils.MoveFile(serverKEY, filepath.Join(envCfg.HydraideBasePath, "certificate", filepath.Base(serverKEY)))
+		if err := utils.MoveFile(serverKEY, filepath.Join(envCfg.HydraideBasePath, "certificate", filepath.Base(serverKEY))); err != nil {
+			fmt.Println("❌ Error copying server key:", err)
+			return
+		}
 
 		fmt.Println("✅ TLS certificates copied successfully.")
 
@@ -396,7 +591,13 @@ var initCmd = &cobra.Command{
 			fmt.Println("❌ Error creating .env file:", err)
 			return
 		}
-		defer envFile.Close()
+		defer func() {
+			if err := envFile.Close(); err != nil {
+				fmt.Println("❌ Error closing .env file:", err)
+			} else {
+				fmt.Println("✅ .env file closed successfully.")
+			}
+		}()
 
 		// Write all environment variables
 		writer := bufio.NewWriter(envFile)
@@ -442,16 +643,4 @@ var initCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(initCmd)
-}
-
-func defaultInstallPath() string {
-	home, _ := os.UserHomeDir()
-	switch runtime.GOOS {
-	case "windows":
-		return filepath.Join(os.Getenv("APPDATA"), "HydrAIDE", "bin")
-	case "darwin":
-		return filepath.Join(home, "Library", "Application Support", "HydrAIDE", "bin")
-	default:
-		return filepath.Join(home, ".hydraide", "bin")
-	}
 }

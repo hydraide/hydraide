@@ -9,8 +9,9 @@ lock-free operations, real-time subscriptions, and stateless routing, all tailor
 
 ## 📚 Table of Contents
 
-1. [🔌 Connect to the HydrAIDE Server Using the SDK](#connect-to-the-hydraide-server-using-the-sdk)
+1. [🔌 Connect to the HydrAIDE Server Using the SDK](#-connect-to-the-hydraide-server-using-the-sdk)
 2. [📦 At a Glance](#-at-a-glance)
+3. [🧭 Naming Conventions](#-naming-conventions)
 3. [🧠 System](#-system)
 4. [🔐 Business Logic](#-business-logic)
 5. [🌿 Swamp & Treasure](#-swamp--treasure)
@@ -45,6 +46,99 @@ For a complete working example of how to initialize and run your service using t
 ## 📦 At a Glance
 
 Below you'll find a wide range of examples and documentation — including complete Go files and ready-made solutions — showing how to use the SDK in **production-ready applications**.
+
+---
+
+## 🧭 Naming Conventions
+
+HydrAIDE uses a structured three-level naming system to deterministically route, organize, and store data across distributed servers — without requiring coordination or a central orchestrator.
+
+Each data location is uniquely identified using a **Name**, which follows the pattern:
+
+```
+Sanctuary → Realm → Swamp
+```
+
+This naming hierarchy allows HydrAIDE to:
+
+* Automatically map names to consistent server locations (using `GetIslandID`)
+* Create predictable folder paths on disk
+* Enable stateless client-side routing
+* Keep lookup performance at **O(1)** regardless of system size
+
+### ✅ Basic Example
+
+```go
+name := name.New().
+    Sanctuary("users").
+    Realm("profiles").
+    Swamp("alice123")
+
+fmt.Println(name.Get())            // users/profiles/alice123
+fmt.Println(name.GetIslandID(100)) // e.g. 42
+```
+
+This name will deterministically map to one of 100 Islands (physical folders or servers). 
+It always resolves to the **same target** for the same input, across all clients.
+
+### 🚫 Constraints
+
+To keep routing fast and deterministic, **names must follow strict constraints**:
+
+* All three components (`Sanctuary`, `Realm`, `Swamp`) are **required**
+* Each component must be at least **1 character long**
+* The `/` character is **not allowed** in any part of the name
+  It is used internally as a structural separator, using it would break routing
+* The use of **alphanumeric characters only** (`a–z`, `A–Z`, `0–9`) is **strongly recommended**
+* Wildcards (`*`) are allowed only for internal system use (e.g. pattern-based registration)
+
+> ℹ️ No runtime validation is enforced by the SDK for performance reasons.
+> The `name` package is one of the most frequently called components in HydrAIDE — adding input validation would 
+> slow it down by 10–20×. It is the **developer’s responsibility** to follow the documented rules.
+
+### ✍️ Constructing a Name
+
+You can create a `name.Name` using fluent chaining:
+
+```go
+n := name.New().
+    Sanctuary("projects").
+    Realm("files").
+    Swamp("report-2025-Q1")
+```
+
+Or reconstruct one from an existing string path:
+
+```go
+n := name.Load("projects/files/report-2025-Q1")
+```
+
+This is useful when deserializing names from persisted storage or incoming metadata.
+
+### 🧪 Common Patterns
+
+| Use case          | Sanctuary | Realm    | Swamp         |
+| ----------------- |----------| -------- | ------------- |
+| User profiles     | users    | profiles | user-123      |
+| Game achievements | games    | unlocked | level-10-boss |
+| Analytics         | domains  | ai       | example.com   |
+| Chat rooms        | chat     | room     | room-42       |
+| Queued tasks      | tasks    | catalog  | main          |
+
+These names are used consistently across the SDK, in Catalogs, Profiles, event subscriptions, locking, routing, and more.
+
+### 🔐 Island Mapping
+
+To determine where data should physically reside, you can use:
+
+```go
+island := name.GetIslandID(1000) // e.g. returns 774
+```
+
+This returns a **1-based index** from 1 to N, based on a fast, collision-resistant `xxhash` of the full path.
+All clients using the same `allIslands` count will resolve the same name to the same server — even without coordination.
+
+---
 
 ### Profiles and Catalogs
 

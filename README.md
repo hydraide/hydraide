@@ -53,7 +53,7 @@ without preloading.
 
 Explore ready-to-run demo applications built in Go to better understand the HydrAIDE Go SDK and its unique data modeling approach.
 
-All demo apps are located in the [example-applications/go](https://github.com/hydraide/hydraide/tree/main/example-applications/go) folder.
+All demo apps are located in the [Example Applications in Go](https://github.com/hydraide/hydraide/tree/main/docs/sdk/go) folder.
 
 > More demos coming soon: reactive dashboards, pub-sub listeners, real-time config editors...
 
@@ -61,7 +61,7 @@ All demo apps are located in the [example-applications/go](https://github.com/hy
 
 * **Queue** – A simple task queue system that manages scheduled jobs with future `expireAt` timestamps.
 
-👉 [View Queue Demo Application](https://github.com/hydraide/hydraide/tree/main/example-applications/go/app-queue)
+👉 [View Queue Demo Application](https://github.com/hydraide/hydraide/tree/main/docs/sdk/go/examples/applications/app-queue)
 
 These examples are a great starting point to learn how to:
 

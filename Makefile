@@ -19,36 +19,36 @@
 
 # Build and push docker image
 # =============================================================================
+# 🚨 DO NOT MODIFY THIS SECTION
+#
+# This section is used by the HydrAIDE GitHub Actions CI/CD pipeline
+# to build and publish Docker images to GitHub Container Registry (GHCR).
+#
+# ➤ It automatically tags images with the version (e.g., 2.0.9) and "latest".
+# ➤ It authenticates using GitHub Secrets (HYDRAIDE_DOCKER_*).
+#
+# Modifying this section may break the release workflow or compromise publishing.
+#
+# If changes are required, please coordinate with the HydrAIDE maintainers.
+# =============================================================================
 IMAGE_NAME=ghcr.io/hydraide/hydraide
-IMAGE_TAG=$(IMAGE_TAG)
-
-# load the .env file to get the GitHub username and token
-include .env
-export $(shell sed 's/=.*//' .env)
-
-# Docker build args
-BUILD_ARGS=--build-arg GIT_USERNAME=$(GITHUB_USERNAME) \
-           --build-arg GIT_EMAIL=$(GITHUB_EMAIL) \
+IMAGE_TAG ?= latest
 
 DOCKER_BUILDKIT=1
 
 # Build the Docker image with the specified tag
 build:
-	echo $(GITHUB_TOKEN) > .git_token_file
-	docker build --secret id=git_token,src=.git_token_file $(BUILD_ARGS) -f Dockerfile -t $(IMAGE_NAME):$(IMAGE_TAG) .
-	rm .git_token_file
+	docker build -f Dockerfile -t $(IMAGE_NAME):$(IMAGE_TAG) .
 
 # Push the Docker image to GitHub Container Registry
 push:
-	echo $(GITHUB_CONTAINER_TOKEN) | docker login ghcr.io -u $(GITHUB_USERNAME) --password-stdin
+	printf "%s" "$${HYDRAIDE_DOCKER_TOKEN}" | docker login ghcr.io -u "$${HYDRAIDE_DOCKER_USERNAME}" --password-stdin || { echo "❌ Docker login failed. Please check your credentials."; exit 1; }
 	docker tag $(IMAGE_NAME):$(IMAGE_TAG) $(IMAGE_NAME):latest
 	docker push $(IMAGE_NAME):$(IMAGE_TAG)
 	docker push $(IMAGE_NAME):latest
 
 # Build the Docker image with both versioned tag and latest tag
 build-push: build push
-
-
 
 # Build from proto files
 # =============================================================================

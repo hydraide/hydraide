@@ -24,17 +24,21 @@ var serverInterface server.Server
 
 var (
 	graylogServer         = ""
-	graylogServiceName    = ""
+	graylogServiceName    = "HydrAIDE-Server"
 	logLevel              = "debug"
-	hydraMaxMessageSize   = 104857600 // 100 MB
-	defaultCloseAfterIdle = int64(1)  // 1 second
-	defaultWriteInterval  = int64(10) // 10 seconds
-	defaultFileSize       = int64(0)  // 1 GB
+	hydraMaxMessageSize   = 104857600   // 100 MB
+	defaultCloseAfterIdle = int64(1)    // 1 second
+	defaultWriteInterval  = int64(10)   // 10 seconds
+	defaultFileSize       = int64(8192) // 8 KB
 	systemResourceLogging = false
 	serverCrtPath         = ""
 	serverKeyPath         = ""
-	hydraServerPort       = int(4444)
-	healthCheckPort       = int(4445)
+	hydraServerPort       = 4444
+	healthCheckPort       = 4445
+)
+
+const (
+	hydrAIDEDefaultRootPath = "/hydraide"
 )
 
 func init() {
@@ -56,8 +60,11 @@ func init() {
 	}
 
 	if os.Getenv("HYDRAIDE_ROOT_PATH") == "" {
-		slog.Error("HYDRAIDE_ROOT_PATH environment variable is not set")
-		panic("HYDRAIDE_ROOT_PATH environment variable is not set")
+		// for the docker container, the hydrAIDE root path is set to /hydraide
+		// needed, because we use this env variable in the settings package, too
+		if err := os.Setenv("HYDRAIDE_ROOT_PATH", hydrAIDEDefaultRootPath); err != nil {
+			panic(fmt.Sprintf("failed to set HYDRAIDE_ROOT_PATH environment variable: %v", err))
+		}
 	}
 
 	// should be handled these for linux and windows
