@@ -3,9 +3,7 @@ package instancerunner
 import (
 	"context"
 	"fmt"
-	"io"
-	"log"
-	"os"
+	"log/slog"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -14,17 +12,25 @@ import (
 	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/instancerunner/locker"
 )
 
-// logger is the package's logger. By default, it is a silent logger that discards all output.
+// NoOpHandler is an slog.Handler that discards all log records.
+type NoOpHandler struct{}
+
+func (h *NoOpHandler) Enabled(_ context.Context, _ slog.Level) bool  { return false }
+func (h *NoOpHandler) Handle(_ context.Context, _ slog.Record) error { return nil }
+func (h *NoOpHandler) WithAttrs(_ []slog.Attr) slog.Handler          { return h }
+func (h *NoOpHandler) WithGroup(_ string) slog.Handler               { return h }
+
+// logger is the package's structured logger. By default, it is a silent logger that discards all output.
 // A custom logger can be set using the SetLogger function.
-var logger *log.Logger
+var logger *slog.Logger
 
 func init() {
 	// By default instance runner is silent. Logs are discarded.
-	logger = log.New(io.Discard, "", 0)
+	logger = slog.New(&NoOpHandler{})
 }
 
-// SetupLogger allows a client to provide a custom logger for verbose output.
-func SetupLogger(customLogger *log.Logger) {
+// SetupLogger allows a client to provide a custom structured logger for verbose output.
+func SetupLogger(customLogger *slog.Logger) {
 	logger = customLogger
 }
 
@@ -47,11 +53,17 @@ type InstanceController interface {
 }
 
 // systemdController implements InstanceController for Linux systems.
-type systemdController struct{}
+type systemdController struct {
+	timeout                 time.Duration
+	gracefulShutdownTimeout time.Duration
+}
 
 // StartInstance starts a systemd user service.
 // This function acquires a file-based lock to ensure exclusive access to the instance.
 func (c *systemdController) StartInstance(ctx context.Context, instance string) error {
+	ctx, cancel := context.WithTimeout(ctx, c.timeout)
+	defer cancel()
+
 	service := fmt.Sprintf("hydraserver-%s.service", instance)
 
 	// Pre-flight check: ensure the service file exists before attempting to start it.
@@ -65,45 +77,53 @@ func (c *systemdController) StartInstance(ctx context.Context, instance string) 
 
 	locker, err := locker.NewLocker(instance)
 	if err != nil {
+		logger.Error("Failed to get Instance Locker")
 		return err
 	}
 	if err := locker.Lock(); err != nil {
 		return fmt.Errorf("failed to lock instance '%s': %w", instance, err)
 	}
+	logger.Debug("Locked instance", "instance_name", instance)
 	// Use defer to ensure the lock is always released when the function exits.
 	defer locker.Unlock()
-	return c.startInstanceOpe(ctx, service)
+	return c.startInstanceOp(ctx, service)
 }
 
 // startInstanceOpe is the core logic for starting an instance, lock is held.
-func (c *systemdController) startInstanceOpe(ctx context.Context, service string) error {
+func (c *systemdController) startInstanceOp(ctx context.Context, service string) error {
 
-	// Get the required environment variables for the user session
-	env, err := c.getUserSystemdEnv()
-	if err != nil {
-		return fmt.Errorf("failed to get user systemd environment: %w", err)
+	isEnabledCmd := exec.CommandContext(ctx, "systemctl", "is-enabled", "--quiet", service)
+	if err := isEnabledCmd.Run(); err != nil {
+		// If the service is not enabled, we enable it.
+		logger.Info("Enable Service", "service_name", service)
+		enableCmd := exec.CommandContext(ctx, "systemctl", "enable", service)
+		if err := enableCmd.Run(); err != nil {
+			return fmt.Errorf("failed to enable service '%s': %w", service, err)
+		}
 	}
 
-	cmd := exec.CommandContext(ctx, "systemctl", "--user", "start", service)
-	cmd.Env = env
+	cmd := exec.CommandContext(ctx, "systemctl", "start", service)
 
-	logger.Printf("Attempting to start service '%s'", service)
+	logger.Info("Attempting to start service", "service_name", service)
 
-	err = cmd.Run()
+	err := cmd.Run()
 	if err != nil {
-		logger.Printf("failed to start service '%s'", service)
+		logger.Info("failed to start service", "service_name", service)
 		return fmt.Errorf("failed to start service '%s': %w", service, err)
 	}
 
-	logger.Printf("Successfully started service '%s'", service)
+	logger.Info("Successfully started service", "service_name", service)
 	return nil
 }
 
 // StopInstance stops a systemd user service gracefully.
 // This function acquires a file-based lock to ensure exclusive access to the instance.
 func (c *systemdController) StopInstance(ctx context.Context, instance string) error {
-	service := fmt.Sprintf("hydraserver-%s.service", instance)
+	ctx, cancel := context.WithTimeout(ctx, c.timeout)
+	defer cancel()
 
+	service := fmt.Sprintf("hydraserver-%s.service", instance)
+	logger.Debug("Stop Instance")
 	// Pre-flight check: ensure the service file exists.
 	exists, err := c.checkServiceExists(service)
 	if err != nil {
@@ -115,40 +135,36 @@ func (c *systemdController) StopInstance(ctx context.Context, instance string) e
 
 	locker, err := locker.NewLocker(instance)
 	if err != nil {
+		logger.Error("Failed to get instance locker")
 		return err
 	}
 	if err := locker.Lock(); err != nil {
 		return fmt.Errorf("failed to lock instance '%s': %w", instance, err)
 	}
+	logger.Debug("File lock instance", "instance_name", instance)
 	// Use defer to ensure the lock is always released when the function exits.
 	defer locker.Unlock()
 
-	return c.stopInstanceOpe(ctx, service)
+	return c.stopInstanceOp(ctx, service)
 }
 
 // stopInstanceOpe is the core logic for stopping an instance, lock is held.
-func (c *systemdController) stopInstanceOpe(ctx context.Context, service string) error {
+func (c *systemdController) stopInstanceOp(ctx context.Context, service string) error {
 
 	// Check if the service is already inactive.
 	isActive, err := c.isServiceActive(service)
 	if err != nil {
-		logger.Printf("Failed to check status of '%s'", service)
+		logger.Info("Failed to check status of", "service_name", service)
 		return fmt.Errorf("failed to check status of '%s': %w", service, err)
 	}
 	if !isActive {
-		logger.Printf("Service '%s' is already stopped. No action needed.", service)
+		logger.Info("Service is already stopped. No action needed.", "service_name", service)
 		return nil
 	}
 
-	cmd := exec.CommandContext(ctx, "systemctl", "--user", "stop", service)
+	cmd := exec.CommandContext(ctx, "systemctl", "stop", service)
 
-	env, err := c.getUserSystemdEnv()
-	if err != nil {
-		return fmt.Errorf("failed to get user systemd environment: %w", err)
-	}
-	cmd.Env = env
-
-	logger.Printf("Attempting to stop service '%s'", service)
+	logger.Info("Attempting to stop service", "service_name", service)
 
 	// Issue the stop command. The command itself doesn't wait for shutdown.
 	if err := cmd.Run(); err != nil {
@@ -156,12 +172,11 @@ func (c *systemdController) stopInstanceOpe(ctx context.Context, service string)
 	}
 
 	// Poll the service status to ensure it has fully shut down.
-	logger.Printf("Waiting for service '%s' to be fully stopped...", service)
+	logger.Info("Waiting for service to be fully stopped...", "service_name", service)
 
-	// Default to a 5-second timeout for graceful shutdown.
-	// Todo: Configurable timeout
 	pollingCtx, pollingCancel := context.WithTimeout(ctx, 5*time.Second)
 	defer pollingCancel()
+	logger.Debug("Created polling with timeout context to check service status")
 
 	ticker := time.NewTicker(200 * time.Millisecond) // Poll every 200ms
 	defer ticker.Stop()
@@ -176,7 +191,7 @@ func (c *systemdController) stopInstanceOpe(ctx context.Context, service string)
 				return fmt.Errorf("failed to check service status during graceful stop: %w", checkErr)
 			}
 			if !isActive {
-				logger.Printf("Service '%s' is confirmed stopped.", service)
+				logger.Info("Service is confirmed stopped.", "service_name", service)
 				return nil
 			}
 		}
@@ -185,7 +200,10 @@ func (c *systemdController) stopInstanceOpe(ctx context.Context, service string)
 
 // RestartInstance stops and then starts a systemd user service instance.
 func (c *systemdController) RestartInstance(ctx context.Context, instanceName string) error {
-	logger.Printf("Attempting to restart instance '%s'...", instanceName)
+	ctx, cancel := context.WithTimeout(ctx, c.timeout)
+	defer cancel()
+
+	logger.Info("Attempting to restart instance", "instance_name", instanceName)
 
 	service := fmt.Sprintf("hydraserver-%s.service", instanceName)
 
@@ -201,6 +219,7 @@ func (c *systemdController) RestartInstance(ctx context.Context, instanceName st
 	// Acquire the lock for the entire restart operation.
 	locker, err := locker.NewLocker(instanceName)
 	if err != nil {
+		logger.Error("Failed to get instance locker")
 		return err
 	}
 	if err := locker.Lock(); err != nil {
@@ -208,62 +227,34 @@ func (c *systemdController) RestartInstance(ctx context.Context, instanceName st
 	}
 	defer locker.Unlock()
 
+	logger.Info("Performing restart of the instance", "instance_name", instanceName)
 	// Stop the service gracefully.
-	if err := c.stopInstanceOpe(ctx, service); err != nil {
+	logger.Debug("Stop Instance", "instance_name", instanceName)
+	if err := c.stopInstanceOp(ctx, service); err != nil {
 		return fmt.Errorf("failed to gracefully stop instance '%s' for restart: %w", instanceName, err)
 	}
 
 	// Start the service.
-	if err := c.startInstanceOpe(ctx, service); err != nil {
+	logger.Debug("Start Instance", "instance_name", instanceName)
+	if err := c.startInstanceOp(ctx, service); err != nil {
 		return fmt.Errorf("failed to start instance '%s' after stop: %w", instanceName, err)
 	}
 
-	logger.Printf("Successfully restarted instance '%s'.", instanceName)
+	logger.Info("Successfully restarted instance", "instance_name", instanceName)
 	return nil
-}
-
-// getUserSystemdEnv retrieves the necessary environment variables for a systemd user session.
-func (c *systemdController) getUserSystemdEnv() ([]string, error) {
-	cmd := exec.Command("systemctl", "--user", "show-environment")
-	output, err := cmd.Output()
-	if err != nil {
-		return nil, fmt.Errorf("failed to run 'systemctl --user show-environment': %w", err)
-	}
-
-	envMap := make(map[string]string)
-	for _, line := range strings.Split(string(output), "\n") {
-		parts := strings.SplitN(line, "=", 2)
-		if len(parts) == 2 {
-			envMap[parts[0]] = parts[1]
-		}
-	}
-
-	// Build the final environment slice
-	var finalEnv []string
-	finalEnv = append(finalEnv, os.Environ()...) // Start with the existing environment
-	if dbusAddress, ok := envMap["DBUS_SESSION_BUS_ADDRESS"]; ok {
-		finalEnv = append(finalEnv, "DBUS_SESSION_BUS_ADDRESS="+dbusAddress)
-	}
-	if xdgRuntimeDir, ok := envMap["XDG_RUNTIME_DIR"]; ok {
-		finalEnv = append(finalEnv, "XDG_RUNTIME_DIR="+xdgRuntimeDir)
-	} else {
-		// Fallback for XDG_RUNTIME_DIR if not found, though unlikely
-		finalEnv = append(finalEnv, fmt.Sprintf("XDG_RUNTIME_DIR=/run/user/%d", os.Getuid()))
-	}
-
-	return finalEnv, nil
 }
 
 // checkServiceExists checks if a service file exists.
 func (c *systemdController) checkServiceExists(serviceName string) (bool, error) {
-	cmd := exec.Command("systemctl", "--user", "is-active", "--quiet", serviceName)
+	logger.Debug("Check service exists..")
+	cmd := exec.Command("systemctl", "is-active", "--quiet", serviceName)
 	err := cmd.Run()
 	if err == nil {
 		// Service is active, exists.
 		return true, nil
 	}
 	if exitError, ok := err.(*exec.ExitError); ok {
-		// Exit code 4 means the service unit does not exist.
+		// Exit code 4 means the service does not exist.
 		if exitError.ExitCode() == 4 {
 			return false, nil
 		}
@@ -275,23 +266,29 @@ func (c *systemdController) checkServiceExists(serviceName string) (bool, error)
 
 // isServiceActive checks if a service is currently active.
 func (c *systemdController) isServiceActive(serviceName string) (bool, error) {
-	cmd := exec.Command("systemctl", "--user", "is-active", "--quiet", serviceName)
+	logger.Debug("Check service active", "service_name", serviceName)
+	cmd := exec.Command("systemctl", "is-active", "--quiet", serviceName)
 	err := cmd.Run()
 	if err == nil {
+		logger.Debug("Service is active!")
 		return true, nil
 	}
 	if exitError, ok := err.(*exec.ExitError); ok {
 		// Inactive service or unknown
 		if exitError.ExitCode() == 3 || exitError.ExitCode() == 4 {
+			logger.Debug("Service is inactive")
 			return false, nil
 		}
 	}
+	logger.Debug("Service is inactive")
 	return false, err
 }
 
 // windowsController implements InstanceController for Windows via NSSM.
 type windowsController struct {
-	useNssm bool
+	useNssm                 bool
+	timeout                 time.Duration
+	gracefulShutdownTimeout time.Duration
 }
 
 // StartInstance installs (if needed) and starts an NSSM-wrapped service.
@@ -299,6 +296,9 @@ type windowsController struct {
 // It acquires the same file-based lock, then checks for existence via `nssm status`.
 // If missing, returns an error. Otherwise it calls `nssm start`.
 func (c *windowsController) StartInstance(ctx context.Context, instance string) error {
+	ctx, cancel := context.WithTimeout(ctx, c.timeout)
+	defer cancel()
+
 	service := fmt.Sprintf("hydraserver-%s", instance)
 
 	// Check if the service exists before attempting to start.
@@ -324,7 +324,7 @@ func (c *windowsController) StartInstance(ctx context.Context, instance string) 
 }
 
 func (c *windowsController) startInstanceOp(ctx context.Context, service string) error {
-	logger.Printf("[windows] Attempting to start service '%s'", service)
+	logger.Info("[windows] Attempting to start service", "service_name", service)
 	var cmd *exec.Cmd
 	if c.useNssm {
 		cmd = exec.CommandContext(ctx, "nssm", "start", service)
@@ -337,12 +337,15 @@ func (c *windowsController) startInstanceOp(ctx context.Context, service string)
 		return fmt.Errorf("failed to start service '%s': %w", service, err)
 	}
 
-	logger.Printf("[windows] Successfully started service '%s'", service)
+	logger.Info("[windows] Successfully started service", "service_name", service)
 	return nil
 }
 
 // StopInstance stops an NSSM service and then polls until it’s confirmed stopped.
 func (c *windowsController) StopInstance(ctx context.Context, instance string) error {
+	ctx, cancel := context.WithTimeout(ctx, c.timeout)
+	defer cancel()
+
 	service := fmt.Sprintf("hydraserver-%s", instance)
 
 	exists, err := c.checkServiceExists(ctx, service)
@@ -372,18 +375,18 @@ func (c *windowsController) stopInstanceOp(ctx context.Context, service string) 
 		return fmt.Errorf("status check failed for '%s': %w", service, err)
 	}
 	if !running {
-		logger.Printf("[windows] Service '%s' already stopped", service)
+		logger.Info("[windows] Service already stopped", "service_name", service)
 		return nil
 	}
 
-	logger.Printf("[windows] Stopping NSSM service '%s'", service)
+	logger.Info("[windows] Stopping NSSM service", "service_name", service)
 	cmd := exec.CommandContext(ctx, "nssm", "stop", service)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("nssm stop failed: %v\n%s", err, out)
 	}
 
 	// Poll until stopped or timeout
-	timeout := 5 * time.Second
+	timeout := c.gracefulShutdownTimeout
 	pollCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
@@ -400,7 +403,7 @@ func (c *windowsController) stopInstanceOp(ctx context.Context, service string) 
 				return fmt.Errorf("status check failed during stop poll: %w", err)
 			}
 			if !running {
-				logger.Printf("[windows] Service '%s' confirmed stopped", service)
+				logger.Info("[windows] Service confirmed stopped", "service_name", service)
 				return nil
 			}
 		}
@@ -409,7 +412,10 @@ func (c *windowsController) stopInstanceOp(ctx context.Context, service string) 
 
 // RestartInstance simply chains StopInstance then StartInstance under one lock.
 func (c *windowsController) RestartInstance(ctx context.Context, instance string) error {
-	logger.Printf("[windows] Restarting instance '%s'", instance)
+	ctx, cancel := context.WithTimeout(ctx, c.timeout)
+	defer cancel()
+
+	logger.Info("[windows] Restarting instance", "instance_name", instance)
 
 	locker, err := locker.NewLocker(instance)
 	if err != nil {
@@ -427,7 +433,7 @@ func (c *windowsController) RestartInstance(ctx context.Context, instance string
 	if err := c.startInstanceOp(ctx, service); err != nil {
 		return fmt.Errorf("failed to start after stop: %w", err)
 	}
-	logger.Printf("[windows] Successfully restarted '%s'", instance)
+	logger.Info("[windows] Successfully restarted", "service_name", instance)
 	return nil
 }
 
@@ -485,19 +491,43 @@ func checkNssmExists() bool {
 
 // NewInstanceController returns the appropriate controller based on the OS.
 // Currently, it supports "linux" and "windows". For any other OS, it returns nil.
-func NewInstanceController() InstanceController {
+// Take timeout in seconds to time out start/stop/restart operations.
+func NewInstanceController(options ...Option) InstanceController {
+
+	// timeout defaults to 5 seconds
+	cfg := &opts{timeout: 10 * time.Second, shutdownTimout: 5 * time.Second}
+	for _, option := range options {
+		option(cfg)
+	}
+
 	switch runtime.GOOS {
 	case "windows":
 		useNssm := checkNssmExists()
 		if useNssm {
-			logger.Println("NSSM found. Using NSSM for Windows service management.")
+			logger.Info("NSSM found. Using NSSM for Windows service management.")
 		} else {
-			logger.Println("NSSM not found. Falling back to PowerShell for Windows service management.")
+			logger.Info("NSSM not found. Falling back to PowerShell for Windows service management.")
 		}
-		return &windowsController{useNssm: useNssm}
+		return &windowsController{useNssm: useNssm, timeout: cfg.timeout, gracefulShutdownTimeout: cfg.shutdownTimout}
 	case "linux":
-		return &systemdController{}
+		return &systemdController{timeout: cfg.timeout, gracefulShutdownTimeout: cfg.shutdownTimout}
 	default:
 		return nil
 	}
+}
+
+// Option will help set configurations for instance runner
+type Option func(*opts)
+type opts struct {
+	timeout        time.Duration
+	shutdownTimout time.Duration
+}
+
+// WithStopTimeout takes timeout duration and sets it to instanceController
+func WithTimeout(d time.Duration) Option {
+	return func(o *opts) { o.timeout = d }
+}
+
+func WithGracefulShutdownTimeout(d time.Duration) Option {
+	return func(o *opts) { o.shutdownTimout = d }
 }

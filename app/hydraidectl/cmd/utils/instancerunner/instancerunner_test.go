@@ -1,8 +1,10 @@
 package instancerunner
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,6 +16,66 @@ import (
 
 // Define a test instance name to use for creating temporary services.
 var instanceName = "temporary-test-service"
+
+// TestDefaultLoggerIsSilent verifies that the default logger uses the NoOpHandler
+// and does not produce any output.
+func TestDefaultLoggerIsSilent(t *testing.T) {
+	if logger.Enabled(context.Background(), slog.LevelInfo) {
+		t.Error("Default logger's Enabled method returned true, but should be silent")
+	}
+	if logger.Enabled(context.Background(), slog.LevelDebug) {
+		t.Error("Default logger's Enabled method returned true, but should be silent")
+	}
+}
+
+// TestSetupLogger verifies that the SetupLogger function successfully replaces the default logger.
+func TestSetupLogger(t *testing.T) {
+	// Create a buffer to capture the output of our custom logger.
+	var buf bytes.Buffer
+	customLogger := slog.New(slog.NewTextHandler(&buf, nil))
+
+	originalLogger := logger
+	t.Cleanup(func() {
+		logger = originalLogger
+	})
+
+	// Set the custom logger using the public SetupLogger function.
+	SetupLogger(customLogger)
+
+	msg := "This is a test log message"
+	key := "environment"
+	value := "test"
+	logger.Info(msg, key, value)
+
+	// We check for the expected content without the timestamp, which is variable.
+	expectedSubString := fmt.Sprintf("level=INFO msg=\"%s\" %s=%s", msg, key, value)
+	output := buf.String()
+	if !strings.Contains(output, expectedSubString) {
+		t.Errorf("Expected logger output to contain '%s', but got '%s'", expectedSubString, output)
+	}
+
+	// We can also verify that the output starts with a timestamp.
+	if !strings.HasPrefix(output, "time=") {
+		t.Error("Expected logger output to start with a timestamp, but it didn't")
+	}
+}
+
+// TestNoOpHandlerInterface checks that the NoOpHandler implements the slog.Handler interface.
+func TestNoOpHandlerInterface(t *testing.T) {
+	var handler slog.Handler = &NoOpHandler{}
+
+	handler.Enabled(context.Background(), slog.LevelInfo)
+	handler.Handle(context.Background(), slog.Record{})
+	handler.WithAttrs([]slog.Attr{})
+	handler.WithGroup("group")
+
+	if h := handler.WithAttrs([]slog.Attr{}); h != handler {
+		t.Errorf("WithAttrs did not return the same handler instance")
+	}
+	if h := handler.WithGroup("group"); h != handler {
+		t.Errorf("WithGroup did not return the same handler instance")
+	}
+}
 
 // TestStartInstance verifies that the StartInstance function correctly starts a service.
 func TestStartInstance(t *testing.T) {
@@ -78,7 +140,7 @@ func TestStopInstance(t *testing.T) {
 		removeTestServiceFile()
 	})
 
-	instance := NewInstanceController()
+	instance := NewInstanceController(WithTimeout(10 * time.Second))
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
@@ -182,7 +244,7 @@ func TestMissingService(t *testing.T) {
 func isServiceActive(serviceName string) (bool, error) {
 	switch runtime.GOOS {
 	case "linux":
-		cmd := exec.Command("systemctl", "--user", "is-active", "--quiet", serviceName)
+		cmd := exec.Command("systemctl", "is-active", "--quiet", serviceName)
 		err := cmd.Run()
 		if err == nil {
 			return true, nil
@@ -235,12 +297,7 @@ func createLinuxTestServiceFile() (string, error) {
 		WantedBy=default.target
 	`
 
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("failed to get user home directory: %w", err)
-	}
-
-	serviceDir := filepath.Join(homeDir, ".config", "systemd", "user")
+	serviceDir := filepath.Join("/etc", "systemd", "system")
 	serviceFile := fmt.Sprintf("hydraserver-%s.service", instanceName)
 	fullPath := filepath.Join(serviceDir, serviceFile)
 
@@ -252,9 +309,9 @@ func createLinuxTestServiceFile() (string, error) {
 		return "", fmt.Errorf("failed to write service file: %w", err)
 	}
 
-	cmd := exec.Command("systemctl", "--user", "daemon-reload")
+	cmd := exec.Command("systemctl", "daemon-reload")
 	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("failed to run 'systemctl --user daemon-reload': %w", err)
+		return "", fmt.Errorf("failed to run 'systemctl daemon-reload': %w", err)
 	}
 
 	return serviceFile, nil
@@ -263,7 +320,13 @@ func createLinuxTestServiceFile() (string, error) {
 // createWindowsTestServiceFile creates a dummy Windows service using sc.exe.
 func createWindowsTestServiceFile() (string, error) {
 	serviceName := fmt.Sprintf("hydraserver-%s", instanceName)
-	cmd := exec.Command("sc", "create", serviceName, "binPath=", `cmd.exe /c "ping 127.0.0.1 -n 60 >nul"`, "start=", "demand")
+
+	var cmd *exec.Cmd
+	if checkNssm() {
+		cmd = exec.Command("nssm", "install", serviceName, "cmd.exe", "/c", "ping 127.0.0.1 -n 60 >nul")
+	} else {
+		cmd = exec.Command("sc", "create", serviceName, "binPath=", `cmd.exe /c "ping 127.0.0.1 -n 60 >nul"`, "start=", "demand")
+	}
 	if err := cmd.Run(); err != nil {
 		return "", fmt.Errorf("failed to create Windows service '%s': %w", serviceName, err)
 	}
@@ -282,22 +345,23 @@ func removeTestServiceFile() {
 
 // removeLinuxTestServiceFile removes a dummy systemd user service file.
 func removeLinuxTestServiceFile() {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return
-	}
 	serviceFile := fmt.Sprintf("hydraserver-%s.service", instanceName)
-	fullPath := filepath.Join(homeDir, ".config", "systemd", "user", serviceFile)
-	exec.Command("systemctl", "--user", "stop", serviceFile).Run()
+	fullPath := filepath.Join("/etc", "systemd", "system", serviceFile)
+	exec.Command("systemctl", "stop", serviceFile).Run()
 	os.Remove(fullPath)
-	exec.Command("systemctl", "--user", "daemon-reload").Run()
+	exec.Command("systemctl", "daemon-reload").Run()
 }
 
 // removeWindowsTestServiceFile removes a dummy Windows service.
 func removeWindowsTestServiceFile() {
 	serviceName := fmt.Sprintf("hydraserver-%s", instanceName)
-	exec.Command("sc", "stop", serviceName).Run()
-	exec.Command("sc", "delete", serviceName).Run()
+	if checkNssm() {
+		exec.Command("nssm", "stop", serviceName).Run()
+		exec.Command("nssm", "remove", serviceName, "confirm").Run()
+	} else {
+		exec.Command("sc", "stop", serviceName).Run()
+		exec.Command("sc", "delete", serviceName).Run()
+	}
 }
 
 // getStopCommand returns the appropriate command for stopping a service based on the OS.
@@ -308,10 +372,11 @@ func getStopCommand() string {
 	return "sc"
 }
 
-// getStopArgs returns the arguments for the stop command based on the OS.
 func getStopArgs(serviceName string) []string {
-	if runtime.GOOS == "linux" {
-		return []string{"--user", "stop", serviceName}
-	}
 	return []string{"stop", serviceName}
+}
+
+func checkNssm() bool {
+	_, err := exec.LookPath("nssm.exe")
+	return err == nil
 }
