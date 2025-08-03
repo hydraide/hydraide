@@ -52,20 +52,6 @@ type systemdController struct{}
 // StartInstance starts a systemd user service.
 // This function acquires a file-based lock to ensure exclusive access to the instance.
 func (c *systemdController) StartInstance(ctx context.Context, instance string) error {
-	locker, err := locker.NewLocker(instance)
-	if err != nil {
-		return err
-	}
-	if err := locker.Lock(); err != nil {
-		return fmt.Errorf("failed to lock instance '%s': %w", instance, err)
-	}
-	// Use defer to ensure the lock is always released when the function exits.
-	defer locker.Unlock()
-	return c.startInstanceOpe(ctx, instance)
-}
-
-// startInstanceOpe is the core logic for starting an instance, lock is held.
-func (c *systemdController) startInstanceOpe(ctx context.Context, instance string) error {
 	service := fmt.Sprintf("hydraserver-%s.service", instance)
 
 	// Pre-flight check: ensure the service file exists before attempting to start it.
@@ -76,6 +62,21 @@ func (c *systemdController) startInstanceOpe(ctx context.Context, instance strin
 	if !exists {
 		return fmt.Errorf("service '%s' not found", service)
 	}
+
+	locker, err := locker.NewLocker(instance)
+	if err != nil {
+		return err
+	}
+	if err := locker.Lock(); err != nil {
+		return fmt.Errorf("failed to lock instance '%s': %w", instance, err)
+	}
+	// Use defer to ensure the lock is always released when the function exits.
+	defer locker.Unlock()
+	return c.startInstanceOpe(ctx, service)
+}
+
+// startInstanceOpe is the core logic for starting an instance, lock is held.
+func (c *systemdController) startInstanceOpe(ctx context.Context, service string) error {
 
 	// Get the required environment variables for the user session
 	env, err := c.getUserSystemdEnv()
@@ -101,21 +102,6 @@ func (c *systemdController) startInstanceOpe(ctx context.Context, instance strin
 // StopInstance stops a systemd user service gracefully.
 // This function acquires a file-based lock to ensure exclusive access to the instance.
 func (c *systemdController) StopInstance(ctx context.Context, instance string) error {
-	locker, err := locker.NewLocker(instance)
-	if err != nil {
-		return err
-	}
-	if err := locker.Lock(); err != nil {
-		return fmt.Errorf("failed to lock instance '%s': %w", instance, err)
-	}
-	// Use defer to ensure the lock is always released when the function exits.
-	defer locker.Unlock()
-
-	return c.stopInstanceOpe(ctx, instance)
-}
-
-// stopInstanceOpe is the core logic for stopping an instance, lock is held.
-func (c *systemdController) stopInstanceOpe(ctx context.Context, instance string) error {
 	service := fmt.Sprintf("hydraserver-%s.service", instance)
 
 	// Pre-flight check: ensure the service file exists.
@@ -126,6 +112,22 @@ func (c *systemdController) stopInstanceOpe(ctx context.Context, instance string
 	if !exists {
 		return fmt.Errorf("service '%s' not found", service)
 	}
+
+	locker, err := locker.NewLocker(instance)
+	if err != nil {
+		return err
+	}
+	if err := locker.Lock(); err != nil {
+		return fmt.Errorf("failed to lock instance '%s': %w", instance, err)
+	}
+	// Use defer to ensure the lock is always released when the function exits.
+	defer locker.Unlock()
+
+	return c.stopInstanceOpe(ctx, service)
+}
+
+// stopInstanceOpe is the core logic for stopping an instance, lock is held.
+func (c *systemdController) stopInstanceOpe(ctx context.Context, service string) error {
 
 	// Check if the service is already inactive.
 	isActive, err := c.isServiceActive(service)
@@ -185,6 +187,17 @@ func (c *systemdController) stopInstanceOpe(ctx context.Context, instance string
 func (c *systemdController) RestartInstance(ctx context.Context, instanceName string) error {
 	logger.Printf("Attempting to restart instance '%s'...", instanceName)
 
+	service := fmt.Sprintf("hydraserver-%s.service", instanceName)
+
+	// Pre-flight check: ensure the service file exists.
+	exists, err := c.checkServiceExists(service)
+	if err != nil {
+		return fmt.Errorf("failed to check for service '%s' existence: %w", service, err)
+	}
+	if !exists {
+		return fmt.Errorf("service '%s' not found", service)
+	}
+
 	// Acquire the lock for the entire restart operation.
 	locker, err := locker.NewLocker(instanceName)
 	if err != nil {
@@ -196,12 +209,12 @@ func (c *systemdController) RestartInstance(ctx context.Context, instanceName st
 	defer locker.Unlock()
 
 	// Stop the service gracefully.
-	if err := c.stopInstanceOpe(ctx, instanceName); err != nil {
+	if err := c.stopInstanceOpe(ctx, service); err != nil {
 		return fmt.Errorf("failed to gracefully stop instance '%s' for restart: %w", instanceName, err)
 	}
 
 	// Start the service.
-	if err := c.startInstanceOpe(ctx, instanceName); err != nil {
+	if err := c.startInstanceOpe(ctx, service); err != nil {
 		return fmt.Errorf("failed to start instance '%s' after stop: %w", instanceName, err)
 	}
 
@@ -276,19 +289,198 @@ func (c *systemdController) isServiceActive(serviceName string) (bool, error) {
 	return false, err
 }
 
-// windowsController implements InstanceController for Windows.
-type windowsController struct{}
+// windowsController implements InstanceController for Windows via NSSM.
+type windowsController struct {
+	useNssm bool
+}
 
+// StartInstance installs (if needed) and starts an NSSM-wrapped service.
+//
+// It acquires the same file-based lock, then checks for existence via `nssm status`.
+// If missing, returns an error. Otherwise it calls `nssm start`.
 func (c *windowsController) StartInstance(ctx context.Context, instance string) error {
+	service := fmt.Sprintf("hydraserver-%s", instance)
+
+	// Check if the service exists before attempting to start.
+	exists, err := c.checkServiceExists(ctx, service)
+	if err != nil {
+		return fmt.Errorf("failed to check for service '%s' existence: %w", service, err)
+	}
+	if !exists {
+		return fmt.Errorf("service '%s' not found", service)
+	}
+
+	locker, err := locker.NewLocker(instance)
+	if err != nil {
+		return err
+	}
+	if err := locker.Lock(); err != nil {
+		return fmt.Errorf("failed to lock instance '%s': %w", instance, err)
+	}
+	// Use defer to ensure the lock is always released when the function exits.
+	defer locker.Unlock()
+
+	return c.startInstanceOp(ctx, service)
+}
+
+func (c *windowsController) startInstanceOp(ctx context.Context, service string) error {
+	logger.Printf("[windows] Attempting to start service '%s'", service)
+	var cmd *exec.Cmd
+	if c.useNssm {
+		cmd = exec.CommandContext(ctx, "nssm", "start", service)
+	} else {
+		cmd = exec.CommandContext(ctx, "powershell", "-Command", fmt.Sprintf("Start-Service -Name '%s'", service))
+	}
+
+	err := cmd.Run()
+	if err != nil {
+		return fmt.Errorf("failed to start service '%s': %w", service, err)
+	}
+
+	logger.Printf("[windows] Successfully started service '%s'", service)
 	return nil
 }
 
+// StopInstance stops an NSSM service and then polls until it’s confirmed stopped.
 func (c *windowsController) StopInstance(ctx context.Context, instance string) error {
+	service := fmt.Sprintf("hydraserver-%s", instance)
+
+	exists, err := c.checkServiceExists(ctx, service)
+	if err != nil {
+		return fmt.Errorf("failed to check for service '%s': %w", service, err)
+	}
+	if !exists {
+		return fmt.Errorf("service '%s' not found", service)
+	}
+
+	locker, err := locker.NewLocker(instance)
+	if err != nil {
+		return err
+	}
+	if err := locker.Lock(); err != nil {
+		return fmt.Errorf("failed to lock instance '%s': %w", instance, err)
+	}
+	defer locker.Unlock()
+
+	return c.stopInstanceOp(ctx, service)
+}
+
+func (c *windowsController) stopInstanceOp(ctx context.Context, service string) error {
+	// If already stopped, nothing to do
+	running, err := c.isServiceRunning(ctx, service)
+	if err != nil {
+		return fmt.Errorf("status check failed for '%s': %w", service, err)
+	}
+	if !running {
+		logger.Printf("[windows] Service '%s' already stopped", service)
+		return nil
+	}
+
+	logger.Printf("[windows] Stopping NSSM service '%s'", service)
+	cmd := exec.CommandContext(ctx, "nssm", "stop", service)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("nssm stop failed: %v\n%s", err, out)
+	}
+
+	// Poll until stopped or timeout
+	timeout := 5 * time.Second
+	pollCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	tick := time.NewTicker(200 * time.Millisecond)
+	defer tick.Stop()
+
+	for {
+		select {
+		case <-pollCtx.Done():
+			return fmt.Errorf("service '%s' did not stop within %s: %w", service, timeout, pollCtx.Err())
+		case <-tick.C:
+			running, err := c.isServiceRunning(ctx, service)
+			if err != nil {
+				return fmt.Errorf("status check failed during stop poll: %w", err)
+			}
+			if !running {
+				logger.Printf("[windows] Service '%s' confirmed stopped", service)
+				return nil
+			}
+		}
+	}
+}
+
+// RestartInstance simply chains StopInstance then StartInstance under one lock.
+func (c *windowsController) RestartInstance(ctx context.Context, instance string) error {
+	logger.Printf("[windows] Restarting instance '%s'", instance)
+
+	locker, err := locker.NewLocker(instance)
+	if err != nil {
+		return err
+	}
+	if err := locker.Lock(); err != nil {
+		return fmt.Errorf("failed to lock instance '%s': %w", instance, err)
+	}
+	defer locker.Unlock()
+
+	service := fmt.Sprintf("hydraserver-%s", instance)
+	if err := c.stopInstanceOp(ctx, service); err != nil {
+		return fmt.Errorf("failed to stop for restart: %w", err)
+	}
+	if err := c.startInstanceOp(ctx, service); err != nil {
+		return fmt.Errorf("failed to start after stop: %w", err)
+	}
+	logger.Printf("[windows] Successfully restarted '%s'", instance)
 	return nil
 }
 
-func (c *windowsController) RestartInstance(ctx context.Context, instance string) error {
-	return nil
+// checkServiceExists checks if a Windows service exists using NSSM or PowerShell.
+func (c *windowsController) checkServiceExists(ctx context.Context, service string) (bool, error) {
+	if c.useNssm {
+		// `nssm status` exits with code 2 if the service is not installed.
+		cmd := exec.CommandContext(ctx, "nssm", "status", service)
+		err := cmd.Run()
+		if err != nil {
+			if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 2 {
+				return false, nil // Service not installed
+			}
+			return false, fmt.Errorf("nssm check failed: %w", err)
+		}
+		return true, nil
+	} else {
+		// Use PowerShell to check for the service.
+		cmd := exec.CommandContext(ctx, "powershell", "-Command", fmt.Sprintf("Get-Service -Name '%s'", service))
+		err := cmd.Run()
+		if err != nil {
+			if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
+				return false, nil // Service not found
+			}
+			return false, fmt.Errorf("powershell get-service failed: %w", err)
+		}
+		return true, nil
+	}
+}
+
+// isServiceRunning returns true if the Windows service is running.
+func (c *windowsController) isServiceRunning(ctx context.Context, service string) (bool, error) {
+	if c.useNssm {
+		// `nssm status` exits with code 0 if running.
+		cmd := exec.CommandContext(ctx, "nssm", "status", service)
+		err := cmd.Run()
+		return err == nil, nil
+	} else {
+		// Use PowerShell to check the service status.
+		cmd := exec.CommandContext(ctx, "powershell", "-Command", fmt.Sprintf("(Get-Service -Name '%s').Status -eq 'Running'", service))
+		output, err := cmd.Output()
+		if err != nil {
+			// This can happen if the service is not found, in which case it's not running.
+			return false, nil
+		}
+		return strings.TrimSpace(string(output)) == "True", nil
+	}
+}
+
+// checkNssmExists checks if nssm.exe is available in the system's PATH.
+func checkNssmExists() bool {
+	_, err := exec.LookPath("nssm.exe")
+	return err == nil
 }
 
 // NewInstanceController returns the appropriate controller based on the OS.
@@ -296,7 +488,13 @@ func (c *windowsController) RestartInstance(ctx context.Context, instance string
 func NewInstanceController() InstanceController {
 	switch runtime.GOOS {
 	case "windows":
-		return &windowsController{}
+		useNssm := checkNssmExists()
+		if useNssm {
+			logger.Println("NSSM found. Using NSSM for Windows service management.")
+		} else {
+			logger.Println("NSSM not found. Falling back to PowerShell for Windows service management.")
+		}
+		return &windowsController{useNssm: useNssm}
 	case "linux":
 		return &systemdController{}
 	default:
