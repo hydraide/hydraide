@@ -1,5 +1,8 @@
 name: Label Merged PR
 
+permissions:
+  issues: write
+
 on:
   pull_request:
     types:
