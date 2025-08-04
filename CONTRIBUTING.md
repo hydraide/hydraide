@@ -196,8 +196,13 @@ permissions to understand or act based on them, just use them to stay aligned wi
 | `meta:claimed`          | Someone has commented they are working on this. Respect ownership. |
 | `meta:ai-assisted`      | Submission was aided by an AI tool — requires careful review.      |
 | `meta:help-wanted`      | Maintainers would love help on this one. Feel free to contribute!  |
-| `meta:good-first-issue` | Great place to start if you're new.                                |
 | `meta:onboarding`       | Task assigned to a newcomer — often mentoring involved.            |
+
+### 🔥 Good First Issues
+
+| Label                   | Meaning                                                            |
+| ----------------------- | ------------------------------------------------------------------ |
+| `good first issue` | Great place to start if you're new.                                |
 
 ℹ️ **Note:** You won't be able to assign labels yourself unless you're part of the triage team. If you're working on something, just leave a comment saying so — a maintainer will handle the rest.
 

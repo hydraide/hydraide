@@ -46,7 +46,7 @@ Here are your key responsibilities:
   When someone commits to a task and shares a timeline, assign them formally and add the `meta:claimed` label.
 
 * **Mark good first issues where appropriate**
-  Identify self-contained, well-specified, and low-risk tasks that are suitable for newcomers, and label them with `meta:good-first-issue`.
+  Identify self-contained, well-specified, and low-risk tasks that are suitable for newcomers, and label them with `good first issue`.
 
 ## 🏷 Label System (Preview)
 
@@ -65,7 +65,7 @@ Maintainers use a structured label set to categorize and manage all tasks and co
 
 * Watch for comments where contributors claim tasks
 * Be generous with context and patient with gaps
-* Label `meta:onboarding` or `meta:good-first-issue` where relevant
+* Label `meta:onboarding` or `good first issue` where relevant
 * Encourage early PRs to be small and easy to review
   Smaller PRs reduce review time and simplify feedback. They increase merge confidence and help contributors build 
   trust gradually, without being overwhelmed. A focused PR is easier to learn from — for both sides.
