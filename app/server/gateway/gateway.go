@@ -65,6 +65,18 @@ func (g Gateway) Unlock(_ context.Context, in *hydrapb.UnlockRequest) (*hydrapb.
 
 	defer handlePanic()
 
+	// wha it the lock key is empty
+	if in.GetKey() == "" {
+		// return with grpc error message
+		return nil, status.Error(codes.InvalidArgument, "Lock key cannot be empty")
+	}
+
+	// what if the lock ID is empty
+	if in.GetLockID() == "" {
+		// return with grpc error message
+		return nil, status.Error(codes.InvalidArgument, "Lock ID cannot be empty")
+	}
+
 	// try to summon the swamp
 	lockerInterface := g.ZeusInterface.GetHydra().GetLocker()
 	// unlock the system
