@@ -48,9 +48,9 @@ func setup() {
 		slog.Error("HYDRA_SERVER_KEY environment variable is not set")
 		panic("HYDRA_SERVER_KEY environment variable is not set")
 	}
-	if os.Getenv("HYDRA_CLIENT_CA_CRT") == "" {
-		slog.Error("HYDRA_CLIENT_CA_CRT environment variable is not set")
-		panic("HYDRA_CLIENT_CA_CRT environment variable is not set")
+	if os.Getenv("HYDRA_CERT") == "" {
+		slog.Error("HYDRA_CERT environment variable is not set")
+		panic("HYDRA_CERT environment variable is not set")
 	}
 
 	// start the new Hydra server
@@ -88,7 +88,7 @@ func createGrpcClient() {
 			Host:         fmt.Sprintf("localhost:%d", testPort),
 			FromIsland:   0,
 			ToIsland:     100,
-			CertFilePath: os.Getenv("HYDRA_CLIENT_CA_CRT"),
+			CertFilePath: os.Getenv("HYDRA_CERT"),
 		},
 	}
 
@@ -123,6 +123,61 @@ func TestLockAndUnlock(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.NotNil(t, unlockResponse)
+
+}
+
+func TestLockAndUnlockWithoutTTL(t *testing.T) {
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	lockKey := "myLockKey"
+	maxTTL := int64(0)
+
+	lockResponse, err := clientInterface.GetServiceClient(serverGlobalName).Lock(ctx, &hydraidepbgo.LockRequest{
+		Key: lockKey,
+		TTL: maxTTL,
+	})
+
+	assert.NoError(t, err)
+	assert.NotNil(t, lockResponse)
+
+	unlockResponse, err := clientInterface.GetServiceClient(serverGlobalName).Unlock(ctx, &hydraidepbgo.UnlockRequest{
+		Key:    lockKey,
+		LockID: lockResponse.GetLockID(),
+	})
+
+	assert.NoError(t, err)
+	assert.NotNil(t, unlockResponse)
+
+}
+
+func TestWaitingForAutoUnlock(t *testing.T) {
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	lockKey := "myLockKey"
+	maxTTL := int64(0)
+
+	// the server will set this lock for 1 second
+	_, err := clientInterface.GetServiceClient(serverGlobalName).Lock(ctx, &hydraidepbgo.LockRequest{
+		Key: lockKey,
+		TTL: maxTTL,
+	})
+
+	assert.NoError(t, err)
+
+	time.Sleep(2 * time.Second) // wait for the lock to be auto-unlocked
+
+	// try to lock it again with same key
+	lockResponse, err := clientInterface.GetServiceClient(serverGlobalName).Lock(ctx, &hydraidepbgo.LockRequest{
+		Key: lockKey,
+		TTL: maxTTL,
+	})
+
+	assert.NoError(t, err)
+	assert.NotNil(t, lockResponse)
 
 }
 
