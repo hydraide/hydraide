@@ -203,6 +203,17 @@ func (c *systemdController) StopInstance(ctx context.Context, instance string) e
 		return ErrServiceNotFound
 	}
 
+	// Check if the service is already inactive.
+	isActive, err := c.isServiceActive(service)
+	if err != nil {
+		logger.Info("Failed to check status of", "service_name", service)
+		return NewOperationError(service, "check service status", err)
+	}
+	if !isActive {
+		logger.Info("Service is already stopped. No action needed.", "service_name", service)
+		return ErrServiceNotRunning
+	}
+
 	locker, err := locker.NewLocker(instance)
 	if err != nil {
 		logger.Error("Failed to get instance locker")
@@ -220,17 +231,6 @@ func (c *systemdController) StopInstance(ctx context.Context, instance string) e
 
 // stopInstanceOpe is the core logic for stopping an instance, lock is held.
 func (c *systemdController) stopInstanceOp(ctx context.Context, service string) error {
-
-	// Check if the service is already inactive.
-	isActive, err := c.isServiceActive(service)
-	if err != nil {
-		logger.Info("Failed to check status of", "service_name", service)
-		return NewOperationError(service, "check service status", err)
-	}
-	if !isActive {
-		logger.Info("Service is already stopped. No action needed.", "service_name", service)
-		return nil
-	}
 
 	cmd := exec.CommandContext(ctx, "systemctl", "stop", service)
 

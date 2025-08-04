@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"runtime"
 	"time"
 
 	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/instancerunner"
@@ -21,6 +22,12 @@ var startCmd = &cobra.Command{
 			instancerunner.WithTimeout(20*time.Second),
 			instancerunner.WithGracefulStartStopTimeout(10*time.Second),
 		)
+
+		if instanceController == nil {
+			fmt.Printf("❌ unsupported operating system: %s", runtime.GOOS)
+			return
+		}
+
 		context := context.Background()
 		err := instanceController.StartInstance(context, startInstance)
 
