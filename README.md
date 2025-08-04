@@ -202,10 +202,10 @@ We’re building a full series of deep comparisons, mindset-first, not config-fi
 
 | 🔍 Comparison                | 📄 Status           | Link                                                                            |
 |-----------------------------|---------------------|---------------------------------------------------------------------------------|
-| HydrAIDE vs MongoDB            | ✅ Complete         | [Read HydrAIDE vs MongoDB Comparison](/docs/comparisons/hydraide-vs-mongodb.md) |
-| HydrAIDE vs Redis              | ✅ Complete         | [Read HydrAIDE vs Redis Comparison](/docs/comparisons/hydraide-vs-redis.md)     |
-| HydrAIDE vs PostgreSQL         | 🔜 In progress      | *coming soon*                                                                   |
-| HydrAIDE vs MySQL              | 🔜 In progress      | *coming soon*                                                                   |
+| HydrAIDE vs MongoDB            | ✅ Complete         | [hydraide-vs-mongodb.md](docs/comparisons/hydraide-vs-mongodb.md) |
+| HydrAIDE vs Redis              | ✅ Complete         | [hydraide-vs-redis.md](docs/comparisons/hydraide-vs-redis.md)     |
+| HydrAIDE vs PostgreSQL         | ✅ Complete      |  [hydraide-vs-postgresql.md](docs/comparisons/hydraide-vs-postgresql.md)                                                                 |
+| HydrAIDE vs MySQL              | ✅ Complete      |  [hydraide-vs-mysql.md](docs/comparisons/hydraide-vs-mysql.md)                                                                  |
 | HydrAIDE vs SQLite             | 🔜 In progress      | *coming soon*                                                                   |
 | HydrAIDE vs Elasticsearch      | 🔜 In progress      | *coming soon*                                                                   |
 | HydrAIDE vs Firebase / Firestore | 🔜 In progress      | *coming soon*                                                                   |
