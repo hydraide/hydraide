@@ -83,6 +83,13 @@ type InstanceController interface {
 	//  - CmdError: if any low-level command fails during the stop or start phases.
 	//  - OperationError: a high-level error wrapping a low-level issue.
 	RestartInstance(ctx context.Context, instanceName string) error
+
+	// InstanceExists checks if the service file for a given instance exists on the system.
+	// This function is intended for quick pre-flight checks in a CLI for better user experience.
+	// It returns a boolean and an error if the check itself fails
+	//
+	//  - CmdError: if any low-level command fails during the stop or start phases.
+	InstanceExists(ctx context.Context, instanceName string) (bool, error)
 }
 
 // systemdController implements InstanceController for Linux systems.
@@ -318,6 +325,12 @@ func (c *systemdController) RestartInstance(ctx context.Context, instanceName st
 	return nil
 }
 
+// InstanceExists checks if the service file for a given instance exists on the system.
+func (c *systemdController) InstanceExists(ctx context.Context, instanceName string) (bool, error) {
+	service := fmt.Sprintf("hydraserver-%s.service", instanceName)
+	return c.checkServiceExists(service)
+}
+
 // checkServiceExists checks if a service file exists.
 func (c *systemdController) checkServiceExists(serviceName string) (bool, error) {
 	logger.Debug("Check service exists..")
@@ -335,7 +348,7 @@ func (c *systemdController) checkServiceExists(serviceName string) (bool, error)
 		// service exists but is not running.
 		return true, nil
 	}
-	return false, err
+	return false, NewCmdError("systemctl is-active", "service exist check", err)
 }
 
 // isServiceActive checks if a service is currently active.
@@ -553,6 +566,12 @@ func (c *windowsController) RestartInstance(ctx context.Context, instance string
 	}
 	logger.Info("[windows] Successfully restarted", "service_name", instance)
 	return nil
+}
+
+// InstanceExists checks if the service file for a given instance exists on the system.
+func (c *windowsController) InstanceExists(ctx context.Context, instanceName string) (bool, error) {
+	service := fmt.Sprintf("hydraserver-%s", instanceName)
+	return c.checkServiceExists(ctx, service)
 }
 
 // checkServiceExists checks if a Windows service exists using NSSM or PowerShell.
