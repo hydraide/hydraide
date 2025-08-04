@@ -45,8 +45,20 @@ func (g Gateway) Lock(ctx context.Context, in *hydrapb.LockRequest) (*hydrapb.Lo
 	// try to summon the swamp
 	lockerInterface := g.ZeusInterface.GetHydra().GetLocker()
 
-	// késíztünk egy új contextet
+	// create a new context
 	ctxForLocker := context.WithoutCancel(ctx)
+
+	// Set the TTL to the required minimum value if it is less than or equal to 1000 milliseconds
+	if in.GetTTL() <= 1000 {
+		// set the TTL to 1000 milliseconds to prevent too short TTLs
+		in.TTL = 1000
+	}
+
+	// what is the lock key is an empty string
+	if in.GetKey() == "" {
+		// return with grpc error message
+		return nil, status.Error(codes.InvalidArgument, "Lock key cannot be empty")
+	}
 
 	// lock the system
 	lockID, err := lockerInterface.Lock(ctxForLocker, in.GetKey(), time.Duration(in.GetTTL())*time.Millisecond)
@@ -64,6 +76,18 @@ func (g Gateway) Lock(ctx context.Context, in *hydrapb.LockRequest) (*hydrapb.Lo
 func (g Gateway) Unlock(_ context.Context, in *hydrapb.UnlockRequest) (*hydrapb.UnlockResponse, error) {
 
 	defer handlePanic()
+
+	// wha it the lock key is empty
+	if in.GetKey() == "" {
+		// return with grpc error message
+		return nil, status.Error(codes.InvalidArgument, "Lock key cannot be empty")
+	}
+
+	// what if the lock ID is empty
+	if in.GetLockID() == "" {
+		// return with grpc error message
+		return nil, status.Error(codes.InvalidArgument, "Lock ID cannot be empty")
+	}
 
 	// try to summon the swamp
 	lockerInterface := g.ZeusInterface.GetHydra().GetLocker()

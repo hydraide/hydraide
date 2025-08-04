@@ -538,6 +538,16 @@ func (h *hydraidego) Lock(ctx context.Context, key string, ttl time.Duration) (l
 	// Get available servers
 	serverClients := h.client.GetUniqueServiceClients()
 
+	// check if the key is empty
+	if key == "" {
+		return "", NewError(ErrCodeInvalidArgument, fmt.Sprintf("%s: %s", errorMessageInvalidArgument, "key cannot be empty"))
+	}
+
+	// check if the TTL is invalid
+	if ttl.Milliseconds() <= 1000 {
+		return "", NewError(ErrCodeInvalidArgument, fmt.Sprintf("%s: %dms", errorMessageInvalidArgument, ttl.Milliseconds()))
+	}
+
 	// Always acquire business-level locks from the first server for consistency
 	response, err := serverClients[0].Lock(ctx, &hydraidepbgo.LockRequest{
 		Key: key,
@@ -588,6 +598,15 @@ func (h *hydraidego) Unlock(ctx context.Context, key string, lockID string) erro
 
 	// Get available servers
 	serverClients := h.client.GetUniqueServiceClients()
+
+	// check if the key is empty
+	if key == "" {
+		return NewError(ErrCodeInvalidArgument, fmt.Sprintf("%s: %s", errorMessageInvalidArgument, "key cannot be empty"))
+	}
+	// check if the lockID is empty
+	if lockID == "" {
+		return NewError(ErrCodeInvalidArgument, fmt.Sprintf("%s: %s", errorMessageInvalidArgument, "lock ID cannot be empty"))
+	}
 
 	_, err := serverClients[0].Unlock(ctx, &hydraidepbgo.UnlockRequest{
 		Key:    key,
