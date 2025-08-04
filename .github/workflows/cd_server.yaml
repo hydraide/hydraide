@@ -14,7 +14,9 @@ env:
 jobs:
   release:
     runs-on: ${{ matrix.os }}
-
+    permissions:
+      contents: read
+      
     strategy:
       matrix:
         include:
