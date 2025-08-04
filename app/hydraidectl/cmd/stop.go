@@ -41,7 +41,7 @@ var stopCmd = &cobra.Command{
 			case errors.Is(err, instancerunner.ErrServiceNotFound):
 				fmt.Printf("❌ Instance \"%s\" not found.\n", startInstance)
 				// Todo: Change the message when list-instances is available
-				// fmt.Printf("❌ Instance \"%s\" not found.\nUse `hydraidectl list-instances` to see available instances.\n", startInstance)
+				// fmt.Printf("❌ Instance \"%s\" not found.\nUse `hydraidectl list-instances` to see available instances.\n", stopInstance)
 				os.Exit(1)
 
 			case errors.Is(err, instancerunner.ErrServiceNotRunning):
