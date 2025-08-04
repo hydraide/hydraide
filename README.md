@@ -200,22 +200,22 @@ or just come chat with us on Discord!
 Want to see how HydrAIDE compares to the most popular databases and engines?  
 We’re building a full series of deep comparisons, mindset-first, not config-first.
 
-| 🔍 Comparison                | 📄 Status           | Link                                                                            |
-|-----------------------------|---------------------|---------------------------------------------------------------------------------|
-| HydrAIDE vs MongoDB            | ✅ Complete         | [hydraide-vs-mongodb.md](docs/comparisons/hydraide-vs-mongodb.md) |
-| HydrAIDE vs Redis              | ✅ Complete         | [hydraide-vs-redis.md](docs/comparisons/hydraide-vs-redis.md)     |
-| HydrAIDE vs PostgreSQL         | ✅ Complete      |  [hydraide-vs-postgresql.md](docs/comparisons/hydraide-vs-postgresql.md)                                                                 |
-| HydrAIDE vs MySQL              | ✅ Complete      |  [hydraide-vs-mysql.md](docs/comparisons/hydraide-vs-mysql.md)                                                                  |
-| HydrAIDE vs SQLite             | 🔜 In progress      | *coming soon*                                                                   |
-| HydrAIDE vs Elasticsearch      | 🔜 In progress      | *coming soon*                                                                   |
-| HydrAIDE vs Firebase / Firestore | 🔜 In progress      | *coming soon*                                                                   |
-| HydrAIDE vs DynamoDB           | 🔜 In progress      | *coming soon*                                                                   |
-| HydrAIDE vs Cassandra          | 🔜 In progress      | *coming soon*                                                                   |
-| HydrAIDE vs InfluxDB           | 🔜 In progress      | *coming soon*                                                                   |
-| HydrAIDE vs ClickHouse         | 🔜 In progress      | *coming soon*                                                                   |
-| HydrAIDE vs Neo4j              | 🔜 In progress      | *coming soon*                                                                   |
-| HydrAIDE vs TimescaleDB        | 🔜 In progress      | *coming soon*                                                                   |
-| HydrAIDE vs Apache Kafka       | 🔜 In progress      | *coming soon* (stream vs native pub-sub)                                        |
+| 🔍 Comparison                | 📄 Status           | Link                                                                    |
+|-----------------------------|---------------------|-------------------------------------------------------------------------|
+| HydrAIDE vs MongoDB            | ✅ Complete         | [hydraide-vs-mongodb.md](docs/comparisons/hydraide-vs-mongodb.md)       |
+| HydrAIDE vs Redis              | ✅ Complete         | [hydraide-vs-redis.md](docs/comparisons/hydraide-vs-redis.md)           |
+| HydrAIDE vs PostgreSQL         | ✅ Complete      | [hydraide-vs-postgresql.md](docs/comparisons/hydraide-vs-postgresql.md) |
+| HydrAIDE vs MySQL              | ✅ Complete      | [hydraide-vs-mysql.md](docs/comparisons/hydraide-vs-mysql.md)           |
+| HydrAIDE vs SQLite             | ✅ Complete     | [hydraide-vs-sqlite.md](docs/comparisons/hydraide-vs-sqlite.md)         |
+| HydrAIDE vs Elasticsearch      | ✅ Complete     | [hydraide-vs-elasticsearch.md](docs/comparisons/hydraide-vs-elasticsearch.md)                                                           |
+| HydrAIDE vs Firebase / Firestore | ✅ Complete       | [hydraide-vs-firebase.md](docs/comparisons/hydraide-vs-firebase.md)                                                           |
+| HydrAIDE vs DynamoDB           | 🔜 In progress      | *coming soon*                                                           |
+| HydrAIDE vs Cassandra          | 🔜 In progress      | *coming soon*                                                           |
+| HydrAIDE vs InfluxDB           | 🔜 In progress      | *coming soon*                                                           |
+| HydrAIDE vs ClickHouse         | 🔜 In progress      | *coming soon*                                                           |
+| HydrAIDE vs Neo4j              | 🔜 In progress      | *coming soon*                                                           |
+| HydrAIDE vs TimescaleDB        | 🔜 In progress      | *coming soon*                                                           |
+| HydrAIDE vs Apache Kafka       | 🔜 In progress      | *coming soon* (stream vs native pub-sub)                                |
 
 ---
 
@@ -231,10 +231,10 @@ Once you're ready, open your first issue or pull request. We’ll be waiting! �
 
 ## 📩 Contact & Enterprise
 
-HydrAIDE is used in production at [Trendizz.com](https://trendizz.com). Interested in enterprise licensing, 
-SDK development, or embedding HydrAIDE in your own platform?
+HydrAIDE is used in production at [Trendizz.com](https://trendizz.com). 
+Interested in enterprise licensing, SDK development, or embedding HydrAIDE in your own platform?
 
-📧 **Peter Gebri** – [peter.gebri@trendizz.com](mailto:peter.gebri@trendizz.com)
+📧 **Peter Gebri** – [peter.gebri@hydraide.io](mailto:peter.gebri@hydraide.io)
 (Founder of HydrAIDE & Trendizz)
 🌐 **Website** – [https://HydrAIDE.io ](https://hydraide.io) Currently in progress and directly linked to GitHub.
 
