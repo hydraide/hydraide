@@ -39,21 +39,49 @@ func SetupLogger(customLogger *slog.Logger) {
 	logger = customLogger
 }
 
-// InstanceController defines control operations for a HydrAIDE instances.
-// The interface provides methods to start, stop, and restart a named service.
+// InstanceController defines control operations for HydrAIDE instances.
+// The interface provides methods to start, stop, and restart a named service,
+// abstracting the underlying operating system's service management.
 type InstanceController interface {
 	// StartInstance starts the system service for the given instanceName.
-	// It returns an error if the service file does not exist, or if the start command fails.
+	//
+	// It performs a pre-flight check to ensure the service file exists and
+	// that the service is not already running. The function will block
+	// until the service is confirmed to be active or the operation times out.
+	//
+	// It returns the following errors:
+	//  - ErrServiceNotFound: if the service file does not exist on the system.
+	//  - ErrServiceAlreadyRunning: if a start command is issued for a
+	//    service that is already active.
+	//  - CmdError: if a low-level command (e.g., `systemctl start`) fails.
+	//  - OperationError: a high-level error wrapping a low-level issue,
+	//    providing context about the instance and operation.
 	StartInstance(ctx context.Context, instanceName string) error
 
 	// StopInstance gracefully stops the system service for the given instanceName.
-	// It issues a stop command and then actively polls the service status
-	// to ensure it has fully shut down before returning.
-	// A 5-second timeout is used to prevent indefinite waiting.
+	//
+	// The function issues a stop command and then actively polls the service status
+	// to ensure it has fully shut down before returning. It respects the
+	// context's deadline for the overall operation and the `gracefulShutdownTimeout`
+	// for polling.
+	//
+	// It returns the following errors:
+	//  - ErrServiceNotFound: if the service file does not exist.
+	//  - ErrServiceNotRunning: if a stop command is issued for a service that is not active.
+	//  - CmdError: if a low-level command (e.g., `systemctl stop`) fails.
+	//  - OperationError: a high-level error wrapping a low-level issue.
 	StopInstance(ctx context.Context, instanceName string) error
 
 	// RestartInstance performs a graceful stop followed by a start of the service.
-	// It uses StopInstance and StartInstance methods to perform restart.
+	//
+	// The function uses the `StopInstance` and `StartInstance` methods to perform the restart.
+	// If the service is not running, it will simply perform a start operation.
+	// The entire operation is governed by the context's deadline.
+	//
+	// It returns the following errors:
+	//  - ErrServiceNotFound: if the service file does not exist.
+	//  - CmdError: if any low-level command fails during the stop or start phases.
+	//  - OperationError: a high-level error wrapping a low-level issue.
 	RestartInstance(ctx context.Context, instanceName string) error
 }
 
