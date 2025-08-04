@@ -2,6 +2,7 @@ package instancerunner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os/exec"
@@ -69,19 +70,29 @@ func (c *systemdController) StartInstance(ctx context.Context, instance string) 
 	// Pre-flight check: ensure the service file exists before attempting to start it.
 	exists, err := c.checkServiceExists(service)
 	if err != nil {
-		return fmt.Errorf("failed to check for service '%s' existence: %w", service, err)
+		return NewOperationError(instance, "check service existence", err)
 	}
 	if !exists {
-		return fmt.Errorf("service '%s' not found", service)
+		return ErrServiceNotFound
+	}
+
+	// Check if the service is already active.
+	isActive, err := c.isServiceActive(service)
+	if err != nil {
+		return NewOperationError(instance, "check service status", err)
+	}
+	if isActive {
+		logger.Info("Service is already running. No action needed.", "service_name", service)
+		return ErrServiceAlreadyRunning
 	}
 
 	locker, err := locker.NewLocker(instance)
 	if err != nil {
 		logger.Error("Failed to get Instance Locker")
-		return err
+		return NewOperationError(instance, "get locker", err)
 	}
 	if err := locker.Lock(); err != nil {
-		return fmt.Errorf("failed to lock instance '%s': %w", instance, err)
+		return NewOperationError(instance, "lock instance", err)
 	}
 	logger.Debug("Locked instance", "instance_name", instance)
 	// Use defer to ensure the lock is always released when the function exits.
@@ -98,7 +109,11 @@ func (c *systemdController) startInstanceOp(ctx context.Context, service string)
 		logger.Info("Enable Service", "service_name", service)
 		enableCmd := exec.CommandContext(ctx, "systemctl", "enable", service)
 		if err := enableCmd.Run(); err != nil {
-			return fmt.Errorf("failed to enable service '%s': %w", service, err)
+			return NewOperationError(service, "enable service", &CmdError{
+				Command: "systemctl enable",
+				Output:  "",
+				Err:     err,
+			})
 		}
 	}
 
@@ -109,7 +124,7 @@ func (c *systemdController) startInstanceOp(ctx context.Context, service string)
 	err := cmd.Run()
 	if err != nil {
 		logger.Info("failed to start service", "service_name", service)
-		return fmt.Errorf("failed to start service '%s': %w", service, err)
+		return NewOperationError(service, "start service", NewCmdError("systemctl start", "", err))
 	}
 
 	logger.Info("Successfully started service", "service_name", service)
@@ -127,16 +142,16 @@ func (c *systemdController) StopInstance(ctx context.Context, instance string) e
 	// Pre-flight check: ensure the service file exists.
 	exists, err := c.checkServiceExists(service)
 	if err != nil {
-		return fmt.Errorf("failed to check for service '%s' existence: %w", service, err)
+		return NewOperationError(instance, "check service existence", err)
 	}
 	if !exists {
-		return fmt.Errorf("service '%s' not found", service)
+		return ErrServiceNotFound
 	}
 
 	locker, err := locker.NewLocker(instance)
 	if err != nil {
 		logger.Error("Failed to get instance locker")
-		return err
+		return NewOperationError(instance, "Acquire lock", err)
 	}
 	if err := locker.Lock(); err != nil {
 		return fmt.Errorf("failed to lock instance '%s': %w", instance, err)
@@ -155,7 +170,7 @@ func (c *systemdController) stopInstanceOp(ctx context.Context, service string) 
 	isActive, err := c.isServiceActive(service)
 	if err != nil {
 		logger.Info("Failed to check status of", "service_name", service)
-		return fmt.Errorf("failed to check status of '%s': %w", service, err)
+		return NewOperationError(service, "check service status", err)
 	}
 	if !isActive {
 		logger.Info("Service is already stopped. No action needed.", "service_name", service)
@@ -168,7 +183,11 @@ func (c *systemdController) stopInstanceOp(ctx context.Context, service string) 
 
 	// Issue the stop command. The command itself doesn't wait for shutdown.
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to issue stop command for service '%s': %w", service, err)
+		return NewOperationError(service, "stop service", &CmdError{
+			Command: "systemctl stop",
+			Output:  "",
+			Err:     err,
+		})
 	}
 
 	// Poll the service status to ensure it has fully shut down.
@@ -184,11 +203,11 @@ func (c *systemdController) stopInstanceOp(ctx context.Context, service string) 
 	for {
 		select {
 		case <-pollingCtx.Done():
-			return fmt.Errorf("service '%s' did not stop gracefully within the timeout: %w", service, pollingCtx.Err())
+			return NewOperationError(service, "graceful stop", pollingCtx.Err())
 		case <-ticker.C:
 			isActive, checkErr := c.isServiceActive(service)
 			if checkErr != nil {
-				return fmt.Errorf("failed to check service status during graceful stop: %w", checkErr)
+				return NewOperationError(service, "check status during graceful stop", checkErr)
 			}
 			if !isActive {
 				logger.Info("Service is confirmed stopped.", "service_name", service)
@@ -210,20 +229,20 @@ func (c *systemdController) RestartInstance(ctx context.Context, instanceName st
 	// Pre-flight check: ensure the service file exists.
 	exists, err := c.checkServiceExists(service)
 	if err != nil {
-		return fmt.Errorf("failed to check for service '%s' existence: %w", service, err)
+		return NewOperationError(instanceName, "check service existence", err)
 	}
 	if !exists {
-		return fmt.Errorf("service '%s' not found", service)
+		return ErrServiceNotFound
 	}
 
 	// Acquire the lock for the entire restart operation.
 	locker, err := locker.NewLocker(instanceName)
 	if err != nil {
 		logger.Error("Failed to get instance locker")
-		return err
+		return NewOperationError(instanceName, "acquire locker", err)
 	}
 	if err := locker.Lock(); err != nil {
-		return fmt.Errorf("failed to lock instance '%s': %w", instanceName, err)
+		return NewOperationError(instanceName, "lock instance", err)
 	}
 	defer locker.Unlock()
 
@@ -231,13 +250,13 @@ func (c *systemdController) RestartInstance(ctx context.Context, instanceName st
 	// Stop the service gracefully.
 	logger.Debug("Stop Instance", "instance_name", instanceName)
 	if err := c.stopInstanceOp(ctx, service); err != nil {
-		return fmt.Errorf("failed to gracefully stop instance '%s' for restart: %w", instanceName, err)
+		return NewOperationError(instanceName, "stop for restart", err)
 	}
 
 	// Start the service.
 	logger.Debug("Start Instance", "instance_name", instanceName)
 	if err := c.startInstanceOp(ctx, service); err != nil {
-		return fmt.Errorf("failed to start instance '%s' after stop: %w", instanceName, err)
+		return NewOperationError(instanceName, "start after stop", err)
 	}
 
 	logger.Info("Successfully restarted instance", "instance_name", instanceName)
@@ -304,18 +323,18 @@ func (c *windowsController) StartInstance(ctx context.Context, instance string) 
 	// Check if the service exists before attempting to start.
 	exists, err := c.checkServiceExists(ctx, service)
 	if err != nil {
-		return fmt.Errorf("failed to check for service '%s' existence: %w", service, err)
+		return NewOperationError(instance, "check service existence", err)
 	}
 	if !exists {
-		return fmt.Errorf("service '%s' not found", service)
+		return ErrServiceNotFound
 	}
 
 	locker, err := locker.NewLocker(instance)
 	if err != nil {
-		return err
+		return NewOperationError(instance, "acquire locker", err)
 	}
 	if err := locker.Lock(); err != nil {
-		return fmt.Errorf("failed to lock instance '%s': %w", instance, err)
+		return NewOperationError(instance, "lock instance", err)
 	}
 	// Use defer to ensure the lock is always released when the function exits.
 	defer locker.Unlock()
@@ -324,6 +343,15 @@ func (c *windowsController) StartInstance(ctx context.Context, instance string) 
 }
 
 func (c *windowsController) startInstanceOp(ctx context.Context, service string) error {
+	running, err := c.isServiceRunning(ctx, service)
+	if err != nil {
+		return NewOperationError(service, "check service status", err)
+	}
+	if running {
+		logger.Info("[windows] Service already running", "service_name", service)
+		return ErrServiceAlreadyRunning
+	}
+
 	logger.Info("[windows] Attempting to start service", "service_name", service)
 	var cmd *exec.Cmd
 	if c.useNssm {
@@ -332,9 +360,13 @@ func (c *windowsController) startInstanceOp(ctx context.Context, service string)
 		cmd = exec.CommandContext(ctx, "powershell", "-Command", fmt.Sprintf("Start-Service -Name '%s'", service))
 	}
 
-	err := cmd.Run()
+	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("failed to start service '%s': %w", service, err)
+		return NewOperationError(service, "start service", &CmdError{
+			Command: fmt.Sprintf("start service for '%s'", service),
+			Output:  string(out),
+			Err:     err,
+		})
 	}
 
 	logger.Info("[windows] Successfully started service", "service_name", service)
@@ -350,18 +382,18 @@ func (c *windowsController) StopInstance(ctx context.Context, instance string) e
 
 	exists, err := c.checkServiceExists(ctx, service)
 	if err != nil {
-		return fmt.Errorf("failed to check for service '%s': %w", service, err)
+		return NewOperationError(instance, "check service existence", err)
 	}
 	if !exists {
-		return fmt.Errorf("service '%s' not found", service)
+		return ErrServiceNotFound
 	}
 
 	locker, err := locker.NewLocker(instance)
 	if err != nil {
-		return err
+		return NewOperationError(instance, "acquire locker", err)
 	}
 	if err := locker.Lock(); err != nil {
-		return fmt.Errorf("failed to lock instance '%s': %w", instance, err)
+		return NewOperationError(instance, "lock instance", err)
 	}
 	defer locker.Unlock()
 
@@ -372,17 +404,27 @@ func (c *windowsController) stopInstanceOp(ctx context.Context, service string) 
 	// If already stopped, nothing to do
 	running, err := c.isServiceRunning(ctx, service)
 	if err != nil {
-		return fmt.Errorf("status check failed for '%s': %w", service, err)
+		return NewOperationError(service, "check service status", err)
 	}
 	if !running {
 		logger.Info("[windows] Service already stopped", "service_name", service)
-		return nil
+		return ErrServiceNotRunning
 	}
 
 	logger.Info("[windows] Stopping NSSM service", "service_name", service)
-	cmd := exec.CommandContext(ctx, "nssm", "stop", service)
+	var cmd *exec.Cmd
+	if c.useNssm {
+		cmd = exec.CommandContext(ctx, "nssm", "stop", service)
+	} else {
+		cmd = exec.CommandContext(ctx, "powershell", "-Command", fmt.Sprintf("Stop-Service -Name '%s'", service))
+	}
+
 	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("nssm stop failed: %v\n%s", err, out)
+		return NewOperationError(service, "stop service", &CmdError{
+			Command: fmt.Sprintf("stop service for '%s'", service),
+			Output:  string(out),
+			Err:     err,
+		})
 	}
 
 	// Poll until stopped or timeout
@@ -396,11 +438,11 @@ func (c *windowsController) stopInstanceOp(ctx context.Context, service string) 
 	for {
 		select {
 		case <-pollCtx.Done():
-			return fmt.Errorf("service '%s' did not stop within %s: %w", service, timeout, pollCtx.Err())
+			return NewOperationError(service, "graceful stop", pollCtx.Err())
 		case <-tick.C:
 			running, err := c.isServiceRunning(ctx, service)
 			if err != nil {
-				return fmt.Errorf("status check failed during stop poll: %w", err)
+				return NewOperationError(service, "status check during stop poll", err)
 			}
 			if !running {
 				logger.Info("[windows] Service confirmed stopped", "service_name", service)
@@ -419,19 +461,19 @@ func (c *windowsController) RestartInstance(ctx context.Context, instance string
 
 	locker, err := locker.NewLocker(instance)
 	if err != nil {
-		return err
+		return NewOperationError(instance, "acquire locker", err)
 	}
 	if err := locker.Lock(); err != nil {
-		return fmt.Errorf("failed to lock instance '%s': %w", instance, err)
+		return NewOperationError(instance, "lock instance", err)
 	}
 	defer locker.Unlock()
 
 	service := fmt.Sprintf("hydraserver-%s", instance)
-	if err := c.stopInstanceOp(ctx, service); err != nil {
-		return fmt.Errorf("failed to stop for restart: %w", err)
+	if err := c.stopInstanceOp(ctx, service); err != nil && !errors.Is(err, ErrServiceNotRunning) {
+		return NewOperationError(instance, "stop for restart", err)
 	}
 	if err := c.startInstanceOp(ctx, service); err != nil {
-		return fmt.Errorf("failed to start after stop: %w", err)
+		return NewOperationError(instance, "start after stop", err)
 	}
 	logger.Info("[windows] Successfully restarted", "service_name", instance)
 	return nil
@@ -447,7 +489,10 @@ func (c *windowsController) checkServiceExists(ctx context.Context, service stri
 			if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 2 {
 				return false, nil // Service not installed
 			}
-			return false, fmt.Errorf("nssm check failed: %w", err)
+			return false, &CmdError{
+				Command: "nssm status",
+				Err:     err,
+			}
 		}
 		return true, nil
 	} else {
@@ -458,7 +503,10 @@ func (c *windowsController) checkServiceExists(ctx context.Context, service stri
 			if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
 				return false, nil // Service not found
 			}
-			return false, fmt.Errorf("powershell get-service failed: %w", err)
+			return false, &CmdError{
+				Command: "powershell Get-Service",
+				Err:     err,
+			}
 		}
 		return true, nil
 	}
@@ -470,14 +518,30 @@ func (c *windowsController) isServiceRunning(ctx context.Context, service string
 		// `nssm status` exits with code 0 if running.
 		cmd := exec.CommandContext(ctx, "nssm", "status", service)
 		err := cmd.Run()
+		if err != nil {
+			if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 2 {
+				return false, ErrServiceNotFound
+			}
+			return false, &CmdError{
+				Command: "nssm status",
+				Err:     err,
+			}
+		}
 		return err == nil, nil
 	} else {
 		// Use PowerShell to check the service status.
 		cmd := exec.CommandContext(ctx, "powershell", "-Command", fmt.Sprintf("(Get-Service -Name '%s').Status -eq 'Running'", service))
 		output, err := cmd.Output()
 		if err != nil {
-			// This can happen if the service is not found, in which case it's not running.
-			return false, nil
+			// If the service is not found, it's not running, and we can return ErrServiceNotFound.
+			if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
+				return false, ErrServiceNotFound
+			}
+			return false, &CmdError{
+				Command: "powershell Get-Service",
+				Output:  string(output),
+				Err:     err,
+			}
 		}
 		return strings.TrimSpace(string(output)) == "True", nil
 	}

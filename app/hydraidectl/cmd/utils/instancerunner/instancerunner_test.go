@@ -3,6 +3,7 @@ package instancerunner
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -225,17 +226,9 @@ func TestMissingService(t *testing.T) {
 		t.Fatal("Expected an error for a missing service, but got none")
 	}
 
-	// Verify the error message matches the expected format for the given OS.
-	var expectedError string
-	switch runtime.GOOS {
-	case "linux":
-		expectedError = fmt.Sprintf("service 'hydraserver-%s.service' not found", missingInstanceName)
-	case "windows":
-		expectedError = fmt.Sprintf("service 'hydraserver-%s' not found", missingInstanceName)
-	}
-
-	if err.Error() != expectedError {
-		t.Fatalf("Expected error '%s', but got '%s'", expectedError, err.Error())
+	// Check if the returned error is the expected ErrServiceNotFound
+	if !errors.Is(err, ErrServiceNotFound) {
+		t.Errorf("Expected error ErrServiceNotFound, but got: %v", err)
 	}
 }
 
