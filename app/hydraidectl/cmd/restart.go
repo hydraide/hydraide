@@ -31,17 +31,25 @@ var restartCmd = &cobra.Command{
 
 		ctx := context.Background()
 
+		exists, err := instanceController.InstanceExists(ctx, restartInstance)
+		if err != nil {
+			fmt.Println("failed to verify instance existence: ", err)
+		}
+
+		if !exists {
+			fmt.Printf("❌ Instance \"%s\" not found.\nUse `hydraidectl list-instances` to see available instances.\n", restartInstance)
+			os.Exit(1)
+		}
+
 		// Stop the instance
 		fmt.Printf("🔁 Restarting instance \"%s\"...\n", restartInstance)
 
-		err := instanceController.StopInstance(ctx, restartInstance)
+		err = instanceController.StopInstance(ctx, restartInstance)
 
 		if err != nil {
 			switch {
 			case errors.Is(err, instancerunner.ErrServiceNotFound):
-				fmt.Printf("❌ Instance \"%s\" not found.\n", restartInstance)
-				// Todo: Change the message when list-instances is available
-				// fmt.Printf("❌ Instance \"%s\" not found.\nUse `hydraidectl list-instances` to see available instances.\n", restartInstance)
+				fmt.Printf("❌ Instance \"%s\" not found.\nUse `hydraidectl list-instances` to see available instances.\n", restartInstance)
 				os.Exit(1)
 
 			case errors.Is(err, instancerunner.ErrServiceNotRunning):

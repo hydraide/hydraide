@@ -31,17 +31,25 @@ var stopCmd = &cobra.Command{
 
 		ctx := context.Background()
 
+		exists, err := instanceController.InstanceExists(ctx, stopInstance)
+		if err != nil {
+			fmt.Println("failed to verify instance existence: ", err)
+		}
+
+		if !exists {
+			fmt.Printf("❌ Instance \"%s\" not found.\nUse `hydraidectl list-instances` to see available instances.\n", stopInstance)
+			os.Exit(1)
+		}
+
 		fmt.Printf("🟡 Shutting down instance \"%s\"...\n", stopInstance)
 		fmt.Println("⚠️  HydrAIDE shutdown in progress... Do not power off or kill the service. Data may be flushing to disk.")
 
-		err := instanceController.StopInstance(ctx, stopInstance)
+		err = instanceController.StopInstance(ctx, stopInstance)
 
 		if err != nil {
 			switch {
 			case errors.Is(err, instancerunner.ErrServiceNotFound):
-				fmt.Printf("❌ Instance \"%s\" not found.\n", startInstance)
-				// Todo: Change the message when list-instances is available
-				// fmt.Printf("❌ Instance \"%s\" not found.\nUse `hydraidectl list-instances` to see available instances.\n", stopInstance)
+				fmt.Printf("❌ Instance \"%s\" not found.\nUse `hydraidectl list-instances` to see available instances.\n", stopInstance)
 				os.Exit(1)
 
 			case errors.Is(err, instancerunner.ErrServiceNotRunning):
