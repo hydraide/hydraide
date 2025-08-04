@@ -13,6 +13,10 @@ import (
 	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/instancerunner/locker"
 )
 
+// SERVICE_STATUS_TICKER is time interval to check status of service
+// after start/stop instance is initiated.
+const SERVICE_STATUS_TICKER = 300 * time.Millisecond
+
 // NoOpHandler is an slog.Handler that discards all log records.
 type NoOpHandler struct{}
 
@@ -55,8 +59,8 @@ type InstanceController interface {
 
 // systemdController implements InstanceController for Linux systems.
 type systemdController struct {
-	timeout                 time.Duration
-	gracefulShutdownTimeout time.Duration
+	timeout                  time.Duration
+	gracefulStartStopTimeout time.Duration
 }
 
 // StartInstance starts a systemd user service.
@@ -127,8 +131,31 @@ func (c *systemdController) startInstanceOp(ctx context.Context, service string)
 		return NewOperationError(service, "start service", NewCmdError("systemctl start", "", err))
 	}
 
-	logger.Info("Successfully started service", "service_name", service)
-	return nil
+	logger.Info("Waiting for service to be fully started", "service_name", service)
+
+	// poll until successfully started or timeout
+	pollingCtx, pollingCancel := context.WithTimeout(ctx, 5*time.Second)
+	defer pollingCancel()
+	logger.Debug("Created polling with timeout context to check service status")
+
+	ticker := time.NewTicker(SERVICE_STATUS_TICKER)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-pollingCtx.Done():
+			return NewOperationError(service, "graceful start", pollingCtx.Err())
+		case <-ticker.C:
+			isActive, checkErr := c.isServiceActive(service)
+			if checkErr != nil {
+				return NewOperationError(service, "check status during graceful start", checkErr)
+			}
+			if isActive {
+				logger.Info("Service is confirmed started.", "service_name", service)
+				return nil
+			}
+		}
+	}
 }
 
 // StopInstance stops a systemd user service gracefully.
@@ -197,7 +224,7 @@ func (c *systemdController) stopInstanceOp(ctx context.Context, service string) 
 	defer pollingCancel()
 	logger.Debug("Created polling with timeout context to check service status")
 
-	ticker := time.NewTicker(200 * time.Millisecond) // Poll every 200ms
+	ticker := time.NewTicker(SERVICE_STATUS_TICKER)
 	defer ticker.Stop()
 
 	for {
@@ -305,9 +332,9 @@ func (c *systemdController) isServiceActive(serviceName string) (bool, error) {
 
 // windowsController implements InstanceController for Windows via NSSM.
 type windowsController struct {
-	useNssm                 bool
-	timeout                 time.Duration
-	gracefulShutdownTimeout time.Duration
+	useNssm                  bool
+	timeout                  time.Duration
+	gracefulStartStopTimeout time.Duration
 }
 
 // StartInstance installs (if needed) and starts an NSSM-wrapped service.
@@ -369,8 +396,29 @@ func (c *windowsController) startInstanceOp(ctx context.Context, service string)
 		})
 	}
 
-	logger.Info("[windows] Successfully started service", "service_name", service)
-	return nil
+	// Poll until started or timeout
+	timeout := c.gracefulStartStopTimeout
+	pollCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	tick := time.NewTicker(SERVICE_STATUS_TICKER)
+	defer tick.Stop()
+
+	for {
+		select {
+		case <-pollCtx.Done():
+			return NewOperationError(service, "graceful start", pollCtx.Err())
+		case <-tick.C:
+			running, err := c.isServiceRunning(ctx, service)
+			if err != nil {
+				return NewOperationError(service, "status check during start poll", err)
+			}
+			if running {
+				logger.Info("[windows] Service confirmed started", "service_name", service)
+				return nil
+			}
+		}
+	}
 }
 
 // StopInstance stops an NSSM service and then polls until it’s confirmed stopped.
@@ -428,11 +476,11 @@ func (c *windowsController) stopInstanceOp(ctx context.Context, service string) 
 	}
 
 	// Poll until stopped or timeout
-	timeout := c.gracefulShutdownTimeout
+	timeout := c.gracefulStartStopTimeout
 	pollCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	tick := time.NewTicker(200 * time.Millisecond)
+	tick := time.NewTicker(SERVICE_STATUS_TICKER)
 	defer tick.Stop()
 
 	for {
@@ -559,7 +607,7 @@ func checkNssmExists() bool {
 func NewInstanceController(options ...Option) InstanceController {
 
 	// timeout defaults to 5 seconds
-	cfg := &opts{timeout: 10 * time.Second, shutdownTimout: 5 * time.Second}
+	cfg := &opts{timeout: 20 * time.Second, startStopTimout: 10 * time.Second}
 	for _, option := range options {
 		option(cfg)
 	}
@@ -572,9 +620,9 @@ func NewInstanceController(options ...Option) InstanceController {
 		} else {
 			logger.Info("NSSM not found. Falling back to PowerShell for Windows service management.")
 		}
-		return &windowsController{useNssm: useNssm, timeout: cfg.timeout, gracefulShutdownTimeout: cfg.shutdownTimout}
+		return &windowsController{useNssm: useNssm, timeout: cfg.timeout, gracefulStartStopTimeout: cfg.startStopTimout}
 	case "linux":
-		return &systemdController{timeout: cfg.timeout, gracefulShutdownTimeout: cfg.shutdownTimout}
+		return &systemdController{timeout: cfg.timeout, gracefulStartStopTimeout: cfg.startStopTimout}
 	default:
 		return nil
 	}
@@ -583,15 +631,18 @@ func NewInstanceController(options ...Option) InstanceController {
 // Option will help set configurations for instance runner
 type Option func(*opts)
 type opts struct {
-	timeout        time.Duration
-	shutdownTimout time.Duration
+	timeout         time.Duration
+	startStopTimout time.Duration
 }
 
-// WithStopTimeout takes timeout duration and sets it to instanceController
+// WithStopTimeout takes timeout duration and sets it as timeout for
+// StartInstance, StopInstance or RestartInstance to complete.
 func WithTimeout(d time.Duration) Option {
 	return func(o *opts) { o.timeout = d }
 }
 
-func WithGracefulShutdownTimeout(d time.Duration) Option {
-	return func(o *opts) { o.shutdownTimout = d }
+// WithGracefulStartStopTimeout takes time duration and sets it as timeout to check
+// service status after StartInstance or StopInstance call.
+func WithGracefulStartStopTimeout(d time.Duration) Option {
+	return func(o *opts) { o.startStopTimout = d }
 }
