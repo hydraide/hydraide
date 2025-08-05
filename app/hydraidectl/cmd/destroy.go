@@ -1,5 +1,3 @@
-// In /home/mockarch/go/src/hydraide/app/hydraidectl/cmd/destroy.go
-
 package cmd
 
 import (
@@ -30,39 +28,31 @@ var destroyCmd = &cobra.Command{
 This command will always perform a graceful shutdown and remove the system service definition.
 Use the --purge flag to also permanently delete the entire base directory, including all data, certificates, and the server binary. This action is irreversible and requires manual confirmation.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute) // Timeout for all operations
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 		defer cancel()
 
-		// 1. Instantiate helpers
-		instanceController := instancerunner.NewInstanceController()
-		serviceManager := servicehelper.New()
 		fs := filesystem.New()
-		bm, err := buildmeta.New()
+		bm, err := buildmeta.New(fs)
 		if err != nil {
-			fmt.Println("❌ Failed to initialize build metadata:", err)
+			fmt.Println("❌ Failed to initialize metadata store:", err)
 			os.Exit(1)
 		}
 
-		fmt.Printf("🔥 Initializing destruction for instance: \"%s\"\n", destroyInstance)
-		instanceKey := destroyInstance + "_basepath"
+		instanceController := instancerunner.NewInstanceController()
+		serviceManager := servicehelper.New()
 
-		// 2. Stop the service if it's running
+		fmt.Printf("🔥 Initializing destruction for instance: \"%s\"\n", destroyInstance)
+
 		fmt.Println("🔄 Checking instance status...")
 		err = instanceController.StopInstance(ctx, destroyInstance)
-		if err != nil {
-			// It's okay if the service wasn't running. Any other error is a problem.
-			if err != instancerunner.ErrServiceNotRunning && err != instancerunner.ErrServiceNotFound {
-				fmt.Printf("❌ Could not stop instance '%s': %v\n", destroyInstance, err)
-				fmt.Println("🚫 Aborting destroy operation. Please stop the service manually before proceeding.")
-				os.Exit(1)
-			}
-			fmt.Println("✅ Instance is already stopped or does not exist as a service.")
-		} else {
-			fmt.Println("✅ Instance stopped successfully.")
+		if err != nil && err != instancerunner.ErrServiceNotRunning && err != instancerunner.ErrServiceNotFound {
+			fmt.Printf("❌ Could not stop instance '%s': %v\n", destroyInstance, err)
+			fmt.Println("🚫 Aborting destroy operation. Please stop the service manually before proceeding.")
+			os.Exit(1)
 		}
+		fmt.Println("✅ Instance is stopped or was not running.")
 
-		// 3. Remove the service definition
-		fmt.Println("🗑️ Removing service definition...")
+		fmt.Println("🗑️  Removing service definition...")
 		if err := serviceManager.RemoveService(destroyInstance); err != nil {
 			fmt.Printf("⚠️  Could not remove service definition: %v\n", err)
 			fmt.Println("   You may need to remove it manually. Continuing...")
@@ -70,20 +60,23 @@ Use the --purge flag to also permanently delete the entire base directory, inclu
 			fmt.Println("✅ Service definition removed.")
 		}
 
-		// 4. Handle the --purge flag for complete data removal
-		basePath, metaErr := bm.Get(instanceKey)
+		// FIXED: Added delay to prevent console output overlap.
+		time.Sleep(500 * time.Millisecond)
+
+		instanceData, metaErr := bm.GetInstance(destroyInstance)
 		if metaErr != nil {
-			fmt.Printf("⚠️  Could not find base path metadata for instance '%s'. Cannot purge data.\n", destroyInstance)
+			fmt.Printf("⚠️  Could not find metadata for instance '%s'. Cannot purge data.\n", destroyInstance)
 			fmt.Printf("✅ Destruction of service '%s' complete.\n", destroyInstance)
 			os.Exit(0)
 		}
+		basePath := instanceData.BasePath
 
 		if purgeData {
 			fmt.Println("\n====================================================================")
 			fmt.Println("‼️ DANGER: FULL DATA PURGE INITIATED ‼️")
 			fmt.Printf("⚠️ You are about to permanently delete the entire base path for instance '%s'.\n", destroyInstance)
 			fmt.Printf("   Directory to be deleted: %s\n", basePath)
-			fmt.Println("   This includes all data, certificates, settings, and the binary.")
+			fmt.Println("   This includes all data, certificates, logs, and the binary.")
 			fmt.Println("   This operation is IRREVERSIBLE.")
 			fmt.Println("====================================================================")
 			fmt.Printf("\n👉 To confirm, type the full instance name ('%s'): ", destroyInstance)
@@ -97,14 +90,10 @@ Use the --purge flag to also permanently delete the entire base directory, inclu
 
 			fmt.Println("✅ Confirmation received. Proceeding with base path deletion.")
 
-			// Use the new incremental deletion method
-			err := fs.RemoveDirIncremental(ctx, basePath, func(path string) {
-				fmt.Printf("   Deleting: %s\n", path)
-			})
-
-			if err != nil {
+			// FIXED: Use the robust fs.RemoveDir which wraps os.RemoveAll.
+			if err := fs.RemoveDir(ctx, basePath); err != nil {
 				fmt.Printf("❌ An error occurred during deletion: %v\n", err)
-				fmt.Println("   The operation was interrupted. You can re-run the command to continue.")
+				fmt.Println("   Please check file permissions and try again.")
 				os.Exit(1)
 			}
 			fmt.Printf("✅ Base path '%s' deleted successfully.\n", basePath)
@@ -113,9 +102,12 @@ Use the --purge flag to also permanently delete the entire base directory, inclu
 			fmt.Printf("   Data directory: %s\n", basePath)
 		}
 
-		// 5. Clean up the instance metadata
-		bm.Delete(instanceKey)
-		fmt.Println("✅ Instance metadata cleaned up.")
+		// CHANGED: Clean up the instance from the metadata file.
+		if err := bm.DeleteInstance(destroyInstance); err != nil {
+			fmt.Printf("⚠️  Could not remove instance metadata: %v\n", err)
+		} else {
+			fmt.Println("✅ Instance metadata cleaned up.")
+		}
 		fmt.Printf("\n✅ Destruction of instance '%s' complete.\n", destroyInstance)
 	},
 }

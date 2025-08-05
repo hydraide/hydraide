@@ -47,14 +47,35 @@ var initCmd = &cobra.Command{
 	Short: "Run the quick install wizard",
 	Run: func(cmd *cobra.Command, args []string) {
 		reader := bufio.NewReader(os.Stdin)
+		fs := filesystem.New()
+		bm, err := buildmeta.New(fs)
+		if err != nil {
+			fmt.Printf("❌ Failed to initialize metadata store: %v\n", err)
+			os.Exit(1)
+		}
 
-		fmt.Println("🚀 Starting HydrAIDE install wizard...")
-		fmt.Println()
+		var instanceName string
+		for {
+			fmt.Print("✨ Please provide a unique name for this new instance (e.g., 'prod', 'dev-local'): ")
+			nameInput, _ := reader.ReadString('\n')
+			instanceName = strings.TrimSpace(nameInput)
+			if instanceName == "" {
+				fmt.Println("🚫 Instance name cannot be empty.")
+				continue
+			}
+
+			if _, err := bm.GetInstance(instanceName); err == nil {
+				fmt.Printf("🚫 An instance named '%s' already exists. Please choose another name.\n", instanceName)
+				continue
+			}
+			break
+		}
+
+		fmt.Printf("\n🚀 Starting HydrAIDE setup for instance: \"%s\"\n\n", instanceName)
 
 		var cert CertConfig
 		var envCfg EnvConfig
 
-		fs := filesystem.New()
 		validator := validator.New()
 		ctx := context.Background()
 
@@ -215,7 +236,7 @@ var initCmd = &cobra.Command{
 
 		// Message size validation loop
 		for {
-			fmt.Printf("Max message size [default: %s]: ", "8KB")
+			fmt.Printf("Max message size [default: %s]: ", "8MB")
 			maxSizeInput, _ := reader.ReadString('\n')
 			maxSizeInput = strings.TrimSpace(maxSizeInput)
 
@@ -572,16 +593,23 @@ var initCmd = &cobra.Command{
 		serverDownloaderObject.SetProgressCallback(progressFn)
 		serverDownloaderObject.DownloadHydraServer("latest", envCfg.HydraideBasePath)
 
-		// Store the base path in buildmeta data
-		bm, err := buildmeta.New()
-		if err != nil {
-			fmt.Println("❌ Failed to load buildmeta:", err)
-			return
-		}
-		bm.Update("basepath", envCfg.HydraideBasePath)
+		fmt.Println("\n✅ HydrAIDE server binary downloaded successfully.")
 
-		// TODO: Create a service file based on the user's operating system
-		// TODO: Start the service
+		// Save instance metadata
+		fmt.Println("\n💾 Saving instance metadata...")
+		instanceData := buildmeta.InstanceMetadata{
+			BasePath: envCfg.HydraideBasePath,
+		}
+		if err := bm.SaveInstance(instanceName, instanceData); err != nil {
+			fmt.Printf("❌ Failed to save metadata for instance '%s': %v\n", instanceName, err)
+			os.Exit(1)
+		}
+
+		configPath, _ := bm.GetConfigFilePath()
+		fmt.Printf("\n✅ Metadata for instance '%s' saved to %s\n", instanceName, configPath)
+		fmt.Println("✅ Installation complete!")
+		fmt.Printf("👉 You can now register this instance as a system service by running:\n")
+		fmt.Printf("   hydraidectl service --instance %s\n", instanceName)
 	},
 }
 

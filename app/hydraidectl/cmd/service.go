@@ -1,9 +1,13 @@
 package cmd
 
 import (
+	"bufio"
 	"fmt"
+	"os"
+	"strings"
 
 	buildmeta "github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/buildmetadata"
+	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/filesystem"
 	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/servicehelper"
 	"github.com/spf13/cobra"
 )
@@ -15,7 +19,6 @@ const (
 	TEMP_FILENAME = "hydraide-cache"
 )
 
-// serviceCmd represents the service command
 var serviceCmd = &cobra.Command{
 	Use:   "service",
 	Short: "Set up a persistent service for hydraserver",
@@ -25,62 +28,54 @@ var serviceCmd = &cobra.Command{
 			return
 		}
 
+		fs := filesystem.New()
 		sp := servicehelper.New()
 
-		// Check if the service already exists
+		// Check if the service file already exists on the OS
 		exists, err := sp.ServiceExists(instanceName)
 		if err != nil {
 			fmt.Printf("Error checking service existence: %v\n", err)
 			return
 		}
 		if exists {
-			fmt.Printf("A service with the name '%s' already exists. Please choose a different instance name.\n", instanceName)
+			fmt.Printf("A service with the name '%s' already exists on this system. Please choose a different instance name or destroy the existing one.\n", instanceName)
 			return
 		}
 
-		// get basepath from build meta
-		bm, err := buildmeta.New()
+		// Load instance metadata
+		fmt.Println("🔍 Loading instance metadata...")
+		// Use the filesystem utility to get the metadata store
+		bm, err := buildmeta.New(fs)
 		if err != nil {
-			fmt.Println("Failed to load buildmeta:", err)
+			fmt.Println("Failed to load metadata store:", err)
 			return
 		}
-		// This is the generic basepath set by the `init` command
-		basepath, err := bm.Get("basepath")
+		instanceData, err := bm.GetInstance(instanceName)
 		if err != nil {
-			fmt.Println("Base Path not found in metadata. Have you run 'hydraidectl init' first?", err)
+			fmt.Printf("❌ Could not find metadata for instance '%s'.\n", instanceName)
+			fmt.Println("👉 Please run 'hydraidectl init' first to create the instance.")
 			return
 		}
+		basepath := instanceData.BasePath
 
-		fmt.Println("Base Path found in metadata:", basepath)
-
-		// NEW: Store the base path specifically for this instance.
-		// This allows the `destroy` command to find it later.
-		instanceKey := instanceName + "_basepath"
-		if err := bm.Update(instanceKey, basepath); err != nil {
-			fmt.Printf("❌ Error saving instance metadata: %v\n", err)
-			return
-		}
-		fmt.Printf("✅ Metadata for instance '%s' saved.\n", instanceName)
+		fmt.Println("Base path for instance found in metadata:", basepath)
 
 		// Generate the service file
 		err = sp.GenerateServiceFile(instanceName, basepath)
 		if err != nil {
 			fmt.Printf("Error generating service file: %v\n", err)
-			// If service file creation fails, clean up the metadata we just wrote.
-			bm.Delete(instanceKey)
 			return
 		}
-
 		fmt.Printf("Service file for instance '%s' created successfully.\n", instanceName)
 
-		// Prompt to enable and start the service
 		if !noPrompt {
-			var response string
 			fmt.Print("Do you want to enable and start this service now? (y/n): ")
-			fmt.Scanln(&response)
-			if response != "y" {
+			reader := bufio.NewReader(os.Stdin)
+			response, _ := reader.ReadString('\n')
+			response = strings.ToLower(strings.TrimSpace(response))
+			if response != "y" && response != "yes" {
 				fmt.Println("Service setup complete. You can enable and start it manually later.")
-				return
+				return // Exit cleanly if user says no.
 			}
 		}
 
@@ -89,7 +84,6 @@ var serviceCmd = &cobra.Command{
 			fmt.Printf("Error enabling and starting service: %v\n", err)
 			return
 		}
-
 		fmt.Printf("Service '%s' enabled and started successfully.\n", instanceName)
 	},
 }
@@ -99,5 +93,5 @@ func init() {
 
 	serviceCmd.Flags().StringVarP(&instanceName, "instance", "i", "", "Unique name for the service instance")
 	serviceCmd.Flags().BoolVar(&noPrompt, "no-prompt", false, "Skip prompts and enable/start the service automatically")
-	serviceCmd.MarkFlagRequired("instance") // Ensure instance name is always provided
+	serviceCmd.MarkFlagRequired("instance")
 }

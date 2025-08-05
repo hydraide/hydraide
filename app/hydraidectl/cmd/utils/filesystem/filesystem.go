@@ -92,6 +92,15 @@ type FileSystem interface {
 	// It is resumable: if interrupted, running it again will delete remaining files.
 	// It is cancellable via the context.
 	RemoveDirIncremental(ctx context.Context, path string, progressCb func(path string)) error
+
+	// ReadFile reads the content of a file at the specified path.
+	// Parameters:
+	//   - ctx: Context for cancellation and logging
+	//   - path: The file path to read from
+	// Returns:
+	//   - []byte: The content of the file
+	//   - error: Any error encountered during file reading
+	ReadFile(ctx context.Context, path string) ([]byte, error)
 }
 
 // fileSystemImpl implements the FileSystem interface.
@@ -331,4 +340,19 @@ func (fs *fileSystemImpl) RemoveDirIncremental(ctx context.Context, path string,
 
 	fs.logger.InfoContext(ctx, "Directory removal process completed", "path", cleanPath)
 	return err
+}
+
+// Add the implementation for ReadFile to fileSystemImpl
+func (fs *fileSystemImpl) ReadFile(ctx context.Context, path string) ([]byte, error) {
+	cleanPath := filepath.Clean(path)
+	fs.logger.DebugContext(ctx, "Reading file", "path", cleanPath)
+
+	content, err := os.ReadFile(cleanPath)
+	if err != nil {
+		fs.logger.ErrorContext(ctx, "Failed to read file", "path", cleanPath, "error", err)
+		return nil, fmt.Errorf("failed to read file %s: %w", cleanPath, err)
+	}
+
+	fs.logger.InfoContext(ctx, "File read successfully", "path", cleanPath)
+	return content, nil
 }
