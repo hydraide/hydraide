@@ -41,20 +41,33 @@ var serviceCmd = &cobra.Command{
 		// get basepath from build meta
 		bm, err := buildmeta.New()
 		if err != nil {
-			fmt.Println("Failed to load buildmeat")
+			fmt.Println("Failed to load buildmeta:", err)
+			return
 		}
+		// This is the generic basepath set by the `init` command
 		basepath, err := bm.Get("basepath")
 		if err != nil {
-			fmt.Println("Base Path is not found in metadata", err)
+			fmt.Println("Base Path not found in metadata. Have you run 'hydraidectl init' first?", err)
 			return
 		}
 
-		fmt.Println("Base Path is found in metadata", basepath)
+		fmt.Println("Base Path found in metadata:", basepath)
+
+		// NEW: Store the base path specifically for this instance.
+		// This allows the `destroy` command to find it later.
+		instanceKey := instanceName + "_basepath"
+		if err := bm.Update(instanceKey, basepath); err != nil {
+			fmt.Printf("❌ Error saving instance metadata: %v\n", err)
+			return
+		}
+		fmt.Printf("✅ Metadata for instance '%s' saved.\n", instanceName)
 
 		// Generate the service file
 		err = sp.GenerateServiceFile(instanceName, basepath)
 		if err != nil {
 			fmt.Printf("Error generating service file: %v\n", err)
+			// If service file creation fails, clean up the metadata we just wrote.
+			bm.Delete(instanceKey)
 			return
 		}
 
@@ -86,4 +99,5 @@ func init() {
 
 	serviceCmd.Flags().StringVarP(&instanceName, "instance", "i", "", "Unique name for the service instance")
 	serviceCmd.Flags().BoolVar(&noPrompt, "no-prompt", false, "Skip prompts and enable/start the service automatically")
+	serviceCmd.MarkFlagRequired("instance") // Ensure instance name is always provided
 }
