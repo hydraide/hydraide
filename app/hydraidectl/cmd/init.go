@@ -236,16 +236,19 @@ var initCmd = &cobra.Command{
 
 		// Message size validation loop
 		for {
-			fmt.Printf("Max message size [default: %s]: ", "8MB")
+			fmt.Printf("Max message size [default: %s]: ", "10MB")
 			maxSizeInput, _ := reader.ReadString('\n')
 			maxSizeInput = strings.TrimSpace(maxSizeInput)
 
+			if maxSizeInput == "" {
+				maxSizeInput = "10MB"
+			}
 			size, err := validator.ParseMessageSize(ctx, maxSizeInput)
 			if err != nil {
 				fmt.Printf("❌ Invalid input: %v. Please try again.\n", err)
 				continue
 			}
-
+			fmt.Printf("✅ Valid size: %s (%d bytes)\n", validator.FormatSize(ctx, size), size)
 			envCfg.GRPCMaxMessageSize = size
 			break
 		}

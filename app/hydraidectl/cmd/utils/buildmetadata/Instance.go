@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/user"
 	"path/filepath"
 
 	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/filesystem"
@@ -53,20 +54,33 @@ type storeImpl struct {
 	configFilePath string
 }
 
+// getHomeDir correctly determines the user's home directory, even when running
+// under `sudo`. It checks for the `SUDO_USER` environment variable and falls back
+// to the standard home directory if not found.
+func getHomeDir() (string, error) {
+	sudoUser := os.Getenv("SUDO_USER")
+	if sudoUser != "" {
+		// If running with sudo, look up the home directory of the original user.
+		u, err := user.Lookup(sudoUser)
+		if err != nil {
+			return "", fmt.Errorf("failed to lookup sudo user '%s': %w", sudoUser, err)
+		}
+		return u.HomeDir, nil
+	}
+	// Otherwise, return the home directory of the current user.
+	return os.UserHomeDir()
+}
+
 // New creates and initializes a new MetadataStore. It ensures the configuration
 // directory and metadata file exist, creating them if necessary.
-// It requires a filesystem.FileSystem instance to perform all file operations,
-// adhering to the dependency injection pattern.
 func New(fs filesystem.FileSystem) (MetadataStore, error) {
 	ctx := context.Background()
 
-	// Get the user's home directory in a cross-platform way.
-	home, err := os.UserHomeDir()
+	home, err := getHomeDir()
 	if err != nil {
-		return nil, fmt.Errorf("could not get user home directory: %w", err)
+		return nil, fmt.Errorf("could not determine user home directory: %w", err)
 	}
 
-	// Construct the path to the .hydraide configuration directory.
 	configDir := filepath.Join(home, CONFIG_DIR)
 	if err := fs.CreateDir(ctx, configDir, 0750); err != nil {
 		return nil, fmt.Errorf("failed to create config directory at %s: %w", configDir, err)
@@ -74,18 +88,18 @@ func New(fs filesystem.FileSystem) (MetadataStore, error) {
 
 	configFilePath := filepath.Join(configDir, META_FILENAME)
 
-	// If the metadata file does not exist, create it with an empty JSON object
-	// to prevent parsing errors on the first run.
-	exists, err := fs.CheckIfFileExists(ctx, configFilePath)
-	if err != nil {
-		return nil, fmt.Errorf("error checking metadata file: %w", err)
-	}
+	// Use the new fs.Stat method to check the file's status.
+	info, err := fs.Stat(ctx, configFilePath)
 
-	if !exists {
-		// Initialize with an empty JSON object for valid parsing.
+	// Initialize the file if it does not exist OR if it is empty.
+	if os.IsNotExist(err) || (err == nil && info.Size() == 0) {
+		// Write an empty JSON object to ensure the file is valid for parsing later.
 		if err := fs.WriteFile(ctx, configFilePath, []byte("{}"), 0640); err != nil {
-			return nil, fmt.Errorf("failed to create metadata file: %w", err)
+			return nil, fmt.Errorf("failed to create or initialize metadata file: %w", err)
 		}
+	} else if err != nil {
+		// If Stat returned a different error (e.g., permission denied), fail hard.
+		return nil, fmt.Errorf("error checking metadata file: %w", err)
 	}
 
 	return &storeImpl{fs: fs, configFilePath: configFilePath}, nil

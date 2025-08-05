@@ -101,6 +101,10 @@ type FileSystem interface {
 	//   - []byte: The content of the file
 	//   - error: Any error encountered during file reading
 	ReadFile(ctx context.Context, path string) ([]byte, error)
+
+	// than CheckIf...Exists as it provides full file info (size, permissions, etc.)
+	// and is the idiomatic way to check for existence in Go via `os.IsNotExist(err)`.
+	Stat(ctx context.Context, path string) (os.FileInfo, error)
 }
 
 // fileSystemImpl implements the FileSystem interface.
@@ -347,6 +351,7 @@ func (fs *fileSystemImpl) ReadFile(ctx context.Context, path string) ([]byte, er
 	cleanPath := filepath.Clean(path)
 	fs.logger.DebugContext(ctx, "Reading file", "path", cleanPath)
 
+	fmt.Println("🔍 Reading file:", cleanPath)
 	content, err := os.ReadFile(cleanPath)
 	if err != nil {
 		fs.logger.ErrorContext(ctx, "Failed to read file", "path", cleanPath, "error", err)
@@ -355,4 +360,11 @@ func (fs *fileSystemImpl) ReadFile(ctx context.Context, path string) ([]byte, er
 
 	fs.logger.InfoContext(ctx, "File read successfully", "path", cleanPath)
 	return content, nil
+}
+
+// Stat implements the FileSystem interface.
+func (fs *fileSystemImpl) Stat(ctx context.Context, path string) (os.FileInfo, error) {
+	cleanPath := filepath.Clean(path)
+	fs.logger.DebugContext(ctx, "Statting path", "path", cleanPath)
+	return os.Stat(cleanPath)
 }

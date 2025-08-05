@@ -42,6 +42,12 @@ var serviceCmd = &cobra.Command{
 			return
 		}
 
+		if os.Geteuid() != 0 {
+			fmt.Println("This command must be run as root or with sudo to create a system service.")
+			fmt.Println("Please run 'sudo hydraidectl service --instance " + instanceName + "'")
+			return
+		}
+
 		// Load instance metadata
 		fmt.Println("🔍 Loading instance metadata...")
 		// Use the filesystem utility to get the metadata store

@@ -19,6 +19,12 @@ var stopCmd = &cobra.Command{
 	Short: "Stop the hydrAIDE instance",
 	Run: func(cmd *cobra.Command, args []string) {
 
+		if os.Geteuid() != 0 {
+			fmt.Println("This command must be run as root or with sudo to create a system service.")
+			fmt.Println("Please run 'sudo hydraidectl stop --instance " + instanceName + "'")
+			return
+		}
+
 		instanceController := instancerunner.NewInstanceController(
 			instancerunner.WithTimeout(20*time.Second),
 			instancerunner.WithGracefulStartStopTimeout(10*time.Second),
