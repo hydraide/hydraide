@@ -15,8 +15,31 @@ type Instance struct {
 	Status string
 }
 
+// Detector is the interface for detecting and querying the status of HydrAIDE
+// application instances on a given operating system.
 type Detector interface {
+	// ListInstances returns a slice of all detected HydrAIDE instances.
+	//
+	// This method scans the system for all services that match the naming
+	// convention and returns a slice of Instance structs containing their
+	// name and normalized status. It is designed for a broad overview of
+	// all running and installed instances.
+	//
+	// It returns an empty slice and a nil error if no matching instances
+	// are found. A non-nil error is returned if the underlying system
+	// command fails to execute or its output cannot be parsed.
 	ListInstances(ctx context.Context) ([]Instance, error)
+
+	// GetInstanceStatus returns the normalized status of a single HydrAIDE instance
+	// specified by its name.
+	//
+	// This method is highly efficient as it performs a direct query for a
+	// single service, avoiding the overhead of listing all services. The
+	// returned status is one of the following: "active", "inactive",
+	// "failed", "unknown", or "not-found".
+	//
+	// It returns a non-nil error if the underlying system command fails to
+	// execute for reasons other than the service not existing.
 	GetInstanceStatus(ctx context.Context, instanceName string) (string, error)
 }
 
