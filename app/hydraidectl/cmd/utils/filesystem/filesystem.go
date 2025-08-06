@@ -87,6 +87,24 @@ type FileSystem interface {
 	// Returns:
 	//   - error: Any error encountered during the file move operation
 	MoveFile(ctx context.Context, src, dst string) error
+
+	// RemoveDirIncremental recursively removes a directory, providing progress feedback.
+	// It is resumable: if interrupted, running it again will delete remaining files.
+	// It is cancellable via the context.
+	RemoveDirIncremental(ctx context.Context, path string, progressCb func(path string)) error
+
+	// ReadFile reads the content of a file at the specified path.
+	// Parameters:
+	//   - ctx: Context for cancellation and logging
+	//   - path: The file path to read from
+	// Returns:
+	//   - []byte: The content of the file
+	//   - error: Any error encountered during file reading
+	ReadFile(ctx context.Context, path string) ([]byte, error)
+
+	// than CheckIf...Exists as it provides full file info (size, permissions, etc.)
+	// and is the idiomatic way to check for existence in Go via `os.IsNotExist(err)`.
+	Stat(ctx context.Context, path string) (os.FileInfo, error)
 }
 
 // fileSystemImpl implements the FileSystem interface.
@@ -256,4 +274,97 @@ func (fs *fileSystemImpl) MoveFile(ctx context.Context, src, dst string) error {
 	}
 	fs.logger.InfoContext(ctx, "File moved successfully")
 	return nil
+}
+
+// RemoveDirIncremental implements the RemoveDirIncremental method of the FileSystem interface.
+// This method recursively removes a directory, providing progress feedback and allowing for cancellation.
+// It is resumable: if interrupted, running it again will delete remaining files.
+// It is cancellable via the context.
+// It uses a top-down approach to ensure that files are deleted before their parent directories.
+func (fs *fileSystemImpl) RemoveDirIncremental(ctx context.Context, path string, progressCb func(path string)) error {
+	cleanPath := filepath.Clean(path)
+
+	// If the path doesn't exist, we're already done.
+	if _, err := os.Stat(cleanPath); os.IsNotExist(err) {
+		fs.logger.InfoContext(ctx, "Directory does not exist, nothing to remove", "path", cleanPath)
+		return nil
+	}
+
+	fs.logger.DebugContext(ctx, "Starting incremental directory removal", "path", cleanPath)
+
+	err := filepath.Walk(cleanPath, func(currentPath string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// Check for cancellation signal
+		select {
+		case <-ctx.Done():
+			fs.logger.InfoContext(ctx, "Directory removal cancelled by user", "path", cleanPath)
+			return ctx.Err() // This will stop the Walk
+		default:
+			// Continue
+		}
+
+		// Report progress *before* deleting
+		if progressCb != nil {
+			progressCb(currentPath)
+		}
+
+		// Delete the file or empty directory
+		if err := os.Remove(currentPath); err != nil {
+			// If we get an error, it might be because the directory isn't empty yet,
+			// which is normal for the top-down Walk. We'll get it on the way back up.
+			// We only return a real error if something unexpected happens.
+			if !os.IsExist(err) {
+				// Return the error to stop the walk if it's not a simple "doesn't exist" error
+				fs.logger.ErrorContext(ctx, "Failed to remove item", "path", currentPath, "error", err)
+				return err
+			}
+		}
+		return nil
+	})
+
+	// After the walk, the root directory might still exist if it wasn't empty initially.
+	// One final remove call handles the root directory itself.
+	if err == nil {
+		if err := os.Remove(cleanPath); err != nil {
+			// If it still fails, it means something inside couldn't be deleted.
+			// The walk would have already returned an error in that case.
+			// This is just a final check.
+			if !os.IsNotExist(err) {
+				fs.logger.ErrorContext(ctx, "Failed to remove final directory root", "path", cleanPath, "error", err)
+				return err
+			}
+		}
+	} else if err == context.Canceled || err == context.DeadlineExceeded {
+		// Don't log cancellation as a failure.
+		return err
+	}
+
+	fs.logger.InfoContext(ctx, "Directory removal process completed", "path", cleanPath)
+	return err
+}
+
+// Add the implementation for ReadFile to fileSystemImpl
+func (fs *fileSystemImpl) ReadFile(ctx context.Context, path string) ([]byte, error) {
+	cleanPath := filepath.Clean(path)
+	fs.logger.DebugContext(ctx, "Reading file", "path", cleanPath)
+
+	fmt.Println("🔍 Reading file:", cleanPath)
+	content, err := os.ReadFile(cleanPath)
+	if err != nil {
+		fs.logger.ErrorContext(ctx, "Failed to read file", "path", cleanPath, "error", err)
+		return nil, fmt.Errorf("failed to read file %s: %w", cleanPath, err)
+	}
+
+	fs.logger.InfoContext(ctx, "File read successfully", "path", cleanPath)
+	return content, nil
+}
+
+// Stat implements the FileSystem interface.
+func (fs *fileSystemImpl) Stat(ctx context.Context, path string) (os.FileInfo, error) {
+	cleanPath := filepath.Clean(path)
+	fs.logger.DebugContext(ctx, "Statting path", "path", cleanPath)
+	return os.Stat(cleanPath)
 }

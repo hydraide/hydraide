@@ -92,10 +92,6 @@ func (s *serviceManagerImpl) GenerateServiceFile(instanceName, basePath string) 
 func (s *serviceManagerImpl) generateSystemdService(instanceName, basePath string) error {
 	slog.Info("Creating systemd service for Linux")
 
-	if os.Geteuid() != 0 {
-		return fmt.Errorf("this script must be run as root. Please use sudo")
-	}
-
 	serviceName := fmt.Sprintf("%s-%s", BASE_SERVICE_NAME, instanceName)
 
 	runCommand := func(name string, args ...string) error {
@@ -115,19 +111,19 @@ func (s *serviceManagerImpl) generateSystemdService(instanceName, basePath strin
 	}
 
 	serviceContent := fmt.Sprintf(`[Unit]
-Description=HydrAIDE Service - %s
-After=network.target
+			Description=HydrAIDE Service - %s
+			After=network.target
 
-[Service]
-ExecStart=%s
-WorkingDirectory=%s
-Restart=always
-RestartSec=5
-StandardOutput=append:%s
-StandardError=append:%s
+			[Service]
+			ExecStart=%s
+			WorkingDirectory=%s
+			Restart=always
+			RestartSec=5
+			StandardOutput=append:%s
+			StandardError=append:%s
 
-[Install]
-WantedBy=multi-user.target
+			[Install]
+			WantedBy=multi-user.target
 `, instanceName, executablePath, basePath, logFile, logFile)
 
 	// Create parent directories if they don't exist

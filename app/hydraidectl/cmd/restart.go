@@ -19,6 +19,12 @@ var restartCmd = &cobra.Command{
 	Short: "Restart the HydrAIDE container",
 	Run: func(cmd *cobra.Command, args []string) {
 
+		if os.Geteuid() != 0 {
+			fmt.Println("This command must be run as root or with sudo to create a system service.")
+			fmt.Println("Please run 'sudo hydraidectl restart --instance " + instanceName + "'")
+			return
+		}
+
 		instanceController := instancerunner.NewInstanceController(
 			instancerunner.WithTimeout(30*time.Second),
 			instancerunner.WithGracefulStartStopTimeout(10*time.Second),
