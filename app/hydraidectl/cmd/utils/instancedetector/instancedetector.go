@@ -17,6 +17,7 @@ type Instance struct {
 
 type Detector interface {
 	ListInstances(ctx context.Context) ([]Instance, error)
+	GetInstanceStatus(ctx context.Context, instanceName string) (string, error)
 }
 
 // CommandExecutor defines an interface for executing a command and returning its output.
@@ -92,6 +93,37 @@ func (d *linuxDetector) ListInstances(ctx context.Context) ([]Instance, error) {
 	return instances, nil
 }
 
+// GetInstanceStatus retrieves the status of a single instance using systemctl query.
+func (d *linuxDetector) GetInstanceStatus(ctx context.Context, instanceName string) (string, error) {
+	serviceName := fmt.Sprintf("hydraserver-%s.service", instanceName)
+
+	listOutput, listErr := d.executor.Execute(ctx, "systemctl", "list-unit-files", "--no-pager", serviceName)
+
+	if listErr != nil {
+		return "not-found", nil
+	}
+
+	// If the output is empty or doesn't contain the service name, it's not found.
+	if strings.TrimSpace(string(listOutput)) == "" {
+		return "not-found", nil
+	}
+
+	// Get status
+	showOutput, err := d.executor.Execute(ctx, "systemctl", "show", serviceName, "--property=SubState")
+
+	if err != nil {
+		return "unknown", nil
+	}
+
+	// The output will be in the format "SubState=running"
+	parts := strings.SplitN(strings.TrimSpace(string(showOutput)), "=", 2)
+	if len(parts) != 2 {
+		return "unknown", nil
+	}
+
+	return normalizeStatus(parts[1]), nil
+}
+
 func parseSystemctlJSON(data []byte) ([]systemctlUnit, error) {
 	var units []systemctlUnit
 	if err := json.Unmarshal(data, &units); err != nil {
@@ -131,7 +163,6 @@ type powershellService struct {
 var reServiceName = regexp.MustCompile(`^hydraserver-(.*)$`)
 
 func (d *windowsDetector) ListInstances(ctx context.Context) ([]Instance, error) {
-	// Nssm doesn't provide direct or easy way to list the services and status.
 	// Using PowerShell command to get services and format them as a JSON string.
 	psCommand := "Get-Service -Name 'hydraserver-*' | Select-Object Name,Status | ConvertTo-Json"
 
@@ -171,6 +202,27 @@ func (d *windowsDetector) ListInstances(ctx context.Context) ([]Instance, error)
 	}
 
 	return instances, nil
+}
+
+// GetInstanceStatus retrieves the status of a single instance using PowerShell query.
+func (d *windowsDetector) GetInstanceStatus(ctx context.Context, instanceName string) (string, error) {
+	serviceName := fmt.Sprintf("hydraserver-%s", instanceName)
+
+	// The -ErrorAction SilentlyContinue prevents Get-Service from throwing an error
+	// if the service is not found. Instead, it returns a null object.
+	psCommand := fmt.Sprintf("(Get-Service -Name '%s' -ErrorAction SilentlyContinue).Status", serviceName)
+	output, err := d.executor.Execute(ctx, "powershell.exe", "-NoProfile", "-Command", psCommand)
+
+	if err != nil {
+		return "", fmt.Errorf("failed to get status for service '%s': %w", serviceName, err)
+	}
+
+	status := strings.TrimSpace(string(output))
+	if status == "" {
+		return "not-found", nil
+	}
+
+	return normalizeWindowsStatus(status), nil
 }
 
 // normalizeWindowsStatus maps Windows service status strings to our standard terms.

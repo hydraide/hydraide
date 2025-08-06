@@ -3,6 +3,7 @@ package instancedetector
 import (
 	"context"
 	"errors"
+	"os/exec"
 	"reflect"
 	"testing"
 )
@@ -269,6 +270,165 @@ func TestNormalizeWindowsStatus(t *testing.T) {
 	}
 }
 
+func TestLinuxDetector_GetInstanceStatus(t *testing.T) {
+	testCases := []struct {
+		name           string
+		instanceName   string
+		mockExecutor   *MockCommandExecutor
+		expectedStatus string
+		expectedErr    bool
+	}{
+		{
+			name:         "Success - Active Service",
+			instanceName: "dev",
+			mockExecutor: &MockCommandExecutor{
+				output: []byte("SubState=running"),
+				err:    nil,
+			},
+			expectedStatus: "active",
+			expectedErr:    false,
+		},
+		{
+			name:         "Success - Inactive Service",
+			instanceName: "staging",
+			mockExecutor: &MockCommandExecutor{
+				output: []byte("SubState=dead"),
+				err:    nil,
+			},
+			expectedStatus: "inactive",
+			expectedErr:    false,
+		},
+		{
+			name:         "Service Not Found",
+			instanceName: "nonexistent",
+			mockExecutor: &MockCommandExecutor{
+				output: []byte("Unit hydraserver-nonexistent.service could not be found."),
+				err: &exec.ExitError{
+					Stderr:       []byte("Unit hydraserver-nonexistent.service could not be found."),
+					ProcessState: nil,
+				},
+			},
+			expectedStatus: "not-found",
+			expectedErr:    false,
+		},
+		{
+			name:         "Malformed Output",
+			instanceName: "dev",
+			mockExecutor: &MockCommandExecutor{
+				output: []byte("unexpected output format"),
+				err:    nil,
+			},
+			expectedStatus: "unknown",
+			expectedErr:    false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			detector := &linuxDetector{executor: tc.mockExecutor}
+			status, err := detector.GetInstanceStatus(context.Background(), tc.instanceName)
+
+			if tc.expectedErr {
+				if err == nil {
+					t.Fatal("Expected an error, but got none")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("Did not expect an error, but got: %v", err)
+			}
+
+			if status != tc.expectedStatus {
+				t.Errorf("Expected status: %s, but got: %s", tc.expectedStatus, status)
+			}
+		})
+	}
+}
+
+func TestWindowsDetector_GetInstanceStatus(t *testing.T) {
+	testCases := []struct {
+		name           string
+		instanceName   string
+		mockExecutor   *MockCommandExecutor
+		expectedStatus string
+		expectedErr    bool
+	}{
+		{
+			name:         "Success - Active Service",
+			instanceName: "dev",
+			mockExecutor: &MockCommandExecutor{
+				output: []byte("Running"),
+				err:    nil,
+			},
+			expectedStatus: "active",
+			expectedErr:    false,
+		},
+		{
+			name:         "Success - Inactive Service",
+			instanceName: "staging",
+			mockExecutor: &MockCommandExecutor{
+				output: []byte("Stopped"),
+				err:    nil,
+			},
+			expectedStatus: "inactive",
+			expectedErr:    false,
+		},
+		{
+			name:         "Service Not Found",
+			instanceName: "nonexistent",
+			mockExecutor: &MockCommandExecutor{
+				output: []byte("\r\n"),
+				err:    nil,
+			},
+			expectedStatus: "not-found",
+			expectedErr:    false,
+		},
+		{
+			name:         "Command Execution Error",
+			instanceName: "dev",
+			mockExecutor: &MockCommandExecutor{
+				output: nil,
+				err:    errors.New("powershell command failed"),
+			},
+			expectedStatus: "",
+			expectedErr:    true,
+		},
+		{
+			name:         "Malformed Output",
+			instanceName: "dev",
+			mockExecutor: &MockCommandExecutor{
+				output: []byte("some garbage text"),
+				err:    nil,
+			},
+			expectedStatus: "unknown",
+			expectedErr:    false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			detector := &windowsDetector{executor: tc.mockExecutor}
+			status, err := detector.GetInstanceStatus(context.Background(), tc.instanceName)
+
+			if tc.expectedErr {
+				if err == nil {
+					t.Fatal("Expected an error, but got none")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("Did not expect an error, but got: %v", err)
+			}
+
+			if status != tc.expectedStatus {
+				t.Errorf("Expected status: %s, but got: %s", tc.expectedStatus, status)
+			}
+		})
+	}
+}
+
 // Integeration/E2E test.
 // func TestIntegrationListInstances(t *testing.T) {
 // 	instanceDetector, err := NewDetector()
@@ -282,4 +442,18 @@ func TestNormalizeWindowsStatus(t *testing.T) {
 // 		t.Error("List instances error: ", err)
 // 	}
 // 	fmt.Println(instances)
+// }
+
+// func TestIntegrationGetInstanceStatus(t *testing.T) {
+// 	instancedetector, err := NewDetector()
+
+// 	if err != nil {
+// 		t.Error("Failed to get instance detector", err)
+// 	}
+
+// 	instanceStatus, err := instancedetector.GetInstanceStatus(context.TODO(), "test5")
+// 	if err != nil {
+// 		t.Error("List instances error: ", err)
+// 	}
+// 	fmt.Println(instanceStatus)
 // }
