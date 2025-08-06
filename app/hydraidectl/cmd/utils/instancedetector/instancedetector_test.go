@@ -14,9 +14,11 @@ func TestListInstances(t *testing.T) {
 	}
 
 	instances, err := detector.ListInstances(context.TODO())
-	fmt.Println(instances)
-
 	if err != nil {
 		t.Error(err)
+	}
+
+	for _, instance := range instances {
+		fmt.Println("Name: ", instance.Name, "\nStatus: ", instance.Status)
 	}
 }
