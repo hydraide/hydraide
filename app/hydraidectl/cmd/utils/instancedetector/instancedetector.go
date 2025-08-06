@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"regexp"
 	"runtime"
+	"strings"
 )
 
 type Instance struct {
@@ -18,12 +19,25 @@ type Detector interface {
 	ListInstances(ctx context.Context) ([]Instance, error)
 }
 
+// CommandExecutor defines an interface for executing a command and returning its output.
+type CommandExecutor interface {
+	Execute(ctx context.Context, name string, args ...string) ([]byte, error)
+}
+
+type commandExecutorImpl struct{}
+
+func (e *commandExecutorImpl) Execute(ctx context.Context, name string, args ...string) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, name, args...)
+	return cmd.Output()
+}
+
 func NewDetector() (Detector, error) {
+	executor := &commandExecutorImpl{}
 	switch runtime.GOOS {
 	case "linux":
-		return &linuxDetector{}, nil
+		return &linuxDetector{executor: executor}, nil
 	case "windows":
-		return &windowsDetector{}, nil
+		return &windowsDetector{executor: executor}, nil
 	default:
 		return nil, fmt.Errorf("unsupported operating system")
 	}
@@ -34,9 +48,9 @@ func NewDetector() (Detector, error) {
 var reUnitName = regexp.MustCompile(`^hydraserver-(.*?)\.service$`)
 
 type linuxDetector struct {
+	executor CommandExecutor
 }
 
-// systemctlUnit is subset of fields from instance list.
 type systemctlUnit struct {
 	Name      string `json:"unit"`
 	Active    string `json:"active"`
@@ -46,16 +60,13 @@ type systemctlUnit struct {
 
 func (d *linuxDetector) ListInstances(ctx context.Context) ([]Instance, error) {
 
-	// List all user services, including inactive and failed ones.
-	cmd := exec.CommandContext(ctx, "systemctl", "list-units", "--type=service", "--all", "--output", "json")
-	output, err := cmd.Output()
+	output, err := d.executor.Execute(ctx, "systemctl", "list-units", "--type=service", "--all", "--output", "json")
+
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
-			// No instances found
 			if len(output) == 0 && exitErr.ExitCode() == 1 {
 				return []Instance{}, nil
 			}
-
 			return nil, fmt.Errorf("systemctl command failed with exit code %d: %s", exitErr.ExitCode(), string(output))
 		}
 		return nil, fmt.Errorf("failed to execute systemctl command: %v", err)
@@ -74,13 +85,10 @@ func (d *linuxDetector) ListInstances(ctx context.Context) ([]Instance, error) {
 			continue
 		}
 		unitName := match[1]
-		// Normalize the systemd 'SUB' state to standard terms.
 		normalizedStatus := normalizeStatus(unit.Sub)
-
 		instances = append(instances, Instance{Name: unitName, Status: normalizedStatus})
 
 	}
-
 	return instances, nil
 }
 
@@ -111,8 +119,75 @@ func normalizeStatus(sub string) string {
 }
 
 type windowsDetector struct {
+	executor CommandExecutor
 }
 
+// powershellService is a Go struct to unmarshal the JSON output from PowerShell.
+type powershellService struct {
+	Name   string `json:"Name"`
+	Status string `json:"Status"`
+}
+
+var reServiceName = regexp.MustCompile(`^hydraserver-(.*)$`)
+
 func (d *windowsDetector) ListInstances(ctx context.Context) ([]Instance, error) {
-	return []Instance{{Name: "", Status: "Active"}}, nil
+	// Nssm doesn't provide direct or easy way to list the services and status.
+	// Using PowerShell command to get services and format them as a JSON string.
+	psCommand := "Get-Service -Name 'hydraserver-*' | Select-Object Name,Status | ConvertTo-Json"
+
+	// Execute the PowerShell command using the injected executor.
+	output, err := d.executor.Execute(ctx, "powershell.exe", "-NoProfile", "-Command", psCommand)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute PowerShell command: %w, output: %s", err, string(output))
+	}
+
+	if len(output) == 0 || strings.TrimSpace(string(output)) == "[]" {
+		return []Instance{}, nil
+	}
+
+	// Unmarshal the JSON output into a slice of powershellService structs.
+	var services []powershellService
+	if err := json.Unmarshal(output, &services); err != nil {
+
+		// If only one service then powershell doesnt return array.
+		var single powershellService
+		if err2 := json.Unmarshal(output, &single); err2 != nil {
+			return nil, fmt.Errorf("invalid PowerShell JSON: %w", err)
+		}
+		services = []powershellService{single}
+	}
+
+	var instances []Instance
+	for _, service := range services {
+		match := reServiceName.FindStringSubmatch(service.Name)
+		if len(match) < 2 {
+			continue
+		}
+
+		instanceName := match[1]
+		normalizedStatus := normalizeWindowsStatus(service.Status)
+		instances = append(instances, Instance{Name: instanceName, Status: normalizedStatus})
+	}
+
+	return instances, nil
+}
+
+// normalizeWindowsStatus maps Windows service status strings to our standard terms.
+func normalizeWindowsStatus(status string) string {
+	lowerStatus := strings.ToLower(status)
+	switch lowerStatus {
+	case "running":
+		return "active"
+	case "stopped":
+		return "inactive"
+	case "startpending":
+		return "activating"
+	case "stoppending":
+		return "deactivating"
+	case "paused":
+		return "inactive"
+	default:
+		return "unknown"
+	}
 }
