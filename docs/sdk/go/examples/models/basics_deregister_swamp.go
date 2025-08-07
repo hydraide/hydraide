@@ -1,12 +1,9 @@
-//go:build ignore
-// +build ignore
-
 package models
 
 import (
-	"github.com/hydraide/hydraide/docs/sdk/go/examples/models/utils/hydraidehelper"
-	"github.com/hydraide/hydraide/docs/sdk/go/examples/models/utils/repo"
 	"github.com/hydraide/hydraide/sdk/go/hydraidego/name"
+	"github.com/hydraide/hydraide/sdk/go/hydraidego/utils/hydraidehelper"
+	"github.com/hydraide/hydraide/sdk/go/hydraidego/utils/repo"
 )
 
 // CatalogModelBasicsDeregisterSwamp demonstrates how to remove a Swamp pattern

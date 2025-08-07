@@ -5,7 +5,7 @@ Thanks for your interest in the **HydrAIDE C# SDK**!
 This SDK is not yet available, but we’re actively working on it.  
 If you’d like to use HydrAIDE in your C#-based project, let us know!
 
-📩 Contact: [peter.gebri@trendizz.com](mailto:peter.gebri@trendizz.com) - Founder of HydrAIDE & Trendizz      
+📩 Contact: [peter.gebri@hydraide.io](mailto:peter.gebri@hydraide.io) - Founder of HydrAIDE & Trendizz      
 📬 Or open an [issue](https://github.com/hydraide/hydraide/issues) to show your interest.
 
 We appreciate your patience and enthusiasm! 🙏

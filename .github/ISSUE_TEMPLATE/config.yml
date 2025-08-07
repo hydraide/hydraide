@@ -1,1 +1,8 @@
 blank_issues_enabled: false
+contact_links:
+  - name: "👋 Want to contribute to HydrAIDE?"
+    url: https://github.com/hydraide/hydraide/blob/main/CONTRIBUTORS.md
+    about: Start here if you're new - apply to become a contributor and learn how the system works.
+  - name: "🛠 Active Contributor Guidelines"
+    url: https://github.com/hydraide/hydraide/blob/main/CONTRIBUTING.md
+    about: Already part of the team? Learn how we work triage, labels, review cycles and code expectations.

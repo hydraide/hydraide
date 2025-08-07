@@ -1,7 +1,10 @@
 name: Feature Request
 description: Propose a new idea, improvement or SDK feature
 title: "Feature: <what would you love to see?>"
-labels: [enhancement]
+labels:
+  - "triage:new"
+  - "type:enhancement"
+  - "priority:normal"
 body:
   - type: markdown
     attributes:

@@ -1,14 +1,12 @@
-//go:build ignore
-// +build ignore
-
 package models
 
 import (
 	"fmt"
-	"github.com/hydraide/hydraide/docs/sdk/go/examples/models/utils/hydraidehelper"
-	"github.com/hydraide/hydraide/docs/sdk/go/examples/models/utils/repo"
 	"log/slog"
 	"time"
+
+	"github.com/hydraide/hydraide/sdk/go/hydraidego/utils/hydraidehelper"
+	"github.com/hydraide/hydraide/sdk/go/hydraidego/utils/repo"
 )
 
 // BasicsLock demonstrates how to safely update a shared logical resource

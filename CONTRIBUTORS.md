@@ -51,7 +51,7 @@ Check the [pinned issues](https://github.com/hydraide/hydraide/issues) for curre
 
 ## How to Start
 
-1. Open an issue titled: `Contributor Application`
+1. Open an issue titled: [Contributor Application](https://github.com/hydraide/hydraide/issues/new?template=contributor-application.yml)
 2. Include:
     - Your GitHub handle
     - Preferred language(s)
@@ -80,7 +80,7 @@ You may use tools like ChatGPT to accelerate work, but code quality and architec
 
 ## Contact
 
-Use GitHub issues to ask questions, or apply via `Contributor Application`.
+Use GitHub issues to ask questions, or apply via [Contributor Application](https://github.com/hydraide/hydraide/issues/new?template=contributor-application.yml).
 
 ---
 

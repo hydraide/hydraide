@@ -6,12 +6,47 @@ import (
 	"testing"
 )
 
+func TestFolderDistribution(t *testing.T) {
+	const (
+		totalItems       = 1000000
+		totalServers     = 1000
+		allowedDeviation = 0.2 // 10%
+	)
+
+	// Map of server slot → count
+	distribution := make(map[uint16]int)
+
+	for i := 0; i < totalItems; i++ {
+		n := New().
+			Sanctuary("test").
+			Realm("bucket").
+			Swamp(fmt.Sprintf("swamp-%d", i))
+
+		server := n.GetFolderNumber(totalServers)
+		distribution[server]++
+	}
+
+	expectedPerServer := float64(totalItems) / float64(totalServers)
+	minAllowed := expectedPerServer * (1 - allowedDeviation)
+	maxAllowed := expectedPerServer * (1 + allowedDeviation)
+
+	// Check each slot
+	for server, count := range distribution {
+		if float64(count) < minAllowed || float64(count) > maxAllowed {
+			t.Errorf("Server %d has %d items, expected %.0f ± %.0f (%.1f%% tolerance)",
+				server, count, expectedPerServer, expectedPerServer*allowedDeviation, allowedDeviation*100)
+		}
+	}
+
+	t.Logf("✅ Distribution test passed with %d items over %d servers", totalItems, totalServers)
+}
+
 func TestGetFullHashPath(t *testing.T) {
 
 	// Parameters for the test
 	rootPath := "/hydraide/data"
-	depth := 2
-	maxFoldersPerLevel := 10000
+	depth := 1
+	maxFoldersPerLevel := 1000
 
 	// First Name instance
 	name1 := New().

@@ -1,0 +1,73 @@
+name: PR Title Labeler
+
+permissions:
+  issues: write
+  pull-requests: write
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+jobs:
+  label-by-title:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Label PR based on title prefix
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const title = pr.title.toLowerCase();
+            const labelsToAdd = [];
+
+            if (title.startsWith('fix:')) {
+              labelsToAdd.push('type:bug');
+            } else if (title.startsWith('feat:') || title.startsWith('feature:')) {
+              labelsToAdd.push('type:enhancement');
+            } else if (title.startsWith('docs:')) {
+              labelsToAdd.push('type:docs');
+            } else if (title.startsWith('refactor:')) {
+              labelsToAdd.push('type:refactor');
+            } else if (title.startsWith('chore:')) {
+              labelsToAdd.push('type:chore');
+            }
+
+            if (labelsToAdd.length > 0) {
+              await github.rest.issues.addLabels({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                labels: labelsToAdd
+              });
+            } else {
+              // Check if warning comment already exists
+              const { data: comments } = await github.rest.issues.listComments({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo
+              });
+
+              const alreadyCommented = comments.some(comment =>
+                comment.body && comment.body.includes("🚨 **PR Title Lacks Prefix**")
+              );
+
+              if (!alreadyCommented) {
+                const warningComment =
+                  "🚨 **PR Title Lacks Prefix**\n\n" +
+                  "Please use a [semantic prefix](https://www.conventionalcommits.org/en/v1.0.0/) in your PR title such as:\n\n" +
+                  "- `fix:` for bugs\n" +
+                  "- `feat:` for features\n" +
+                  "- `docs:` for documentation\n" +
+                  "- `refactor:` for code improvements\n" +
+                  "- `chore:` for maintenance tasks\n\n" +
+                  "_Example: `fix: handle nil pointer panic`_\n\n" +
+                  "This helps us automatically classify your pull request. Thanks! 🙌";
+
+                await github.rest.issues.createComment({
+                  issue_number: context.issue.number,
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  body: warningComment
+                });
+              }
+            }
