@@ -83,7 +83,7 @@ var initCmd = &cobra.Command{
 		fmt.Println("🌐 TLS Certificate Setup")
 		fmt.Println("🔖 Common Name (CN) is the main name assigned to the certificate.")
 		fmt.Println("It usually identifies your company or internal system.")
-		fmt.Print("CN (e.g. yourcompany, api.hydraide.local) (default: hydraide): ")
+		fmt.Print("CN (e.g. yourcompany, api.hydraide.local) [default: hydraide]: ")
 		cnInput, _ := reader.ReadString('\n')
 		cert.CN = strings.TrimSpace(cnInput)
 		if cert.CN == "" {
@@ -101,7 +101,7 @@ var initCmd = &cobra.Command{
 		fmt.Println("Now, list any other IP addresses where clients will access the HydrAIDE server.")
 		fmt.Println("For example, if the HydrAIDE container is reachable at 192.168.106.100:4900, include that IP.")
 		fmt.Println("These IPs must match the address used in the TLS connection, or it will fail.")
-		fmt.Print("Do you want to add other IPs besides 127.0.0.1? (y/n): ")
+		fmt.Print("Do you want to add other IPs besides 127.0.0.1? (y/n) [default: n]: ")
 
 		ans, _ := reader.ReadString('\n')
 		if strings.ToLower(strings.TrimSpace(ans)) == "y" {
@@ -119,7 +119,7 @@ var initCmd = &cobra.Command{
 		fmt.Println("\n🌐 Will clients connect via a domain name (FQDN)?")
 		fmt.Println("This includes public domains (e.g. api.example.com) or internal DNS (e.g. hydraide.lan).")
 		fmt.Println("To ensure secure TLS connections, you must list any domains that clients will use.")
-		fmt.Print("Add domain names to the certificate? (y/n): ")
+		fmt.Print("Add domain names to the certificate? (y/n) [default: n]: ")
 		ans, _ = reader.ReadString('\n')
 		if strings.ToLower(strings.TrimSpace(ans)) == "y" {
 			fmt.Print("Enter domain names (comma-separated, e.g. api.example.com,hydraide.local): ")
@@ -139,7 +139,7 @@ var initCmd = &cobra.Command{
 
 		// Port validation loop for main port
 		for {
-			fmt.Print("Which port should HydrAIDE listen on? (default: 4900): ")
+			fmt.Print("Which port should HydrAIDE listen on? [default: 4900]: ")
 			portInput, _ := reader.ReadString('\n')
 			portInput = strings.TrimSpace(portInput)
 
@@ -266,7 +266,7 @@ var initCmd = &cobra.Command{
 
 		// CLOSE_AFTER_IDLE
 		fmt.Println("⏱️ Auto-Close Idle Swamps")
-		fmt.Println("   Time in seconds before idle Swamps are automatically closed")
+		fmt.Println("   Time in seconds before idle Swamps are automatically closed. Between 10 sec and 3600 sec.")
 		fmt.Print("Idle timeout [default: 10]: ")
 		idleInput, _ := reader.ReadString('\n')
 		idleInput = strings.TrimSpace(idleInput)
@@ -274,7 +274,15 @@ var initCmd = &cobra.Command{
 			envCfg.CloseAfterIdle = 10
 		} else {
 			if idle, err := strconv.Atoi(idleInput); err == nil {
+
 				envCfg.CloseAfterIdle = idle
+				if envCfg.CloseAfterIdle < 10 || envCfg.CloseAfterIdle > 3600 {
+					fmt.Printf("⚠️ Idle timeout must be between 10 and 3600 seconds. Using default 10s.\n")
+					envCfg.CloseAfterIdle = 10
+				} else {
+					fmt.Printf("✅ Idle timeout set to %d seconds.\n", envCfg.CloseAfterIdle)
+				}
+
 			} else {
 				fmt.Printf("⚠️ Invalid number, using default 10s. Error: %v\n", err)
 				envCfg.CloseAfterIdle = 10
@@ -302,7 +310,7 @@ var initCmd = &cobra.Command{
 		fmt.Println("\n📦 Storage Fragment Size")
 		fmt.Println("   Controls the size of storage fragments for Swamp data")
 		fmt.Println("   Accepts human-readable format: 8KB, 64KB, 1MB, 512MB, 1GB")
-		fmt.Println("   Range: 8KB to 1GB (default: 8KB)")
+		fmt.Println("   Range: 8KB to 1GB [default: 8KB]")
 
 		// Fragment size validation loop
 		for {
@@ -381,7 +389,7 @@ var initCmd = &cobra.Command{
 		fmt.Println("  • Base Path:  ", envCfg.HydraideBasePath)
 
 		// Confirmation
-		fmt.Print("\n✅ Proceed with installation? (y/n): ")
+		fmt.Print("\n✅ Proceed with installation? (y/n) [default: n]: ")
 		confirm, _ := reader.ReadString('\n')
 		confirm = strings.ToLower(strings.TrimSpace(confirm))
 		if confirm != "y" && confirm != "yes" {
@@ -590,11 +598,17 @@ var initCmd = &cobra.Command{
 					progressbar.OptionShowBytes(true),
 				)
 			}
-			bar.Set64(downloaded)
+			if err := bar.Set64(downloaded); err != nil {
+				fmt.Printf("❌ Error updating progress bar: %v\n", err)
+				return
+			}
 		}
 
 		serverDownloaderObject.SetProgressCallback(progressFn)
-		serverDownloaderObject.DownloadHydraServer("latest", envCfg.HydraideBasePath)
+		if err := serverDownloaderObject.DownloadHydraServer("latest", envCfg.HydraideBasePath); err != nil {
+			fmt.Printf("❌ Failed to download HydrAIDE server binary: %v\n", err)
+			os.Exit(1)
+		}
 
 		fmt.Println("\n✅ HydrAIDE server binary downloaded successfully.")
 
