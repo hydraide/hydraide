@@ -57,7 +57,7 @@ Check the [pinned issues](https://github.com/hydraide/hydraide/issues) for curre
     - Preferred language(s)
     - Link to work or projects (if any)
     - What you'd like to help with
-3. Join the Discord community: [discord.gg/aBfAuYjR](https://discord.gg/aBfAuYjR)
+3. Join the Discord community: [https://discord.gg/xE2YSkzFRm](https://discord.gg/xE2YSkzFRm)
 4. Wait for access + onboarding (usually <48h)
 5. Pick an issue or ask for one
 6. Submit a PR → We review, merge, and credit you

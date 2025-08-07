@@ -13,7 +13,7 @@ import (
 	buildmeta "github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/buildmetadata"
 	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/certificate"
 	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/downloader"
-	filesystem "github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/filesystem"
+	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/filesystem"
 	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/validator"
 	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"

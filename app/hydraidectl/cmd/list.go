@@ -10,7 +10,7 @@ import (
 )
 
 var listCmd = &cobra.Command{
-	Use:   "list-instances",
+	Use:   "list",
 	Short: "List all installed HydrAIDE instances and their status",
 	Long: `Detects and lists all HydrAIDE instances registered as OS-level services.
 		The command scans for services named 'hydraserver-<instance-name>' and reports

@@ -16,7 +16,7 @@ var stopInstance string
 
 var stopCmd = &cobra.Command{
 	Use:   "stop",
-	Short: "Stop the hydrAIDE instance",
+	Short: "Stop the HydrAIDE instance",
 	Run: func(cmd *cobra.Command, args []string) {
 
 		if os.Geteuid() != 0 {
@@ -86,5 +86,8 @@ func init() {
 	rootCmd.AddCommand(stopCmd)
 
 	stopCmd.Flags().StringVarP(&stopInstance, "instance", "i", "", "Name of the service instance")
-	stopCmd.MarkFlagRequired("instance")
+	if err := stopCmd.MarkFlagRequired("instance"); err != nil {
+		fmt.Println("Error marking 'instance' flag as required:", err)
+		os.Exit(1)
+	}
 }
