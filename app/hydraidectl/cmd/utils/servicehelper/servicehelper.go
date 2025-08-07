@@ -38,7 +38,7 @@ const (
 // serviceManagerImpl implements the ServiceManager interface for different platforms.
 type serviceManagerImpl struct{}
 
-// NewServiceManager creates a new instance of ServiceManager.
+// New creates a new instance of ServiceManager.
 func New() ServiceManager {
 	return &serviceManagerImpl{}
 }
