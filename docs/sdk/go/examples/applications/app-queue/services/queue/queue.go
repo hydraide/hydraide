@@ -81,12 +81,13 @@ package queue
 
 import (
 	"encoding/json"
-	"github.com/google/uuid"
-	"github.com/hydraide/hydraide/docs/sdk/go/examples/applications/app-queue/utils/panichandler"
-	"github.com/hydraide/hydraide/docs/sdk/go/examples/applications/app-queue/utils/repo"
 	"log/slog"
 	"reflect"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/hydraide/hydraide/sdk/go/hydraidego/utils/panichandler"
+	"github.com/hydraide/hydraide/sdk/go/hydraidego/utils/repo"
 )
 
 // QueueService – HydrAIDE-based delayed task queue interface.

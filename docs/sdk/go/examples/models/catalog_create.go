@@ -1,14 +1,12 @@
-//go:build ignore
-// +build ignore
-
 package models
 
 import (
-	"github.com/hydraide/hydraide/docs/sdk/go/examples/models/utils/hydraidehelper"
-	"github.com/hydraide/hydraide/docs/sdk/go/examples/models/utils/repo"
+	"time"
+
 	"github.com/hydraide/hydraide/sdk/go/hydraidego"
 	"github.com/hydraide/hydraide/sdk/go/hydraidego/name"
-	"time"
+	"github.com/hydraide/hydraide/sdk/go/hydraidego/utils/hydraidehelper"
+	"github.com/hydraide/hydraide/sdk/go/hydraidego/utils/repo"
 )
 
 // CatalogModelUserCreateExample demonstrates how to insert a new user ID into

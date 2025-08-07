@@ -6,10 +6,11 @@ package hydraidehelper
 import (
 	"context"
 	"errors"
-	"github.com/hydraide/hydraide/docs/sdk/go/examples/applications/app-queue/utils/repo"
 	"log/slog"
 	"strings"
 	"time"
+
+	"github.com/hydraide/hydraide/sdk/go/hydraidego/utils/repo"
 )
 
 // CreateHydraContext creates a context with a 5-second timeout.
@@ -41,7 +42,7 @@ func Lock(r repo.Repo, lockName string, ttl time.Duration) (lockID string) {
 	defer cancelFunc()
 	lockID, err := r.GetHydraidego().Lock(ctx, lockName, ttl)
 	if err != nil {
-		slog.Error("failed to create hydra lock", "err", err.Error(), "lockName", lockName)
+		slog.Error("failed to create hydra lock", "err", err.Error(), lockName, lockName)
 		return ""
 	}
 	return lockID

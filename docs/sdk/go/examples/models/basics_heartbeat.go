@@ -1,12 +1,10 @@
-//go:build ignore
-// +build ignore
-
 package models
 
 import (
-	"github.com/hydraide/hydraide/docs/sdk/go/examples/models/utils/hydraidehelper"
-	"github.com/hydraide/hydraide/docs/sdk/go/examples/models/utils/repo"
 	"log/slog"
+
+	"github.com/hydraide/hydraide/sdk/go/hydraidego/utils/hydraidehelper"
+	"github.com/hydraide/hydraide/sdk/go/hydraidego/utils/repo"
 )
 
 // CheckHydrAIDEServers performs a manual heartbeat check against all registered HydrAIDE servers.
