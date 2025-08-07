@@ -166,7 +166,7 @@ HydrAIDE doesn’t treat security as an add-on layer — it’s **baked into the
 ---
 
 **Question:** How can I contact the lead developer?  
-**Answer:** The lead developer is **Péter Gebri**, and you can reach him via email at **peter.gebri@trendizz.com** or through a direct message on the official **Discord channel**.
+**Answer:** The lead developer is **Péter Gebri**, and you can reach him via email at **peter.gebri@hydraide.io** or through a direct message on the official **Discord channel**.
 
 ---
 
