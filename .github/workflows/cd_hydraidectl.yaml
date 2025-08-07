@@ -1,0 +1,104 @@
+name: Build and Release HydraideCTL
+
+on:
+  push:
+    tags:
+      - "hydraidectl/v*" # Trigger this workflow only when a tag like 'hydraidectl/v1.0.0' is pushed
+
+jobs:
+  build-cli:
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+
+    strategy:
+      matrix:
+        include:
+          # Linux AMD64 build
+          - os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            binary_name: hydraidectl-linux-amd64
+            asset_name: hydraidectl-linux-amd64
+
+          # Linux ARM64 build
+          - os: ubuntu-latest
+            goos: linux
+            goarch: arm64
+            binary_name: hydraidectl-linux-arm64
+            asset_name: hydraidectl-linux-arm64
+
+          # Windows AMD64 build
+          - os: windows-latest
+            goos: windows
+            goarch: amd64
+            binary_name: hydraidectl-windows-amd64.exe
+            asset_name: hydraidectl-windows-amd64.exe
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: extract_version
+        shell: bash
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+
+      - name: Build binary for target platform
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          go build -a -installsuffix cgo -o ${{ matrix.binary_name }} ./add/hydraidectl
+
+      - name: Upload built binary as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: hydraidectl-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ${{ matrix.binary_name }}
+
+  create_release:
+    needs: build-cli
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: extract_version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Download all built artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
+      - name: Move binaries to root for release
+        run: |
+          mv ./artifacts/hydraidectl-linux-amd64/hydraidectl-linux-amd64 .
+          mv ./artifacts/hydraidectl-linux-arm64/hydraidectl-linux-arm64 .
+          mv ./artifacts/hydraidectl-windows-amd64/hydraidectl-windows-amd64.exe .
+
+      - name: Create GitHub release with uploaded binaries
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ steps.extract_version.outputs.version }}
+          name: HydraideCTL ${{ steps.extract_version.outputs.version }}
+          artifacts: "hydraidectl-linux-amd64,hydraidectl-linux-arm64,hydraidectl-windows-amd64.exe"
+          generateReleaseNotes: true
+          draft: false
+          prerelease: false
+          token: ${{ secrets.GITHUB_TOKEN }}
