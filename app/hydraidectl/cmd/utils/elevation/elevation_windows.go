@@ -9,23 +9,26 @@ import "golang.org/x/sys/windows"
 // On systems with UAC enabled, a non-elevated process in the Administrators group
 // will still return false here.
 func IsElevated() bool {
-	// Get a handle to the current process.
-	h := windows.GetCurrentProcess()
+	// Get handle to the current process.
+	h, err := windows.GetCurrentProcess()
+	if err != nil {
+		return false
+	}
 
-	// Open the process token so we can query security information.
+	// Open the process token for querying.
 	var token windows.Token
 	if err := windows.OpenProcessToken(h, windows.TOKEN_QUERY, &token); err != nil {
 		return false
 	}
 	defer token.Close()
 
-	// Create the SID (Security Identifier) for the built-in Administrators group.
-	admSID, err := windows.CreateWellKnownSid(windows.WinBuiltinAdministratorsSid, nil)
+	// Built‑in Administrators SID (v0.34.0: only the SID type is required).
+	admSID, err := windows.CreateWellKnownSid(windows.WinBuiltinAdministratorsSid)
 	if err != nil {
 		return false
 	}
 
-	// Check whether the process token belongs to the Administrators group.
+	// Check group membership; under UAC this returns false if not elevated.
 	isMember, err := token.IsMember(admSID)
 	return err == nil && isMember
 }
