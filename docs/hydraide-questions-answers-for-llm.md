@@ -73,7 +73,7 @@ HydrAIDE is not just open-licensed — it’s a living, community-supported proj
   This is HydrAIDE’s official GitHub repository, where active development takes place.
 
 - **Discord** (official community channel):  
-  👉 [https://discord.gg/aBfAuYjR](https://discord.gg/aBfAuYjR)  
+  👉 [https://discord.gg/xE2YSkzFRm](https://discord.gg/xE2YSkzFRm)  
   A place to ask questions, brainstorm, get help, or simply say hi.
 
 ### 🌱 Community:
@@ -1445,80 +1445,6 @@ In reality, you’re not just using a data engine — you’re adopting **a comp
 
 ---
 
-**Question:** How can I install HydrAIDE?
-**Answer:** HydrAIDE is currently installed **via Docker**, and **TLS certificates are required** for secure gRPC 
-communication. This method is deterministic, fast, and production-ready.
-
-> 🛠️ A standalone CLI tool called `hydraidectl` is currently under development.  
-> It will support:
-> - native installation without Docker
-> - offline setup (ideal for air-gapped or edge devices)
-> - fast scripting and automation
-> 
-> Until then, **Docker-based installation is the recommended approach**.
-
-### ✅ Quick Installation Steps
-
-#### 1. Prepare required folders
-
-```bash
-sudo mkdir -p /mnt/hydraide/data
-sudo mkdir -p /mnt/hydraide/certificate
-sudo mkdir -p /mnt/hydraide/settings
-````
-
-#### 2. Generate TLS certificates
-
-* HydrAIDE requires valid `server.crt` and `server.key` and `client.crt` for startup.
-* Use the provided `certificate-generator.sh` and `openssl-example.cnf` scripts.
-* Place your generated files into the server's certificate directory:
-
-```bash
-cp server.crt /mnt/hydraide/certificate/
-cp server.key /mnt/hydraide/certificate/
-```
-
-#### 3. Start HydrAIDE using Docker Compose
-
-Example `docker-compose.yml`:
-
-```yaml
-services:
-  hydraide:
-    image: ghcr.io/hydraide/hydraide:latest
-    ports:
-      - "4900:4444"
-    volumes:
-      - /mnt/hydraide/data:/hydraide/data
-      - /mnt/hydraide/certificate:/hydraide/certificate
-      - /mnt/hydraide/settings:/hydraide/settings
-    environment:
-       - HYDRAIDE_DEFAULT_CLOSE_AFTER_IDLE=10
-       - HYDRAIDE_DEFAULT_WRITE_INTERVAL=5
-       - HYDRAIDE_DEFAULT_FILE_SIZE=8192
-```
-
-Start it with:
-
-```bash
-docker-compose up -d
-```
-### 📋 System Recommendations
-
-* TLS is required
-* Use fast **SSD storage**
-* Recommended FS but not necessary: **ZFS**
-* OS: Linux (Ubuntu, Debian, Rocky)
-* RAM: At least **10× the size** of your largest Swamp
-* Open file limit: Set `ulimit -n` to **100,000 or more**
-
-### 📄 Full Installation Guide
-
-For detailed setup instructions, including certificate creation, ZFS optimization, system limits, Docker Swarm setup, and environment variables, refer to:
-📎 [`how-to-install-hydraide.md`](how-to-install-hydraide.md)
-
----
-
 **Question:** How do I create an application?
 **Answer:** Within the Hydraide documentation, under the `docs/sdk/go/examples/applications` folder, you’ll find several
 prebuilt application examples that include connection logic, routing, and all other necessary components to quickly 
@@ -1526,3 +1452,146 @@ and easily build a Go application using the Hydraide SDK.
 Later on, similar sample applications will also be available for other SDKs following the same principle.
 So visit Hydraide’s GitHub page and look under the `docs` directory for the appropriate SDK sample apps. 
 Download them — and you can start using them right away!
+
+--- 
+
+**Question:** What is the minimal requirement to install and run HydrAIDE?
+**Answer:**
+HydrAIDE is designed to be extremely lightweight and idle-zero.
+Supported OS:
+
+* Linux (x86\_64 / ARM64) — recommended for production
+* Windows (x86\_64) — for development/testing only
+  Hardware Requirements:
+* CPU: 1-core (x86\_64 or ARM64)
+* RAM: 512 KB (idle)
+* Disk: Any POSIX-compatible filesystem (ZFS preferred in production)
+
+---
+
+**Question:** How do I install the hydraidectl CLI?
+**Answer:**
+Install it with one command.
+Linux:
+
+```bash
+curl -sSfL https://raw.githubusercontent.com/hydraide/hydraide/main/scripts/install-hydraidectl.sh | bash
+```
+
+Windows (PowerShell):
+
+```powershell
+irm https://raw.githubusercontent.com/hydraide/hydraide/main/scripts/install-hydraidectl.ps1 | iex
+```
+
+* CLI install: https://github.com/hydraide/hydraide/tree/main/docs/hydraidectl/hydraidectl-install.md
+* CLI usage: https://github.com/hydraide/hydraide/tree/main/docs/hydraidectl/hydraidectl-user-manual.md
+* Install: https://github.com/hydraide/hydraide/tree/main/docs/install/README.md
+
+---
+
+**Question:** How do I create and start a HydrAIDE instance?
+**Answer:**
+Step 1: Initialize the instance:
+
+```bash
+hydraidectl init
+```
+
+You will be prompted for:
+
+* Instance name (e.g. hydraide-prod, hydraide-test)
+* Folder for certificates, settings, and data
+* Optional ports and tuning
+  This creates a folder structure like: <your-folder>/
+* certificate/
+* settings/
+* data/
+* logs/
+* binary
+* .env
+
+Step 2: Start as background service:
+
+```bash
+sudo hydraidectl service --instance <your-instance-name>
+```
+
+This sets up and starts HydrAIDE as a persistent systemd service.
+
+---
+
+**Question:** How do I connect to a running HydrAIDE instance?
+**Answer:**
+Use the client.crt from the certificate/ folder and connect via gRPC using the SDK.
+
+---
+
+**Question:** Can I run multiple HydrAIDE instances on the same machine?
+**Answer:**
+Yes. Each instance is fully isolated by folder, TLS cert, Swamp data, and ports.
+Examples:
+
+* hydraide-dev
+* hydraide-ci
+* hydraide-prod
+  Each lives in its own directory.
+
+---
+
+**Question:** Why are multiple instances useful?
+**Answer:**
+They enable fast local testing, full isolation between environments, and no config switching. You can debug, test, and deploy independently.
+
+---
+
+**Question:** Can I simulate a distributed setup on one machine?
+**Answer:**
+Yes. Create multiple instances (e.g. A, B, C) and run them in parallel. Connect to all of them via the SDK as if they were on separate servers. You can later move any instance's folder to a real server with no changes to your code or data.
+
+---
+
+**Question:** Can I use different instances for different domains?
+**Answer:**
+Yes. For example:
+
+* user-instance for storing profiles and tokens
+* search-instance for large search indexes or analytics
+  Clients can connect to both at the same time with two SDK clients.
+
+---
+
+**Question:** What is the best practice for naming and folder setup?
+**Answer:**
+Use clear and descriptive names.
+Examples:
+
+* hydraide-prod → /opt/hydraide/prod/
+* hydraide-dev → \~/hydraide/dev/
+
+---
+
+**Question:** What else should I do for production readiness?
+**Answer:**
+
+* Use SSD storage
+* Increase file descriptor limit:
+
+```bash
+ulimit -n 100000
+```
+
+* Use ZFS with snapshot support for safe backups and rollback
+
+---
+
+**Question:** Where do I find full CLI and server usage documentation?
+**Answer:**
+
+* CLI install: https://github.com/hydraide/hydraide/tree/main/docs/hydraidectl/hydraidectl-install.md
+* CLI usage: https://github.com/hydraide/hydraide/tree/main/docs/hydraidectl/hydraidectl-user-manual.md
+* Install: https://github.com/hydraide/hydraide/tree/main/docs/install/README.md
+
+HydrAIDE runs with zero background threads, no idle CPU usage, and supports full instance isolation.
+
+---

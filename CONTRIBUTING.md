@@ -35,7 +35,7 @@ or refining CLI behavior, your contribution matters.
 If you're new to HydrAIDE, feel free to:
 
 - Start with a [Contributor Application](https://github.com/hydraide/hydraide/issues/new?template=contributor-application.yml) issue
-- Ask for guidance on Discord: [discord.gg/aBfAuYjR](https://discord.gg/aBfAuYjR)
+- Ask for guidance on Discord: [https://discord.gg/xE2YSkzFRm](https://discord.gg/xE2YSkzFRm)
 - Explore the [HydrAIDE Knowledge Engine](https://chatgpt.com/g/g-688779751c988191b975beaf7f68801d-hydraide-knowledge-engine) to better understand the system
 
 ---

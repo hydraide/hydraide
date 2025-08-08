@@ -1,13 +1,14 @@
 package main
 
 import (
-	"github.com/hydraide/hydraide/docs/sdk/go/examples/applications/app-queue/appserver"
-	"github.com/hydraide/hydraide/docs/sdk/go/examples/applications/app-queue/utils/repo"
-	"github.com/hydraide/hydraide/sdk/go/hydraidego/client"
 	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
+
+	"github.com/hydraide/hydraide/docs/sdk/go/examples/applications/app-queue/appserver"
+	"github.com/hydraide/hydraide/sdk/go/hydraidego/client"
+	"github.com/hydraide/hydraide/sdk/go/hydraidego/utils/repo"
 )
 
 var (

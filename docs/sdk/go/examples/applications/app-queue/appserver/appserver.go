@@ -2,10 +2,11 @@ package appserver
 
 import (
 	"fmt"
-	"github.com/hydraide/hydraide/docs/sdk/go/examples/applications/app-queue/services/queue"
-	"github.com/hydraide/hydraide/docs/sdk/go/examples/applications/app-queue/utils/repo"
 	"log/slog"
 	"time"
+
+	"github.com/hydraide/hydraide/docs/sdk/go/examples/applications/app-queue/services/queue"
+	"github.com/hydraide/hydraide/sdk/go/hydraidego/utils/repo"
 )
 
 // AppServer defines the core interface for starting and stopping the demo application.
