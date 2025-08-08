@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -79,8 +80,10 @@ type Asset struct {
 // - Assets: List of assets (files) attached to the release.
 // Used to select the correct binary and checksum for a given version.
 type GitHubRelease struct {
-	TagName string  `json:"tag_name"`
-	Assets  []Asset `json:"assets"`
+	TagName    string  `json:"tag_name"`
+	Assets     []Asset `json:"assets"`
+	Draft      bool    `json:"draft"`
+	Prerelease bool    `json:"prerelease"`
 }
 
 // DefaultDownloader is the main implementation of the BinaryDownloader interface.
@@ -256,7 +259,10 @@ func (d *DefaultDownloader) DownloadHydraServer(version string, basePath string)
 		logger.Info("Verifying checksum for downloaded binary")
 		if err := d.verifyChecksum(cacheFile, binaryAsset.Digest); err != nil {
 			logger.Error("Checksum verification failed", "error", err)
-			os.Remove(cacheFile)
+			if err := os.Remove(cacheFile); err != nil {
+				logger.Error("Failed to remove invalid cached binary", "file", cacheFile, "error", err)
+				return fmt.Errorf("failed to remove invalid cached binary: %w", err)
+			}
 			return fmt.Errorf("checksum verification failed: %w", err)
 		}
 		logger.Info("Checksum verified successfully")
@@ -264,6 +270,57 @@ func (d *DefaultDownloader) DownloadHydraServer(version string, basePath string)
 
 	logger.Info("Installing hydraserver binary", "target_dir", basePath)
 	return d.installFromCache(cacheFile, basePath, binaryName)
+}
+
+func (d *DefaultDownloader) githubGET(url string) (*http.Response, error) {
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	return d.httpClient.Do(req)
+}
+
+func (d *DefaultDownloader) GetLatestVersionByPrefix(prefix string) (string, error) {
+	// GitHub a legújabbaktól listáz, ezért elég az első 100-at megnézni
+	githubUrl := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases?per_page=100", OWNER, REPO)
+
+	resp, err := d.githubGET(githubUrl)
+	if err != nil {
+		logger.Error("Failed to fetch releases list", "error", err)
+		return "", fmt.Errorf("failed to fetch releases list: %w", err)
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			logger.Error("Failed to close response body", "error", err)
+		}
+	}()
+
+	if resp.StatusCode != http.StatusOK {
+		logger.Error("GitHub API returned error status when listing releases", "status", resp.StatusCode)
+		return "", fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
+	}
+
+	var releases []GitHubRelease
+	if err := json.NewDecoder(resp.Body).Decode(&releases); err != nil {
+		logger.Error("Failed to decode releases list", "error", err)
+		return "", fmt.Errorf("failed to decode releases list: %w", err)
+	}
+
+	for _, r := range releases {
+		if r.Draft || r.Prerelease {
+			continue
+		}
+		if strings.HasPrefix(r.TagName, prefix) {
+			logger.Info("Fetched latest version by prefix", "prefix", prefix, "version", r.TagName)
+			return r.TagName, nil
+		}
+	}
+
+	return "", fmt.Errorf("no release found with prefix %q", prefix)
 }
 
 // GetLatestVersion returns the latest available version tag from the hydraide GitHub repository.
@@ -282,28 +339,8 @@ func (d *DefaultDownloader) DownloadHydraServer(version string, basePath string)
 //	}
 //	fmt.Println("Latest version:", latest)
 func (d *DefaultDownloader) GetLatestVersion() (string, error) {
-	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest", OWNER, REPO)
-
-	resp, err := d.httpClient.Get(url)
-	if err != nil {
-		logger.Error("Failed to fetch latest hydraserver release", "error", err)
-		return "", fmt.Errorf("failed to fetch latest release: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		logger.Error("GitHub API returned error status when fetching latest release", "status", resp.StatusCode)
-		return "", fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
-	}
-
-	var release GitHubRelease
-	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
-		logger.Error("Failed to decode latest release response", "error", err)
-		return "", fmt.Errorf("failed to decode release response: %w", err)
-	}
-
-	logger.Info("Fetched latest hydraserver version", "version", release.TagName)
-	return release.TagName, nil
+	// Backward-compatible default: server
+	return d.GetLatestVersionByPrefix("server/")
 }
 
 // getReleaseByTag fetches release information for a specific version tag from the hydraide GitHub repository.
@@ -322,14 +359,18 @@ func (d *DefaultDownloader) GetLatestVersion() (string, error) {
 //	}
 //	fmt.Println("Assets:", release.Assets)
 func (d *DefaultDownloader) getReleaseByTag(tag string) (*GitHubRelease, error) {
-	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/tags/%s", OWNER, REPO, tag)
+	githubUrl := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/tags/%s", OWNER, REPO, url.PathEscape(tag))
 
-	resp, err := d.httpClient.Get(url)
+	resp, err := d.httpClient.Get(githubUrl)
 	if err != nil {
 		logger.Error("Failed to fetch hydraserver release by tag", "tag", tag, "error", err)
 		return nil, fmt.Errorf("failed to fetch release %s: %w", tag, err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			logger.Error("Failed to close response body", "tag", tag, "error", err)
+		}
+	}()
 
 	if resp.StatusCode == http.StatusNotFound {
 		logger.Error("Hydraserver release not found for tag", "tag", tag)
@@ -434,7 +475,11 @@ func (d *DefaultDownloader) downloadFile(url, destination string, expectedSize i
 		logger.Error("Failed to start download", "url", url, "error", err)
 		return fmt.Errorf("failed to start download: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			logger.Error("Failed to close response body", "url", url, "error", err)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		logger.Error("Download failed with HTTP error", "url", url, "status", resp.StatusCode)
@@ -446,7 +491,11 @@ func (d *DefaultDownloader) downloadFile(url, destination string, expectedSize i
 		logger.Error("Failed to create file for download", "file", destination, "error", err)
 		return fmt.Errorf("failed to create file: %w", err)
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			logger.Error("Failed to close downloaded file", "file", destination, "error", err)
+		}
+	}()
 
 	// Create progress reader if callback is set
 	var reader io.Reader = resp.Body
@@ -461,7 +510,10 @@ func (d *DefaultDownloader) downloadFile(url, destination string, expectedSize i
 	_, err = io.Copy(file, reader)
 	if err != nil {
 		logger.Error("Failed to write downloaded file", "file", destination, "error", err)
-		os.Remove(destination) // Clean up on error
+		if err := os.Remove(destination); err != nil {
+			logger.Error("Failed to remove invalid downloaded file", "file", destination, "error", err)
+			return fmt.Errorf("failed to remove invalid file: %w", err)
+		}
 		return fmt.Errorf("failed to write file: %w", err)
 	}
 
@@ -476,7 +528,11 @@ func (d *DefaultDownloader) downloadChecksum(url string) (string, error) {
 		logger.Error("Failed to download checksum", "url", url, "error", err)
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			logger.Error("Failed to close checksum response body", "url", url, "error", err)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		logger.Error("Checksum download failed with HTTP error", "url", url, "status", resp.StatusCode)
@@ -506,7 +562,11 @@ func (d *DefaultDownloader) verifyChecksum(filename, expected string) error {
 		logger.Error("Failed to open file for checksum verification", "file", filename, "error", err)
 		return err
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			logger.Error("Failed to close file after checksum verification", "file", filename, "error", err)
+		}
+	}()
 
 	hasher := sha256.New()
 	if _, err := io.Copy(hasher, file); err != nil {
@@ -535,7 +595,11 @@ func (d *DefaultDownloader) installFromCache(cacheFile, basePath, binaryName str
 		logger.Error("Failed to open cached binary for installation", "file", cacheFile, "error", err)
 		return fmt.Errorf("failed to open cache file: %w", err)
 	}
-	defer src.Close()
+	defer func() {
+		if err := src.Close(); err != nil {
+			logger.Error("Failed to close source file after installation", "file", cacheFile, "error", err)
+		}
+	}()
 
 	// Ensure target directory exists
 	if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
@@ -548,7 +612,11 @@ func (d *DefaultDownloader) installFromCache(cacheFile, basePath, binaryName str
 		logger.Error("Failed to create target file for installation", "file", targetPath, "error", err)
 		return fmt.Errorf("failed to create target file: %w", err)
 	}
-	defer dst.Close()
+	defer func() {
+		if err := dst.Close(); err != nil {
+			logger.Error("Failed to close destination file after installation", "file", targetPath, "error", err)
+		}
+	}()
 
 	// Copy file
 	if _, err := io.Copy(dst, src); err != nil {
