@@ -57,7 +57,7 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
-          go build -a -installsuffix cgo -o ${{ matrix.binary_name }} ./add/hydraidectl
+          go build -a -installsuffix cgo -o ${{ matrix.binary_name }} ./app/hydraidectl
 
       - name: Upload built binary as artifact
         uses: actions/upload-artifact@v4

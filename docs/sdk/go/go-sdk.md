@@ -33,7 +33,7 @@ initialized during your application's startup sequence.
 
 You can find the repo implementation and usage examples here:
 
-📁 [`repo.go`](examples/models/utils/repo/repo.go)
+📁 [`repo.go`](../../../sdk/go/hydraidego/utils/repo/repo.go)
 
 ### How to Start Your Server Using the Repo Package
 
