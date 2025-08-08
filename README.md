@@ -11,28 +11,38 @@
 
 ## 🧠 What is HydrAIDE?
 
-**HydrAIDE is a real-time data engine that unifies multiple critical layers into one.**
+**One engine that replaces your database, cache, and pub/sub — just save your structs.**
 
-With HydrAIDE, you no longer need to run a separate database, cache, pub/sub system, or worry about cleaning up stale data.  
-It’s a purpose-built engine that replaces traditional architecture with clean, reactive, and developer-native logic.
+No schema design. No queries. No cleanup scripts.
+HydrAIDE automatically handles persistence, real-time events, distribution, and memory for you.
+
+For developers who want:
+
+* **Less code and infrastructure** — everything in one place
+* **Instant data access** with O(1) folder-based routing
+* **Native reactivity** — every change emits a real-time event
+* **Memory-efficient operation** — data only lives in RAM when needed
+* **Safe concurrency** — built-in per-key distributed locking
+
+With HydrAIDE, you don’t adapt to the database — **the database adapts to your intent**.
 
 ---
 
 ### ⚙️ What HydrAIDE Does – In One Stack
 
-| Feature                                        | Description                                                                                                                                                                                                                                                                         |
-|------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| 🗂️ **Database Engine**                        | A NoSQL-like, structure-first data store — no schemas, no query language. Just save your Go structs. [👉 read more](docs/features/database-engine.md)                                                                                                                               |
+| Feature                                         | Description                                                                                                                                                                                                                                                                         |
+|-------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| 🗂️ **Database Engine**                         | A NoSQL-like, structure-first data store — no schemas, no query language. Just save your Go structs. [👉 read more](docs/features/database-engine.md)                                                                                                                               |
 | 🔄 **Built-in Reactivity & Subscription logic** | Native real-time subscriptions on every write/update/delete. Like Redis Pub/Sub, but smarter. [👉 read more](docs/features/reactivity-and-subscription-logic.md)                                                                                                                    |
-| ⚡️ **(O)1 access**                             | Deterministic, constant-time (O(1)) access to data — every Swamp name maps directly to a fixed folder location, ensuring instant lookup without indexing or scanning. [👉 read more](docs/features/o1-access.md) |
-| 🔐 **Concurrency-Safe**                        | Per-object locking with deadlock-free critical sections. Easy and safe for business rules. [👉 read more](docs/features/concurrency-safe.md)                                                                                                                                        |
-| 🛡️ **Built-in business lock**                 | Per-key, distributed locking that works across services and servers — ideal for enforcing business-level rules without race conditions. HydrAIDE automatically queues lock requests (FIFO), applies a TTL to prevent deadlocks, and releases locks safely even if a service crashes [👉 read more](docs/features/built-in-busines-lock.md) |
-| 🧠 **Memory-Efficient**                        | Swamps live in memory only when accessed. Instant hydration, automatic disposal when idle. [👉 read more](docs/features/memory-efficient.md)                                                                                                                                        |
-| 🧹 **Zero Garbage**                            | No daemons. No cron jobs. No cleanup scripts. Swamps manage themselves via lifecycle logic. [👉 read more](docs/features/zero-garbage.md)                                                                                                                                           |
-| ✍️ **No More Queries**                         | No SELECT, no WHERE, no JOINS, no Aggregates. Your struct *is* the query. [👉 read more](docs/features/no-more-queries.md)                                                                                                                                                          |
-| 🛰️ **Pure gRPC Control**                      | Fully gRPC-native. Works with or without SDKs. Ideal for CLI tools, edge services, and IoT nodes. [👉 read more](docs/features/pure-grpc-control.md)                                                                                                                                |
-| 🌐 **Scaling Without Orchestrator**            | Deterministic folder-based distribution. No orchestrators. Just spawn instances where needed. [👉 read more](docs/features/scaing-without-orchestrator.md)                                                                                                                                                                                      |
-| 🤯 **Less Infra Headache**                     | No need to combine Redis + Kafka + Mongo + scheduler. HydrAIDE is the backend stack itself. [👉 read more](docs/features/less-infra-headache.md)                                                                                                                                                                                        |
+| ⚡️ **O(1) access**                              | Deterministic, constant-time O(1) access to data — every Swamp name maps directly to a fixed folder location, ensuring instant lookup without indexing or scanning. [👉 read more](docs/features/o1-access.md) |
+| 🔐 **Concurrency-Safe**                         | Per-object locking with deadlock-free critical sections. Easy and safe for business rules. [👉 read more](docs/features/concurrency-safe.md)                                                                                                                                        |
+| 🛡️ **Built-in business lock**                  | Per-key, distributed locking that works across services and servers — ideal for enforcing business-level rules without race conditions. HydrAIDE automatically queues lock requests (FIFO), applies a TTL to prevent deadlocks, and releases locks safely even if a service crashes [👉 read more](docs/features/built-in-busines-lock.md) |
+| 🧠 **Memory-Efficient**                         | Swamps live in memory only when accessed. Instant hydration, automatic disposal when idle. [👉 read more](docs/features/memory-efficient.md)                                                                                                                                        |
+| 🧹 **Zero Garbage**                             | No daemons. No cron jobs. No cleanup scripts. Swamps manage themselves via lifecycle logic. [👉 read more](docs/features/zero-garbage.md)                                                                                                                                           |
+| ✍️ **No More Queries**                          | No SELECT, no WHERE, no JOINS, no Aggregates. Your struct *is* the query. [👉 read more](docs/features/no-more-queries.md)                                                                                                                                                          |
+| 🛰️ **Pure gRPC Control**                       | Fully gRPC-native. Works with or without SDKs. Ideal for CLI tools, edge services, and IoT nodes. [👉 read more](docs/features/pure-grpc-control.md)                                                                                                                                |
+| 🌐 **Scaling Without Orchestrator**             | Deterministic folder-based distribution. No orchestrators. Just spawn instances where needed. [👉 read more](docs/features/scaing-without-orchestrator.md)                                                                                                                                                                                      |
+| 🤯 **Less Infra Headache**                      | No need to combine Redis + Kafka + Mongo + scheduler. HydrAIDE is the backend stack itself. [👉 read more](docs/features/less-infra-headache.md)                                                                                                                                                                                        |
 
 ---
 
