@@ -51,7 +51,7 @@ No config files. No docker. No complexity.
    curl -sSfL https://raw.githubusercontent.com/hydraide/hydraide/main/scripts/install-hydraidectl.sh | bash
    ```
 
-   👉 For Windows, and full install guide, see the [hydraidectl-install.md](docs/hydraidectl/hydraidectl-install.md)
+   👉 For Windows, and full install guide, see the [How to install hydraidectl](docs/hydraidectl/hydraidectl-install.md)
 
 
 2. **Create a new instance:**

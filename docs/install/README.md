@@ -12,7 +12,7 @@ HydrAIDE is designed to be **extremely lightweight** and **zero-impact** when id
 **Supported Platforms:**
 
 * ✅ Linux (x86\_64 / ARM64) — recommended for production
-* ✅ Windows (x86\_64) — recommended for development and testing only
+* ⚠️ Windows (x86\_64) — only via WSL2 with Ubuntu distribution (no native Windows support)
 
 **Minimum Hardware:**
 
@@ -42,11 +42,9 @@ curl -sSfL https://raw.githubusercontent.com/hydraide/hydraide/main/scripts/inst
 
 #### Windows:
 
-```powershell
-irm https://raw.githubusercontent.com/hydraide/hydraide/main/scripts/install-hydraidectl.ps1 | iex
-```
-
-> ➡️ Hydraidectl full install documentation: [hydraidectl-install.md](../hydraidectl/hydraidectl-install.md)
+HydrAIDE does **not** support native Windows execution.
+For development purposes, it can be run inside **WSL2** using an Ubuntu distribution.
+Inside your Ubuntu (WSL2) terminal, run the Linux installer (see above).
 
 ---
 
@@ -91,7 +89,7 @@ You're now ready to connect via gRPC — HydrAIDE is live and secure.
 
 ---
 
-- ➡️ Full CLI documentation with all commands: [hydraidectl-user-manual.md](../hydraidectl/hydraidectl-user-manual.md)
+- ➡️ Full CLI documentation with all commands: [hydraidectl user manual](../hydraidectl/hydraidectl-user-manual.md)
 
 ---
 

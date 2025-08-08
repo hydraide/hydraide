@@ -25,20 +25,12 @@ This script will:
 
 ---
 
-## 🪠 Windows (PowerShell)
+## 🪠 Windows (WSL2 + Ubuntu only)
 
-Run the following command in an **Administrator PowerShell** window:
+HydrAIDE does **not** support native Windows execution. 
+For development purposes, it can be run inside **WSL2** using an Ubuntu distribution.
 
-```powershell
-irm https://raw.githubusercontent.com/hydraide/hydraide/main/scripts/install-hydraidectl.ps1 | iex
-```
-
-This script will:
-
-* Download the latest `hydraidectl-windows-amd64.exe`
-* Copy it to `C:\Program Files\Hydraide\`
-* Add this folder to the system PATH (if not already there)
-* Make `hydraidectl` globally available via PowerShell or CMD
+Inside your Ubuntu (WSL2) terminal, run the Linux installer (see above)
 
 ---
 
@@ -47,12 +39,6 @@ This script will:
 After installation, you can run:
 
 ```bash
-hydraidectl --help
-```
-
-Or on Windows:
-
-```powershell
 hydraidectl --help
 ```
 
@@ -68,7 +54,6 @@ It will download and replace the previous version automatically.
 ## 📁 Source Scripts
 
 * Linux script: [`scripts/install-hydraidectl.sh`](https://github.com/hydraide/hydraide/blob/main/scripts/install-hydraidectl.sh)
-* Windows script: [`scripts/install-hydraidectl.ps1`](https://github.com/hydraide/hydraide/blob/main/scripts/install-hydraidectl.ps1)
 
 ---
 
