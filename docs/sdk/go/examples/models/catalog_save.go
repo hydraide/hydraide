@@ -169,7 +169,7 @@ func (c *CatalogModelUserSaveExample) RegisterPattern(r repo.Repo) error {
 		SwampPattern: c.createCatalogName(),
 
 		// Keep Swamp in memory for 6 hours of idle time
-		CloseAfterIdle: time.Second * 21600,
+		CloseAfterIdle: time.Hour * 21600,
 
 		// Use persistent, disk-backed storage
 		IsInMemorySwamp: false,
