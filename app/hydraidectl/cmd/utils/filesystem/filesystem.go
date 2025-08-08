@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 )
 
 // FileSystem defines an interface for common file and directory operations.
@@ -404,11 +405,60 @@ func (fs *fileSystemImpl) copyThenReplace(ctx context.Context, src, dst string) 
 		return fmt.Errorf("rename temp to final: %w", err)
 	}
 
-	// Remove source (best effort)
-	if err := os.Remove(src); err != nil {
-		return fmt.Errorf("remove src after copy: %w", err)
+	// Remove source with Windows-friendly retry
+	if err := fs.removeWithRetry(ctx, src); err != nil {
+		return fmt.Errorf("remove src after copy (after retries): %w", err)
 	}
+
 	return nil
+}
+
+// removeWithRetry attempts to delete a file with multiple retries.
+// This is mainly needed for Windows, where file deletion can fail if the file
+// is still locked or in use by another process (e.g. antivirus scan, delayed file close).
+//
+// On Windows, unlike Linux/Unix, a file cannot be deleted while any process
+// still has an open handle to it. This means that even right after writing
+// or copying a file, the OS or another program might briefly keep it locked.
+// Common causes:
+//   - Antivirus or indexing services scanning the file
+//   - Another process (even our own) not having closed it yet
+//   - Slow filesystem flushes on network or external drives
+//
+// This helper works around the issue by:
+//  1. Forcing file permissions to writable in case it's read-only.
+//  2. Retrying deletion multiple times (up to ~3 seconds total) with exponential backoff.
+//  3. Respecting the provided context for early cancellation.
+//
+// If all attempts fail, it returns the last error.
+func (fs *fileSystemImpl) removeWithRetry(ctx context.Context, path string) error {
+	// Retry parameters: 8 attempts, starting at 50ms and doubling each time (~3s total wait)
+	const (
+		maxAttempts = 8
+		baseDelay   = 50 * time.Millisecond
+	)
+
+	// Ensure the file isn't read-only before attempting removal
+	_ = os.Chmod(path, 0o666)
+
+	var lastErr error
+	for i := 0; i < maxAttempts; i++ {
+		// Attempt deletion
+		if err := os.Remove(path); err == nil || os.IsNotExist(err) {
+			return nil // Success or already gone
+		} else {
+			lastErr = err
+		}
+
+		// Check for cancellation before retrying
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(time.Duration(1<<i) * baseDelay): // Exponential backoff
+		}
+	}
+
+	return fmt.Errorf("remove with retry failed: %w", lastErr)
 }
 
 // RemoveDirIncremental implements the RemoveDirIncremental method of the FileSystem interface.

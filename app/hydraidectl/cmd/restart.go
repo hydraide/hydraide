@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/elevation"
 	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/instancerunner"
 	"github.com/spf13/cobra"
 )
@@ -16,12 +17,15 @@ var restartInstance string
 
 var restartCmd = &cobra.Command{
 	Use:   "restart",
-	Short: "Restart the HydrAIDE container",
+	Short: "Restart the HydrAIDE instance if it is running (gracefully stops and starts it)",
+	Long: `Restarts an existing HydrAIDE instance that has been previously created and registered as a service.
+This command first gracefully stops the running instance, ensuring all operations are completed,
+and then starts it again. It can only be used if the instance was first set up with 'init'
+and then configured as a service with 'service'.`,
 	Run: func(cmd *cobra.Command, args []string) {
 
-		if os.Geteuid() != 0 {
-			fmt.Println("This command must be run as root or with sudo to create a system service.")
-			fmt.Println("Please run 'sudo hydraidectl restart --instance " + instanceName + "'")
+		if !elevation.IsElevated() {
+			fmt.Println(elevation.Hint(instanceName))
 			return
 		}
 
@@ -103,5 +107,9 @@ func init() {
 	rootCmd.AddCommand(restartCmd)
 
 	restartCmd.Flags().StringVarP(&restartInstance, "instance", "i", "", "Name of the service instance")
-	restartCmd.MarkFlagRequired("instance")
+	if err := restartCmd.MarkFlagRequired("instance"); err != nil {
+		fmt.Println("Error marking 'instance' flag as required:", err)
+		os.Exit(1)
+	}
+
 }

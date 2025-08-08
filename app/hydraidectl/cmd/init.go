@@ -43,8 +43,12 @@ type EnvConfig struct {
 }
 
 var initCmd = &cobra.Command{
+
 	Use:   "init",
-	Short: "Run the quick install wizard",
+	Short: "Run the quick install wizard to create a new HydrAIDE instance",
+	Long: `Launches the interactive quick install wizard for HydrAIDE.
+This command guides you through the process of creating a new HydrAIDE instance, including setting its service name, storage location, and configuration.`,
+
 	Run: func(cmd *cobra.Command, args []string) {
 		reader := bufio.NewReader(os.Stdin)
 		fs := filesystem.New()
