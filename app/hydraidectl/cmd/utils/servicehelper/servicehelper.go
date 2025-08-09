@@ -458,12 +458,6 @@ func (s *serviceManagerImpl) RemoveService(instanceName string) error {
 		// Use system-level systemd commands (consistent with creation)
 		serviceFilePath := filepath.Join("/etc", "systemd", "system", fmt.Sprintf("%s.service", serviceName))
 
-		// delete lock file - in unlocked state here, since service is stopped
-		if err := deleteLockFile(instanceName); err != nil {
-			// log the error and continue
-			slog.Error("Failed to delete lock file for instance", "instanceName", instanceName)
-		}
-
 		// Stop the service if running
 		slog.Info("Stopping service", "service", serviceName)
 		cmd := exec.Command("systemctl", "stop", fmt.Sprintf("%s.service", serviceName))
@@ -471,6 +465,12 @@ func (s *serviceManagerImpl) RemoveService(instanceName string) error {
 			slog.Warn("Failed to stop service", "error", err, "output", string(output))
 		} else {
 			slog.Info("Service stopped successfully", "service", serviceName)
+		}
+
+		// delete lock file
+		if err := deleteLockFile(instanceName); err != nil {
+			// log the error and continue
+			slog.Error("Failed to delete lock file for instance", "instanceName", instanceName)
 		}
 
 		// Disable the service
@@ -506,18 +506,18 @@ func (s *serviceManagerImpl) RemoveService(instanceName string) error {
 		// Try to remove NSSM service first
 		slog.Info("Attempting to remove NSSM service", "service", serviceName)
 
-		// delete lock file - in unlocked state here, since service is stopped
-		if err := deleteLockFile(instanceName); err != nil {
-			// log the error and continue
-			slog.Error("Failed to delete lock file for instance", "instanceName", instanceName)
-		}
-
 		// Stop the service first
 		stopCmd := exec.Command("nssm", "stop", serviceName)
 		if output, err := stopCmd.CombinedOutput(); err != nil {
 			slog.Warn("Failed to stop NSSM service", "error", err, "output", string(output))
 		} else {
 			slog.Info("NSSM service stopped successfully", "service", serviceName)
+		}
+
+		// delete lock file
+		if err := deleteLockFile(instanceName); err != nil {
+			// log the error and continue
+			slog.Error("Failed to delete lock file for instance", "instanceName", instanceName)
 		}
 
 		// Remove the service
