@@ -458,6 +458,12 @@ func (s *serviceManagerImpl) RemoveService(instanceName string) error {
 		// Use system-level systemd commands (consistent with creation)
 		serviceFilePath := filepath.Join("/etc", "systemd", "system", fmt.Sprintf("%s.service", serviceName))
 
+		// delete lock file - in unlocked state here, since service is stopped
+		if err := deleteLockFile(instanceName); err != nil {
+			// log the error and continue
+			slog.Error("Failed to delete lock file for instance", "instanceName", instanceName)
+		}
+
 		// Stop the service if running
 		slog.Info("Stopping service", "service", serviceName)
 		cmd := exec.Command("systemctl", "stop", fmt.Sprintf("%s.service", serviceName))
@@ -499,6 +505,12 @@ func (s *serviceManagerImpl) RemoveService(instanceName string) error {
 	case WINDOWS_OS:
 		// Try to remove NSSM service first
 		slog.Info("Attempting to remove NSSM service", "service", serviceName)
+
+		// delete lock file - in unlocked state here, since service is stopped
+		if err := deleteLockFile(instanceName); err != nil {
+			// log the error and continue
+			slog.Error("Failed to delete lock file for instance", "instanceName", instanceName)
+		}
 
 		// Stop the service first
 		stopCmd := exec.Command("nssm", "stop", serviceName)
@@ -551,5 +563,23 @@ func (s *serviceManagerImpl) RemoveService(instanceName string) error {
 	default:
 		return fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
 	}
+	return nil
+}
+
+func deleteLockFile(instanceName string) error {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		slog.Debug("Failed to get user home directory")
+		return fmt.Errorf("failed to get user home directory: %w", err)
+	}
+	path := filepath.Join(home, instanceName+".lock")
+	slog.Debug("Attempting to delete lock file at", "path", path)
+
+	err = os.Remove(path)
+	if err != nil {
+		slog.Error("Failed to delete lock file.")
+		return fmt.Errorf("failed to delete lock file: %w", err)
+	}
+	slog.Debug("Successfully deleted lock file.")
 	return nil
 }
