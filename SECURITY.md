@@ -6,10 +6,10 @@ If you discover a security vulnerability in HydrAIDE, please **do not open a pub
 
 Instead, report it privately to the lead developer via email:
 
-📧 **peter.gebri@trendizz.com**
+📧 **peter.gebri@hydraide.io**
 
 Alternatively, you may contact us directly on our official Discord channel in DM:
-👉 https://discord.gg/aBfAuYjR
+👉 https://discord.gg/xE2YSkzFRm
 
 Please include:
 - A detailed description of the issue

@@ -2,13 +2,14 @@ package models
 
 import (
 	"fmt"
-	"github.com/hydraide/hydraide/docs/sdk/go/examples/models/utils/hydraidehelper"
-	"github.com/hydraide/hydraide/docs/sdk/go/examples/models/utils/repo"
-	"github.com/hydraide/hydraide/sdk/go/hydraidego"
-	"github.com/hydraide/hydraide/sdk/go/hydraidego/name"
 	"hash/fnv"
 	"log/slog"
 	"time"
+
+	"github.com/hydraide/hydraide/sdk/go/hydraidego"
+	"github.com/hydraide/hydraide/sdk/go/hydraidego/name"
+	"github.com/hydraide/hydraide/sdk/go/hydraidego/utils/hydraidehelper"
+	"github.com/hydraide/hydraide/sdk/go/hydraidego/utils/repo"
 )
 
 // ModelTagProductViewers demonstrates HydrAIDE’s native reverse index capabilities

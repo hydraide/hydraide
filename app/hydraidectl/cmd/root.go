@@ -15,6 +15,8 @@ var rootCmd = &cobra.Command{
 
 Welcome to hydraidectl – your tool to install, restart, destroy and inspect your HydrAIDE system.
 
+📚 Full documentation for hydraidectl is available here: https://github.com/hydraide/hydraide/tree/main/docs/hydraidectl/hydraidectl-user-manual.md
+
 Usage:
   hydraidectl <command>
 

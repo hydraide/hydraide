@@ -57,7 +57,7 @@ Check the [pinned issues](https://github.com/hydraide/hydraide/issues) for curre
     - Preferred language(s)
     - Link to work or projects (if any)
     - What you'd like to help with
-3. Join the Discord community: [discord.gg/aBfAuYjR](https://discord.gg/aBfAuYjR)
+3. Join the Discord community: [https://discord.gg/xE2YSkzFRm](https://discord.gg/xE2YSkzFRm)
 4. Wait for access + onboarding (usually <48h)
 5. Pick an issue or ask for one
 6. Submit a PR → We review, merge, and credit you
@@ -67,14 +67,19 @@ Check the [pinned issues](https://github.com/hydraide/hydraide/issues) for curre
 
 ---
 
-## Tools & Resources
+## 🚀 Demo Applications & Model examples
 
-- [Installation Guide](docs/how-to-install-hydraide.md)
-- [Go SDK reference](docs/sdk/go/go-sdk.md)
-- [Thinking in HydrAIDE](docs/thinking-in-hydraide/thinking-in-hydraide.md)
-- [FAQ for AI & SDK usage](docs/hydraide-questions-answers-for-llm.md)
+Explore ready-to-run demo applications built in Go to better understand the HydrAIDE Go SDK and its unique data modeling approach.
 
-You may use tools like ChatGPT to accelerate work, but code quality and architectural decisions are human-reviewed.
+- All demo apps are located in the [Example Applications in Go](https://github.com/hydraide/hydraide/tree/main/docs/sdk/go/examples/applications) folder.
+- Model Examples [CRUD operations, subscriptions, etc.](https://github.com/hydraide/hydraide/tree/main/docs/sdk/go/examples/models)
+- Full Go SDK Documentation: [Go SDK Documentation](docs/sdk/go/go-sdk.md)
+
+These examples are a great starting point to learn how to:
+
+* Structure your HydrAIDE-powered services
+* Use profile and catalog models
+* Handle real-time, reactive data flows efficiently
 
 ---
 

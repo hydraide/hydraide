@@ -1,5 +1,9 @@
 name: Label Needs Review PR
 
+permissions:
+  pull-requests: write
+  issues: write
+
 on:
   pull_request:
     types: [opened, ready_for_review, reopened, edited]

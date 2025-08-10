@@ -35,19 +35,24 @@ or refining CLI behavior, your contribution matters.
 If you're new to HydrAIDE, feel free to:
 
 - Start with a [Contributor Application](https://github.com/hydraide/hydraide/issues/new?template=contributor-application.yml) issue
-- Ask for guidance on Discord: [discord.gg/aBfAuYjR](https://discord.gg/aBfAuYjR)
+- Ask for guidance on Discord: [https://discord.gg/xE2YSkzFRm](https://discord.gg/xE2YSkzFRm)
 - Explore the [HydrAIDE Knowledge Engine](https://chatgpt.com/g/g-688779751c988191b975beaf7f68801d-hydraide-knowledge-engine) to better understand the system
 
 ---
 
-## Docs & SDK Reference
+## 🚀 Demo Applications & Model examples
 
-- [Installation Guide](docs/how-to-install-hydraide.md)
-- [Go SDK reference](docs/sdk/go/go-sdk.md)
-- [Thinking in HydrAIDE](docs/thinking-in-hydraide/thinking-in-hydraide.md)
-- [FAQ for AI & SDK usage](docs/hydraide-questions-answers-for-llm.md)
+Explore ready-to-run demo applications built in Go to better understand the HydrAIDE Go SDK and its unique data modeling approach.
 
-These are optimized for both humans and tools like ChatGPT — use whatever helps you learn faster.
+- All demo apps are located in the [Example Applications in Go](https://github.com/hydraide/hydraide/tree/main/docs/sdk/go/examples/applications) folder.
+- Model Examples [CRUD operations, subscriptions, etc.](https://github.com/hydraide/hydraide/tree/main/docs/sdk/go/examples/models)
+- Full Go SDK Documentation: [Go SDK Documentation](docs/sdk/go/go-sdk.md)
+
+These examples are a great starting point to learn how to:
+
+* Structure your HydrAIDE-powered services
+* Use profile and catalog models
+* Handle real-time, reactive data flows efficiently
 
 ---
 
@@ -196,8 +201,13 @@ permissions to understand or act based on them, just use them to stay aligned wi
 | `meta:claimed`          | Someone has commented they are working on this. Respect ownership. |
 | `meta:ai-assisted`      | Submission was aided by an AI tool — requires careful review.      |
 | `meta:help-wanted`      | Maintainers would love help on this one. Feel free to contribute!  |
-| `meta:good-first-issue` | Great place to start if you're new.                                |
 | `meta:onboarding`       | Task assigned to a newcomer — often mentoring involved.            |
+
+### 🔥 Good First Issues
+
+| Label                   | Meaning                                                            |
+| ----------------------- | ------------------------------------------------------------------ |
+| `good first issue` | Great place to start if you're new.                                |
 
 ℹ️ **Note:** You won't be able to assign labels yourself unless you're part of the triage team. If you're working on something, just leave a comment saying so — a maintainer will handle the rest.
 

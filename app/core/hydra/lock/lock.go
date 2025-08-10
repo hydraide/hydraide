@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/google/uuid"
+	"github.com/hydraide/hydraide/docs/sdk/go/examples/applications/app-queue/utils/panichandler"
 	"sync"
 	"time"
 )
@@ -99,6 +100,9 @@ func (q *queue) CanExecute(callerID string) bool {
 
 // StartAutoUnlock ensures that the lock is forcefully released when the TTL expires.
 func (q *queue) StartAutoUnlock(ctx context.Context, callerID string, ttl time.Duration) {
+
+	// handling the panic because this function called by a goroutine
+	defer panichandler.PanicHandler()
 
 	// Remove the caller after the TTL expires. Whichever timeout comes first will be used.
 	// Exit the goroutine immediately afterward.

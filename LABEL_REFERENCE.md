@@ -62,7 +62,13 @@
 | `meta:ai-assisted` | Contribution (partly) generated using AI — requires manual understanding. | ✅ **Maintainers** set manually based on context or author’s note. Optionally flagged by bot. | `#e4e669` |
 | `meta:onboarding`       | Assigned to a newcomer or first-time contributor.                          | ✅ Maintainers assign manually based on user profile or intent (e.g. via `contributor-application.yml`).          | `#c2e0c6` |
 | `meta:help-wanted`      | Maintainer explicitly welcomes external contributions.                     | ✅ Maintainers set manually. Can also be toggled from GitHub UI or issue template.                                | `#159818` |
-| `meta:good-first-issue` | Suitable for newcomers — simple and self-contained.                        | ✅ Maintainers add manually, often in combination with `meta:onboarding` and `type:bug` or `type:enhancement`.   | `#7057ff` |
 | `meta:do-not-pick`      | Should not be picked — deprecated, internal or intentionally disabled.     | ✅ Maintainers apply this to internal-only tasks, deprecated flows, or reserved issues.                           | `#b60205` |
 | `meta:discussable`      | Meant for long-form discussion or evolving collective input.               | ✅ Maintainers set this when an item is intentionally left open-ended or conceptual (e.g. RFCs, architectural docs). | `#fef2c0` |
 | `meta:reference`        | Issue is used as a live example or long-term reference — not to be closed. | ✅ Maintainers apply to sticky issues like API contracts, decisions, glossary, or process definitions.           | `#0366d6` |
+
+
+## Good First Issue Labels
+
+| Label              | Description                                                                | Who/When Can Set It                                                                                            | Color     |
+|--------------------| -------------------------------------------------------------------------- |----------------------------------------------------------------------------------------------------------------| --------- |
+| `good first issue` | Suitable for newcomers — simple and self-contained.                        | ✅ Maintainers add manually, often in combination with `meta:onboarding` and `type:bug` or `type:enhancement`. Unlike other labels, however, good first issue is treated specially only because websites like goodfirstissues.com and goodfirstissues.dev currently only parse issues with that exact label format. This makes it functionally different — not semantically — from other triage labels. | `#7057ff` |

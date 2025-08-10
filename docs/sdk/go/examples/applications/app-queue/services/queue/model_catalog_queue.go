@@ -44,12 +44,13 @@ package queue
 
 import (
 	"errors"
-	"github.com/hydraide/hydraide/docs/sdk/go/examples/applications/app-queue/utils/hydraidehelper"
-	"github.com/hydraide/hydraide/docs/sdk/go/examples/applications/app-queue/utils/repo"
-	"github.com/hydraide/hydraide/sdk/go/hydraidego"
-	"github.com/hydraide/hydraide/sdk/go/hydraidego/name"
 	"log/slog"
 	"time"
+
+	"github.com/hydraide/hydraide/sdk/go/hydraidego"
+	"github.com/hydraide/hydraide/sdk/go/hydraidego/name"
+	"github.com/hydraide/hydraide/sdk/go/hydraidego/utils/hydraidehelper"
+	"github.com/hydraide/hydraide/sdk/go/hydraidego/utils/repo"
 )
 
 type ModelCatalogQueue struct {
