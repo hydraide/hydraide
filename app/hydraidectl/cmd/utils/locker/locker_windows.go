@@ -62,14 +62,13 @@ func (l *windowsLocker) Unlock() error {
 // getLockDirectory returns the path to the directory where lock files are stored.
 // It creates the directory if it does not exist.
 func getLockDir() (string, error) {
-	// identical to posix getLockDir
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
+	programData := os.Getenv("ProgramData")
+	if programData == "" {
+		return "", fmt.Errorf("%%ProgramData%% environment variable not set")
 	}
-	dir := filepath.Join(home, ".hydraide", "locks")
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return "", err
+	dir := filepath.Join(programData, "HydrAIDE", "locks")
+	if err := os.MkdirAll(dir, 0o777); err != nil {
+		return "", fmt.Errorf("failed to create system lock directory '%s': %w", dir, err)
 	}
 	return dir, nil
 }
