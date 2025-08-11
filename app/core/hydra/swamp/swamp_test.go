@@ -895,11 +895,11 @@ func TestIncrementUint8_NewKey_WithMetadataIfNotExist(t *testing.T) {
 
 	before := time.Now().UTC()
 	metaReq := &IncrementMetadataRequest{
-		CreatedAt: true,
-		CreatedBy: "alice",
-		UpdatedAt: true,
-		UpdatedBy: "alice",
-		ExpiredAt: before.Add(10 * time.Minute),
+		SetCreatedAt: true,
+		CreatedBy:    "alice",
+		SetUpdatedAt: true,
+		UpdatedBy:    "alice",
+		ExpiredAt:    before.Add(10 * time.Minute),
 	}
 
 	newVal, inc, meta, err := s.IncrementUint8(
@@ -921,10 +921,10 @@ func TestIncrementUint8_NewKey_WithMetadataIfNotExist(t *testing.T) {
 
 	// laza ellenőrzés az időkre (nem pontosan now, de > before)
 	if meta.CreatedAt.Before(before) {
-		t.Fatalf("CreatedAt not set correctly: %v <= %v", meta.CreatedAt, before)
+		t.Fatalf("SetCreatedAt not set correctly: %v <= %v", meta.CreatedAt, before)
 	}
 	if meta.UpdatedAt.Before(before) {
-		t.Fatalf("UpdatedAt not set correctly: %v <= %v", meta.UpdatedAt, before)
+		t.Fatalf("SetUpdatedAt not set correctly: %v <= %v", meta.UpdatedAt, before)
 	}
 	if meta.CreatedBy != "alice" || meta.UpdatedBy != "alice" {
 		t.Fatalf("bad CreatedBy/UpdatedBy: %+v", meta)
@@ -973,8 +973,8 @@ func TestIncrementUint8_ExistingKey_WithMetadataIfExist(t *testing.T) {
 
 	before := time.Now().UTC()
 	metaReq := &IncrementMetadataRequest{
-		UpdatedAt: true,
-		UpdatedBy: "bob",
+		SetUpdatedAt: true,
+		UpdatedBy:    "bob",
 		// direkt nem állítunk Created* mezőket, mert létező elemről beszélünk
 	}
 
@@ -996,9 +996,9 @@ func TestIncrementUint8_ExistingKey_WithMetadataIfExist(t *testing.T) {
 	}
 	// BUG DETECTOR:
 	// Ha a kódban rossz a hívás és ifExist helyett ifNotExist-et ad át,
-	// akkor UpdatedAt/UpdatedBy nem frissül. Ez a teszt ilyenkor FAIL-el.
+	// akkor SetUpdatedAt/UpdatedBy nem frissül. Ez a teszt ilyenkor FAIL-el.
 	if meta.UpdatedAt.Before(before) {
-		t.Fatalf("UpdatedAt was not updated for existing treasure (did you pass metadataRequestIfExist to setMetaForIncrement?)")
+		t.Fatalf("SetUpdatedAt was not updated for existing treasure (did you pass metadataRequestIfExist to setMetaForIncrement?)")
 	}
 	if meta.UpdatedBy != "bob" {
 		t.Fatalf("UpdatedBy not set to 'bob': %+v", meta)
@@ -1127,11 +1127,11 @@ func TestIncrementUint16_NewKey_WithMetadataIfNotExist(t *testing.T) {
 
 	before := time.Now().UTC()
 	metaReq := &IncrementMetadataRequest{
-		CreatedAt: true,
-		CreatedBy: "alice",
-		UpdatedAt: true,
-		UpdatedBy: "alice",
-		ExpiredAt: before.Add(10 * time.Minute),
+		SetCreatedAt: true,
+		CreatedBy:    "alice",
+		SetUpdatedAt: true,
+		UpdatedBy:    "alice",
+		ExpiredAt:    before.Add(10 * time.Minute),
 	}
 
 	newVal, inc, meta, err := s.IncrementUint16(
@@ -1151,10 +1151,10 @@ func TestIncrementUint16_NewKey_WithMetadataIfNotExist(t *testing.T) {
 		t.Fatalf("expected metadataResponse not nil")
 	}
 	if meta.CreatedAt.Before(before) {
-		t.Fatalf("CreatedAt not set correctly: %v <= %v", meta.CreatedAt, before)
+		t.Fatalf("SetCreatedAt not set correctly: %v <= %v", meta.CreatedAt, before)
 	}
 	if meta.UpdatedAt.Before(before) {
-		t.Fatalf("UpdatedAt not set correctly: %v <= %v", meta.UpdatedAt, before)
+		t.Fatalf("SetUpdatedAt not set correctly: %v <= %v", meta.UpdatedAt, before)
 	}
 	if meta.CreatedBy != "alice" || meta.UpdatedBy != "alice" {
 		t.Fatalf("bad CreatedBy/UpdatedBy: %+v", meta)
@@ -1202,8 +1202,8 @@ func TestIncrementUint16_ExistingKey_WithMetadataIfExist(t *testing.T) {
 
 	before := time.Now().UTC()
 	metaReq := &IncrementMetadataRequest{
-		UpdatedAt: true,
-		UpdatedBy: "bob",
+		SetUpdatedAt: true,
+		UpdatedBy:    "bob",
 	}
 
 	newVal, inc, meta, err := s.IncrementUint16(
@@ -1223,7 +1223,7 @@ func TestIncrementUint16_ExistingKey_WithMetadataIfExist(t *testing.T) {
 		t.Fatalf("metadataResponse must not be nil when metadataIfExist is provided")
 	}
 	if meta.UpdatedAt.Before(before) {
-		t.Fatalf("UpdatedAt was not updated for existing treasure (did you pass metadataRequestIfExist to setMetaForIncrement?)")
+		t.Fatalf("SetUpdatedAt was not updated for existing treasure (did you pass metadataRequestIfExist to setMetaForIncrement?)")
 	}
 	if meta.UpdatedBy != "bob" {
 		t.Fatalf("UpdatedBy not set to 'bob': %+v", meta)
@@ -1349,11 +1349,11 @@ func TestIncrementUint32_NewKey_WithMetadataIfNotExist(t *testing.T) {
 
 	before := time.Now().UTC()
 	metaReq := &IncrementMetadataRequest{
-		CreatedAt: true,
-		CreatedBy: "alice",
-		UpdatedAt: true,
-		UpdatedBy: "alice",
-		ExpiredAt: before.Add(10 * time.Minute),
+		SetCreatedAt: true,
+		CreatedBy:    "alice",
+		SetUpdatedAt: true,
+		UpdatedBy:    "alice",
+		ExpiredAt:    before.Add(10 * time.Minute),
 	}
 
 	newVal, inc, meta, err := s.IncrementUint32(
@@ -1373,10 +1373,10 @@ func TestIncrementUint32_NewKey_WithMetadataIfNotExist(t *testing.T) {
 		t.Fatalf("expected metadataResponse not nil")
 	}
 	if meta.CreatedAt.Before(before) {
-		t.Fatalf("CreatedAt not set correctly: %v <= %v", meta.CreatedAt, before)
+		t.Fatalf("SetCreatedAt not set correctly: %v <= %v", meta.CreatedAt, before)
 	}
 	if meta.UpdatedAt.Before(before) {
-		t.Fatalf("UpdatedAt not set correctly: %v <= %v", meta.UpdatedAt, before)
+		t.Fatalf("SetUpdatedAt not set correctly: %v <= %v", meta.UpdatedAt, before)
 	}
 	if meta.CreatedBy != "alice" || meta.UpdatedBy != "alice" {
 		t.Fatalf("bad CreatedBy/UpdatedBy: %+v", meta)
@@ -1424,8 +1424,8 @@ func TestIncrementUint32_ExistingKey_WithMetadataIfExist(t *testing.T) {
 
 	before := time.Now().UTC()
 	metaReq := &IncrementMetadataRequest{
-		UpdatedAt: true,
-		UpdatedBy: "bob",
+		SetUpdatedAt: true,
+		UpdatedBy:    "bob",
 	}
 
 	newVal, inc, meta, err := s.IncrementUint32(
@@ -1445,7 +1445,7 @@ func TestIncrementUint32_ExistingKey_WithMetadataIfExist(t *testing.T) {
 		t.Fatalf("metadataResponse must not be nil when metadataIfExist is provided")
 	}
 	if meta.UpdatedAt.Before(before) {
-		t.Fatalf("UpdatedAt was not updated for existing treasure (did you pass metadataRequestIfExist to setMetaForIncrement?)")
+		t.Fatalf("SetUpdatedAt was not updated for existing treasure (did you pass metadataRequestIfExist to setMetaForIncrement?)")
 	}
 	if meta.UpdatedBy != "bob" {
 		t.Fatalf("UpdatedBy not set to 'bob': %+v", meta)
@@ -1572,11 +1572,11 @@ func TestIncrementUint64_NewKey_WithMetadataIfNotExist(t *testing.T) {
 
 	before := time.Now().UTC()
 	metaReq := &IncrementMetadataRequest{
-		CreatedAt: true,
-		CreatedBy: "alice",
-		UpdatedAt: true,
-		UpdatedBy: "alice",
-		ExpiredAt: before.Add(10 * time.Minute),
+		SetCreatedAt: true,
+		CreatedBy:    "alice",
+		SetUpdatedAt: true,
+		UpdatedBy:    "alice",
+		ExpiredAt:    before.Add(10 * time.Minute),
 	}
 
 	newVal, inc, meta, err := s.IncrementUint64(
@@ -1596,10 +1596,10 @@ func TestIncrementUint64_NewKey_WithMetadataIfNotExist(t *testing.T) {
 		t.Fatalf("expected metadataResponse not nil")
 	}
 	if meta.CreatedAt.Before(before) {
-		t.Fatalf("CreatedAt not set correctly: %v <= %v", meta.CreatedAt, before)
+		t.Fatalf("SetCreatedAt not set correctly: %v <= %v", meta.CreatedAt, before)
 	}
 	if meta.UpdatedAt.Before(before) {
-		t.Fatalf("UpdatedAt not set correctly: %v <= %v", meta.UpdatedAt, before)
+		t.Fatalf("SetUpdatedAt not set correctly: %v <= %v", meta.UpdatedAt, before)
 	}
 	if meta.CreatedBy != "alice" || meta.UpdatedBy != "alice" {
 		t.Fatalf("bad CreatedBy/UpdatedBy: %+v", meta)
@@ -1647,8 +1647,8 @@ func TestIncrementUint64_ExistingKey_WithMetadataIfExist(t *testing.T) {
 
 	before := time.Now().UTC()
 	metaReq := &IncrementMetadataRequest{
-		UpdatedAt: true,
-		UpdatedBy: "bob",
+		SetUpdatedAt: true,
+		UpdatedBy:    "bob",
 	}
 
 	newVal, inc, meta, err := s.IncrementUint64(
@@ -1668,7 +1668,7 @@ func TestIncrementUint64_ExistingKey_WithMetadataIfExist(t *testing.T) {
 		t.Fatalf("metadataResponse must not be nil when metadataIfExist is provided")
 	}
 	if meta.UpdatedAt.Before(before) {
-		t.Fatalf("UpdatedAt was not updated for existing treasure (did you pass metadataRequestIfExist to setMetaForIncrement?)")
+		t.Fatalf("SetUpdatedAt was not updated for existing treasure (did you pass metadataRequestIfExist to setMetaForIncrement?)")
 	}
 	if meta.UpdatedBy != "bob" {
 		t.Fatalf("UpdatedBy not set to 'bob': %+v", meta)
@@ -1799,11 +1799,11 @@ func TestIncrementInt8_NewKey_WithMetadataIfNotExist(t *testing.T) {
 
 	before := time.Now().UTC()
 	metaReq := &IncrementMetadataRequest{
-		CreatedAt: true,
-		CreatedBy: "alice",
-		UpdatedAt: true,
-		UpdatedBy: "alice",
-		ExpiredAt: before.Add(10 * time.Minute),
+		SetCreatedAt: true,
+		CreatedBy:    "alice",
+		SetUpdatedAt: true,
+		UpdatedBy:    "alice",
+		ExpiredAt:    before.Add(10 * time.Minute),
 	}
 
 	newVal, inc, meta, err := s.IncrementInt8(
@@ -1823,10 +1823,10 @@ func TestIncrementInt8_NewKey_WithMetadataIfNotExist(t *testing.T) {
 		t.Fatalf("expected metadataResponse not nil")
 	}
 	if meta.CreatedAt.Before(before) {
-		t.Fatalf("CreatedAt not set correctly: %v <= %v", meta.CreatedAt, before)
+		t.Fatalf("SetCreatedAt not set correctly: %v <= %v", meta.CreatedAt, before)
 	}
 	if meta.UpdatedAt.Before(before) {
-		t.Fatalf("UpdatedAt not set correctly: %v <= %v", meta.UpdatedAt, before)
+		t.Fatalf("SetUpdatedAt not set correctly: %v <= %v", meta.UpdatedAt, before)
 	}
 	if meta.CreatedBy != "alice" || meta.UpdatedBy != "alice" {
 		t.Fatalf("bad CreatedBy/UpdatedBy: %+v", meta)
@@ -1874,8 +1874,8 @@ func TestIncrementInt8_ExistingKey_WithMetadataIfExist(t *testing.T) {
 
 	before := time.Now().UTC()
 	metaReq := &IncrementMetadataRequest{
-		UpdatedAt: true,
-		UpdatedBy: "bob",
+		SetUpdatedAt: true,
+		UpdatedBy:    "bob",
 	}
 
 	newVal, inc, meta, err := s.IncrementInt8(
@@ -1895,7 +1895,7 @@ func TestIncrementInt8_ExistingKey_WithMetadataIfExist(t *testing.T) {
 		t.Fatalf("metadataResponse must not be nil when metadataIfExist is provided")
 	}
 	if meta.UpdatedAt.Before(before) {
-		t.Fatalf("UpdatedAt was not updated for existing treasure (did you pass metadataRequestIfExist to setMetaForIncrement?)")
+		t.Fatalf("SetUpdatedAt was not updated for existing treasure (did you pass metadataRequestIfExist to setMetaForIncrement?)")
 	}
 	if meta.UpdatedBy != "bob" {
 		t.Fatalf("UpdatedBy not set to 'bob': %+v", meta)
@@ -2021,11 +2021,11 @@ func TestIncrementInt16_NewKey_WithMetadataIfNotExist(t *testing.T) {
 
 	before := time.Now().UTC()
 	metaReq := &IncrementMetadataRequest{
-		CreatedAt: true,
-		CreatedBy: "alice",
-		UpdatedAt: true,
-		UpdatedBy: "alice",
-		ExpiredAt: before.Add(10 * time.Minute),
+		SetCreatedAt: true,
+		CreatedBy:    "alice",
+		SetUpdatedAt: true,
+		UpdatedBy:    "alice",
+		ExpiredAt:    before.Add(10 * time.Minute),
 	}
 
 	newVal, inc, meta, err := s.IncrementInt16(
@@ -2045,10 +2045,10 @@ func TestIncrementInt16_NewKey_WithMetadataIfNotExist(t *testing.T) {
 		t.Fatalf("expected metadataResponse not nil")
 	}
 	if meta.CreatedAt.Before(before) {
-		t.Fatalf("CreatedAt not set correctly: %v <= %v", meta.CreatedAt, before)
+		t.Fatalf("SetCreatedAt not set correctly: %v <= %v", meta.CreatedAt, before)
 	}
 	if meta.UpdatedAt.Before(before) {
-		t.Fatalf("UpdatedAt not set correctly: %v <= %v", meta.UpdatedAt, before)
+		t.Fatalf("SetUpdatedAt not set correctly: %v <= %v", meta.UpdatedAt, before)
 	}
 	if meta.CreatedBy != "alice" || meta.UpdatedBy != "alice" {
 		t.Fatalf("bad CreatedBy/UpdatedBy: %+v", meta)
@@ -2096,8 +2096,8 @@ func TestIncrementInt16_ExistingKey_WithMetadataIfExist(t *testing.T) {
 
 	before := time.Now().UTC()
 	metaReq := &IncrementMetadataRequest{
-		UpdatedAt: true,
-		UpdatedBy: "bob",
+		SetUpdatedAt: true,
+		UpdatedBy:    "bob",
 	}
 
 	newVal, inc, meta, err := s.IncrementInt16(
@@ -2117,7 +2117,7 @@ func TestIncrementInt16_ExistingKey_WithMetadataIfExist(t *testing.T) {
 		t.Fatalf("metadataResponse must not be nil when metadataIfExist is provided")
 	}
 	if meta.UpdatedAt.Before(before) {
-		t.Fatalf("UpdatedAt was not updated for existing treasure (did you pass metadataRequestIfExist to setMetaForIncrement?)")
+		t.Fatalf("SetUpdatedAt was not updated for existing treasure (did you pass metadataRequestIfExist to setMetaForIncrement?)")
 	}
 	if meta.UpdatedBy != "bob" {
 		t.Fatalf("UpdatedBy not set to 'bob': %+v", meta)
@@ -2243,11 +2243,11 @@ func TestIncrementInt32_NewKey_WithMetadataIfNotExist(t *testing.T) {
 
 	before := time.Now().UTC()
 	metaReq := &IncrementMetadataRequest{
-		CreatedAt: true,
-		CreatedBy: "alice",
-		UpdatedAt: true,
-		UpdatedBy: "alice",
-		ExpiredAt: before.Add(10 * time.Minute),
+		SetCreatedAt: true,
+		CreatedBy:    "alice",
+		SetUpdatedAt: true,
+		UpdatedBy:    "alice",
+		ExpiredAt:    before.Add(10 * time.Minute),
 	}
 
 	newVal, inc, meta, err := s.IncrementInt32(
@@ -2267,10 +2267,10 @@ func TestIncrementInt32_NewKey_WithMetadataIfNotExist(t *testing.T) {
 		t.Fatalf("expected metadataResponse not nil")
 	}
 	if meta.CreatedAt.Before(before) {
-		t.Fatalf("CreatedAt not set correctly: %v <= %v", meta.CreatedAt, before)
+		t.Fatalf("SetCreatedAt not set correctly: %v <= %v", meta.CreatedAt, before)
 	}
 	if meta.UpdatedAt.Before(before) {
-		t.Fatalf("UpdatedAt not set correctly: %v <= %v", meta.UpdatedAt, before)
+		t.Fatalf("SetUpdatedAt not set correctly: %v <= %v", meta.UpdatedAt, before)
 	}
 	if meta.CreatedBy != "alice" || meta.UpdatedBy != "alice" {
 		t.Fatalf("bad CreatedBy/UpdatedBy: %+v", meta)
@@ -2318,8 +2318,8 @@ func TestIncrementInt32_ExistingKey_WithMetadataIfExist(t *testing.T) {
 
 	before := time.Now().UTC()
 	metaReq := &IncrementMetadataRequest{
-		UpdatedAt: true,
-		UpdatedBy: "bob",
+		SetUpdatedAt: true,
+		UpdatedBy:    "bob",
 	}
 
 	newVal, inc, meta, err := s.IncrementInt32(
@@ -2339,7 +2339,7 @@ func TestIncrementInt32_ExistingKey_WithMetadataIfExist(t *testing.T) {
 		t.Fatalf("metadataResponse must not be nil when metadataIfExist is provided")
 	}
 	if meta.UpdatedAt.Before(before) {
-		t.Fatalf("UpdatedAt was not updated for existing treasure (did you pass metadataRequestIfExist to setMetaForIncrement?)")
+		t.Fatalf("SetUpdatedAt was not updated for existing treasure (did you pass metadataRequestIfExist to setMetaForIncrement?)")
 	}
 	if meta.UpdatedBy != "bob" {
 		t.Fatalf("UpdatedBy not set to 'bob': %+v", meta)
@@ -2470,11 +2470,11 @@ func TestIncrementInt64_NewKey_WithMetadataIfNotExist(t *testing.T) {
 
 	before := time.Now().UTC()
 	metaReq := &IncrementMetadataRequest{
-		CreatedAt: true,
-		CreatedBy: "alice",
-		UpdatedAt: true,
-		UpdatedBy: "alice",
-		ExpiredAt: before.Add(10 * time.Minute),
+		SetCreatedAt: true,
+		CreatedBy:    "alice",
+		SetUpdatedAt: true,
+		UpdatedBy:    "alice",
+		ExpiredAt:    before.Add(10 * time.Minute),
 	}
 
 	newVal, inc, meta, err := s.IncrementInt64(
@@ -2494,10 +2494,10 @@ func TestIncrementInt64_NewKey_WithMetadataIfNotExist(t *testing.T) {
 		t.Fatalf("expected metadataResponse not nil")
 	}
 	if meta.CreatedAt.Before(before) {
-		t.Fatalf("CreatedAt not set correctly: %v <= %v", meta.CreatedAt, before)
+		t.Fatalf("SetCreatedAt not set correctly: %v <= %v", meta.CreatedAt, before)
 	}
 	if meta.UpdatedAt.Before(before) {
-		t.Fatalf("UpdatedAt not set correctly: %v <= %v", meta.UpdatedAt, before)
+		t.Fatalf("SetUpdatedAt not set correctly: %v <= %v", meta.UpdatedAt, before)
 	}
 	if meta.CreatedBy != "alice" || meta.UpdatedBy != "alice" {
 		t.Fatalf("bad CreatedBy/UpdatedBy: %+v", meta)
@@ -2545,8 +2545,8 @@ func TestIncrementInt64_ExistingKey_WithMetadataIfExist(t *testing.T) {
 
 	before := time.Now().UTC()
 	metaReq := &IncrementMetadataRequest{
-		UpdatedAt: true,
-		UpdatedBy: "bob",
+		SetUpdatedAt: true,
+		UpdatedBy:    "bob",
 	}
 
 	newVal, inc, meta, err := s.IncrementInt64(
@@ -2566,7 +2566,7 @@ func TestIncrementInt64_ExistingKey_WithMetadataIfExist(t *testing.T) {
 		t.Fatalf("metadataResponse must not be nil when metadataIfExist is provided")
 	}
 	if meta.UpdatedAt.Before(before) {
-		t.Fatalf("UpdatedAt was not updated for existing treasure (did you pass metadataRequestIfExist to setMetaForIncrement?)")
+		t.Fatalf("SetUpdatedAt was not updated for existing treasure (did you pass metadataRequestIfExist to setMetaForIncrement?)")
 	}
 	if meta.UpdatedBy != "bob" {
 		t.Fatalf("UpdatedBy not set to 'bob': %+v", meta)
@@ -2700,11 +2700,11 @@ func TestIncrementFloat32_NewKey_WithMetadataIfNotExist(t *testing.T) {
 
 	before := time.Now().UTC()
 	metaReq := &IncrementMetadataRequest{
-		CreatedAt: true,
-		CreatedBy: "alice",
-		UpdatedAt: true,
-		UpdatedBy: "alice",
-		ExpiredAt: before.Add(10 * time.Minute),
+		SetCreatedAt: true,
+		CreatedBy:    "alice",
+		SetUpdatedAt: true,
+		UpdatedBy:    "alice",
+		ExpiredAt:    before.Add(10 * time.Minute),
 	}
 
 	newVal, inc, meta, err := s.IncrementFloat32(
@@ -2724,10 +2724,10 @@ func TestIncrementFloat32_NewKey_WithMetadataIfNotExist(t *testing.T) {
 		t.Fatalf("expected metadataResponse not nil")
 	}
 	if meta.CreatedAt.Before(before) {
-		t.Fatalf("CreatedAt not set correctly: %v <= %v", meta.CreatedAt, before)
+		t.Fatalf("SetCreatedAt not set correctly: %v <= %v", meta.CreatedAt, before)
 	}
 	if meta.UpdatedAt.Before(before) {
-		t.Fatalf("UpdatedAt not set correctly: %v <= %v", meta.UpdatedAt, before)
+		t.Fatalf("SetUpdatedAt not set correctly: %v <= %v", meta.UpdatedAt, before)
 	}
 	if meta.CreatedBy != "alice" || meta.UpdatedBy != "alice" {
 		t.Fatalf("bad CreatedBy/UpdatedBy: %+v", meta)
@@ -2775,8 +2775,8 @@ func TestIncrementFloat32_ExistingKey_WithMetadataIfExist(t *testing.T) {
 
 	before := time.Now().UTC()
 	metaReq := &IncrementMetadataRequest{
-		UpdatedAt: true,
-		UpdatedBy: "bob",
+		SetUpdatedAt: true,
+		UpdatedBy:    "bob",
 	}
 
 	newVal, inc, meta, err := s.IncrementFloat32(
@@ -2796,7 +2796,7 @@ func TestIncrementFloat32_ExistingKey_WithMetadataIfExist(t *testing.T) {
 		t.Fatalf("metadataResponse must not be nil when metadataIfExist is provided")
 	}
 	if meta.UpdatedAt.Before(before) {
-		t.Fatalf("UpdatedAt was not updated for existing treasure (did you pass metadataRequestIfExist to setMetaForIncrement?)")
+		t.Fatalf("SetUpdatedAt was not updated for existing treasure (did you pass metadataRequestIfExist to setMetaForIncrement?)")
 	}
 	if meta.UpdatedBy != "bob" {
 		t.Fatalf("UpdatedBy not set to 'bob': %+v", meta)
@@ -2927,11 +2927,11 @@ func TestIncrementFloat64_NewKey_WithMetadataIfNotExist(t *testing.T) {
 
 	before := time.Now().UTC()
 	metaReq := &IncrementMetadataRequest{
-		CreatedAt: true,
-		CreatedBy: "alice",
-		UpdatedAt: true,
-		UpdatedBy: "alice",
-		ExpiredAt: before.Add(10 * time.Minute),
+		SetCreatedAt: true,
+		CreatedBy:    "alice",
+		SetUpdatedAt: true,
+		UpdatedBy:    "alice",
+		ExpiredAt:    before.Add(10 * time.Minute),
 	}
 
 	newVal, inc, meta, err := s.IncrementFloat64(
@@ -2951,10 +2951,10 @@ func TestIncrementFloat64_NewKey_WithMetadataIfNotExist(t *testing.T) {
 		t.Fatalf("expected metadataResponse not nil")
 	}
 	if meta.CreatedAt.Before(before) {
-		t.Fatalf("CreatedAt not set correctly: %v <= %v", meta.CreatedAt, before)
+		t.Fatalf("SetCreatedAt not set correctly: %v <= %v", meta.CreatedAt, before)
 	}
 	if meta.UpdatedAt.Before(before) {
-		t.Fatalf("UpdatedAt not set correctly: %v <= %v", meta.UpdatedAt, before)
+		t.Fatalf("SetUpdatedAt not set correctly: %v <= %v", meta.UpdatedAt, before)
 	}
 	if meta.CreatedBy != "alice" || meta.UpdatedBy != "alice" {
 		t.Fatalf("bad CreatedBy/UpdatedBy: %+v", meta)
@@ -3002,8 +3002,8 @@ func TestIncrementFloat64_ExistingKey_WithMetadataIfExist(t *testing.T) {
 
 	before := time.Now().UTC()
 	metaReq := &IncrementMetadataRequest{
-		UpdatedAt: true,
-		UpdatedBy: "bob",
+		SetUpdatedAt: true,
+		UpdatedBy:    "bob",
 	}
 
 	newVal, inc, meta, err := s.IncrementFloat64(
@@ -3023,7 +3023,7 @@ func TestIncrementFloat64_ExistingKey_WithMetadataIfExist(t *testing.T) {
 		t.Fatalf("metadataResponse must not be nil when metadataIfExist is provided")
 	}
 	if meta.UpdatedAt.Before(before) {
-		t.Fatalf("UpdatedAt was not updated for existing treasure (did you pass metadataRequestIfExist to setMetaForIncrement?)")
+		t.Fatalf("SetUpdatedAt was not updated for existing treasure (did you pass metadataRequestIfExist to setMetaForIncrement?)")
 	}
 	if meta.UpdatedBy != "bob" {
 		t.Fatalf("UpdatedBy not set to 'bob': %+v", meta)

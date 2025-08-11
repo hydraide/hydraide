@@ -952,11 +952,11 @@ const (
 )
 
 type IncrementMetadataRequest struct {
-	CreatedAt bool      // indicates if we need to update the CreatedAt field to the actual time
-	CreatedBy string    // indicates to set the CreatedBy field to this value
-	UpdatedAt bool      // indicates if we need to update the UpdatedAt field to the actual time
-	UpdatedBy string    // indicates to set the UpdatedBy field to this value
-	ExpiredAt time.Time // indicates to set the ExpiredAt field to this value
+	SetCreatedAt bool      // indicates if we need to update the SetCreatedAt field to the actual time
+	CreatedBy    string    // indicates to set the CreatedBy field to this value
+	SetUpdatedAt bool      // indicates if we need to update the SetUpdatedAt field to the actual time
+	UpdatedBy    string    // indicates to set the UpdatedBy field to this value
+	ExpiredAt    time.Time // indicates to set the ExpiredAt field to this value
 }
 
 type IncrementMetadataResponse struct {
@@ -969,13 +969,13 @@ type IncrementMetadataResponse struct {
 
 func (s *swamp) setMetaForIncrement(treasureObj treasure.Treasure, guardID guard.ID, meta *IncrementMetadataRequest) {
 	// ha a treasure nem létezett, akkor beállítjuk a metaadatokat, ha vannak
-	if meta.CreatedAt {
+	if meta.SetCreatedAt {
 		treasureObj.SetCreatedAt(guardID, time.Now().UTC())
 	}
 	if meta.CreatedBy != "" {
 		treasureObj.SetCreatedBy(guardID, meta.CreatedBy)
 	}
-	if meta.UpdatedAt {
+	if meta.SetUpdatedAt {
 		treasureObj.SetModifiedAt(guardID, time.Now().UTC())
 	}
 	if meta.UpdatedBy != "" {
