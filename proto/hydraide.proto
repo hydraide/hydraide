@@ -982,12 +982,20 @@ message CountSwamp {
   int32 Count = 3;
 }
 
-message Metadata {
+message IncrementRequestMetadata {
   optional bool CreatedAt = 1; // If true, the CreatedAt timestamp will be set to the current time
   optional string CreatedBy = 2; // If set, the CreatedBy field will be set to this value
   optional bool UpdatedAt = 3; // If true, the UpdatedAt timestamp will be set to the current time
   optional string UpdatedBy = 4; // If set, the UpdatedBy field will be set to this value
   optional google.protobuf.Timestamp ExpiredAt = 5; // If set, the expireAt field will be set to this value
+}
+
+message IncrementResponseMetadata {
+  optional google.protobuf.Timestamp CreatedAt = 1; // The timestamp when the treasure was created
+  optional string CreatedBy = 2; // The identifier of who created the treasure
+  optional google.protobuf.Timestamp UpdatedAt = 3; // The timestamp when the treasure was last
+  optional string UpdatedBy = 4; // The identifier of who last updated the treasure
+  optional google.protobuf.Timestamp ExpiredAt = 5; // The timestamp when the treasure will expire
 }
 
 message IncrementInt8Request {
@@ -1013,10 +1021,10 @@ message IncrementInt8Request {
   IncrementInt8Condition Condition = 5;
 
   // SetIfNotExist is optional metadata to set if the key does not exist yet.
-  optional Metadata SetIfNotExist = 6; // Optional metadata to set if the key does not exist yet.
+  optional IncrementRequestMetadata SetIfNotExist = 6; // Optional metadata to set if the key does not exist yet.
 
   // SetIfNotExist is optional metadata to set if the key already exists.
-  optional Metadata SetIfExist = 7; // Optional metadata to set if the key already exists.
+  optional IncrementRequestMetadata SetIfExist = 7; // Optional metadata to set if the key already exists.
 
 }
 
@@ -1044,7 +1052,7 @@ message IncrementInt8Response {
   bool IsIncremented = 2;
 
   // Metadata of the treasure
-  Metadata Metadata = 3;
+  IncrementResponseMetadata Metadata = 3;
 
 }
 
@@ -1069,10 +1077,10 @@ message IncrementInt16Request {
   IncrementInt16Condition Condition = 5;
 
   // SetIfNotExist is optional metadata to set if the key does not exist yet.
-  optional Metadata SetIfNotExist = 6; // Optional metadata to set if the key does not exist yet.
+  optional IncrementRequestMetadata SetIfNotExist = 6; // Optional metadata to set if the key does not exist yet.
 
   // SetIfNotExist is optional metadata to set if the key already exists.
-  optional Metadata SetIfExist = 7; // Optional metadata to set if the key already exists.
+  optional IncrementRequestMetadata SetIfExist = 7; // Optional metadata to set if the key already exists.
 
 
 }
@@ -1099,7 +1107,7 @@ message IncrementInt16Response {
   bool IsIncremented = 2;
 
   // Metadata of the treasure
-  Metadata Metadata = 3;
+  IncrementResponseMetadata Metadata = 3;
 
 }
 
@@ -1121,10 +1129,10 @@ message IncrementInt32Request {
   IncrementInt32Condition Condition = 5;
 
   // SetIfNotExist is optional metadata to set if the key does not exist yet.
-  optional Metadata SetIfNotExist = 6; // Optional metadata to set if the key does not exist yet.
+  optional IncrementRequestMetadata SetIfNotExist = 6; // Optional metadata to set if the key does not exist yet.
 
   // SetIfNotExist is optional metadata to set if the key already exists.
-  optional Metadata SetIfExist = 7; // Optional metadata to set if the key already exists.
+  optional IncrementRequestMetadata SetIfExist = 7; // Optional metadata to set if the key already exists.
 
 
 }
@@ -1145,7 +1153,7 @@ message IncrementInt32Response {
   bool IsIncremented = 2;
 
   // Metadata of the treasure
-  Metadata Metadata = 3;
+  IncrementResponseMetadata Metadata = 3;
 
 }
 
@@ -1169,10 +1177,10 @@ message IncrementInt64Request {
   IncrementInt64Condition Condition = 5;
 
   // SetIfNotExist is optional metadata to set if the key does not exist yet.
-  optional Metadata SetIfNotExist = 6; // Optional metadata to set if the key does not exist yet.
+  optional IncrementRequestMetadata SetIfNotExist = 6; // Optional metadata to set if the key does not exist yet.
 
   // SetIfNotExist is optional metadata to set if the key already exists.
-  optional Metadata SetIfExist = 7; // Optional metadata to set if the key already exists.
+  optional IncrementRequestMetadata SetIfExist = 7; // Optional metadata to set if the key already exists.
 
 }
 
@@ -1193,7 +1201,7 @@ message IncrementInt64Response {
   bool IsIncremented = 2;
 
   // Metadata of the treasure
-  Metadata Metadata = 3;
+  IncrementResponseMetadata Metadata = 3;
 
 }
 
@@ -1222,10 +1230,10 @@ message IncrementUint8Request {
   IncrementUint8Condition Condition = 5;
 
   // SetIfNotExist is optional metadata to set if the key does not exist yet.
-  optional Metadata SetIfNotExist = 6; // Optional metadata to set if the key does not exist yet.
+  optional IncrementRequestMetadata SetIfNotExist = 6; // Optional metadata to set if the key does not exist yet.
 
   // SetIfNotExist is optional metadata to set if the key already exists.
-  optional Metadata SetIfExist = 7; // Optional metadata to set if the key already exists.
+  optional IncrementRequestMetadata SetIfExist = 7; // Optional metadata to set if the key already exists.
 
 }
 
@@ -1249,7 +1257,7 @@ message IncrementUint8Response {
   bool IsIncremented = 2;
 
   // Metadata of the treasure
-  Metadata Metadata = 3;
+  IncrementResponseMetadata Metadata = 3;
 
 }
 
@@ -1275,10 +1283,10 @@ message IncrementUint16Request {
   IncrementUint16Condition Condition = 5;
 
   // SetIfNotExist is optional metadata to set if the key does not exist yet.
-  optional Metadata SetIfNotExist = 6; // Optional metadata to set if the key does not exist yet.
+  optional IncrementRequestMetadata SetIfNotExist = 6; // Optional metadata to set if the key does not exist yet.
 
   // SetIfNotExist is optional metadata to set if the key already exists.
-  optional Metadata SetIfExist = 7; // Optional metadata to set if the key already exists.
+  optional IncrementRequestMetadata SetIfExist = 7; // Optional metadata to set if the key already exists.
 
 }
 
@@ -1303,7 +1311,7 @@ message IncrementUint16Response {
   bool IsIncremented = 2;
 
   // Metadata of the treasure
-  Metadata Metadata = 3;
+  IncrementResponseMetadata Metadata = 3;
 
 }
 
@@ -1328,10 +1336,10 @@ message IncrementUint32Request {
   IncrementUint32Condition Condition = 5;
 
   // SetIfNotExist is optional metadata to set if the key does not exist yet.
-  optional Metadata SetIfNotExist = 6; // Optional metadata to set if the key does not exist yet.
+  optional IncrementRequestMetadata SetIfNotExist = 6; // Optional metadata to set if the key does not exist yet.
 
   // SetIfNotExist is optional metadata to set if the key already exists.
-  optional Metadata SetIfExist = 7; // Optional metadata to set if the key already exists.
+  optional IncrementRequestMetadata SetIfExist = 7; // Optional metadata to set if the key already exists.
 
 }
 
@@ -1352,7 +1360,7 @@ message IncrementUint32Response {
   bool IsIncremented = 2;
 
   // Metadata of the treasure
-  Metadata Metadata = 3;
+  IncrementResponseMetadata Metadata = 3;
 
 }
 
@@ -1377,10 +1385,10 @@ message IncrementUint64Request {
   IncrementUint64Condition Condition = 5;
 
   // SetIfNotExist is optional metadata to set if the key does not exist yet.
-  optional Metadata SetIfNotExist = 6; // Optional metadata to set if the key does not exist yet.
+  optional IncrementRequestMetadata SetIfNotExist = 6; // Optional metadata to set if the key does not exist yet.
 
   // SetIfNotExist is optional metadata to set if the key already exists.
-  optional Metadata SetIfExist = 7; // Optional metadata to set if the key already exists.
+  optional IncrementRequestMetadata SetIfExist = 7; // Optional metadata to set if the key already exists.
 
 }
 
@@ -1401,7 +1409,7 @@ message IncrementUint64Response {
   bool IsIncremented = 2;
 
   // Metadata of the treasure
-  Metadata Metadata = 3;
+  IncrementResponseMetadata Metadata = 3;
 
 }
 
@@ -1439,10 +1447,10 @@ message IncrementFloat32Request {
   IncrementFloat32Condition Condition = 5;
 
   // SetIfNotExist is optional metadata to set if the key does not exist yet.
-  optional Metadata SetIfNotExist = 6; // Optional metadata to set if the key does not exist yet.
+  optional IncrementRequestMetadata SetIfNotExist = 6; // Optional metadata to set if the key does not exist yet.
 
   // SetIfNotExist is optional metadata to set if the key already exists.
-  optional Metadata SetIfExist = 7; // Optional metadata to set if the key already exists.
+  optional IncrementRequestMetadata SetIfExist = 7; // Optional metadata to set if the key already exists.
 
 }
 
@@ -1463,7 +1471,7 @@ message IncrementFloat32Response {
   bool IsIncremented = 2;
 
   // Metadata of the treasure
-  Metadata Metadata = 3;
+  IncrementResponseMetadata Metadata = 3;
 
 }
 
@@ -1489,10 +1497,10 @@ message IncrementFloat64Request {
   IncrementFloat64Condition Condition = 5;
 
   // SetIfNotExist is optional metadata to set if the key does not exist yet.
-  optional Metadata SetIfNotExist = 6; // Optional metadata to set if the key does not exist yet.
+  optional IncrementRequestMetadata SetIfNotExist = 6; // Optional metadata to set if the key does not exist yet.
 
   // SetIfNotExist is optional metadata to set if the key already exists.
-  optional Metadata SetIfExist = 7; // Optional metadata to set if the key already exists.
+  optional IncrementRequestMetadata SetIfExist = 7; // Optional metadata to set if the key already exists.
 
 }
 
@@ -1512,7 +1520,7 @@ message IncrementFloat64Response {
   bool IsIncremented = 2;
 
   // Metadata of the treasure
-  Metadata Metadata = 3;
+  IncrementResponseMetadata Metadata = 3;
 
 }
 
