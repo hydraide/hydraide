@@ -4,6 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
+	"runtime/debug"
+	"strings"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/hydraide/hydraide/app/core/hydra/swamp"
 	"github.com/hydraide/hydraide/app/core/hydra/swamp/treasure"
@@ -16,10 +21,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	"log/slog"
-	"runtime/debug"
-	"strings"
-	"time"
 )
 
 type Gateway struct {
@@ -1246,8 +1247,11 @@ func (g Gateway) IncrementInt8(ctx context.Context, in *hydrapb.IncrementInt8Req
 		}
 	}
 
+	setIfNotExist := convertIncrementMetaToSwampMeta(in.SetIfNotExist)
+	setIfExist := convertIncrementMetaToSwampMeta(in.SetIfExist)
+
 	// increment the value with the condition
-	newValue, isIncremented, err := swampObj.IncrementInt8(in.Key, int8(in.IncrementBy), condition)
+	newValue, isIncremented, metaResponse, err := swampObj.IncrementInt8(in.Key, int8(in.IncrementBy), condition, setIfNotExist, setIfExist)
 	if err != nil {
 		// return with grpc error message
 		return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("the value of the key is not an integer: %s", err.Error()))
@@ -1257,10 +1261,10 @@ func (g Gateway) IncrementInt8(ctx context.Context, in *hydrapb.IncrementInt8Req
 	return &hydrapb.IncrementInt8Response{
 		Value:         int32(newValue),
 		IsIncremented: isIncremented,
+		Metadata:      convertIncrementMetaResponseToProtoResponse(metaResponse),
 	}, nil
 
 }
-
 func (g Gateway) IncrementInt16(ctx context.Context, in *hydrapb.IncrementInt16Request) (*hydrapb.IncrementInt16Response, error) {
 
 	g.ZeusInterface.GetSafeops().LockSystem()
@@ -1306,8 +1310,10 @@ func (g Gateway) IncrementInt16(ctx context.Context, in *hydrapb.IncrementInt16R
 		}
 	}
 
+	setIfNotExist := convertIncrementMetaToSwampMeta(in.SetIfNotExist)
+	setIfExist := convertIncrementMetaToSwampMeta(in.SetIfExist)
 	// increment the value with the condition
-	newValue, isIncremented, err := swampObj.IncrementInt16(in.Key, int16(in.IncrementBy), condition)
+	newValue, isIncremented, metaResponse, err := swampObj.IncrementInt16(in.Key, int16(in.IncrementBy), condition, setIfNotExist, setIfExist)
 	if err != nil {
 		// return with grpc error message
 		return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("the value of the key is not an integer: %s", err.Error()))
@@ -1317,10 +1323,10 @@ func (g Gateway) IncrementInt16(ctx context.Context, in *hydrapb.IncrementInt16R
 	return &hydrapb.IncrementInt16Response{
 		Value:         int32(newValue),
 		IsIncremented: isIncremented,
+		Metadata:      convertIncrementMetaResponseToProtoResponse(metaResponse),
 	}, nil
 
 }
-
 func (g Gateway) IncrementInt32(ctx context.Context, in *hydrapb.IncrementInt32Request) (*hydrapb.IncrementInt32Response, error) {
 
 	g.ZeusInterface.GetSafeops().LockSystem()
@@ -1366,8 +1372,10 @@ func (g Gateway) IncrementInt32(ctx context.Context, in *hydrapb.IncrementInt32R
 		}
 	}
 
+	setIfNotExist := convertIncrementMetaToSwampMeta(in.SetIfNotExist)
+	setIfExist := convertIncrementMetaToSwampMeta(in.SetIfExist)
 	// increment the value with the condition
-	newValue, isIncremented, err := swampObj.IncrementInt32(in.Key, in.IncrementBy, condition)
+	newValue, isIncremented, metaResponse, err := swampObj.IncrementInt32(in.Key, in.IncrementBy, condition, setIfNotExist, setIfExist)
 	if err != nil {
 		// return with grpc error message
 		return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("the value of the key is not an integer: %s", err.Error()))
@@ -1377,10 +1385,10 @@ func (g Gateway) IncrementInt32(ctx context.Context, in *hydrapb.IncrementInt32R
 	return &hydrapb.IncrementInt32Response{
 		Value:         newValue,
 		IsIncremented: isIncremented,
+		Metadata:      convertIncrementMetaResponseToProtoResponse(metaResponse),
 	}, nil
 
 }
-
 func (g Gateway) IncrementInt64(ctx context.Context, in *hydrapb.IncrementInt64Request) (*hydrapb.IncrementInt64Response, error) {
 
 	g.ZeusInterface.GetSafeops().LockSystem()
@@ -1426,8 +1434,10 @@ func (g Gateway) IncrementInt64(ctx context.Context, in *hydrapb.IncrementInt64R
 		}
 	}
 
+	setIfNotExist := convertIncrementMetaToSwampMeta(in.SetIfNotExist)
+	setIfExist := convertIncrementMetaToSwampMeta(in.SetIfExist)
 	// increment the value with the condition
-	newValue, isIncremented, err := swampObj.IncrementInt64(in.Key, in.IncrementBy, condition)
+	newValue, isIncremented, metaResponse, err := swampObj.IncrementInt64(in.Key, in.IncrementBy, condition, setIfNotExist, setIfExist)
 	if err != nil {
 		// return with grpc error message
 		return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("the value of the key is not an integer: %s", err.Error()))
@@ -1437,10 +1447,10 @@ func (g Gateway) IncrementInt64(ctx context.Context, in *hydrapb.IncrementInt64R
 	return &hydrapb.IncrementInt64Response{
 		Value:         newValue,
 		IsIncremented: isIncremented,
+		Metadata:      convertIncrementMetaResponseToProtoResponse(metaResponse),
 	}, nil
 
 }
-
 func (g Gateway) IncrementUint8(ctx context.Context, in *hydrapb.IncrementUint8Request) (*hydrapb.IncrementUint8Response, error) {
 
 	g.ZeusInterface.GetSafeops().LockSystem()
@@ -1486,8 +1496,10 @@ func (g Gateway) IncrementUint8(ctx context.Context, in *hydrapb.IncrementUint8R
 		}
 	}
 
+	setIfNotExist := convertIncrementMetaToSwampMeta(in.SetIfNotExist)
+	setIfExist := convertIncrementMetaToSwampMeta(in.SetIfExist)
 	// increment the value with the condition
-	newValue, isIncremented, err := swampObj.IncrementUint8(in.Key, uint8(in.IncrementBy), condition)
+	newValue, isIncremented, metaResponse, err := swampObj.IncrementUint8(in.Key, uint8(in.IncrementBy), condition, setIfNotExist, setIfExist)
 	if err != nil {
 		// return with grpc error message
 		return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("the value of the key is not an integer: %s", err.Error()))
@@ -1497,10 +1509,10 @@ func (g Gateway) IncrementUint8(ctx context.Context, in *hydrapb.IncrementUint8R
 	return &hydrapb.IncrementUint8Response{
 		Value:         uint32(newValue),
 		IsIncremented: isIncremented,
+		Metadata:      convertIncrementMetaResponseToProtoResponse(metaResponse),
 	}, nil
 
 }
-
 func (g Gateway) IncrementUint16(ctx context.Context, in *hydrapb.IncrementUint16Request) (*hydrapb.IncrementUint16Response, error) {
 
 	g.ZeusInterface.GetSafeops().LockSystem()
@@ -1546,8 +1558,10 @@ func (g Gateway) IncrementUint16(ctx context.Context, in *hydrapb.IncrementUint1
 		}
 	}
 
+	setIfNotExist := convertIncrementMetaToSwampMeta(in.SetIfNotExist)
+	setIfExist := convertIncrementMetaToSwampMeta(in.SetIfExist)
 	// increment the value with the condition
-	newValue, isIncremented, err := swampObj.IncrementUint16(in.Key, uint16(in.IncrementBy), condition)
+	newValue, isIncremented, metaResponse, err := swampObj.IncrementUint16(in.Key, uint16(in.IncrementBy), condition, setIfNotExist, setIfExist)
 	if err != nil {
 		// return with grpc error message
 		return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("the value of the key is not an integer: %s", err.Error()))
@@ -1557,10 +1571,10 @@ func (g Gateway) IncrementUint16(ctx context.Context, in *hydrapb.IncrementUint1
 	return &hydrapb.IncrementUint16Response{
 		Value:         uint32(newValue),
 		IsIncremented: isIncremented,
+		Metadata:      convertIncrementMetaResponseToProtoResponse(metaResponse),
 	}, nil
 
 }
-
 func (g Gateway) IncrementUint32(ctx context.Context, in *hydrapb.IncrementUint32Request) (*hydrapb.IncrementUint32Response, error) {
 
 	g.ZeusInterface.GetSafeops().LockSystem()
@@ -1606,8 +1620,10 @@ func (g Gateway) IncrementUint32(ctx context.Context, in *hydrapb.IncrementUint3
 		}
 	}
 
+	setIfNotExist := convertIncrementMetaToSwampMeta(in.SetIfNotExist)
+	setIfExist := convertIncrementMetaToSwampMeta(in.SetIfExist)
 	// increment the value with the condition
-	newValue, isIncremented, err := swampObj.IncrementUint32(in.Key, in.IncrementBy, condition)
+	newValue, isIncremented, metaResponse, err := swampObj.IncrementUint32(in.Key, in.IncrementBy, condition, setIfNotExist, setIfExist)
 	if err != nil {
 		// return with grpc error message
 		return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("the value of the key is not an integer: %s", err.Error()))
@@ -1617,10 +1633,10 @@ func (g Gateway) IncrementUint32(ctx context.Context, in *hydrapb.IncrementUint3
 	return &hydrapb.IncrementUint32Response{
 		Value:         newValue,
 		IsIncremented: isIncremented,
+		Metadata:      convertIncrementMetaResponseToProtoResponse(metaResponse),
 	}, nil
 
 }
-
 func (g Gateway) IncrementUint64(ctx context.Context, in *hydrapb.IncrementUint64Request) (*hydrapb.IncrementUint64Response, error) {
 
 	g.ZeusInterface.GetSafeops().LockSystem()
@@ -1666,8 +1682,10 @@ func (g Gateway) IncrementUint64(ctx context.Context, in *hydrapb.IncrementUint6
 		}
 	}
 
+	setIfNotExist := convertIncrementMetaToSwampMeta(in.SetIfNotExist)
+	setIfExist := convertIncrementMetaToSwampMeta(in.SetIfExist)
 	// increment the value with the condition
-	newValue, isIncremented, err := swampObj.IncrementUint64(in.Key, in.IncrementBy, condition)
+	newValue, isIncremented, metaResponse, err := swampObj.IncrementUint64(in.Key, in.IncrementBy, condition, setIfNotExist, setIfExist)
 	if err != nil {
 		// return with grpc error message
 		return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("the value of the key is not an integer: %s", err.Error()))
@@ -1677,10 +1695,10 @@ func (g Gateway) IncrementUint64(ctx context.Context, in *hydrapb.IncrementUint6
 	return &hydrapb.IncrementUint64Response{
 		Value:         newValue,
 		IsIncremented: isIncremented,
+		Metadata:      convertIncrementMetaResponseToProtoResponse(metaResponse),
 	}, nil
 
 }
-
 func (g Gateway) IncrementFloat32(ctx context.Context, in *hydrapb.IncrementFloat32Request) (*hydrapb.IncrementFloat32Response, error) {
 
 	g.ZeusInterface.GetSafeops().LockSystem()
@@ -1726,8 +1744,10 @@ func (g Gateway) IncrementFloat32(ctx context.Context, in *hydrapb.IncrementFloa
 		}
 	}
 
+	setIfNotExist := convertIncrementMetaToSwampMeta(in.SetIfNotExist)
+	setIfExist := convertIncrementMetaToSwampMeta(in.SetIfExist)
 	// increment the value with the condition
-	newValue, isIncremented, err := swampObj.IncrementFloat32(in.Key, in.IncrementBy, condition)
+	newValue, isIncremented, metaResponse, err := swampObj.IncrementFloat32(in.Key, in.IncrementBy, condition, setIfNotExist, setIfExist)
 
 	if err != nil {
 		// return with grpc error message
@@ -1738,10 +1758,10 @@ func (g Gateway) IncrementFloat32(ctx context.Context, in *hydrapb.IncrementFloa
 	return &hydrapb.IncrementFloat32Response{
 		Value:         newValue,
 		IsIncremented: isIncremented,
+		Metadata:      convertIncrementMetaResponseToProtoResponse(metaResponse),
 	}, nil
 
 }
-
 func (g Gateway) IncrementFloat64(ctx context.Context, in *hydrapb.IncrementFloat64Request) (*hydrapb.IncrementFloat64Response, error) {
 
 	g.ZeusInterface.GetSafeops().LockSystem()
@@ -1787,8 +1807,10 @@ func (g Gateway) IncrementFloat64(ctx context.Context, in *hydrapb.IncrementFloa
 		}
 	}
 
+	setIfNotExist := convertIncrementMetaToSwampMeta(in.SetIfNotExist)
+	setIfExist := convertIncrementMetaToSwampMeta(in.SetIfExist)
 	// increment the value with the condition
-	newValue, isIncremented, err := swampObj.IncrementFloat64(in.Key, in.IncrementBy, condition)
+	newValue, isIncremented, metaResponse, err := swampObj.IncrementFloat64(in.Key, in.IncrementBy, condition, setIfNotExist, setIfExist)
 
 	if err != nil {
 		// return with grpc error message
@@ -1799,8 +1821,54 @@ func (g Gateway) IncrementFloat64(ctx context.Context, in *hydrapb.IncrementFloa
 	return &hydrapb.IncrementFloat64Response{
 		Value:         newValue,
 		IsIncremented: isIncremented,
+		Metadata:      convertIncrementMetaResponseToProtoResponse(metaResponse),
 	}, nil
 
+}
+
+// convertIncrementMetaToSwampMeta helper function that converts the IncrementRequestMetadata from hydra to swamp IncrementMetadataRequest
+func convertIncrementMetaToSwampMeta(in *hydrapb.IncrementRequestMetadata) *swamp.IncrementMetadataRequest {
+	if in == nil {
+		return nil
+	}
+	imr := &swamp.IncrementMetadataRequest{
+		SetCreatedAt: in.GetCreatedAt(),
+		SetUpdatedAt: in.GetUpdatedAt(),
+	}
+	if in.GetExpiredAt() != nil && in.GetExpiredAt().IsValid() {
+		imr.ExpiredAt = in.GetExpiredAt().AsTime()
+	}
+	if in.GetCreatedBy() != "" {
+		imr.CreatedBy = in.GetCreatedBy()
+	}
+	if in.GetUpdatedBy() != "" {
+		imr.UpdatedBy = in.GetUpdatedBy()
+	}
+	return imr
+}
+
+// convertIncrementMetaResponseToProtoResponse helper function that converts the IncrementMetadataResponse from swamp to hydra IncrementResponseMetadata
+func convertIncrementMetaResponseToProtoResponse(metaResponse *swamp.IncrementMetadataResponse) *hydrapb.IncrementResponseMetadata {
+	if metaResponse == nil {
+		return nil
+	}
+	resp := &hydrapb.IncrementResponseMetadata{}
+	if !metaResponse.CreatedAt.IsZero() {
+		resp.CreatedAt = timestamppb.New(metaResponse.CreatedAt)
+	}
+	if !metaResponse.UpdatedAt.IsZero() {
+		resp.UpdatedAt = timestamppb.New(metaResponse.UpdatedAt)
+	}
+	if !metaResponse.ExpiredAt.IsZero() {
+		resp.ExpiredAt = timestamppb.New(metaResponse.ExpiredAt)
+	}
+	if metaResponse.CreatedBy != "" {
+		resp.CreatedBy = &metaResponse.CreatedBy
+	}
+	if metaResponse.UpdatedBy != "" {
+		resp.UpdatedBy = &metaResponse.UpdatedBy
+	}
+	return resp
 }
 
 // keyValuesToTreasure converts the key value pairs to the treasure content
