@@ -1070,27 +1070,27 @@ func (s *swamp) IncrementUint8(key string, i uint8, condition *IncrementUInt8Con
 		switch condition.RelationalOperator {
 		case RelationalOperatorEqual:
 			if contentInt != condition.Value {
-				return contentInt, false, nil, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorNotEqual:
 			if contentInt == condition.Value {
-				return contentInt, false, nil, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorGreaterThan:
 			if contentInt <= condition.Value {
-				return contentInt, false, nil, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorGreaterThanOrEqual:
 			if contentInt < condition.Value {
-				return contentInt, false, nil, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorLessThan:
 			if contentInt >= condition.Value {
-				return contentInt, false, nil, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorLessThanOrEqual:
 			if contentInt > condition.Value {
-				return contentInt, false, nil, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		}
 	}
@@ -1154,27 +1154,27 @@ func (s *swamp) IncrementUint16(key string, i uint16, condition *IncrementUInt16
 		switch condition.RelationalOperator {
 		case RelationalOperatorEqual:
 			if contentInt != condition.Value {
-				return contentInt, false, nil, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorNotEqual:
 			if contentInt == condition.Value {
-				return contentInt, false, nil, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorGreaterThan:
 			if contentInt <= condition.Value {
-				return contentInt, false, nil, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorGreaterThanOrEqual:
 			if contentInt < condition.Value {
-				return contentInt, false, nil, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorLessThan:
 			if contentInt >= condition.Value {
-				return contentInt, false, nil, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorLessThanOrEqual:
 			if contentInt > condition.Value {
-				return contentInt, false, nil, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		}
 	}
@@ -1235,27 +1235,27 @@ func (s *swamp) IncrementUint32(key string, i uint32, condition *IncrementUInt32
 		switch condition.RelationalOperator {
 		case RelationalOperatorEqual:
 			if contentInt != condition.Value {
-				return contentInt, false, nil, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorNotEqual:
 			if contentInt == condition.Value {
-				return contentInt, false, nil, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorGreaterThan:
 			if contentInt <= condition.Value {
-				return contentInt, false, nil, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorGreaterThanOrEqual:
 			if contentInt < condition.Value {
-				return contentInt, false, nil, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorLessThan:
 			if contentInt >= condition.Value {
-				return contentInt, false, nil, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorLessThanOrEqual:
 			if contentInt > condition.Value {
-				return contentInt, false, nil, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		}
 	}
@@ -1317,27 +1317,27 @@ func (s *swamp) IncrementUint64(key string, i uint64, condition *IncrementUInt64
 		switch condition.RelationalOperator {
 		case RelationalOperatorEqual:
 			if contentInt != condition.Value {
-				return contentInt, false, nil, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorNotEqual:
 			if contentInt == condition.Value {
-				return contentInt, false, nil, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorGreaterThan:
 			if contentInt <= condition.Value {
-				return contentInt, false, nil, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorGreaterThanOrEqual:
 			if contentInt < condition.Value {
-				return contentInt, false, nil, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorLessThan:
 			if contentInt >= condition.Value {
-				return contentInt, false, nil, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorLessThanOrEqual:
 			if contentInt > condition.Value {
-				return contentInt, false, nil, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		}
 	}
@@ -1397,27 +1397,27 @@ func (s *swamp) IncrementInt8(key string, i int8, condition *IncrementInt8Condit
 		switch condition.RelationalOperator {
 		case RelationalOperatorEqual:
 			if contentInt != condition.Value {
-				return contentInt, false, nil, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorNotEqual:
 			if contentInt == condition.Value {
-				return contentInt, false, nil, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorGreaterThan:
 			if contentInt <= condition.Value {
-				return contentInt, false, nil, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorGreaterThanOrEqual:
 			if contentInt < condition.Value {
-				return contentInt, false, nil, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorLessThan:
 			if contentInt >= condition.Value {
-				return contentInt, false, nil, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorLessThanOrEqual:
 			if contentInt > condition.Value {
-				return contentInt, false, nil, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		}
 	}
@@ -1478,27 +1478,27 @@ func (s *swamp) IncrementInt16(key string, i int16, condition *IncrementInt16Con
 		switch condition.RelationalOperator {
 		case RelationalOperatorEqual:
 			if contentInt != condition.Value {
-				return contentInt, false, nil, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorNotEqual:
 			if contentInt == condition.Value {
-				return contentInt, false, nil, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorGreaterThan:
 			if contentInt <= condition.Value {
-				return contentInt, false, nil, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorGreaterThanOrEqual:
 			if contentInt < condition.Value {
-				return contentInt, false, nil, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorLessThan:
 			if contentInt >= condition.Value {
-				return contentInt, false, nil, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorLessThanOrEqual:
 			if contentInt > condition.Value {
-				return contentInt, false, nil, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		}
 	}
@@ -1557,27 +1557,27 @@ func (s *swamp) IncrementInt32(key string, i int32, condition *IncrementInt32Con
 		switch condition.RelationalOperator {
 		case RelationalOperatorEqual:
 			if contentInt != condition.Value {
-				return contentInt, false, nil, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorNotEqual:
 			if contentInt == condition.Value {
-				return contentInt, false, nil, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorGreaterThan:
 			if contentInt <= condition.Value {
-				return contentInt, false, nil, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorGreaterThanOrEqual:
 			if contentInt < condition.Value {
-				return contentInt, false, nil, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorLessThan:
 			if contentInt >= condition.Value {
-				return contentInt, false, nil, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorLessThanOrEqual:
 			if contentInt > condition.Value {
-				return contentInt, false, nil, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		}
 	}
@@ -1636,27 +1636,27 @@ func (s *swamp) IncrementInt64(key string, i int64, condition *IncrementInt64Con
 		switch condition.RelationalOperator {
 		case RelationalOperatorEqual:
 			if contentInt != condition.Value {
-				return contentInt, false, nil, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorNotEqual:
 			if contentInt == condition.Value {
-				return contentInt, false, nil, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorGreaterThan:
 			if contentInt <= condition.Value {
-				return contentInt, false, nil, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorGreaterThanOrEqual:
 			if contentInt < condition.Value {
-				return contentInt, false, nil, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorLessThan:
 			if contentInt >= condition.Value {
-				return contentInt, false, nil, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorLessThanOrEqual:
 			if contentInt > condition.Value {
-				return contentInt, false, nil, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		}
 	}
@@ -1727,27 +1727,27 @@ func (s *swamp) IncrementFloat32(key string, f float32, condition *IncrementFloa
 		switch condition.RelationalOperator {
 		case RelationalOperatorEqual:
 			if contentFloat != condition.Value {
-				return contentFloat, false, nil, nil
+				return contentFloat, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorNotEqual:
 			if contentFloat == condition.Value {
-				return contentFloat, false, nil, nil
+				return contentFloat, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorGreaterThan:
 			if contentFloat <= condition.Value {
-				return contentFloat, false, nil, nil
+				return contentFloat, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorGreaterThanOrEqual:
 			if contentFloat < condition.Value {
-				return contentFloat, false, nil, nil
+				return contentFloat, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorLessThan:
 			if contentFloat >= condition.Value {
-				return contentFloat, false, nil, nil
+				return contentFloat, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorLessThanOrEqual:
 			if contentFloat > condition.Value {
-				return contentFloat, false, nil, nil
+				return contentFloat, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		}
 	}
@@ -1807,27 +1807,27 @@ func (s *swamp) IncrementFloat64(key string, f float64, condition *IncrementFloa
 		switch condition.RelationalOperator {
 		case RelationalOperatorEqual:
 			if contentFloat != condition.Value {
-				return contentFloat, false, nil, nil
+				return contentFloat, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorNotEqual:
 			if contentFloat == condition.Value {
-				return contentFloat, false, nil, nil
+				return contentFloat, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorGreaterThan:
 			if contentFloat <= condition.Value {
-				return contentFloat, false, nil, nil
+				return contentFloat, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorGreaterThanOrEqual:
 			if contentFloat < condition.Value {
-				return contentFloat, false, nil, nil
+				return contentFloat, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorLessThan:
 			if contentFloat >= condition.Value {
-				return contentFloat, false, nil, nil
+				return contentFloat, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorLessThanOrEqual:
 			if contentFloat > condition.Value {
-				return contentFloat, false, nil, nil
+				return contentFloat, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		}
 	}
