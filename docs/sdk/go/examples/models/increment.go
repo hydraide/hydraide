@@ -139,7 +139,7 @@ type CatalogModelRateLimitCounter struct {
 // → State evaporates when no longer needed.
 //
 //	Rate limiting becomes stateless by design.
-func (c *CatalogModelRateLimitCounter) AttemptRateLimitedAction(r repo.Repo, userID string) bool {
+func (c *CatalogModelRateLimitCounter) AttemptRateLimitedAction(r repo.Repo) bool {
 
 	// Create a context with a default timeout using the helper.
 	ctx, cancelFunc := hydraidehelper.CreateHydraContext()
@@ -151,7 +151,7 @@ func (c *CatalogModelRateLimitCounter) AttemptRateLimitedAction(r repo.Repo, use
 	swamp := c.createName()
 
 	// Attempt to increment the counter if it's still under the limit
-	newVal, err := h.IncrementUint8(ctx, swamp, userID, 1, &hydraidego.Uint8Condition{
+	newVal, err := h.IncrementUint8(ctx, swamp, c.UserID, 1, &hydraidego.Uint8Condition{
 		RelationalOperator: hydraidego.LessThan,
 		Value:              10, // Max 10 actions per minute
 	})
@@ -159,14 +159,14 @@ func (c *CatalogModelRateLimitCounter) AttemptRateLimitedAction(r repo.Repo, use
 	// Evaluate result
 	if err != nil {
 		if hydraidego.IsConditionNotMet(err) {
-			slog.Warn("Rate limit exceeded", "userID", userID)
+			slog.Warn("Rate limit exceeded", "userID", c.UserID)
 			return false
 		}
-		slog.Error("Rate-limit increment failed", "userID", userID, "error", err)
+		slog.Error("Rate-limit increment failed", "userID", c.UserID, "error", err)
 		return false
 	}
 
-	slog.Info("Action allowed, counter incremented", "userID", userID, "newVal", newVal)
+	slog.Info("Action allowed, counter incremented", "userID", c.UserID, "newVal", newVal)
 	return true
 }
 

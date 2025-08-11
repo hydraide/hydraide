@@ -3,12 +3,6 @@ package client
 import (
 	"context"
 	"errors"
-	"github.com/hydraide/hydraide/generated/hydraidepbgo"
-	"github.com/hydraide/hydraide/sdk/go/hydraidego/name"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/grpclog"
-	"google.golang.org/grpc/keepalive"
 	"log/slog"
 	"net"
 	"os"
@@ -16,6 +10,13 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/hydraide/hydraide/generated/hydraidepbgo"
+	"github.com/hydraide/hydraide/sdk/go/hydraidego/name"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/grpclog"
+	"google.golang.org/grpc/keepalive"
 )
 
 const (
@@ -351,16 +352,17 @@ func (c *client) GetServiceClient(swampName name.Name) hydraidepbgo.HydraideServ
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	// lekérdezzük a folder számát
+	// get the folder number based on the swamp name
 	folderNumber := swampName.GetIslandID(c.allIslands)
 
-	// a folder száma alapján visszaadjuk a klienst
+	// return with the service client based on the folder number
 	if serviceClient, ok := c.serviceClients[folderNumber]; ok {
 		return serviceClient.GrpcClient
 	}
 
 	slog.Error("error while getting service client by swamp name",
 		"swampName", swampName.Get())
+
 	return nil
 
 }

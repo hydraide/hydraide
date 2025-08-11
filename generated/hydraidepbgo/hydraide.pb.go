@@ -401,7 +401,7 @@ func (x Relational_Operator) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use Relational_Operator.Descriptor instead.
 func (Relational_Operator) EnumDescriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{67, 0}
+	return file_hydraide_proto_rawDescGZIP(), []int{68, 0}
 }
 
 type HeartbeatRequest struct {
@@ -3120,6 +3120,82 @@ func (x *CountSwamp) GetCount() int32 {
 	return 0
 }
 
+type Metadata struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	CreatedAt     *bool                  `protobuf:"varint,1,opt,name=CreatedAt,proto3,oneof" json:"CreatedAt,omitempty"` // If true, the CreatedAt timestamp will be set to the current time
+	CreatedBy     *string                `protobuf:"bytes,2,opt,name=CreatedBy,proto3,oneof" json:"CreatedBy,omitempty"`  // If set, the CreatedBy field will be set to this value
+	UpdatedAt     *bool                  `protobuf:"varint,3,opt,name=UpdatedAt,proto3,oneof" json:"UpdatedAt,omitempty"` // If true, the UpdatedAt timestamp will be set to the current time
+	UpdatedBy     *string                `protobuf:"bytes,4,opt,name=UpdatedBy,proto3,oneof" json:"UpdatedBy,omitempty"`  // If set, the UpdatedBy field will be set to this value
+	ExpiredAt     *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=ExpiredAt,proto3,oneof" json:"ExpiredAt,omitempty"`  // If set, the expireAt field will be set to this value
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Metadata) Reset() {
+	*x = Metadata{}
+	mi := &file_hydraide_proto_msgTypes[43]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Metadata) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Metadata) ProtoMessage() {}
+
+func (x *Metadata) ProtoReflect() protoreflect.Message {
+	mi := &file_hydraide_proto_msgTypes[43]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Metadata.ProtoReflect.Descriptor instead.
+func (*Metadata) Descriptor() ([]byte, []int) {
+	return file_hydraide_proto_rawDescGZIP(), []int{43}
+}
+
+func (x *Metadata) GetCreatedAt() bool {
+	if x != nil && x.CreatedAt != nil {
+		return *x.CreatedAt
+	}
+	return false
+}
+
+func (x *Metadata) GetCreatedBy() string {
+	if x != nil && x.CreatedBy != nil {
+		return *x.CreatedBy
+	}
+	return ""
+}
+
+func (x *Metadata) GetUpdatedAt() bool {
+	if x != nil && x.UpdatedAt != nil {
+		return *x.UpdatedAt
+	}
+	return false
+}
+
+func (x *Metadata) GetUpdatedBy() string {
+	if x != nil && x.UpdatedBy != nil {
+		return *x.UpdatedBy
+	}
+	return ""
+}
+
+func (x *Metadata) GetExpiredAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpiredAt
+	}
+	return nil
+}
+
 type IncrementInt8Request struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// IslandID is the deterministic storage zone (or "island") where this Swamp lives.
@@ -3136,14 +3212,18 @@ type IncrementInt8Request struct {
 	// 💡 Supports negative values for decrementing.
 	IncrementBy int32 `protobuf:"varint,4,opt,name=IncrementBy,proto3" json:"IncrementBy,omitempty"`
 	// Condition determines whether the increment should proceed.
-	Condition     *IncrementInt8Condition `protobuf:"bytes,5,opt,name=Condition,proto3" json:"Condition,omitempty"`
+	Condition *IncrementInt8Condition `protobuf:"bytes,5,opt,name=Condition,proto3" json:"Condition,omitempty"`
+	// SetIfNotExist is optional metadata to set if the key does not exist yet.
+	SetIfNotExist *Metadata `protobuf:"bytes,6,opt,name=SetIfNotExist,proto3,oneof" json:"SetIfNotExist,omitempty"` // Optional metadata to set if the key does not exist yet.
+	// SetIfNotExist is optional metadata to set if the key already exists.
+	SetIfExist    *Metadata `protobuf:"bytes,7,opt,name=SetIfExist,proto3,oneof" json:"SetIfExist,omitempty"` // Optional metadata to set if the key already exists.
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *IncrementInt8Request) Reset() {
 	*x = IncrementInt8Request{}
-	mi := &file_hydraide_proto_msgTypes[43]
+	mi := &file_hydraide_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3155,7 +3235,7 @@ func (x *IncrementInt8Request) String() string {
 func (*IncrementInt8Request) ProtoMessage() {}
 
 func (x *IncrementInt8Request) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[43]
+	mi := &file_hydraide_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3168,7 +3248,7 @@ func (x *IncrementInt8Request) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementInt8Request.ProtoReflect.Descriptor instead.
 func (*IncrementInt8Request) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{43}
+	return file_hydraide_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *IncrementInt8Request) GetIslandID() uint64 {
@@ -3206,6 +3286,20 @@ func (x *IncrementInt8Request) GetCondition() *IncrementInt8Condition {
 	return nil
 }
 
+func (x *IncrementInt8Request) GetSetIfNotExist() *Metadata {
+	if x != nil {
+		return x.SetIfNotExist
+	}
+	return nil
+}
+
+func (x *IncrementInt8Request) GetSetIfExist() *Metadata {
+	if x != nil {
+		return x.SetIfExist
+	}
+	return nil
+}
+
 type IncrementInt8Condition struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The relational operator to apply (e.g., GREATER_THAN, EQUAL).
@@ -3220,7 +3314,7 @@ type IncrementInt8Condition struct {
 
 func (x *IncrementInt8Condition) Reset() {
 	*x = IncrementInt8Condition{}
-	mi := &file_hydraide_proto_msgTypes[44]
+	mi := &file_hydraide_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3232,7 +3326,7 @@ func (x *IncrementInt8Condition) String() string {
 func (*IncrementInt8Condition) ProtoMessage() {}
 
 func (x *IncrementInt8Condition) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[44]
+	mi := &file_hydraide_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3245,7 +3339,7 @@ func (x *IncrementInt8Condition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementInt8Condition.ProtoReflect.Descriptor instead.
 func (*IncrementInt8Condition) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{44}
+	return file_hydraide_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *IncrementInt8Condition) GetRelationalOperator() Relational_Operator {
@@ -3271,13 +3365,15 @@ type IncrementInt8Response struct {
 	Value int32 `protobuf:"varint,1,opt,name=Value,proto3" json:"Value,omitempty"`
 	// IsIncremented indicates whether the increment was actually applied.
 	IsIncremented bool `protobuf:"varint,2,opt,name=IsIncremented,proto3" json:"IsIncremented,omitempty"`
+	// Metadata of the treasure
+	Metadata      *Metadata `protobuf:"bytes,3,opt,name=Metadata,proto3" json:"Metadata,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *IncrementInt8Response) Reset() {
 	*x = IncrementInt8Response{}
-	mi := &file_hydraide_proto_msgTypes[45]
+	mi := &file_hydraide_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3289,7 +3385,7 @@ func (x *IncrementInt8Response) String() string {
 func (*IncrementInt8Response) ProtoMessage() {}
 
 func (x *IncrementInt8Response) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[45]
+	mi := &file_hydraide_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3302,7 +3398,7 @@ func (x *IncrementInt8Response) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementInt8Response.ProtoReflect.Descriptor instead.
 func (*IncrementInt8Response) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{45}
+	return file_hydraide_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *IncrementInt8Response) GetValue() int32 {
@@ -3319,6 +3415,13 @@ func (x *IncrementInt8Response) GetIsIncremented() bool {
 	return false
 }
 
+func (x *IncrementInt8Response) GetMetadata() *Metadata {
+	if x != nil {
+		return x.Metadata
+	}
+	return nil
+}
+
 type IncrementInt16Request struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// IslandID is the deterministic storage zone (or "island") where this Swamp lives.
@@ -3333,14 +3436,18 @@ type IncrementInt16Request struct {
 	// The system enforces proper bounds and type conversion internally.
 	IncrementBy int32 `protobuf:"varint,4,opt,name=IncrementBy,proto3" json:"IncrementBy,omitempty"`
 	// Condition determines whether the increment should proceed.
-	Condition     *IncrementInt16Condition `protobuf:"bytes,5,opt,name=Condition,proto3" json:"Condition,omitempty"`
+	Condition *IncrementInt16Condition `protobuf:"bytes,5,opt,name=Condition,proto3" json:"Condition,omitempty"`
+	// SetIfNotExist is optional metadata to set if the key does not exist yet.
+	SetIfNotExist *Metadata `protobuf:"bytes,6,opt,name=SetIfNotExist,proto3,oneof" json:"SetIfNotExist,omitempty"` // Optional metadata to set if the key does not exist yet.
+	// SetIfNotExist is optional metadata to set if the key already exists.
+	SetIfExist    *Metadata `protobuf:"bytes,7,opt,name=SetIfExist,proto3,oneof" json:"SetIfExist,omitempty"` // Optional metadata to set if the key already exists.
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *IncrementInt16Request) Reset() {
 	*x = IncrementInt16Request{}
-	mi := &file_hydraide_proto_msgTypes[46]
+	mi := &file_hydraide_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3352,7 +3459,7 @@ func (x *IncrementInt16Request) String() string {
 func (*IncrementInt16Request) ProtoMessage() {}
 
 func (x *IncrementInt16Request) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[46]
+	mi := &file_hydraide_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3365,7 +3472,7 @@ func (x *IncrementInt16Request) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementInt16Request.ProtoReflect.Descriptor instead.
 func (*IncrementInt16Request) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{46}
+	return file_hydraide_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *IncrementInt16Request) GetIslandID() uint64 {
@@ -3403,6 +3510,20 @@ func (x *IncrementInt16Request) GetCondition() *IncrementInt16Condition {
 	return nil
 }
 
+func (x *IncrementInt16Request) GetSetIfNotExist() *Metadata {
+	if x != nil {
+		return x.SetIfNotExist
+	}
+	return nil
+}
+
+func (x *IncrementInt16Request) GetSetIfExist() *Metadata {
+	if x != nil {
+		return x.SetIfExist
+	}
+	return nil
+}
+
 type IncrementInt16Condition struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The relational operator to apply (e.g., GREATER_THAN, LESS_THAN).
@@ -3418,7 +3539,7 @@ type IncrementInt16Condition struct {
 
 func (x *IncrementInt16Condition) Reset() {
 	*x = IncrementInt16Condition{}
-	mi := &file_hydraide_proto_msgTypes[47]
+	mi := &file_hydraide_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3430,7 +3551,7 @@ func (x *IncrementInt16Condition) String() string {
 func (*IncrementInt16Condition) ProtoMessage() {}
 
 func (x *IncrementInt16Condition) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[47]
+	mi := &file_hydraide_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3443,7 +3564,7 @@ func (x *IncrementInt16Condition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementInt16Condition.ProtoReflect.Descriptor instead.
 func (*IncrementInt16Condition) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{47}
+	return file_hydraide_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *IncrementInt16Condition) GetRelationalOperator() Relational_Operator {
@@ -3469,13 +3590,15 @@ type IncrementInt16Response struct {
 	Value int32 `protobuf:"varint,1,opt,name=Value,proto3" json:"Value,omitempty"`
 	// IsIncremented tells whether the value was actually modified.
 	IsIncremented bool `protobuf:"varint,2,opt,name=IsIncremented,proto3" json:"IsIncremented,omitempty"`
+	// Metadata of the treasure
+	Metadata      *Metadata `protobuf:"bytes,3,opt,name=Metadata,proto3" json:"Metadata,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *IncrementInt16Response) Reset() {
 	*x = IncrementInt16Response{}
-	mi := &file_hydraide_proto_msgTypes[48]
+	mi := &file_hydraide_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3487,7 +3610,7 @@ func (x *IncrementInt16Response) String() string {
 func (*IncrementInt16Response) ProtoMessage() {}
 
 func (x *IncrementInt16Response) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[48]
+	mi := &file_hydraide_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3500,7 +3623,7 @@ func (x *IncrementInt16Response) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementInt16Response.ProtoReflect.Descriptor instead.
 func (*IncrementInt16Response) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{48}
+	return file_hydraide_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *IncrementInt16Response) GetValue() int32 {
@@ -3517,6 +3640,13 @@ func (x *IncrementInt16Response) GetIsIncremented() bool {
 	return false
 }
 
+func (x *IncrementInt16Response) GetMetadata() *Metadata {
+	if x != nil {
+		return x.Metadata
+	}
+	return nil
+}
+
 type IncrementInt32Request struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// IslandID is the deterministic storage zone (or "island") where this Swamp lives.
@@ -3528,14 +3658,18 @@ type IncrementInt32Request struct {
 	// IncrementBy is the signed 32-bit integer to add or subtract.
 	IncrementBy int32 `protobuf:"varint,4,opt,name=IncrementBy,proto3" json:"IncrementBy,omitempty"`
 	// Condition must be satisfied for the increment to apply.
-	Condition     *IncrementInt32Condition `protobuf:"bytes,5,opt,name=Condition,proto3" json:"Condition,omitempty"`
+	Condition *IncrementInt32Condition `protobuf:"bytes,5,opt,name=Condition,proto3" json:"Condition,omitempty"`
+	// SetIfNotExist is optional metadata to set if the key does not exist yet.
+	SetIfNotExist *Metadata `protobuf:"bytes,6,opt,name=SetIfNotExist,proto3,oneof" json:"SetIfNotExist,omitempty"` // Optional metadata to set if the key does not exist yet.
+	// SetIfNotExist is optional metadata to set if the key already exists.
+	SetIfExist    *Metadata `protobuf:"bytes,7,opt,name=SetIfExist,proto3,oneof" json:"SetIfExist,omitempty"` // Optional metadata to set if the key already exists.
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *IncrementInt32Request) Reset() {
 	*x = IncrementInt32Request{}
-	mi := &file_hydraide_proto_msgTypes[49]
+	mi := &file_hydraide_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3547,7 +3681,7 @@ func (x *IncrementInt32Request) String() string {
 func (*IncrementInt32Request) ProtoMessage() {}
 
 func (x *IncrementInt32Request) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[49]
+	mi := &file_hydraide_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3560,7 +3694,7 @@ func (x *IncrementInt32Request) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementInt32Request.ProtoReflect.Descriptor instead.
 func (*IncrementInt32Request) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{49}
+	return file_hydraide_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *IncrementInt32Request) GetIslandID() uint64 {
@@ -3598,6 +3732,20 @@ func (x *IncrementInt32Request) GetCondition() *IncrementInt32Condition {
 	return nil
 }
 
+func (x *IncrementInt32Request) GetSetIfNotExist() *Metadata {
+	if x != nil {
+		return x.SetIfNotExist
+	}
+	return nil
+}
+
+func (x *IncrementInt32Request) GetSetIfExist() *Metadata {
+	if x != nil {
+		return x.SetIfExist
+	}
+	return nil
+}
+
 type IncrementInt32Condition struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The relational operator for evaluating the current value.
@@ -3610,7 +3758,7 @@ type IncrementInt32Condition struct {
 
 func (x *IncrementInt32Condition) Reset() {
 	*x = IncrementInt32Condition{}
-	mi := &file_hydraide_proto_msgTypes[50]
+	mi := &file_hydraide_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3622,7 +3770,7 @@ func (x *IncrementInt32Condition) String() string {
 func (*IncrementInt32Condition) ProtoMessage() {}
 
 func (x *IncrementInt32Condition) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[50]
+	mi := &file_hydraide_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3635,7 +3783,7 @@ func (x *IncrementInt32Condition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementInt32Condition.ProtoReflect.Descriptor instead.
 func (*IncrementInt32Condition) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{50}
+	return file_hydraide_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *IncrementInt32Condition) GetRelationalOperator() Relational_Operator {
@@ -3658,13 +3806,15 @@ type IncrementInt32Response struct {
 	Value int32 `protobuf:"varint,1,opt,name=Value,proto3" json:"Value,omitempty"`
 	// IsIncremented is true if the value was changed.
 	IsIncremented bool `protobuf:"varint,2,opt,name=IsIncremented,proto3" json:"IsIncremented,omitempty"`
+	// Metadata of the treasure
+	Metadata      *Metadata `protobuf:"bytes,3,opt,name=Metadata,proto3" json:"Metadata,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *IncrementInt32Response) Reset() {
 	*x = IncrementInt32Response{}
-	mi := &file_hydraide_proto_msgTypes[51]
+	mi := &file_hydraide_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3676,7 +3826,7 @@ func (x *IncrementInt32Response) String() string {
 func (*IncrementInt32Response) ProtoMessage() {}
 
 func (x *IncrementInt32Response) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[51]
+	mi := &file_hydraide_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3689,7 +3839,7 @@ func (x *IncrementInt32Response) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementInt32Response.ProtoReflect.Descriptor instead.
 func (*IncrementInt32Response) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{51}
+	return file_hydraide_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *IncrementInt32Response) GetValue() int32 {
@@ -3706,6 +3856,13 @@ func (x *IncrementInt32Response) GetIsIncremented() bool {
 	return false
 }
 
+func (x *IncrementInt32Response) GetMetadata() *Metadata {
+	if x != nil {
+		return x.Metadata
+	}
+	return nil
+}
+
 type IncrementInt64Request struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// IslandID is the deterministic storage zone (or "island") where this Swamp lives.
@@ -3719,14 +3876,18 @@ type IncrementInt64Request struct {
 	// 💡 Ideal for working with timestamps, counters, large numeric values.
 	IncrementBy int64 `protobuf:"varint,4,opt,name=IncrementBy,proto3" json:"IncrementBy,omitempty"`
 	// Condition must be met for the increment to happen.
-	Condition     *IncrementInt64Condition `protobuf:"bytes,5,opt,name=Condition,proto3" json:"Condition,omitempty"`
+	Condition *IncrementInt64Condition `protobuf:"bytes,5,opt,name=Condition,proto3" json:"Condition,omitempty"`
+	// SetIfNotExist is optional metadata to set if the key does not exist yet.
+	SetIfNotExist *Metadata `protobuf:"bytes,6,opt,name=SetIfNotExist,proto3,oneof" json:"SetIfNotExist,omitempty"` // Optional metadata to set if the key does not exist yet.
+	// SetIfNotExist is optional metadata to set if the key already exists.
+	SetIfExist    *Metadata `protobuf:"bytes,7,opt,name=SetIfExist,proto3,oneof" json:"SetIfExist,omitempty"` // Optional metadata to set if the key already exists.
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *IncrementInt64Request) Reset() {
 	*x = IncrementInt64Request{}
-	mi := &file_hydraide_proto_msgTypes[52]
+	mi := &file_hydraide_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3738,7 +3899,7 @@ func (x *IncrementInt64Request) String() string {
 func (*IncrementInt64Request) ProtoMessage() {}
 
 func (x *IncrementInt64Request) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[52]
+	mi := &file_hydraide_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3751,7 +3912,7 @@ func (x *IncrementInt64Request) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementInt64Request.ProtoReflect.Descriptor instead.
 func (*IncrementInt64Request) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{52}
+	return file_hydraide_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *IncrementInt64Request) GetIslandID() uint64 {
@@ -3789,6 +3950,20 @@ func (x *IncrementInt64Request) GetCondition() *IncrementInt64Condition {
 	return nil
 }
 
+func (x *IncrementInt64Request) GetSetIfNotExist() *Metadata {
+	if x != nil {
+		return x.SetIfNotExist
+	}
+	return nil
+}
+
+func (x *IncrementInt64Request) GetSetIfExist() *Metadata {
+	if x != nil {
+		return x.SetIfExist
+	}
+	return nil
+}
+
 type IncrementInt64Condition struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Relational operator used for conditional increment.
@@ -3801,7 +3976,7 @@ type IncrementInt64Condition struct {
 
 func (x *IncrementInt64Condition) Reset() {
 	*x = IncrementInt64Condition{}
-	mi := &file_hydraide_proto_msgTypes[53]
+	mi := &file_hydraide_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3813,7 +3988,7 @@ func (x *IncrementInt64Condition) String() string {
 func (*IncrementInt64Condition) ProtoMessage() {}
 
 func (x *IncrementInt64Condition) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[53]
+	mi := &file_hydraide_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3826,7 +4001,7 @@ func (x *IncrementInt64Condition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementInt64Condition.ProtoReflect.Descriptor instead.
 func (*IncrementInt64Condition) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{53}
+	return file_hydraide_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *IncrementInt64Condition) GetRelationalOperator() Relational_Operator {
@@ -3849,13 +4024,15 @@ type IncrementInt64Response struct {
 	Value int64 `protobuf:"varint,1,opt,name=Value,proto3" json:"Value,omitempty"`
 	// IsIncremented indicates whether the operation was applied.
 	IsIncremented bool `protobuf:"varint,2,opt,name=IsIncremented,proto3" json:"IsIncremented,omitempty"`
+	// Metadata of the treasure
+	Metadata      *Metadata `protobuf:"bytes,3,opt,name=Metadata,proto3" json:"Metadata,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *IncrementInt64Response) Reset() {
 	*x = IncrementInt64Response{}
-	mi := &file_hydraide_proto_msgTypes[54]
+	mi := &file_hydraide_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3867,7 +4044,7 @@ func (x *IncrementInt64Response) String() string {
 func (*IncrementInt64Response) ProtoMessage() {}
 
 func (x *IncrementInt64Response) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[54]
+	mi := &file_hydraide_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3880,7 +4057,7 @@ func (x *IncrementInt64Response) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementInt64Response.ProtoReflect.Descriptor instead.
 func (*IncrementInt64Response) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{54}
+	return file_hydraide_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *IncrementInt64Response) GetValue() int64 {
@@ -3895,6 +4072,13 @@ func (x *IncrementInt64Response) GetIsIncremented() bool {
 		return x.IsIncremented
 	}
 	return false
+}
+
+func (x *IncrementInt64Response) GetMetadata() *Metadata {
+	if x != nil {
+		return x.Metadata
+	}
+	return nil
 }
 
 type IncrementUint8Request struct {
@@ -3913,14 +4097,18 @@ type IncrementUint8Request struct {
 	// Any overflow is safely rejected and not applied.
 	IncrementBy uint32 `protobuf:"varint,4,opt,name=IncrementBy,proto3" json:"IncrementBy,omitempty"`
 	// Condition to be evaluated before applying the increment.
-	Condition     *IncrementUint8Condition `protobuf:"bytes,5,opt,name=Condition,proto3" json:"Condition,omitempty"`
+	Condition *IncrementUint8Condition `protobuf:"bytes,5,opt,name=Condition,proto3" json:"Condition,omitempty"`
+	// SetIfNotExist is optional metadata to set if the key does not exist yet.
+	SetIfNotExist *Metadata `protobuf:"bytes,6,opt,name=SetIfNotExist,proto3,oneof" json:"SetIfNotExist,omitempty"` // Optional metadata to set if the key does not exist yet.
+	// SetIfNotExist is optional metadata to set if the key already exists.
+	SetIfExist    *Metadata `protobuf:"bytes,7,opt,name=SetIfExist,proto3,oneof" json:"SetIfExist,omitempty"` // Optional metadata to set if the key already exists.
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *IncrementUint8Request) Reset() {
 	*x = IncrementUint8Request{}
-	mi := &file_hydraide_proto_msgTypes[55]
+	mi := &file_hydraide_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3932,7 +4120,7 @@ func (x *IncrementUint8Request) String() string {
 func (*IncrementUint8Request) ProtoMessage() {}
 
 func (x *IncrementUint8Request) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[55]
+	mi := &file_hydraide_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3945,7 +4133,7 @@ func (x *IncrementUint8Request) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementUint8Request.ProtoReflect.Descriptor instead.
 func (*IncrementUint8Request) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{55}
+	return file_hydraide_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *IncrementUint8Request) GetIslandID() uint64 {
@@ -3983,6 +4171,20 @@ func (x *IncrementUint8Request) GetCondition() *IncrementUint8Condition {
 	return nil
 }
 
+func (x *IncrementUint8Request) GetSetIfNotExist() *Metadata {
+	if x != nil {
+		return x.SetIfNotExist
+	}
+	return nil
+}
+
+func (x *IncrementUint8Request) GetSetIfExist() *Metadata {
+	if x != nil {
+		return x.SetIfExist
+	}
+	return nil
+}
+
 type IncrementUint8Condition struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The relational operator (e.g. EQUAL, GREATER_THAN, etc.)
@@ -3997,7 +4199,7 @@ type IncrementUint8Condition struct {
 
 func (x *IncrementUint8Condition) Reset() {
 	*x = IncrementUint8Condition{}
-	mi := &file_hydraide_proto_msgTypes[56]
+	mi := &file_hydraide_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4009,7 +4211,7 @@ func (x *IncrementUint8Condition) String() string {
 func (*IncrementUint8Condition) ProtoMessage() {}
 
 func (x *IncrementUint8Condition) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[56]
+	mi := &file_hydraide_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4022,7 +4224,7 @@ func (x *IncrementUint8Condition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementUint8Condition.ProtoReflect.Descriptor instead.
 func (*IncrementUint8Condition) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{56}
+	return file_hydraide_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *IncrementUint8Condition) GetRelationalOperator() Relational_Operator {
@@ -4047,13 +4249,15 @@ type IncrementUint8Response struct {
 	Value uint32 `protobuf:"varint,1,opt,name=Value,proto3" json:"Value,omitempty"`
 	// IsIncremented is true if the increment was applied.
 	IsIncremented bool `protobuf:"varint,2,opt,name=IsIncremented,proto3" json:"IsIncremented,omitempty"`
+	// Metadata of the treasure
+	Metadata      *Metadata `protobuf:"bytes,3,opt,name=Metadata,proto3" json:"Metadata,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *IncrementUint8Response) Reset() {
 	*x = IncrementUint8Response{}
-	mi := &file_hydraide_proto_msgTypes[57]
+	mi := &file_hydraide_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4065,7 +4269,7 @@ func (x *IncrementUint8Response) String() string {
 func (*IncrementUint8Response) ProtoMessage() {}
 
 func (x *IncrementUint8Response) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[57]
+	mi := &file_hydraide_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4078,7 +4282,7 @@ func (x *IncrementUint8Response) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementUint8Response.ProtoReflect.Descriptor instead.
 func (*IncrementUint8Response) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{57}
+	return file_hydraide_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *IncrementUint8Response) GetValue() uint32 {
@@ -4095,6 +4299,13 @@ func (x *IncrementUint8Response) GetIsIncremented() bool {
 	return false
 }
 
+func (x *IncrementUint8Response) GetMetadata() *Metadata {
+	if x != nil {
+		return x.Metadata
+	}
+	return nil
+}
+
 type IncrementUint16Request struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// IslandID is the deterministic storage zone (or "island") where this Swamp lives.
@@ -4109,14 +4320,18 @@ type IncrementUint16Request struct {
 	// Allowed value range: 0 to 65,535
 	IncrementBy uint32 `protobuf:"varint,4,opt,name=IncrementBy,proto3" json:"IncrementBy,omitempty"`
 	// Condition to be satisfied before increment is applied.
-	Condition     *IncrementUint16Condition `protobuf:"bytes,5,opt,name=Condition,proto3" json:"Condition,omitempty"`
+	Condition *IncrementUint16Condition `protobuf:"bytes,5,opt,name=Condition,proto3" json:"Condition,omitempty"`
+	// SetIfNotExist is optional metadata to set if the key does not exist yet.
+	SetIfNotExist *Metadata `protobuf:"bytes,6,opt,name=SetIfNotExist,proto3,oneof" json:"SetIfNotExist,omitempty"` // Optional metadata to set if the key does not exist yet.
+	// SetIfNotExist is optional metadata to set if the key already exists.
+	SetIfExist    *Metadata `protobuf:"bytes,7,opt,name=SetIfExist,proto3,oneof" json:"SetIfExist,omitempty"` // Optional metadata to set if the key already exists.
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *IncrementUint16Request) Reset() {
 	*x = IncrementUint16Request{}
-	mi := &file_hydraide_proto_msgTypes[58]
+	mi := &file_hydraide_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4128,7 +4343,7 @@ func (x *IncrementUint16Request) String() string {
 func (*IncrementUint16Request) ProtoMessage() {}
 
 func (x *IncrementUint16Request) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[58]
+	mi := &file_hydraide_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4141,7 +4356,7 @@ func (x *IncrementUint16Request) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementUint16Request.ProtoReflect.Descriptor instead.
 func (*IncrementUint16Request) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{58}
+	return file_hydraide_proto_rawDescGZIP(), []int{59}
 }
 
 func (x *IncrementUint16Request) GetIslandID() uint64 {
@@ -4179,6 +4394,20 @@ func (x *IncrementUint16Request) GetCondition() *IncrementUint16Condition {
 	return nil
 }
 
+func (x *IncrementUint16Request) GetSetIfNotExist() *Metadata {
+	if x != nil {
+		return x.SetIfNotExist
+	}
+	return nil
+}
+
+func (x *IncrementUint16Request) GetSetIfExist() *Metadata {
+	if x != nil {
+		return x.SetIfExist
+	}
+	return nil
+}
+
 type IncrementUint16Condition struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The logical operator used for evaluating the current value.
@@ -4193,7 +4422,7 @@ type IncrementUint16Condition struct {
 
 func (x *IncrementUint16Condition) Reset() {
 	*x = IncrementUint16Condition{}
-	mi := &file_hydraide_proto_msgTypes[59]
+	mi := &file_hydraide_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4205,7 +4434,7 @@ func (x *IncrementUint16Condition) String() string {
 func (*IncrementUint16Condition) ProtoMessage() {}
 
 func (x *IncrementUint16Condition) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[59]
+	mi := &file_hydraide_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4218,7 +4447,7 @@ func (x *IncrementUint16Condition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementUint16Condition.ProtoReflect.Descriptor instead.
 func (*IncrementUint16Condition) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{59}
+	return file_hydraide_proto_rawDescGZIP(), []int{60}
 }
 
 func (x *IncrementUint16Condition) GetRelationalOperator() Relational_Operator {
@@ -4243,13 +4472,15 @@ type IncrementUint16Response struct {
 	Value uint32 `protobuf:"varint,1,opt,name=Value,proto3" json:"Value,omitempty"`
 	// IsIncremented tells whether the value was actually modified.
 	IsIncremented bool `protobuf:"varint,2,opt,name=IsIncremented,proto3" json:"IsIncremented,omitempty"`
+	// Metadata of the treasure
+	Metadata      *Metadata `protobuf:"bytes,3,opt,name=Metadata,proto3" json:"Metadata,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *IncrementUint16Response) Reset() {
 	*x = IncrementUint16Response{}
-	mi := &file_hydraide_proto_msgTypes[60]
+	mi := &file_hydraide_proto_msgTypes[61]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4261,7 +4492,7 @@ func (x *IncrementUint16Response) String() string {
 func (*IncrementUint16Response) ProtoMessage() {}
 
 func (x *IncrementUint16Response) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[60]
+	mi := &file_hydraide_proto_msgTypes[61]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4274,7 +4505,7 @@ func (x *IncrementUint16Response) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementUint16Response.ProtoReflect.Descriptor instead.
 func (*IncrementUint16Response) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{60}
+	return file_hydraide_proto_rawDescGZIP(), []int{61}
 }
 
 func (x *IncrementUint16Response) GetValue() uint32 {
@@ -4291,6 +4522,13 @@ func (x *IncrementUint16Response) GetIsIncremented() bool {
 	return false
 }
 
+func (x *IncrementUint16Response) GetMetadata() *Metadata {
+	if x != nil {
+		return x.Metadata
+	}
+	return nil
+}
+
 type IncrementUint32Request struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// IslandID is the deterministic storage zone (or "island") where this Swamp lives.
@@ -4304,14 +4542,18 @@ type IncrementUint32Request struct {
 	// 💡 Supports any uint32 value (0–4,294,967,295)
 	IncrementBy uint32 `protobuf:"varint,4,opt,name=IncrementBy,proto3" json:"IncrementBy,omitempty"`
 	// Condition must be true for the increment to be applied.
-	Condition     *IncrementUint32Condition `protobuf:"bytes,5,opt,name=Condition,proto3" json:"Condition,omitempty"`
+	Condition *IncrementUint32Condition `protobuf:"bytes,5,opt,name=Condition,proto3" json:"Condition,omitempty"`
+	// SetIfNotExist is optional metadata to set if the key does not exist yet.
+	SetIfNotExist *Metadata `protobuf:"bytes,6,opt,name=SetIfNotExist,proto3,oneof" json:"SetIfNotExist,omitempty"` // Optional metadata to set if the key does not exist yet.
+	// SetIfNotExist is optional metadata to set if the key already exists.
+	SetIfExist    *Metadata `protobuf:"bytes,7,opt,name=SetIfExist,proto3,oneof" json:"SetIfExist,omitempty"` // Optional metadata to set if the key already exists.
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *IncrementUint32Request) Reset() {
 	*x = IncrementUint32Request{}
-	mi := &file_hydraide_proto_msgTypes[61]
+	mi := &file_hydraide_proto_msgTypes[62]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4323,7 +4565,7 @@ func (x *IncrementUint32Request) String() string {
 func (*IncrementUint32Request) ProtoMessage() {}
 
 func (x *IncrementUint32Request) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[61]
+	mi := &file_hydraide_proto_msgTypes[62]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4336,7 +4578,7 @@ func (x *IncrementUint32Request) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementUint32Request.ProtoReflect.Descriptor instead.
 func (*IncrementUint32Request) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{61}
+	return file_hydraide_proto_rawDescGZIP(), []int{62}
 }
 
 func (x *IncrementUint32Request) GetIslandID() uint64 {
@@ -4374,6 +4616,20 @@ func (x *IncrementUint32Request) GetCondition() *IncrementUint32Condition {
 	return nil
 }
 
+func (x *IncrementUint32Request) GetSetIfNotExist() *Metadata {
+	if x != nil {
+		return x.SetIfNotExist
+	}
+	return nil
+}
+
+func (x *IncrementUint32Request) GetSetIfExist() *Metadata {
+	if x != nil {
+		return x.SetIfExist
+	}
+	return nil
+}
+
 type IncrementUint32Condition struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The relational operator used to evaluate the current value.
@@ -4386,7 +4642,7 @@ type IncrementUint32Condition struct {
 
 func (x *IncrementUint32Condition) Reset() {
 	*x = IncrementUint32Condition{}
-	mi := &file_hydraide_proto_msgTypes[62]
+	mi := &file_hydraide_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4398,7 +4654,7 @@ func (x *IncrementUint32Condition) String() string {
 func (*IncrementUint32Condition) ProtoMessage() {}
 
 func (x *IncrementUint32Condition) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[62]
+	mi := &file_hydraide_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4411,7 +4667,7 @@ func (x *IncrementUint32Condition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementUint32Condition.ProtoReflect.Descriptor instead.
 func (*IncrementUint32Condition) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{62}
+	return file_hydraide_proto_rawDescGZIP(), []int{63}
 }
 
 func (x *IncrementUint32Condition) GetRelationalOperator() Relational_Operator {
@@ -4435,13 +4691,15 @@ type IncrementUint32Response struct {
 	Value uint32 `protobuf:"varint,1,opt,name=Value,proto3" json:"Value,omitempty"`
 	// IsIncremented indicates whether the value was modified.
 	IsIncremented bool `protobuf:"varint,2,opt,name=IsIncremented,proto3" json:"IsIncremented,omitempty"`
+	// Metadata of the treasure
+	Metadata      *Metadata `protobuf:"bytes,3,opt,name=Metadata,proto3" json:"Metadata,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *IncrementUint32Response) Reset() {
 	*x = IncrementUint32Response{}
-	mi := &file_hydraide_proto_msgTypes[63]
+	mi := &file_hydraide_proto_msgTypes[64]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4453,7 +4711,7 @@ func (x *IncrementUint32Response) String() string {
 func (*IncrementUint32Response) ProtoMessage() {}
 
 func (x *IncrementUint32Response) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[63]
+	mi := &file_hydraide_proto_msgTypes[64]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4466,7 +4724,7 @@ func (x *IncrementUint32Response) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementUint32Response.ProtoReflect.Descriptor instead.
 func (*IncrementUint32Response) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{63}
+	return file_hydraide_proto_rawDescGZIP(), []int{64}
 }
 
 func (x *IncrementUint32Response) GetValue() uint32 {
@@ -4483,6 +4741,13 @@ func (x *IncrementUint32Response) GetIsIncremented() bool {
 	return false
 }
 
+func (x *IncrementUint32Response) GetMetadata() *Metadata {
+	if x != nil {
+		return x.Metadata
+	}
+	return nil
+}
+
 type IncrementUint64Request struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// IslandID is the deterministic storage zone (or "island") where this Swamp lives.
@@ -4496,14 +4761,18 @@ type IncrementUint64Request struct {
 	// 💡 Supports the full range of unsigned 64-bit integers (0 to 18 quintillion+)
 	IncrementBy uint64 `protobuf:"varint,4,opt,name=IncrementBy,proto3" json:"IncrementBy,omitempty"`
 	// Condition must be satisfied for the operation to take place.
-	Condition     *IncrementUint64Condition `protobuf:"bytes,5,opt,name=Condition,proto3" json:"Condition,omitempty"`
+	Condition *IncrementUint64Condition `protobuf:"bytes,5,opt,name=Condition,proto3" json:"Condition,omitempty"`
+	// SetIfNotExist is optional metadata to set if the key does not exist yet.
+	SetIfNotExist *Metadata `protobuf:"bytes,6,opt,name=SetIfNotExist,proto3,oneof" json:"SetIfNotExist,omitempty"` // Optional metadata to set if the key does not exist yet.
+	// SetIfNotExist is optional metadata to set if the key already exists.
+	SetIfExist    *Metadata `protobuf:"bytes,7,opt,name=SetIfExist,proto3,oneof" json:"SetIfExist,omitempty"` // Optional metadata to set if the key already exists.
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *IncrementUint64Request) Reset() {
 	*x = IncrementUint64Request{}
-	mi := &file_hydraide_proto_msgTypes[64]
+	mi := &file_hydraide_proto_msgTypes[65]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4515,7 +4784,7 @@ func (x *IncrementUint64Request) String() string {
 func (*IncrementUint64Request) ProtoMessage() {}
 
 func (x *IncrementUint64Request) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[64]
+	mi := &file_hydraide_proto_msgTypes[65]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4528,7 +4797,7 @@ func (x *IncrementUint64Request) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementUint64Request.ProtoReflect.Descriptor instead.
 func (*IncrementUint64Request) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{64}
+	return file_hydraide_proto_rawDescGZIP(), []int{65}
 }
 
 func (x *IncrementUint64Request) GetIslandID() uint64 {
@@ -4566,6 +4835,20 @@ func (x *IncrementUint64Request) GetCondition() *IncrementUint64Condition {
 	return nil
 }
 
+func (x *IncrementUint64Request) GetSetIfNotExist() *Metadata {
+	if x != nil {
+		return x.SetIfNotExist
+	}
+	return nil
+}
+
+func (x *IncrementUint64Request) GetSetIfExist() *Metadata {
+	if x != nil {
+		return x.SetIfExist
+	}
+	return nil
+}
+
 type IncrementUint64Condition struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Logical operator used to compare current value.
@@ -4578,7 +4861,7 @@ type IncrementUint64Condition struct {
 
 func (x *IncrementUint64Condition) Reset() {
 	*x = IncrementUint64Condition{}
-	mi := &file_hydraide_proto_msgTypes[65]
+	mi := &file_hydraide_proto_msgTypes[66]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4590,7 +4873,7 @@ func (x *IncrementUint64Condition) String() string {
 func (*IncrementUint64Condition) ProtoMessage() {}
 
 func (x *IncrementUint64Condition) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[65]
+	mi := &file_hydraide_proto_msgTypes[66]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4603,7 +4886,7 @@ func (x *IncrementUint64Condition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementUint64Condition.ProtoReflect.Descriptor instead.
 func (*IncrementUint64Condition) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{65}
+	return file_hydraide_proto_rawDescGZIP(), []int{66}
 }
 
 func (x *IncrementUint64Condition) GetRelationalOperator() Relational_Operator {
@@ -4626,13 +4909,15 @@ type IncrementUint64Response struct {
 	Value uint64 `protobuf:"varint,1,opt,name=Value,proto3" json:"Value,omitempty"`
 	// IsIncremented is true if the operation was applied.
 	IsIncremented bool `protobuf:"varint,2,opt,name=IsIncremented,proto3" json:"IsIncremented,omitempty"`
+	// Metadata of the treasure
+	Metadata      *Metadata `protobuf:"bytes,3,opt,name=Metadata,proto3" json:"Metadata,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *IncrementUint64Response) Reset() {
 	*x = IncrementUint64Response{}
-	mi := &file_hydraide_proto_msgTypes[66]
+	mi := &file_hydraide_proto_msgTypes[67]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4644,7 +4929,7 @@ func (x *IncrementUint64Response) String() string {
 func (*IncrementUint64Response) ProtoMessage() {}
 
 func (x *IncrementUint64Response) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[66]
+	mi := &file_hydraide_proto_msgTypes[67]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4657,7 +4942,7 @@ func (x *IncrementUint64Response) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementUint64Response.ProtoReflect.Descriptor instead.
 func (*IncrementUint64Response) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{66}
+	return file_hydraide_proto_rawDescGZIP(), []int{67}
 }
 
 func (x *IncrementUint64Response) GetValue() uint64 {
@@ -4674,6 +4959,13 @@ func (x *IncrementUint64Response) GetIsIncremented() bool {
 	return false
 }
 
+func (x *IncrementUint64Response) GetMetadata() *Metadata {
+	if x != nil {
+		return x.Metadata
+	}
+	return nil
+}
+
 type Relational struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -4682,7 +4974,7 @@ type Relational struct {
 
 func (x *Relational) Reset() {
 	*x = Relational{}
-	mi := &file_hydraide_proto_msgTypes[67]
+	mi := &file_hydraide_proto_msgTypes[68]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4694,7 +4986,7 @@ func (x *Relational) String() string {
 func (*Relational) ProtoMessage() {}
 
 func (x *Relational) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[67]
+	mi := &file_hydraide_proto_msgTypes[68]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4707,7 +4999,7 @@ func (x *Relational) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Relational.ProtoReflect.Descriptor instead.
 func (*Relational) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{67}
+	return file_hydraide_proto_rawDescGZIP(), []int{68}
 }
 
 type IncrementFloat32Request struct {
@@ -4723,14 +5015,18 @@ type IncrementFloat32Request struct {
 	// 💡 Supports 32-bit floating point numbers.
 	IncrementBy float32 `protobuf:"fixed32,4,opt,name=IncrementBy,proto3" json:"IncrementBy,omitempty"`
 	// Condition must be met for the change to happen.
-	Condition     *IncrementFloat32Condition `protobuf:"bytes,5,opt,name=Condition,proto3" json:"Condition,omitempty"`
+	Condition *IncrementFloat32Condition `protobuf:"bytes,5,opt,name=Condition,proto3" json:"Condition,omitempty"`
+	// SetIfNotExist is optional metadata to set if the key does not exist yet.
+	SetIfNotExist *Metadata `protobuf:"bytes,6,opt,name=SetIfNotExist,proto3,oneof" json:"SetIfNotExist,omitempty"` // Optional metadata to set if the key does not exist yet.
+	// SetIfNotExist is optional metadata to set if the key already exists.
+	SetIfExist    *Metadata `protobuf:"bytes,7,opt,name=SetIfExist,proto3,oneof" json:"SetIfExist,omitempty"` // Optional metadata to set if the key already exists.
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *IncrementFloat32Request) Reset() {
 	*x = IncrementFloat32Request{}
-	mi := &file_hydraide_proto_msgTypes[68]
+	mi := &file_hydraide_proto_msgTypes[69]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4742,7 +5038,7 @@ func (x *IncrementFloat32Request) String() string {
 func (*IncrementFloat32Request) ProtoMessage() {}
 
 func (x *IncrementFloat32Request) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[68]
+	mi := &file_hydraide_proto_msgTypes[69]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4755,7 +5051,7 @@ func (x *IncrementFloat32Request) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementFloat32Request.ProtoReflect.Descriptor instead.
 func (*IncrementFloat32Request) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{68}
+	return file_hydraide_proto_rawDescGZIP(), []int{69}
 }
 
 func (x *IncrementFloat32Request) GetIslandID() uint64 {
@@ -4793,6 +5089,20 @@ func (x *IncrementFloat32Request) GetCondition() *IncrementFloat32Condition {
 	return nil
 }
 
+func (x *IncrementFloat32Request) GetSetIfNotExist() *Metadata {
+	if x != nil {
+		return x.SetIfNotExist
+	}
+	return nil
+}
+
+func (x *IncrementFloat32Request) GetSetIfExist() *Metadata {
+	if x != nil {
+		return x.SetIfExist
+	}
+	return nil
+}
+
 type IncrementFloat32Condition struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Logical check to evaluate before applying the increment.
@@ -4805,7 +5115,7 @@ type IncrementFloat32Condition struct {
 
 func (x *IncrementFloat32Condition) Reset() {
 	*x = IncrementFloat32Condition{}
-	mi := &file_hydraide_proto_msgTypes[69]
+	mi := &file_hydraide_proto_msgTypes[70]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4817,7 +5127,7 @@ func (x *IncrementFloat32Condition) String() string {
 func (*IncrementFloat32Condition) ProtoMessage() {}
 
 func (x *IncrementFloat32Condition) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[69]
+	mi := &file_hydraide_proto_msgTypes[70]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4830,7 +5140,7 @@ func (x *IncrementFloat32Condition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementFloat32Condition.ProtoReflect.Descriptor instead.
 func (*IncrementFloat32Condition) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{69}
+	return file_hydraide_proto_rawDescGZIP(), []int{70}
 }
 
 func (x *IncrementFloat32Condition) GetRelationalOperator() Relational_Operator {
@@ -4853,13 +5163,15 @@ type IncrementFloat32Response struct {
 	Value float32 `protobuf:"fixed32,1,opt,name=Value,proto3" json:"Value,omitempty"`
 	// IsIncremented is true if the change was applied.
 	IsIncremented bool `protobuf:"varint,2,opt,name=IsIncremented,proto3" json:"IsIncremented,omitempty"`
+	// Metadata of the treasure
+	Metadata      *Metadata `protobuf:"bytes,3,opt,name=Metadata,proto3" json:"Metadata,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *IncrementFloat32Response) Reset() {
 	*x = IncrementFloat32Response{}
-	mi := &file_hydraide_proto_msgTypes[70]
+	mi := &file_hydraide_proto_msgTypes[71]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4871,7 +5183,7 @@ func (x *IncrementFloat32Response) String() string {
 func (*IncrementFloat32Response) ProtoMessage() {}
 
 func (x *IncrementFloat32Response) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[70]
+	mi := &file_hydraide_proto_msgTypes[71]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4884,7 +5196,7 @@ func (x *IncrementFloat32Response) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementFloat32Response.ProtoReflect.Descriptor instead.
 func (*IncrementFloat32Response) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{70}
+	return file_hydraide_proto_rawDescGZIP(), []int{71}
 }
 
 func (x *IncrementFloat32Response) GetValue() float32 {
@@ -4901,6 +5213,13 @@ func (x *IncrementFloat32Response) GetIsIncremented() bool {
 	return false
 }
 
+func (x *IncrementFloat32Response) GetMetadata() *Metadata {
+	if x != nil {
+		return x.Metadata
+	}
+	return nil
+}
+
 type IncrementFloat64Request struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// IslandID is the deterministic storage zone (or "island") where this Swamp lives.
@@ -4915,14 +5234,18 @@ type IncrementFloat64Request struct {
 	// ✅ Uses 64-bit floating-point precision.
 	IncrementBy float64 `protobuf:"fixed64,4,opt,name=IncrementBy,proto3" json:"IncrementBy,omitempty"`
 	// Condition that must be true for the increment to apply.
-	Condition     *IncrementFloat64Condition `protobuf:"bytes,5,opt,name=Condition,proto3" json:"Condition,omitempty"`
+	Condition *IncrementFloat64Condition `protobuf:"bytes,5,opt,name=Condition,proto3" json:"Condition,omitempty"`
+	// SetIfNotExist is optional metadata to set if the key does not exist yet.
+	SetIfNotExist *Metadata `protobuf:"bytes,6,opt,name=SetIfNotExist,proto3,oneof" json:"SetIfNotExist,omitempty"` // Optional metadata to set if the key does not exist yet.
+	// SetIfNotExist is optional metadata to set if the key already exists.
+	SetIfExist    *Metadata `protobuf:"bytes,7,opt,name=SetIfExist,proto3,oneof" json:"SetIfExist,omitempty"` // Optional metadata to set if the key already exists.
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *IncrementFloat64Request) Reset() {
 	*x = IncrementFloat64Request{}
-	mi := &file_hydraide_proto_msgTypes[71]
+	mi := &file_hydraide_proto_msgTypes[72]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4934,7 +5257,7 @@ func (x *IncrementFloat64Request) String() string {
 func (*IncrementFloat64Request) ProtoMessage() {}
 
 func (x *IncrementFloat64Request) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[71]
+	mi := &file_hydraide_proto_msgTypes[72]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4947,7 +5270,7 @@ func (x *IncrementFloat64Request) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementFloat64Request.ProtoReflect.Descriptor instead.
 func (*IncrementFloat64Request) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{71}
+	return file_hydraide_proto_rawDescGZIP(), []int{72}
 }
 
 func (x *IncrementFloat64Request) GetIslandID() uint64 {
@@ -4985,6 +5308,20 @@ func (x *IncrementFloat64Request) GetCondition() *IncrementFloat64Condition {
 	return nil
 }
 
+func (x *IncrementFloat64Request) GetSetIfNotExist() *Metadata {
+	if x != nil {
+		return x.SetIfNotExist
+	}
+	return nil
+}
+
+func (x *IncrementFloat64Request) GetSetIfExist() *Metadata {
+	if x != nil {
+		return x.SetIfExist
+	}
+	return nil
+}
+
 type IncrementFloat64Condition struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Comparison operator (e.g. GREATER_THAN, EQUAL, etc.)
@@ -4997,7 +5334,7 @@ type IncrementFloat64Condition struct {
 
 func (x *IncrementFloat64Condition) Reset() {
 	*x = IncrementFloat64Condition{}
-	mi := &file_hydraide_proto_msgTypes[72]
+	mi := &file_hydraide_proto_msgTypes[73]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5009,7 +5346,7 @@ func (x *IncrementFloat64Condition) String() string {
 func (*IncrementFloat64Condition) ProtoMessage() {}
 
 func (x *IncrementFloat64Condition) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[72]
+	mi := &file_hydraide_proto_msgTypes[73]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5022,7 +5359,7 @@ func (x *IncrementFloat64Condition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementFloat64Condition.ProtoReflect.Descriptor instead.
 func (*IncrementFloat64Condition) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{72}
+	return file_hydraide_proto_rawDescGZIP(), []int{73}
 }
 
 func (x *IncrementFloat64Condition) GetRelationalOperator() Relational_Operator {
@@ -5045,13 +5382,15 @@ type IncrementFloat64Response struct {
 	Value float64 `protobuf:"fixed64,1,opt,name=Value,proto3" json:"Value,omitempty"`
 	// IsIncremented tells if the change actually occurred.
 	IsIncremented bool `protobuf:"varint,2,opt,name=IsIncremented,proto3" json:"IsIncremented,omitempty"`
+	// Metadata of the treasure
+	Metadata      *Metadata `protobuf:"bytes,3,opt,name=Metadata,proto3" json:"Metadata,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *IncrementFloat64Response) Reset() {
 	*x = IncrementFloat64Response{}
-	mi := &file_hydraide_proto_msgTypes[73]
+	mi := &file_hydraide_proto_msgTypes[74]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5063,7 +5402,7 @@ func (x *IncrementFloat64Response) String() string {
 func (*IncrementFloat64Response) ProtoMessage() {}
 
 func (x *IncrementFloat64Response) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[73]
+	mi := &file_hydraide_proto_msgTypes[74]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5076,7 +5415,7 @@ func (x *IncrementFloat64Response) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementFloat64Response.ProtoReflect.Descriptor instead.
 func (*IncrementFloat64Response) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{73}
+	return file_hydraide_proto_rawDescGZIP(), []int{74}
 }
 
 func (x *IncrementFloat64Response) GetValue() float64 {
@@ -5093,6 +5432,13 @@ func (x *IncrementFloat64Response) GetIsIncremented() bool {
 	return false
 }
 
+func (x *IncrementFloat64Response) GetMetadata() *Metadata {
+	if x != nil {
+		return x.Metadata
+	}
+	return nil
+}
+
 // KeySlicePair represents a mapping between a key and a list of uint32 values.
 // Used for slice-related operations like push and delete.
 type KeySlicePair struct {
@@ -5107,7 +5453,7 @@ type KeySlicePair struct {
 
 func (x *KeySlicePair) Reset() {
 	*x = KeySlicePair{}
-	mi := &file_hydraide_proto_msgTypes[74]
+	mi := &file_hydraide_proto_msgTypes[75]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5119,7 +5465,7 @@ func (x *KeySlicePair) String() string {
 func (*KeySlicePair) ProtoMessage() {}
 
 func (x *KeySlicePair) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[74]
+	mi := &file_hydraide_proto_msgTypes[75]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5132,7 +5478,7 @@ func (x *KeySlicePair) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KeySlicePair.ProtoReflect.Descriptor instead.
 func (*KeySlicePair) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{74}
+	return file_hydraide_proto_rawDescGZIP(), []int{75}
 }
 
 func (x *KeySlicePair) GetKey() string {
@@ -5164,7 +5510,7 @@ type AddToUint32SlicePushRequest struct {
 
 func (x *AddToUint32SlicePushRequest) Reset() {
 	*x = AddToUint32SlicePushRequest{}
-	mi := &file_hydraide_proto_msgTypes[75]
+	mi := &file_hydraide_proto_msgTypes[76]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5176,7 +5522,7 @@ func (x *AddToUint32SlicePushRequest) String() string {
 func (*AddToUint32SlicePushRequest) ProtoMessage() {}
 
 func (x *AddToUint32SlicePushRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[75]
+	mi := &file_hydraide_proto_msgTypes[76]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5189,7 +5535,7 @@ func (x *AddToUint32SlicePushRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddToUint32SlicePushRequest.ProtoReflect.Descriptor instead.
 func (*AddToUint32SlicePushRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{75}
+	return file_hydraide_proto_rawDescGZIP(), []int{76}
 }
 
 func (x *AddToUint32SlicePushRequest) GetIslandID() uint64 {
@@ -5223,7 +5569,7 @@ type AddToUint32SlicePushResponse struct {
 
 func (x *AddToUint32SlicePushResponse) Reset() {
 	*x = AddToUint32SlicePushResponse{}
-	mi := &file_hydraide_proto_msgTypes[76]
+	mi := &file_hydraide_proto_msgTypes[77]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5235,7 +5581,7 @@ func (x *AddToUint32SlicePushResponse) String() string {
 func (*AddToUint32SlicePushResponse) ProtoMessage() {}
 
 func (x *AddToUint32SlicePushResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[76]
+	mi := &file_hydraide_proto_msgTypes[77]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5248,7 +5594,7 @@ func (x *AddToUint32SlicePushResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddToUint32SlicePushResponse.ProtoReflect.Descriptor instead.
 func (*AddToUint32SlicePushResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{76}
+	return file_hydraide_proto_rawDescGZIP(), []int{77}
 }
 
 // Uint32SliceDeleteRequest removes one or more values from one or more uint32 slices.
@@ -5266,7 +5612,7 @@ type Uint32SliceDeleteRequest struct {
 
 func (x *Uint32SliceDeleteRequest) Reset() {
 	*x = Uint32SliceDeleteRequest{}
-	mi := &file_hydraide_proto_msgTypes[77]
+	mi := &file_hydraide_proto_msgTypes[78]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5278,7 +5624,7 @@ func (x *Uint32SliceDeleteRequest) String() string {
 func (*Uint32SliceDeleteRequest) ProtoMessage() {}
 
 func (x *Uint32SliceDeleteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[77]
+	mi := &file_hydraide_proto_msgTypes[78]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5291,7 +5637,7 @@ func (x *Uint32SliceDeleteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Uint32SliceDeleteRequest.ProtoReflect.Descriptor instead.
 func (*Uint32SliceDeleteRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{77}
+	return file_hydraide_proto_rawDescGZIP(), []int{78}
 }
 
 func (x *Uint32SliceDeleteRequest) GetIslandID() uint64 {
@@ -5325,7 +5671,7 @@ type Uint32SliceDeleteResponse struct {
 
 func (x *Uint32SliceDeleteResponse) Reset() {
 	*x = Uint32SliceDeleteResponse{}
-	mi := &file_hydraide_proto_msgTypes[78]
+	mi := &file_hydraide_proto_msgTypes[79]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5337,7 +5683,7 @@ func (x *Uint32SliceDeleteResponse) String() string {
 func (*Uint32SliceDeleteResponse) ProtoMessage() {}
 
 func (x *Uint32SliceDeleteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[78]
+	mi := &file_hydraide_proto_msgTypes[79]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5350,7 +5696,7 @@ func (x *Uint32SliceDeleteResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Uint32SliceDeleteResponse.ProtoReflect.Descriptor instead.
 func (*Uint32SliceDeleteResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{78}
+	return file_hydraide_proto_rawDescGZIP(), []int{79}
 }
 
 // Uint32SliceSizeRequest queries the size (number of elements) of a specific uint32 slice.
@@ -5368,7 +5714,7 @@ type Uint32SliceSizeRequest struct {
 
 func (x *Uint32SliceSizeRequest) Reset() {
 	*x = Uint32SliceSizeRequest{}
-	mi := &file_hydraide_proto_msgTypes[79]
+	mi := &file_hydraide_proto_msgTypes[80]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5380,7 +5726,7 @@ func (x *Uint32SliceSizeRequest) String() string {
 func (*Uint32SliceSizeRequest) ProtoMessage() {}
 
 func (x *Uint32SliceSizeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[79]
+	mi := &file_hydraide_proto_msgTypes[80]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5393,7 +5739,7 @@ func (x *Uint32SliceSizeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Uint32SliceSizeRequest.ProtoReflect.Descriptor instead.
 func (*Uint32SliceSizeRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{79}
+	return file_hydraide_proto_rawDescGZIP(), []int{80}
 }
 
 func (x *Uint32SliceSizeRequest) GetIslandID() uint64 {
@@ -5428,7 +5774,7 @@ type Uint32SliceSizeResponse struct {
 
 func (x *Uint32SliceSizeResponse) Reset() {
 	*x = Uint32SliceSizeResponse{}
-	mi := &file_hydraide_proto_msgTypes[80]
+	mi := &file_hydraide_proto_msgTypes[81]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5440,7 +5786,7 @@ func (x *Uint32SliceSizeResponse) String() string {
 func (*Uint32SliceSizeResponse) ProtoMessage() {}
 
 func (x *Uint32SliceSizeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[80]
+	mi := &file_hydraide_proto_msgTypes[81]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5453,7 +5799,7 @@ func (x *Uint32SliceSizeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Uint32SliceSizeResponse.ProtoReflect.Descriptor instead.
 func (*Uint32SliceSizeResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{80}
+	return file_hydraide_proto_rawDescGZIP(), []int{81}
 }
 
 func (x *Uint32SliceSizeResponse) GetSize() int64 {
@@ -5480,7 +5826,7 @@ type Uint32SliceIsValueExistRequest struct {
 
 func (x *Uint32SliceIsValueExistRequest) Reset() {
 	*x = Uint32SliceIsValueExistRequest{}
-	mi := &file_hydraide_proto_msgTypes[81]
+	mi := &file_hydraide_proto_msgTypes[82]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5492,7 +5838,7 @@ func (x *Uint32SliceIsValueExistRequest) String() string {
 func (*Uint32SliceIsValueExistRequest) ProtoMessage() {}
 
 func (x *Uint32SliceIsValueExistRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[81]
+	mi := &file_hydraide_proto_msgTypes[82]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5505,7 +5851,7 @@ func (x *Uint32SliceIsValueExistRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Uint32SliceIsValueExistRequest.ProtoReflect.Descriptor instead.
 func (*Uint32SliceIsValueExistRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{81}
+	return file_hydraide_proto_rawDescGZIP(), []int{82}
 }
 
 func (x *Uint32SliceIsValueExistRequest) GetIslandID() uint64 {
@@ -5547,7 +5893,7 @@ type Uint32SliceIsValueExistResponse struct {
 
 func (x *Uint32SliceIsValueExistResponse) Reset() {
 	*x = Uint32SliceIsValueExistResponse{}
-	mi := &file_hydraide_proto_msgTypes[82]
+	mi := &file_hydraide_proto_msgTypes[83]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5559,7 +5905,7 @@ func (x *Uint32SliceIsValueExistResponse) String() string {
 func (*Uint32SliceIsValueExistResponse) ProtoMessage() {}
 
 func (x *Uint32SliceIsValueExistResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[82]
+	mi := &file_hydraide_proto_msgTypes[83]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5572,7 +5918,7 @@ func (x *Uint32SliceIsValueExistResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Uint32SliceIsValueExistResponse.ProtoReflect.Descriptor instead.
 func (*Uint32SliceIsValueExistResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{82}
+	return file_hydraide_proto_rawDescGZIP(), []int{83}
 }
 
 func (x *Uint32SliceIsValueExistResponse) GetIsExist() bool {
@@ -5595,7 +5941,7 @@ type IsSwampExistRequest struct {
 
 func (x *IsSwampExistRequest) Reset() {
 	*x = IsSwampExistRequest{}
-	mi := &file_hydraide_proto_msgTypes[83]
+	mi := &file_hydraide_proto_msgTypes[84]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5607,7 +5953,7 @@ func (x *IsSwampExistRequest) String() string {
 func (*IsSwampExistRequest) ProtoMessage() {}
 
 func (x *IsSwampExistRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[83]
+	mi := &file_hydraide_proto_msgTypes[84]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5620,7 +5966,7 @@ func (x *IsSwampExistRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IsSwampExistRequest.ProtoReflect.Descriptor instead.
 func (*IsSwampExistRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{83}
+	return file_hydraide_proto_rawDescGZIP(), []int{84}
 }
 
 func (x *IsSwampExistRequest) GetIslandID() uint64 {
@@ -5648,7 +5994,7 @@ type IsSwampExistResponse struct {
 
 func (x *IsSwampExistResponse) Reset() {
 	*x = IsSwampExistResponse{}
-	mi := &file_hydraide_proto_msgTypes[84]
+	mi := &file_hydraide_proto_msgTypes[85]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5660,7 +6006,7 @@ func (x *IsSwampExistResponse) String() string {
 func (*IsSwampExistResponse) ProtoMessage() {}
 
 func (x *IsSwampExistResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[84]
+	mi := &file_hydraide_proto_msgTypes[85]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5673,7 +6019,7 @@ func (x *IsSwampExistResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IsSwampExistResponse.ProtoReflect.Descriptor instead.
 func (*IsSwampExistResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{84}
+	return file_hydraide_proto_rawDescGZIP(), []int{85}
 }
 
 func (x *IsSwampExistResponse) GetIsExist() bool {
@@ -5698,7 +6044,7 @@ type IsKeyExistRequest struct {
 
 func (x *IsKeyExistRequest) Reset() {
 	*x = IsKeyExistRequest{}
-	mi := &file_hydraide_proto_msgTypes[85]
+	mi := &file_hydraide_proto_msgTypes[86]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5710,7 +6056,7 @@ func (x *IsKeyExistRequest) String() string {
 func (*IsKeyExistRequest) ProtoMessage() {}
 
 func (x *IsKeyExistRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[85]
+	mi := &file_hydraide_proto_msgTypes[86]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5723,7 +6069,7 @@ func (x *IsKeyExistRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IsKeyExistRequest.ProtoReflect.Descriptor instead.
 func (*IsKeyExistRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{85}
+	return file_hydraide_proto_rawDescGZIP(), []int{86}
 }
 
 func (x *IsKeyExistRequest) GetIslandID() uint64 {
@@ -5758,7 +6104,7 @@ type IsKeyExistResponse struct {
 
 func (x *IsKeyExistResponse) Reset() {
 	*x = IsKeyExistResponse{}
-	mi := &file_hydraide_proto_msgTypes[86]
+	mi := &file_hydraide_proto_msgTypes[87]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5770,7 +6116,7 @@ func (x *IsKeyExistResponse) String() string {
 func (*IsKeyExistResponse) ProtoMessage() {}
 
 func (x *IsKeyExistResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[86]
+	mi := &file_hydraide_proto_msgTypes[87]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5783,7 +6129,7 @@ func (x *IsKeyExistResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IsKeyExistResponse.ProtoReflect.Descriptor instead.
 func (*IsKeyExistResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{86}
+	return file_hydraide_proto_rawDescGZIP(), []int{87}
 }
 
 func (x *IsKeyExistResponse) GetIsExist() bool {
@@ -5807,7 +6153,7 @@ type DeleteRequest_SwampKeys struct {
 
 func (x *DeleteRequest_SwampKeys) Reset() {
 	*x = DeleteRequest_SwampKeys{}
-	mi := &file_hydraide_proto_msgTypes[87]
+	mi := &file_hydraide_proto_msgTypes[88]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5819,7 +6165,7 @@ func (x *DeleteRequest_SwampKeys) String() string {
 func (*DeleteRequest_SwampKeys) ProtoMessage() {}
 
 func (x *DeleteRequest_SwampKeys) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[87]
+	mi := &file_hydraide_proto_msgTypes[88]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5871,7 +6217,7 @@ type DeleteResponse_SwampDeleteResponse struct {
 
 func (x *DeleteResponse_SwampDeleteResponse) Reset() {
 	*x = DeleteResponse_SwampDeleteResponse{}
-	mi := &file_hydraide_proto_msgTypes[88]
+	mi := &file_hydraide_proto_msgTypes[89]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5883,7 +6229,7 @@ func (x *DeleteResponse_SwampDeleteResponse) String() string {
 func (*DeleteResponse_SwampDeleteResponse) ProtoMessage() {}
 
 func (x *DeleteResponse_SwampDeleteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[88]
+	mi := &file_hydraide_proto_msgTypes[89]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5932,7 +6278,7 @@ type CountRequest_SwampIdentifier struct {
 
 func (x *CountRequest_SwampIdentifier) Reset() {
 	*x = CountRequest_SwampIdentifier{}
-	mi := &file_hydraide_proto_msgTypes[89]
+	mi := &file_hydraide_proto_msgTypes[90]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5944,7 +6290,7 @@ func (x *CountRequest_SwampIdentifier) String() string {
 func (*CountRequest_SwampIdentifier) ProtoMessage() {}
 
 func (x *CountRequest_SwampIdentifier) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[89]
+	mi := &file_hydraide_proto_msgTypes[90]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6260,103 +6606,175 @@ const file_hydraide_proto_rawDesc = "" +
 	"CountSwamp\x12\x1c\n" +
 	"\tSwampName\x18\x01 \x01(\tR\tSwampName\x12\x18\n" +
 	"\aIsExist\x18\x02 \x01(\bR\aIsExist\x12\x14\n" +
-	"\x05Count\x18\x03 \x01(\x05R\x05Count\"\xc8\x01\n" +
+	"\x05Count\x18\x03 \x01(\x05R\x05Count\"\x9b\x02\n" +
+	"\bMetadata\x12!\n" +
+	"\tCreatedAt\x18\x01 \x01(\bH\x00R\tCreatedAt\x88\x01\x01\x12!\n" +
+	"\tCreatedBy\x18\x02 \x01(\tH\x01R\tCreatedBy\x88\x01\x01\x12!\n" +
+	"\tUpdatedAt\x18\x03 \x01(\bH\x02R\tUpdatedAt\x88\x01\x01\x12!\n" +
+	"\tUpdatedBy\x18\x04 \x01(\tH\x03R\tUpdatedBy\x88\x01\x01\x12=\n" +
+	"\tExpiredAt\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampH\x04R\tExpiredAt\x88\x01\x01B\f\n" +
+	"\n" +
+	"_CreatedAtB\f\n" +
+	"\n" +
+	"_CreatedByB\f\n" +
+	"\n" +
+	"_UpdatedAtB\f\n" +
+	"\n" +
+	"_UpdatedByB\f\n" +
+	"\n" +
+	"_ExpiredAt\"\xe9\x02\n" +
 	"\x14IncrementInt8Request\x12\x1a\n" +
 	"\bIslandID\x18\x01 \x01(\x04R\bIslandID\x12\x1c\n" +
 	"\tSwampName\x18\x02 \x01(\tR\tSwampName\x12\x10\n" +
 	"\x03Key\x18\x03 \x01(\tR\x03Key\x12 \n" +
 	"\vIncrementBy\x18\x04 \x01(\x05R\vIncrementBy\x12B\n" +
-	"\tCondition\x18\x05 \x01(\v2$.hydraidepbgo.IncrementInt8ConditionR\tCondition\"\x81\x01\n" +
+	"\tCondition\x18\x05 \x01(\v2$.hydraidepbgo.IncrementInt8ConditionR\tCondition\x12A\n" +
+	"\rSetIfNotExist\x18\x06 \x01(\v2\x16.hydraidepbgo.MetadataH\x00R\rSetIfNotExist\x88\x01\x01\x12;\n" +
+	"\n" +
+	"SetIfExist\x18\a \x01(\v2\x16.hydraidepbgo.MetadataH\x01R\n" +
+	"SetIfExist\x88\x01\x01B\x10\n" +
+	"\x0e_SetIfNotExistB\r\n" +
+	"\v_SetIfExist\"\x81\x01\n" +
 	"\x16IncrementInt8Condition\x12Q\n" +
 	"\x12RelationalOperator\x18\x01 \x01(\x0e2!.hydraidepbgo.Relational.OperatorR\x12RelationalOperator\x12\x14\n" +
-	"\x05Value\x18\x02 \x01(\x05R\x05Value\"S\n" +
+	"\x05Value\x18\x02 \x01(\x05R\x05Value\"\x87\x01\n" +
 	"\x15IncrementInt8Response\x12\x14\n" +
 	"\x05Value\x18\x01 \x01(\x05R\x05Value\x12$\n" +
-	"\rIsIncremented\x18\x02 \x01(\bR\rIsIncremented\"\xca\x01\n" +
+	"\rIsIncremented\x18\x02 \x01(\bR\rIsIncremented\x122\n" +
+	"\bMetadata\x18\x03 \x01(\v2\x16.hydraidepbgo.MetadataR\bMetadata\"\xeb\x02\n" +
 	"\x15IncrementInt16Request\x12\x1a\n" +
 	"\bIslandID\x18\x01 \x01(\x04R\bIslandID\x12\x1c\n" +
 	"\tSwampName\x18\x02 \x01(\tR\tSwampName\x12\x10\n" +
 	"\x03Key\x18\x03 \x01(\tR\x03Key\x12 \n" +
 	"\vIncrementBy\x18\x04 \x01(\x05R\vIncrementBy\x12C\n" +
-	"\tCondition\x18\x05 \x01(\v2%.hydraidepbgo.IncrementInt16ConditionR\tCondition\"\x82\x01\n" +
+	"\tCondition\x18\x05 \x01(\v2%.hydraidepbgo.IncrementInt16ConditionR\tCondition\x12A\n" +
+	"\rSetIfNotExist\x18\x06 \x01(\v2\x16.hydraidepbgo.MetadataH\x00R\rSetIfNotExist\x88\x01\x01\x12;\n" +
+	"\n" +
+	"SetIfExist\x18\a \x01(\v2\x16.hydraidepbgo.MetadataH\x01R\n" +
+	"SetIfExist\x88\x01\x01B\x10\n" +
+	"\x0e_SetIfNotExistB\r\n" +
+	"\v_SetIfExist\"\x82\x01\n" +
 	"\x17IncrementInt16Condition\x12Q\n" +
 	"\x12RelationalOperator\x18\x01 \x01(\x0e2!.hydraidepbgo.Relational.OperatorR\x12RelationalOperator\x12\x14\n" +
-	"\x05Value\x18\x02 \x01(\x05R\x05Value\"T\n" +
+	"\x05Value\x18\x02 \x01(\x05R\x05Value\"\x88\x01\n" +
 	"\x16IncrementInt16Response\x12\x14\n" +
 	"\x05Value\x18\x01 \x01(\x05R\x05Value\x12$\n" +
-	"\rIsIncremented\x18\x02 \x01(\bR\rIsIncremented\"\xca\x01\n" +
+	"\rIsIncremented\x18\x02 \x01(\bR\rIsIncremented\x122\n" +
+	"\bMetadata\x18\x03 \x01(\v2\x16.hydraidepbgo.MetadataR\bMetadata\"\xeb\x02\n" +
 	"\x15IncrementInt32Request\x12\x1a\n" +
 	"\bIslandID\x18\x01 \x01(\x04R\bIslandID\x12\x1c\n" +
 	"\tSwampName\x18\x02 \x01(\tR\tSwampName\x12\x10\n" +
 	"\x03Key\x18\x03 \x01(\tR\x03Key\x12 \n" +
 	"\vIncrementBy\x18\x04 \x01(\x05R\vIncrementBy\x12C\n" +
-	"\tCondition\x18\x05 \x01(\v2%.hydraidepbgo.IncrementInt32ConditionR\tCondition\"\x82\x01\n" +
+	"\tCondition\x18\x05 \x01(\v2%.hydraidepbgo.IncrementInt32ConditionR\tCondition\x12A\n" +
+	"\rSetIfNotExist\x18\x06 \x01(\v2\x16.hydraidepbgo.MetadataH\x00R\rSetIfNotExist\x88\x01\x01\x12;\n" +
+	"\n" +
+	"SetIfExist\x18\a \x01(\v2\x16.hydraidepbgo.MetadataH\x01R\n" +
+	"SetIfExist\x88\x01\x01B\x10\n" +
+	"\x0e_SetIfNotExistB\r\n" +
+	"\v_SetIfExist\"\x82\x01\n" +
 	"\x17IncrementInt32Condition\x12Q\n" +
 	"\x12RelationalOperator\x18\x01 \x01(\x0e2!.hydraidepbgo.Relational.OperatorR\x12RelationalOperator\x12\x14\n" +
-	"\x05Value\x18\x02 \x01(\x05R\x05Value\"T\n" +
+	"\x05Value\x18\x02 \x01(\x05R\x05Value\"\x88\x01\n" +
 	"\x16IncrementInt32Response\x12\x14\n" +
 	"\x05Value\x18\x01 \x01(\x05R\x05Value\x12$\n" +
-	"\rIsIncremented\x18\x02 \x01(\bR\rIsIncremented\"\xca\x01\n" +
+	"\rIsIncremented\x18\x02 \x01(\bR\rIsIncremented\x122\n" +
+	"\bMetadata\x18\x03 \x01(\v2\x16.hydraidepbgo.MetadataR\bMetadata\"\xeb\x02\n" +
 	"\x15IncrementInt64Request\x12\x1a\n" +
 	"\bIslandID\x18\x01 \x01(\x04R\bIslandID\x12\x1c\n" +
 	"\tSwampName\x18\x02 \x01(\tR\tSwampName\x12\x10\n" +
 	"\x03Key\x18\x03 \x01(\tR\x03Key\x12 \n" +
 	"\vIncrementBy\x18\x04 \x01(\x03R\vIncrementBy\x12C\n" +
-	"\tCondition\x18\x05 \x01(\v2%.hydraidepbgo.IncrementInt64ConditionR\tCondition\"\x82\x01\n" +
+	"\tCondition\x18\x05 \x01(\v2%.hydraidepbgo.IncrementInt64ConditionR\tCondition\x12A\n" +
+	"\rSetIfNotExist\x18\x06 \x01(\v2\x16.hydraidepbgo.MetadataH\x00R\rSetIfNotExist\x88\x01\x01\x12;\n" +
+	"\n" +
+	"SetIfExist\x18\a \x01(\v2\x16.hydraidepbgo.MetadataH\x01R\n" +
+	"SetIfExist\x88\x01\x01B\x10\n" +
+	"\x0e_SetIfNotExistB\r\n" +
+	"\v_SetIfExist\"\x82\x01\n" +
 	"\x17IncrementInt64Condition\x12Q\n" +
 	"\x12RelationalOperator\x18\x01 \x01(\x0e2!.hydraidepbgo.Relational.OperatorR\x12RelationalOperator\x12\x14\n" +
-	"\x05Value\x18\x02 \x01(\x03R\x05Value\"T\n" +
+	"\x05Value\x18\x02 \x01(\x03R\x05Value\"\x88\x01\n" +
 	"\x16IncrementInt64Response\x12\x14\n" +
 	"\x05Value\x18\x01 \x01(\x03R\x05Value\x12$\n" +
-	"\rIsIncremented\x18\x02 \x01(\bR\rIsIncremented\"\xca\x01\n" +
+	"\rIsIncremented\x18\x02 \x01(\bR\rIsIncremented\x122\n" +
+	"\bMetadata\x18\x03 \x01(\v2\x16.hydraidepbgo.MetadataR\bMetadata\"\xeb\x02\n" +
 	"\x15IncrementUint8Request\x12\x1a\n" +
 	"\bIslandID\x18\x01 \x01(\x04R\bIslandID\x12\x1c\n" +
 	"\tSwampName\x18\x02 \x01(\tR\tSwampName\x12\x10\n" +
 	"\x03Key\x18\x03 \x01(\tR\x03Key\x12 \n" +
 	"\vIncrementBy\x18\x04 \x01(\rR\vIncrementBy\x12C\n" +
-	"\tCondition\x18\x05 \x01(\v2%.hydraidepbgo.IncrementUint8ConditionR\tCondition\"\x82\x01\n" +
+	"\tCondition\x18\x05 \x01(\v2%.hydraidepbgo.IncrementUint8ConditionR\tCondition\x12A\n" +
+	"\rSetIfNotExist\x18\x06 \x01(\v2\x16.hydraidepbgo.MetadataH\x00R\rSetIfNotExist\x88\x01\x01\x12;\n" +
+	"\n" +
+	"SetIfExist\x18\a \x01(\v2\x16.hydraidepbgo.MetadataH\x01R\n" +
+	"SetIfExist\x88\x01\x01B\x10\n" +
+	"\x0e_SetIfNotExistB\r\n" +
+	"\v_SetIfExist\"\x82\x01\n" +
 	"\x17IncrementUint8Condition\x12Q\n" +
 	"\x12RelationalOperator\x18\x01 \x01(\x0e2!.hydraidepbgo.Relational.OperatorR\x12RelationalOperator\x12\x14\n" +
-	"\x05Value\x18\x02 \x01(\rR\x05Value\"T\n" +
+	"\x05Value\x18\x02 \x01(\rR\x05Value\"\x88\x01\n" +
 	"\x16IncrementUint8Response\x12\x14\n" +
 	"\x05Value\x18\x01 \x01(\rR\x05Value\x12$\n" +
-	"\rIsIncremented\x18\x02 \x01(\bR\rIsIncremented\"\xcc\x01\n" +
+	"\rIsIncremented\x18\x02 \x01(\bR\rIsIncremented\x122\n" +
+	"\bMetadata\x18\x03 \x01(\v2\x16.hydraidepbgo.MetadataR\bMetadata\"\xed\x02\n" +
 	"\x16IncrementUint16Request\x12\x1a\n" +
 	"\bIslandID\x18\x01 \x01(\x04R\bIslandID\x12\x1c\n" +
 	"\tSwampName\x18\x02 \x01(\tR\tSwampName\x12\x10\n" +
 	"\x03Key\x18\x03 \x01(\tR\x03Key\x12 \n" +
 	"\vIncrementBy\x18\x04 \x01(\rR\vIncrementBy\x12D\n" +
-	"\tCondition\x18\x05 \x01(\v2&.hydraidepbgo.IncrementUint16ConditionR\tCondition\"\x83\x01\n" +
+	"\tCondition\x18\x05 \x01(\v2&.hydraidepbgo.IncrementUint16ConditionR\tCondition\x12A\n" +
+	"\rSetIfNotExist\x18\x06 \x01(\v2\x16.hydraidepbgo.MetadataH\x00R\rSetIfNotExist\x88\x01\x01\x12;\n" +
+	"\n" +
+	"SetIfExist\x18\a \x01(\v2\x16.hydraidepbgo.MetadataH\x01R\n" +
+	"SetIfExist\x88\x01\x01B\x10\n" +
+	"\x0e_SetIfNotExistB\r\n" +
+	"\v_SetIfExist\"\x83\x01\n" +
 	"\x18IncrementUint16Condition\x12Q\n" +
 	"\x12RelationalOperator\x18\x01 \x01(\x0e2!.hydraidepbgo.Relational.OperatorR\x12RelationalOperator\x12\x14\n" +
-	"\x05Value\x18\x02 \x01(\rR\x05Value\"U\n" +
+	"\x05Value\x18\x02 \x01(\rR\x05Value\"\x89\x01\n" +
 	"\x17IncrementUint16Response\x12\x14\n" +
 	"\x05Value\x18\x01 \x01(\rR\x05Value\x12$\n" +
-	"\rIsIncremented\x18\x02 \x01(\bR\rIsIncremented\"\xcc\x01\n" +
+	"\rIsIncremented\x18\x02 \x01(\bR\rIsIncremented\x122\n" +
+	"\bMetadata\x18\x03 \x01(\v2\x16.hydraidepbgo.MetadataR\bMetadata\"\xed\x02\n" +
 	"\x16IncrementUint32Request\x12\x1a\n" +
 	"\bIslandID\x18\x01 \x01(\x04R\bIslandID\x12\x1c\n" +
 	"\tSwampName\x18\x02 \x01(\tR\tSwampName\x12\x10\n" +
 	"\x03Key\x18\x03 \x01(\tR\x03Key\x12 \n" +
 	"\vIncrementBy\x18\x04 \x01(\rR\vIncrementBy\x12D\n" +
-	"\tCondition\x18\x05 \x01(\v2&.hydraidepbgo.IncrementUint32ConditionR\tCondition\"\x83\x01\n" +
+	"\tCondition\x18\x05 \x01(\v2&.hydraidepbgo.IncrementUint32ConditionR\tCondition\x12A\n" +
+	"\rSetIfNotExist\x18\x06 \x01(\v2\x16.hydraidepbgo.MetadataH\x00R\rSetIfNotExist\x88\x01\x01\x12;\n" +
+	"\n" +
+	"SetIfExist\x18\a \x01(\v2\x16.hydraidepbgo.MetadataH\x01R\n" +
+	"SetIfExist\x88\x01\x01B\x10\n" +
+	"\x0e_SetIfNotExistB\r\n" +
+	"\v_SetIfExist\"\x83\x01\n" +
 	"\x18IncrementUint32Condition\x12Q\n" +
 	"\x12RelationalOperator\x18\x01 \x01(\x0e2!.hydraidepbgo.Relational.OperatorR\x12RelationalOperator\x12\x14\n" +
-	"\x05Value\x18\x02 \x01(\rR\x05Value\"U\n" +
+	"\x05Value\x18\x02 \x01(\rR\x05Value\"\x89\x01\n" +
 	"\x17IncrementUint32Response\x12\x14\n" +
 	"\x05Value\x18\x01 \x01(\rR\x05Value\x12$\n" +
-	"\rIsIncremented\x18\x02 \x01(\bR\rIsIncremented\"\xcc\x01\n" +
+	"\rIsIncremented\x18\x02 \x01(\bR\rIsIncremented\x122\n" +
+	"\bMetadata\x18\x03 \x01(\v2\x16.hydraidepbgo.MetadataR\bMetadata\"\xed\x02\n" +
 	"\x16IncrementUint64Request\x12\x1a\n" +
 	"\bIslandID\x18\x01 \x01(\x04R\bIslandID\x12\x1c\n" +
 	"\tSwampName\x18\x02 \x01(\tR\tSwampName\x12\x10\n" +
 	"\x03Key\x18\x03 \x01(\tR\x03Key\x12 \n" +
 	"\vIncrementBy\x18\x04 \x01(\x04R\vIncrementBy\x12D\n" +
-	"\tCondition\x18\x05 \x01(\v2&.hydraidepbgo.IncrementUint64ConditionR\tCondition\"\x83\x01\n" +
+	"\tCondition\x18\x05 \x01(\v2&.hydraidepbgo.IncrementUint64ConditionR\tCondition\x12A\n" +
+	"\rSetIfNotExist\x18\x06 \x01(\v2\x16.hydraidepbgo.MetadataH\x00R\rSetIfNotExist\x88\x01\x01\x12;\n" +
+	"\n" +
+	"SetIfExist\x18\a \x01(\v2\x16.hydraidepbgo.MetadataH\x01R\n" +
+	"SetIfExist\x88\x01\x01B\x10\n" +
+	"\x0e_SetIfNotExistB\r\n" +
+	"\v_SetIfExist\"\x83\x01\n" +
 	"\x18IncrementUint64Condition\x12Q\n" +
 	"\x12RelationalOperator\x18\x01 \x01(\x0e2!.hydraidepbgo.Relational.OperatorR\x12RelationalOperator\x12\x14\n" +
-	"\x05Value\x18\x02 \x01(\x04R\x05Value\"U\n" +
+	"\x05Value\x18\x02 \x01(\x04R\x05Value\"\x89\x01\n" +
 	"\x17IncrementUint64Response\x12\x14\n" +
 	"\x05Value\x18\x01 \x01(\x04R\x05Value\x12$\n" +
-	"\rIsIncremented\x18\x02 \x01(\bR\rIsIncremented\"\x86\x01\n" +
+	"\rIsIncremented\x18\x02 \x01(\bR\rIsIncremented\x122\n" +
+	"\bMetadata\x18\x03 \x01(\v2\x16.hydraidepbgo.MetadataR\bMetadata\"\x86\x01\n" +
 	"\n" +
 	"Relational\"x\n" +
 	"\bOperator\x12\t\n" +
@@ -6365,31 +6783,45 @@ const file_hydraide_proto_rawDesc = "" +
 	"\x15GREATER_THAN_OR_EQUAL\x10\x02\x12\r\n" +
 	"\tLESS_THAN\x10\x03\x12\x16\n" +
 	"\x12LESS_THAN_OR_EQUAL\x10\x04\x12\r\n" +
-	"\tNOT_EQUAL\x10\x05\"\xce\x01\n" +
+	"\tNOT_EQUAL\x10\x05\"\xef\x02\n" +
 	"\x17IncrementFloat32Request\x12\x1a\n" +
 	"\bIslandID\x18\x01 \x01(\x04R\bIslandID\x12\x1c\n" +
 	"\tSwampName\x18\x02 \x01(\tR\tSwampName\x12\x10\n" +
 	"\x03Key\x18\x03 \x01(\tR\x03Key\x12 \n" +
 	"\vIncrementBy\x18\x04 \x01(\x02R\vIncrementBy\x12E\n" +
-	"\tCondition\x18\x05 \x01(\v2'.hydraidepbgo.IncrementFloat32ConditionR\tCondition\"\x84\x01\n" +
+	"\tCondition\x18\x05 \x01(\v2'.hydraidepbgo.IncrementFloat32ConditionR\tCondition\x12A\n" +
+	"\rSetIfNotExist\x18\x06 \x01(\v2\x16.hydraidepbgo.MetadataH\x00R\rSetIfNotExist\x88\x01\x01\x12;\n" +
+	"\n" +
+	"SetIfExist\x18\a \x01(\v2\x16.hydraidepbgo.MetadataH\x01R\n" +
+	"SetIfExist\x88\x01\x01B\x10\n" +
+	"\x0e_SetIfNotExistB\r\n" +
+	"\v_SetIfExist\"\x84\x01\n" +
 	"\x19IncrementFloat32Condition\x12Q\n" +
 	"\x12RelationalOperator\x18\x01 \x01(\x0e2!.hydraidepbgo.Relational.OperatorR\x12RelationalOperator\x12\x14\n" +
-	"\x05Value\x18\x02 \x01(\x02R\x05Value\"V\n" +
+	"\x05Value\x18\x02 \x01(\x02R\x05Value\"\x8a\x01\n" +
 	"\x18IncrementFloat32Response\x12\x14\n" +
 	"\x05Value\x18\x01 \x01(\x02R\x05Value\x12$\n" +
-	"\rIsIncremented\x18\x02 \x01(\bR\rIsIncremented\"\xce\x01\n" +
+	"\rIsIncremented\x18\x02 \x01(\bR\rIsIncremented\x122\n" +
+	"\bMetadata\x18\x03 \x01(\v2\x16.hydraidepbgo.MetadataR\bMetadata\"\xef\x02\n" +
 	"\x17IncrementFloat64Request\x12\x1a\n" +
 	"\bIslandID\x18\x01 \x01(\x04R\bIslandID\x12\x1c\n" +
 	"\tSwampName\x18\x02 \x01(\tR\tSwampName\x12\x10\n" +
 	"\x03Key\x18\x03 \x01(\tR\x03Key\x12 \n" +
 	"\vIncrementBy\x18\x04 \x01(\x01R\vIncrementBy\x12E\n" +
-	"\tCondition\x18\x05 \x01(\v2'.hydraidepbgo.IncrementFloat64ConditionR\tCondition\"\x84\x01\n" +
+	"\tCondition\x18\x05 \x01(\v2'.hydraidepbgo.IncrementFloat64ConditionR\tCondition\x12A\n" +
+	"\rSetIfNotExist\x18\x06 \x01(\v2\x16.hydraidepbgo.MetadataH\x00R\rSetIfNotExist\x88\x01\x01\x12;\n" +
+	"\n" +
+	"SetIfExist\x18\a \x01(\v2\x16.hydraidepbgo.MetadataH\x01R\n" +
+	"SetIfExist\x88\x01\x01B\x10\n" +
+	"\x0e_SetIfNotExistB\r\n" +
+	"\v_SetIfExist\"\x84\x01\n" +
 	"\x19IncrementFloat64Condition\x12Q\n" +
 	"\x12RelationalOperator\x18\x01 \x01(\x0e2!.hydraidepbgo.Relational.OperatorR\x12RelationalOperator\x12\x14\n" +
-	"\x05Value\x18\x02 \x01(\x01R\x05Value\"V\n" +
+	"\x05Value\x18\x02 \x01(\x01R\x05Value\"\x8a\x01\n" +
 	"\x18IncrementFloat64Response\x12\x14\n" +
 	"\x05Value\x18\x01 \x01(\x01R\x05Value\x12$\n" +
-	"\rIsIncremented\x18\x02 \x01(\bR\rIsIncremented\"8\n" +
+	"\rIsIncremented\x18\x02 \x01(\bR\rIsIncremented\x122\n" +
+	"\bMetadata\x18\x03 \x01(\v2\x16.hydraidepbgo.MetadataR\bMetadata\"8\n" +
 	"\fKeySlicePair\x12\x10\n" +
 	"\x03Key\x18\x01 \x01(\tR\x03Key\x12\x16\n" +
 	"\x06Values\x18\x02 \x03(\rR\x06Values\"\x99\x01\n" +
@@ -6475,7 +6907,7 @@ func file_hydraide_proto_rawDescGZIP() []byte {
 }
 
 var file_hydraide_proto_enumTypes = make([]protoimpl.EnumInfo, 7)
-var file_hydraide_proto_msgTypes = make([]protoimpl.MessageInfo, 90)
+var file_hydraide_proto_msgTypes = make([]protoimpl.MessageInfo, 91)
 var file_hydraide_proto_goTypes = []any{
 	(SwampResponse_ErrCodeEnum)(0), // 0: hydraidepbgo.SwampResponse.ErrCodeEnum
 	(Status_Code)(0),               // 1: hydraidepbgo.Status.Code
@@ -6527,178 +6959,210 @@ var file_hydraide_proto_goTypes = []any{
 	(*CountRequest)(nil),                                  // 47: hydraidepbgo.CountRequest
 	(*CountResponse)(nil),                                 // 48: hydraidepbgo.CountResponse
 	(*CountSwamp)(nil),                                    // 49: hydraidepbgo.CountSwamp
-	(*IncrementInt8Request)(nil),                          // 50: hydraidepbgo.IncrementInt8Request
-	(*IncrementInt8Condition)(nil),                        // 51: hydraidepbgo.IncrementInt8Condition
-	(*IncrementInt8Response)(nil),                         // 52: hydraidepbgo.IncrementInt8Response
-	(*IncrementInt16Request)(nil),                         // 53: hydraidepbgo.IncrementInt16Request
-	(*IncrementInt16Condition)(nil),                       // 54: hydraidepbgo.IncrementInt16Condition
-	(*IncrementInt16Response)(nil),                        // 55: hydraidepbgo.IncrementInt16Response
-	(*IncrementInt32Request)(nil),                         // 56: hydraidepbgo.IncrementInt32Request
-	(*IncrementInt32Condition)(nil),                       // 57: hydraidepbgo.IncrementInt32Condition
-	(*IncrementInt32Response)(nil),                        // 58: hydraidepbgo.IncrementInt32Response
-	(*IncrementInt64Request)(nil),                         // 59: hydraidepbgo.IncrementInt64Request
-	(*IncrementInt64Condition)(nil),                       // 60: hydraidepbgo.IncrementInt64Condition
-	(*IncrementInt64Response)(nil),                        // 61: hydraidepbgo.IncrementInt64Response
-	(*IncrementUint8Request)(nil),                         // 62: hydraidepbgo.IncrementUint8Request
-	(*IncrementUint8Condition)(nil),                       // 63: hydraidepbgo.IncrementUint8Condition
-	(*IncrementUint8Response)(nil),                        // 64: hydraidepbgo.IncrementUint8Response
-	(*IncrementUint16Request)(nil),                        // 65: hydraidepbgo.IncrementUint16Request
-	(*IncrementUint16Condition)(nil),                      // 66: hydraidepbgo.IncrementUint16Condition
-	(*IncrementUint16Response)(nil),                       // 67: hydraidepbgo.IncrementUint16Response
-	(*IncrementUint32Request)(nil),                        // 68: hydraidepbgo.IncrementUint32Request
-	(*IncrementUint32Condition)(nil),                      // 69: hydraidepbgo.IncrementUint32Condition
-	(*IncrementUint32Response)(nil),                       // 70: hydraidepbgo.IncrementUint32Response
-	(*IncrementUint64Request)(nil),                        // 71: hydraidepbgo.IncrementUint64Request
-	(*IncrementUint64Condition)(nil),                      // 72: hydraidepbgo.IncrementUint64Condition
-	(*IncrementUint64Response)(nil),                       // 73: hydraidepbgo.IncrementUint64Response
-	(*Relational)(nil),                                    // 74: hydraidepbgo.Relational
-	(*IncrementFloat32Request)(nil),                       // 75: hydraidepbgo.IncrementFloat32Request
-	(*IncrementFloat32Condition)(nil),                     // 76: hydraidepbgo.IncrementFloat32Condition
-	(*IncrementFloat32Response)(nil),                      // 77: hydraidepbgo.IncrementFloat32Response
-	(*IncrementFloat64Request)(nil),                       // 78: hydraidepbgo.IncrementFloat64Request
-	(*IncrementFloat64Condition)(nil),                     // 79: hydraidepbgo.IncrementFloat64Condition
-	(*IncrementFloat64Response)(nil),                      // 80: hydraidepbgo.IncrementFloat64Response
-	(*KeySlicePair)(nil),                                  // 81: hydraidepbgo.KeySlicePair
-	(*AddToUint32SlicePushRequest)(nil),                   // 82: hydraidepbgo.AddToUint32SlicePushRequest
-	(*AddToUint32SlicePushResponse)(nil),                  // 83: hydraidepbgo.AddToUint32SlicePushResponse
-	(*Uint32SliceDeleteRequest)(nil),                      // 84: hydraidepbgo.Uint32SliceDeleteRequest
-	(*Uint32SliceDeleteResponse)(nil),                     // 85: hydraidepbgo.Uint32SliceDeleteResponse
-	(*Uint32SliceSizeRequest)(nil),                        // 86: hydraidepbgo.Uint32SliceSizeRequest
-	(*Uint32SliceSizeResponse)(nil),                       // 87: hydraidepbgo.Uint32SliceSizeResponse
-	(*Uint32SliceIsValueExistRequest)(nil),                // 88: hydraidepbgo.Uint32SliceIsValueExistRequest
-	(*Uint32SliceIsValueExistResponse)(nil),               // 89: hydraidepbgo.Uint32SliceIsValueExistResponse
-	(*IsSwampExistRequest)(nil),                           // 90: hydraidepbgo.IsSwampExistRequest
-	(*IsSwampExistResponse)(nil),                          // 91: hydraidepbgo.IsSwampExistResponse
-	(*IsKeyExistRequest)(nil),                             // 92: hydraidepbgo.IsKeyExistRequest
-	(*IsKeyExistResponse)(nil),                            // 93: hydraidepbgo.IsKeyExistResponse
-	(*DeleteRequest_SwampKeys)(nil),                       // 94: hydraidepbgo.DeleteRequest.SwampKeys
-	(*DeleteResponse_SwampDeleteResponse)(nil),            // 95: hydraidepbgo.DeleteResponse.SwampDeleteResponse
-	(*CountRequest_SwampIdentifier)(nil),                  // 96: hydraidepbgo.CountRequest.SwampIdentifier
-	(*timestamppb.Timestamp)(nil),                         // 97: google.protobuf.Timestamp
+	(*Metadata)(nil),                                      // 50: hydraidepbgo.Metadata
+	(*IncrementInt8Request)(nil),                          // 51: hydraidepbgo.IncrementInt8Request
+	(*IncrementInt8Condition)(nil),                        // 52: hydraidepbgo.IncrementInt8Condition
+	(*IncrementInt8Response)(nil),                         // 53: hydraidepbgo.IncrementInt8Response
+	(*IncrementInt16Request)(nil),                         // 54: hydraidepbgo.IncrementInt16Request
+	(*IncrementInt16Condition)(nil),                       // 55: hydraidepbgo.IncrementInt16Condition
+	(*IncrementInt16Response)(nil),                        // 56: hydraidepbgo.IncrementInt16Response
+	(*IncrementInt32Request)(nil),                         // 57: hydraidepbgo.IncrementInt32Request
+	(*IncrementInt32Condition)(nil),                       // 58: hydraidepbgo.IncrementInt32Condition
+	(*IncrementInt32Response)(nil),                        // 59: hydraidepbgo.IncrementInt32Response
+	(*IncrementInt64Request)(nil),                         // 60: hydraidepbgo.IncrementInt64Request
+	(*IncrementInt64Condition)(nil),                       // 61: hydraidepbgo.IncrementInt64Condition
+	(*IncrementInt64Response)(nil),                        // 62: hydraidepbgo.IncrementInt64Response
+	(*IncrementUint8Request)(nil),                         // 63: hydraidepbgo.IncrementUint8Request
+	(*IncrementUint8Condition)(nil),                       // 64: hydraidepbgo.IncrementUint8Condition
+	(*IncrementUint8Response)(nil),                        // 65: hydraidepbgo.IncrementUint8Response
+	(*IncrementUint16Request)(nil),                        // 66: hydraidepbgo.IncrementUint16Request
+	(*IncrementUint16Condition)(nil),                      // 67: hydraidepbgo.IncrementUint16Condition
+	(*IncrementUint16Response)(nil),                       // 68: hydraidepbgo.IncrementUint16Response
+	(*IncrementUint32Request)(nil),                        // 69: hydraidepbgo.IncrementUint32Request
+	(*IncrementUint32Condition)(nil),                      // 70: hydraidepbgo.IncrementUint32Condition
+	(*IncrementUint32Response)(nil),                       // 71: hydraidepbgo.IncrementUint32Response
+	(*IncrementUint64Request)(nil),                        // 72: hydraidepbgo.IncrementUint64Request
+	(*IncrementUint64Condition)(nil),                      // 73: hydraidepbgo.IncrementUint64Condition
+	(*IncrementUint64Response)(nil),                       // 74: hydraidepbgo.IncrementUint64Response
+	(*Relational)(nil),                                    // 75: hydraidepbgo.Relational
+	(*IncrementFloat32Request)(nil),                       // 76: hydraidepbgo.IncrementFloat32Request
+	(*IncrementFloat32Condition)(nil),                     // 77: hydraidepbgo.IncrementFloat32Condition
+	(*IncrementFloat32Response)(nil),                      // 78: hydraidepbgo.IncrementFloat32Response
+	(*IncrementFloat64Request)(nil),                       // 79: hydraidepbgo.IncrementFloat64Request
+	(*IncrementFloat64Condition)(nil),                     // 80: hydraidepbgo.IncrementFloat64Condition
+	(*IncrementFloat64Response)(nil),                      // 81: hydraidepbgo.IncrementFloat64Response
+	(*KeySlicePair)(nil),                                  // 82: hydraidepbgo.KeySlicePair
+	(*AddToUint32SlicePushRequest)(nil),                   // 83: hydraidepbgo.AddToUint32SlicePushRequest
+	(*AddToUint32SlicePushResponse)(nil),                  // 84: hydraidepbgo.AddToUint32SlicePushResponse
+	(*Uint32SliceDeleteRequest)(nil),                      // 85: hydraidepbgo.Uint32SliceDeleteRequest
+	(*Uint32SliceDeleteResponse)(nil),                     // 86: hydraidepbgo.Uint32SliceDeleteResponse
+	(*Uint32SliceSizeRequest)(nil),                        // 87: hydraidepbgo.Uint32SliceSizeRequest
+	(*Uint32SliceSizeResponse)(nil),                       // 88: hydraidepbgo.Uint32SliceSizeResponse
+	(*Uint32SliceIsValueExistRequest)(nil),                // 89: hydraidepbgo.Uint32SliceIsValueExistRequest
+	(*Uint32SliceIsValueExistResponse)(nil),               // 90: hydraidepbgo.Uint32SliceIsValueExistResponse
+	(*IsSwampExistRequest)(nil),                           // 91: hydraidepbgo.IsSwampExistRequest
+	(*IsSwampExistResponse)(nil),                          // 92: hydraidepbgo.IsSwampExistResponse
+	(*IsKeyExistRequest)(nil),                             // 93: hydraidepbgo.IsKeyExistRequest
+	(*IsKeyExistResponse)(nil),                            // 94: hydraidepbgo.IsKeyExistResponse
+	(*DeleteRequest_SwampKeys)(nil),                       // 95: hydraidepbgo.DeleteRequest.SwampKeys
+	(*DeleteResponse_SwampDeleteResponse)(nil),            // 96: hydraidepbgo.DeleteResponse.SwampDeleteResponse
+	(*CountRequest_SwampIdentifier)(nil),                  // 97: hydraidepbgo.CountRequest.SwampIdentifier
+	(*timestamppb.Timestamp)(nil),                         // 98: google.protobuf.Timestamp
 }
 var file_hydraide_proto_depIdxs = []int32{
-	39, // 0: hydraidepbgo.SubscribeToEventsResponse.Treasure:type_name -> hydraidepbgo.Treasure
-	39, // 1: hydraidepbgo.SubscribeToEventsResponse.OldTreasure:type_name -> hydraidepbgo.Treasure
-	39, // 2: hydraidepbgo.SubscribeToEventsResponse.DeletedTreasure:type_name -> hydraidepbgo.Treasure
-	97, // 3: hydraidepbgo.SubscribeToEventsResponse.EventTime:type_name -> google.protobuf.Timestamp
-	1,  // 4: hydraidepbgo.SubscribeToEventsResponse.Status:type_name -> hydraidepbgo.Status.Code
-	25, // 5: hydraidepbgo.SetRequest.Swamps:type_name -> hydraidepbgo.SwampRequest
-	26, // 6: hydraidepbgo.SwampRequest.KeyValues:type_name -> hydraidepbgo.KeyValuePair
-	2,  // 7: hydraidepbgo.KeyValuePair.BoolVal:type_name -> hydraidepbgo.Boolean.Type
-	97, // 8: hydraidepbgo.KeyValuePair.CreatedAt:type_name -> google.protobuf.Timestamp
-	97, // 9: hydraidepbgo.KeyValuePair.UpdatedAt:type_name -> google.protobuf.Timestamp
-	97, // 10: hydraidepbgo.KeyValuePair.ExpiredAt:type_name -> google.protobuf.Timestamp
-	28, // 11: hydraidepbgo.SetResponse.Swamps:type_name -> hydraidepbgo.SwampResponse
-	29, // 12: hydraidepbgo.SwampResponse.KeysAndStatuses:type_name -> hydraidepbgo.KeyStatusPair
-	0,  // 13: hydraidepbgo.SwampResponse.ErrorCode:type_name -> hydraidepbgo.SwampResponse.ErrCodeEnum
-	1,  // 14: hydraidepbgo.KeyStatusPair.Status:type_name -> hydraidepbgo.Status.Code
-	32, // 15: hydraidepbgo.GetRequest.Swamps:type_name -> hydraidepbgo.GetSwamp
-	34, // 16: hydraidepbgo.GetResponse.Swamps:type_name -> hydraidepbgo.GetSwampResponse
-	39, // 17: hydraidepbgo.GetSwampResponse.Treasures:type_name -> hydraidepbgo.Treasure
-	39, // 18: hydraidepbgo.GetAllResponse.Treasures:type_name -> hydraidepbgo.Treasure
-	39, // 19: hydraidepbgo.ShiftExpiredTreasuresResponse.Treasures:type_name -> hydraidepbgo.Treasure
-	2,  // 20: hydraidepbgo.Treasure.BoolVal:type_name -> hydraidepbgo.Boolean.Type
-	97, // 21: hydraidepbgo.Treasure.CreatedAt:type_name -> google.protobuf.Timestamp
-	97, // 22: hydraidepbgo.Treasure.UpdatedAt:type_name -> google.protobuf.Timestamp
-	97, // 23: hydraidepbgo.Treasure.ExpiredAt:type_name -> google.protobuf.Timestamp
-	3,  // 24: hydraidepbgo.GetByIndexRequest.IndexType:type_name -> hydraidepbgo.IndexType.Type
-	4,  // 25: hydraidepbgo.GetByIndexRequest.OrderType:type_name -> hydraidepbgo.OrderType.Type
-	39, // 26: hydraidepbgo.GetByIndexResponse.Treasures:type_name -> hydraidepbgo.Treasure
-	94, // 27: hydraidepbgo.DeleteRequest.Swamps:type_name -> hydraidepbgo.DeleteRequest.SwampKeys
-	95, // 28: hydraidepbgo.DeleteResponse.Responses:type_name -> hydraidepbgo.DeleteResponse.SwampDeleteResponse
-	96, // 29: hydraidepbgo.CountRequest.Swamps:type_name -> hydraidepbgo.CountRequest.SwampIdentifier
-	49, // 30: hydraidepbgo.CountResponse.Swamps:type_name -> hydraidepbgo.CountSwamp
-	51, // 31: hydraidepbgo.IncrementInt8Request.Condition:type_name -> hydraidepbgo.IncrementInt8Condition
-	6,  // 32: hydraidepbgo.IncrementInt8Condition.RelationalOperator:type_name -> hydraidepbgo.Relational.Operator
-	54, // 33: hydraidepbgo.IncrementInt16Request.Condition:type_name -> hydraidepbgo.IncrementInt16Condition
-	6,  // 34: hydraidepbgo.IncrementInt16Condition.RelationalOperator:type_name -> hydraidepbgo.Relational.Operator
-	57, // 35: hydraidepbgo.IncrementInt32Request.Condition:type_name -> hydraidepbgo.IncrementInt32Condition
-	6,  // 36: hydraidepbgo.IncrementInt32Condition.RelationalOperator:type_name -> hydraidepbgo.Relational.Operator
-	60, // 37: hydraidepbgo.IncrementInt64Request.Condition:type_name -> hydraidepbgo.IncrementInt64Condition
-	6,  // 38: hydraidepbgo.IncrementInt64Condition.RelationalOperator:type_name -> hydraidepbgo.Relational.Operator
-	63, // 39: hydraidepbgo.IncrementUint8Request.Condition:type_name -> hydraidepbgo.IncrementUint8Condition
-	6,  // 40: hydraidepbgo.IncrementUint8Condition.RelationalOperator:type_name -> hydraidepbgo.Relational.Operator
-	66, // 41: hydraidepbgo.IncrementUint16Request.Condition:type_name -> hydraidepbgo.IncrementUint16Condition
-	6,  // 42: hydraidepbgo.IncrementUint16Condition.RelationalOperator:type_name -> hydraidepbgo.Relational.Operator
-	69, // 43: hydraidepbgo.IncrementUint32Request.Condition:type_name -> hydraidepbgo.IncrementUint32Condition
-	6,  // 44: hydraidepbgo.IncrementUint32Condition.RelationalOperator:type_name -> hydraidepbgo.Relational.Operator
-	72, // 45: hydraidepbgo.IncrementUint64Request.Condition:type_name -> hydraidepbgo.IncrementUint64Condition
-	6,  // 46: hydraidepbgo.IncrementUint64Condition.RelationalOperator:type_name -> hydraidepbgo.Relational.Operator
-	76, // 47: hydraidepbgo.IncrementFloat32Request.Condition:type_name -> hydraidepbgo.IncrementFloat32Condition
-	6,  // 48: hydraidepbgo.IncrementFloat32Condition.RelationalOperator:type_name -> hydraidepbgo.Relational.Operator
-	79, // 49: hydraidepbgo.IncrementFloat64Request.Condition:type_name -> hydraidepbgo.IncrementFloat64Condition
-	6,  // 50: hydraidepbgo.IncrementFloat64Condition.RelationalOperator:type_name -> hydraidepbgo.Relational.Operator
-	81, // 51: hydraidepbgo.AddToUint32SlicePushRequest.KeySlicePairs:type_name -> hydraidepbgo.KeySlicePair
-	81, // 52: hydraidepbgo.Uint32SliceDeleteRequest.KeySlicePairs:type_name -> hydraidepbgo.KeySlicePair
-	5,  // 53: hydraidepbgo.DeleteResponse.SwampDeleteResponse.ErrorCode:type_name -> hydraidepbgo.DeleteResponse.SwampDeleteResponse.ErrorCodeEnum
-	29, // 54: hydraidepbgo.DeleteResponse.SwampDeleteResponse.KeyStatuses:type_name -> hydraidepbgo.KeyStatusPair
-	7,  // 55: hydraidepbgo.HydraideService.Heartbeat:input_type -> hydraidepbgo.HeartbeatRequest
-	9,  // 56: hydraidepbgo.HydraideService.Lock:input_type -> hydraidepbgo.LockRequest
-	11, // 57: hydraidepbgo.HydraideService.Unlock:input_type -> hydraidepbgo.UnlockRequest
-	20, // 58: hydraidepbgo.HydraideService.RegisterSwamp:input_type -> hydraidepbgo.RegisterSwampRequest
-	22, // 59: hydraidepbgo.HydraideService.DeRegisterSwamp:input_type -> hydraidepbgo.DeRegisterSwampRequest
-	24, // 60: hydraidepbgo.HydraideService.Set:input_type -> hydraidepbgo.SetRequest
-	31, // 61: hydraidepbgo.HydraideService.Get:input_type -> hydraidepbgo.GetRequest
-	35, // 62: hydraidepbgo.HydraideService.GetAll:input_type -> hydraidepbgo.GetAllRequest
-	41, // 63: hydraidepbgo.HydraideService.GetByIndex:input_type -> hydraidepbgo.GetByIndexRequest
-	37, // 64: hydraidepbgo.HydraideService.ShiftExpiredTreasures:input_type -> hydraidepbgo.ShiftExpiredTreasuresRequest
-	13, // 65: hydraidepbgo.HydraideService.Destroy:input_type -> hydraidepbgo.DestroyRequest
-	45, // 66: hydraidepbgo.HydraideService.Delete:input_type -> hydraidepbgo.DeleteRequest
-	47, // 67: hydraidepbgo.HydraideService.Count:input_type -> hydraidepbgo.CountRequest
-	90, // 68: hydraidepbgo.HydraideService.IsSwampExist:input_type -> hydraidepbgo.IsSwampExistRequest
-	92, // 69: hydraidepbgo.HydraideService.IsKeyExist:input_type -> hydraidepbgo.IsKeyExistRequest
-	17, // 70: hydraidepbgo.HydraideService.SubscribeToEvents:input_type -> hydraidepbgo.SubscribeToEventsRequest
-	15, // 71: hydraidepbgo.HydraideService.SubscribeToInfo:input_type -> hydraidepbgo.SubscribeToInfoRequest
-	82, // 72: hydraidepbgo.HydraideService.Uint32SlicePush:input_type -> hydraidepbgo.AddToUint32SlicePushRequest
-	84, // 73: hydraidepbgo.HydraideService.Uint32SliceDelete:input_type -> hydraidepbgo.Uint32SliceDeleteRequest
-	86, // 74: hydraidepbgo.HydraideService.Uint32SliceSize:input_type -> hydraidepbgo.Uint32SliceSizeRequest
-	88, // 75: hydraidepbgo.HydraideService.Uint32SliceIsValueExist:input_type -> hydraidepbgo.Uint32SliceIsValueExistRequest
-	50, // 76: hydraidepbgo.HydraideService.IncrementInt8:input_type -> hydraidepbgo.IncrementInt8Request
-	53, // 77: hydraidepbgo.HydraideService.IncrementInt16:input_type -> hydraidepbgo.IncrementInt16Request
-	56, // 78: hydraidepbgo.HydraideService.IncrementInt32:input_type -> hydraidepbgo.IncrementInt32Request
-	59, // 79: hydraidepbgo.HydraideService.IncrementInt64:input_type -> hydraidepbgo.IncrementInt64Request
-	62, // 80: hydraidepbgo.HydraideService.IncrementUint8:input_type -> hydraidepbgo.IncrementUint8Request
-	65, // 81: hydraidepbgo.HydraideService.IncrementUint16:input_type -> hydraidepbgo.IncrementUint16Request
-	68, // 82: hydraidepbgo.HydraideService.IncrementUint32:input_type -> hydraidepbgo.IncrementUint32Request
-	71, // 83: hydraidepbgo.HydraideService.IncrementUint64:input_type -> hydraidepbgo.IncrementUint64Request
-	75, // 84: hydraidepbgo.HydraideService.IncrementFloat32:input_type -> hydraidepbgo.IncrementFloat32Request
-	78, // 85: hydraidepbgo.HydraideService.IncrementFloat64:input_type -> hydraidepbgo.IncrementFloat64Request
-	8,  // 86: hydraidepbgo.HydraideService.Heartbeat:output_type -> hydraidepbgo.HeartbeatResponse
-	10, // 87: hydraidepbgo.HydraideService.Lock:output_type -> hydraidepbgo.LockResponse
-	12, // 88: hydraidepbgo.HydraideService.Unlock:output_type -> hydraidepbgo.UnlockResponse
-	21, // 89: hydraidepbgo.HydraideService.RegisterSwamp:output_type -> hydraidepbgo.RegisterSwampResponse
-	23, // 90: hydraidepbgo.HydraideService.DeRegisterSwamp:output_type -> hydraidepbgo.DeRegisterSwampResponse
-	27, // 91: hydraidepbgo.HydraideService.Set:output_type -> hydraidepbgo.SetResponse
-	33, // 92: hydraidepbgo.HydraideService.Get:output_type -> hydraidepbgo.GetResponse
-	36, // 93: hydraidepbgo.HydraideService.GetAll:output_type -> hydraidepbgo.GetAllResponse
-	44, // 94: hydraidepbgo.HydraideService.GetByIndex:output_type -> hydraidepbgo.GetByIndexResponse
-	38, // 95: hydraidepbgo.HydraideService.ShiftExpiredTreasures:output_type -> hydraidepbgo.ShiftExpiredTreasuresResponse
-	14, // 96: hydraidepbgo.HydraideService.Destroy:output_type -> hydraidepbgo.DestroyResponse
-	46, // 97: hydraidepbgo.HydraideService.Delete:output_type -> hydraidepbgo.DeleteResponse
-	48, // 98: hydraidepbgo.HydraideService.Count:output_type -> hydraidepbgo.CountResponse
-	91, // 99: hydraidepbgo.HydraideService.IsSwampExist:output_type -> hydraidepbgo.IsSwampExistResponse
-	93, // 100: hydraidepbgo.HydraideService.IsKeyExist:output_type -> hydraidepbgo.IsKeyExistResponse
-	18, // 101: hydraidepbgo.HydraideService.SubscribeToEvents:output_type -> hydraidepbgo.SubscribeToEventsResponse
-	16, // 102: hydraidepbgo.HydraideService.SubscribeToInfo:output_type -> hydraidepbgo.SubscribeToInfoResponse
-	83, // 103: hydraidepbgo.HydraideService.Uint32SlicePush:output_type -> hydraidepbgo.AddToUint32SlicePushResponse
-	85, // 104: hydraidepbgo.HydraideService.Uint32SliceDelete:output_type -> hydraidepbgo.Uint32SliceDeleteResponse
-	87, // 105: hydraidepbgo.HydraideService.Uint32SliceSize:output_type -> hydraidepbgo.Uint32SliceSizeResponse
-	89, // 106: hydraidepbgo.HydraideService.Uint32SliceIsValueExist:output_type -> hydraidepbgo.Uint32SliceIsValueExistResponse
-	52, // 107: hydraidepbgo.HydraideService.IncrementInt8:output_type -> hydraidepbgo.IncrementInt8Response
-	55, // 108: hydraidepbgo.HydraideService.IncrementInt16:output_type -> hydraidepbgo.IncrementInt16Response
-	58, // 109: hydraidepbgo.HydraideService.IncrementInt32:output_type -> hydraidepbgo.IncrementInt32Response
-	61, // 110: hydraidepbgo.HydraideService.IncrementInt64:output_type -> hydraidepbgo.IncrementInt64Response
-	64, // 111: hydraidepbgo.HydraideService.IncrementUint8:output_type -> hydraidepbgo.IncrementUint8Response
-	67, // 112: hydraidepbgo.HydraideService.IncrementUint16:output_type -> hydraidepbgo.IncrementUint16Response
-	70, // 113: hydraidepbgo.HydraideService.IncrementUint32:output_type -> hydraidepbgo.IncrementUint32Response
-	73, // 114: hydraidepbgo.HydraideService.IncrementUint64:output_type -> hydraidepbgo.IncrementUint64Response
-	77, // 115: hydraidepbgo.HydraideService.IncrementFloat32:output_type -> hydraidepbgo.IncrementFloat32Response
-	80, // 116: hydraidepbgo.HydraideService.IncrementFloat64:output_type -> hydraidepbgo.IncrementFloat64Response
-	86, // [86:117] is the sub-list for method output_type
-	55, // [55:86] is the sub-list for method input_type
-	55, // [55:55] is the sub-list for extension type_name
-	55, // [55:55] is the sub-list for extension extendee
-	0,  // [0:55] is the sub-list for field type_name
+	39,  // 0: hydraidepbgo.SubscribeToEventsResponse.Treasure:type_name -> hydraidepbgo.Treasure
+	39,  // 1: hydraidepbgo.SubscribeToEventsResponse.OldTreasure:type_name -> hydraidepbgo.Treasure
+	39,  // 2: hydraidepbgo.SubscribeToEventsResponse.DeletedTreasure:type_name -> hydraidepbgo.Treasure
+	98,  // 3: hydraidepbgo.SubscribeToEventsResponse.EventTime:type_name -> google.protobuf.Timestamp
+	1,   // 4: hydraidepbgo.SubscribeToEventsResponse.Status:type_name -> hydraidepbgo.Status.Code
+	25,  // 5: hydraidepbgo.SetRequest.Swamps:type_name -> hydraidepbgo.SwampRequest
+	26,  // 6: hydraidepbgo.SwampRequest.KeyValues:type_name -> hydraidepbgo.KeyValuePair
+	2,   // 7: hydraidepbgo.KeyValuePair.BoolVal:type_name -> hydraidepbgo.Boolean.Type
+	98,  // 8: hydraidepbgo.KeyValuePair.CreatedAt:type_name -> google.protobuf.Timestamp
+	98,  // 9: hydraidepbgo.KeyValuePair.UpdatedAt:type_name -> google.protobuf.Timestamp
+	98,  // 10: hydraidepbgo.KeyValuePair.ExpiredAt:type_name -> google.protobuf.Timestamp
+	28,  // 11: hydraidepbgo.SetResponse.Swamps:type_name -> hydraidepbgo.SwampResponse
+	29,  // 12: hydraidepbgo.SwampResponse.KeysAndStatuses:type_name -> hydraidepbgo.KeyStatusPair
+	0,   // 13: hydraidepbgo.SwampResponse.ErrorCode:type_name -> hydraidepbgo.SwampResponse.ErrCodeEnum
+	1,   // 14: hydraidepbgo.KeyStatusPair.Status:type_name -> hydraidepbgo.Status.Code
+	32,  // 15: hydraidepbgo.GetRequest.Swamps:type_name -> hydraidepbgo.GetSwamp
+	34,  // 16: hydraidepbgo.GetResponse.Swamps:type_name -> hydraidepbgo.GetSwampResponse
+	39,  // 17: hydraidepbgo.GetSwampResponse.Treasures:type_name -> hydraidepbgo.Treasure
+	39,  // 18: hydraidepbgo.GetAllResponse.Treasures:type_name -> hydraidepbgo.Treasure
+	39,  // 19: hydraidepbgo.ShiftExpiredTreasuresResponse.Treasures:type_name -> hydraidepbgo.Treasure
+	2,   // 20: hydraidepbgo.Treasure.BoolVal:type_name -> hydraidepbgo.Boolean.Type
+	98,  // 21: hydraidepbgo.Treasure.CreatedAt:type_name -> google.protobuf.Timestamp
+	98,  // 22: hydraidepbgo.Treasure.UpdatedAt:type_name -> google.protobuf.Timestamp
+	98,  // 23: hydraidepbgo.Treasure.ExpiredAt:type_name -> google.protobuf.Timestamp
+	3,   // 24: hydraidepbgo.GetByIndexRequest.IndexType:type_name -> hydraidepbgo.IndexType.Type
+	4,   // 25: hydraidepbgo.GetByIndexRequest.OrderType:type_name -> hydraidepbgo.OrderType.Type
+	39,  // 26: hydraidepbgo.GetByIndexResponse.Treasures:type_name -> hydraidepbgo.Treasure
+	95,  // 27: hydraidepbgo.DeleteRequest.Swamps:type_name -> hydraidepbgo.DeleteRequest.SwampKeys
+	96,  // 28: hydraidepbgo.DeleteResponse.Responses:type_name -> hydraidepbgo.DeleteResponse.SwampDeleteResponse
+	97,  // 29: hydraidepbgo.CountRequest.Swamps:type_name -> hydraidepbgo.CountRequest.SwampIdentifier
+	49,  // 30: hydraidepbgo.CountResponse.Swamps:type_name -> hydraidepbgo.CountSwamp
+	98,  // 31: hydraidepbgo.Metadata.ExpiredAt:type_name -> google.protobuf.Timestamp
+	52,  // 32: hydraidepbgo.IncrementInt8Request.Condition:type_name -> hydraidepbgo.IncrementInt8Condition
+	50,  // 33: hydraidepbgo.IncrementInt8Request.SetIfNotExist:type_name -> hydraidepbgo.Metadata
+	50,  // 34: hydraidepbgo.IncrementInt8Request.SetIfExist:type_name -> hydraidepbgo.Metadata
+	6,   // 35: hydraidepbgo.IncrementInt8Condition.RelationalOperator:type_name -> hydraidepbgo.Relational.Operator
+	50,  // 36: hydraidepbgo.IncrementInt8Response.Metadata:type_name -> hydraidepbgo.Metadata
+	55,  // 37: hydraidepbgo.IncrementInt16Request.Condition:type_name -> hydraidepbgo.IncrementInt16Condition
+	50,  // 38: hydraidepbgo.IncrementInt16Request.SetIfNotExist:type_name -> hydraidepbgo.Metadata
+	50,  // 39: hydraidepbgo.IncrementInt16Request.SetIfExist:type_name -> hydraidepbgo.Metadata
+	6,   // 40: hydraidepbgo.IncrementInt16Condition.RelationalOperator:type_name -> hydraidepbgo.Relational.Operator
+	50,  // 41: hydraidepbgo.IncrementInt16Response.Metadata:type_name -> hydraidepbgo.Metadata
+	58,  // 42: hydraidepbgo.IncrementInt32Request.Condition:type_name -> hydraidepbgo.IncrementInt32Condition
+	50,  // 43: hydraidepbgo.IncrementInt32Request.SetIfNotExist:type_name -> hydraidepbgo.Metadata
+	50,  // 44: hydraidepbgo.IncrementInt32Request.SetIfExist:type_name -> hydraidepbgo.Metadata
+	6,   // 45: hydraidepbgo.IncrementInt32Condition.RelationalOperator:type_name -> hydraidepbgo.Relational.Operator
+	50,  // 46: hydraidepbgo.IncrementInt32Response.Metadata:type_name -> hydraidepbgo.Metadata
+	61,  // 47: hydraidepbgo.IncrementInt64Request.Condition:type_name -> hydraidepbgo.IncrementInt64Condition
+	50,  // 48: hydraidepbgo.IncrementInt64Request.SetIfNotExist:type_name -> hydraidepbgo.Metadata
+	50,  // 49: hydraidepbgo.IncrementInt64Request.SetIfExist:type_name -> hydraidepbgo.Metadata
+	6,   // 50: hydraidepbgo.IncrementInt64Condition.RelationalOperator:type_name -> hydraidepbgo.Relational.Operator
+	50,  // 51: hydraidepbgo.IncrementInt64Response.Metadata:type_name -> hydraidepbgo.Metadata
+	64,  // 52: hydraidepbgo.IncrementUint8Request.Condition:type_name -> hydraidepbgo.IncrementUint8Condition
+	50,  // 53: hydraidepbgo.IncrementUint8Request.SetIfNotExist:type_name -> hydraidepbgo.Metadata
+	50,  // 54: hydraidepbgo.IncrementUint8Request.SetIfExist:type_name -> hydraidepbgo.Metadata
+	6,   // 55: hydraidepbgo.IncrementUint8Condition.RelationalOperator:type_name -> hydraidepbgo.Relational.Operator
+	50,  // 56: hydraidepbgo.IncrementUint8Response.Metadata:type_name -> hydraidepbgo.Metadata
+	67,  // 57: hydraidepbgo.IncrementUint16Request.Condition:type_name -> hydraidepbgo.IncrementUint16Condition
+	50,  // 58: hydraidepbgo.IncrementUint16Request.SetIfNotExist:type_name -> hydraidepbgo.Metadata
+	50,  // 59: hydraidepbgo.IncrementUint16Request.SetIfExist:type_name -> hydraidepbgo.Metadata
+	6,   // 60: hydraidepbgo.IncrementUint16Condition.RelationalOperator:type_name -> hydraidepbgo.Relational.Operator
+	50,  // 61: hydraidepbgo.IncrementUint16Response.Metadata:type_name -> hydraidepbgo.Metadata
+	70,  // 62: hydraidepbgo.IncrementUint32Request.Condition:type_name -> hydraidepbgo.IncrementUint32Condition
+	50,  // 63: hydraidepbgo.IncrementUint32Request.SetIfNotExist:type_name -> hydraidepbgo.Metadata
+	50,  // 64: hydraidepbgo.IncrementUint32Request.SetIfExist:type_name -> hydraidepbgo.Metadata
+	6,   // 65: hydraidepbgo.IncrementUint32Condition.RelationalOperator:type_name -> hydraidepbgo.Relational.Operator
+	50,  // 66: hydraidepbgo.IncrementUint32Response.Metadata:type_name -> hydraidepbgo.Metadata
+	73,  // 67: hydraidepbgo.IncrementUint64Request.Condition:type_name -> hydraidepbgo.IncrementUint64Condition
+	50,  // 68: hydraidepbgo.IncrementUint64Request.SetIfNotExist:type_name -> hydraidepbgo.Metadata
+	50,  // 69: hydraidepbgo.IncrementUint64Request.SetIfExist:type_name -> hydraidepbgo.Metadata
+	6,   // 70: hydraidepbgo.IncrementUint64Condition.RelationalOperator:type_name -> hydraidepbgo.Relational.Operator
+	50,  // 71: hydraidepbgo.IncrementUint64Response.Metadata:type_name -> hydraidepbgo.Metadata
+	77,  // 72: hydraidepbgo.IncrementFloat32Request.Condition:type_name -> hydraidepbgo.IncrementFloat32Condition
+	50,  // 73: hydraidepbgo.IncrementFloat32Request.SetIfNotExist:type_name -> hydraidepbgo.Metadata
+	50,  // 74: hydraidepbgo.IncrementFloat32Request.SetIfExist:type_name -> hydraidepbgo.Metadata
+	6,   // 75: hydraidepbgo.IncrementFloat32Condition.RelationalOperator:type_name -> hydraidepbgo.Relational.Operator
+	50,  // 76: hydraidepbgo.IncrementFloat32Response.Metadata:type_name -> hydraidepbgo.Metadata
+	80,  // 77: hydraidepbgo.IncrementFloat64Request.Condition:type_name -> hydraidepbgo.IncrementFloat64Condition
+	50,  // 78: hydraidepbgo.IncrementFloat64Request.SetIfNotExist:type_name -> hydraidepbgo.Metadata
+	50,  // 79: hydraidepbgo.IncrementFloat64Request.SetIfExist:type_name -> hydraidepbgo.Metadata
+	6,   // 80: hydraidepbgo.IncrementFloat64Condition.RelationalOperator:type_name -> hydraidepbgo.Relational.Operator
+	50,  // 81: hydraidepbgo.IncrementFloat64Response.Metadata:type_name -> hydraidepbgo.Metadata
+	82,  // 82: hydraidepbgo.AddToUint32SlicePushRequest.KeySlicePairs:type_name -> hydraidepbgo.KeySlicePair
+	82,  // 83: hydraidepbgo.Uint32SliceDeleteRequest.KeySlicePairs:type_name -> hydraidepbgo.KeySlicePair
+	5,   // 84: hydraidepbgo.DeleteResponse.SwampDeleteResponse.ErrorCode:type_name -> hydraidepbgo.DeleteResponse.SwampDeleteResponse.ErrorCodeEnum
+	29,  // 85: hydraidepbgo.DeleteResponse.SwampDeleteResponse.KeyStatuses:type_name -> hydraidepbgo.KeyStatusPair
+	7,   // 86: hydraidepbgo.HydraideService.Heartbeat:input_type -> hydraidepbgo.HeartbeatRequest
+	9,   // 87: hydraidepbgo.HydraideService.Lock:input_type -> hydraidepbgo.LockRequest
+	11,  // 88: hydraidepbgo.HydraideService.Unlock:input_type -> hydraidepbgo.UnlockRequest
+	20,  // 89: hydraidepbgo.HydraideService.RegisterSwamp:input_type -> hydraidepbgo.RegisterSwampRequest
+	22,  // 90: hydraidepbgo.HydraideService.DeRegisterSwamp:input_type -> hydraidepbgo.DeRegisterSwampRequest
+	24,  // 91: hydraidepbgo.HydraideService.Set:input_type -> hydraidepbgo.SetRequest
+	31,  // 92: hydraidepbgo.HydraideService.Get:input_type -> hydraidepbgo.GetRequest
+	35,  // 93: hydraidepbgo.HydraideService.GetAll:input_type -> hydraidepbgo.GetAllRequest
+	41,  // 94: hydraidepbgo.HydraideService.GetByIndex:input_type -> hydraidepbgo.GetByIndexRequest
+	37,  // 95: hydraidepbgo.HydraideService.ShiftExpiredTreasures:input_type -> hydraidepbgo.ShiftExpiredTreasuresRequest
+	13,  // 96: hydraidepbgo.HydraideService.Destroy:input_type -> hydraidepbgo.DestroyRequest
+	45,  // 97: hydraidepbgo.HydraideService.Delete:input_type -> hydraidepbgo.DeleteRequest
+	47,  // 98: hydraidepbgo.HydraideService.Count:input_type -> hydraidepbgo.CountRequest
+	91,  // 99: hydraidepbgo.HydraideService.IsSwampExist:input_type -> hydraidepbgo.IsSwampExistRequest
+	93,  // 100: hydraidepbgo.HydraideService.IsKeyExist:input_type -> hydraidepbgo.IsKeyExistRequest
+	17,  // 101: hydraidepbgo.HydraideService.SubscribeToEvents:input_type -> hydraidepbgo.SubscribeToEventsRequest
+	15,  // 102: hydraidepbgo.HydraideService.SubscribeToInfo:input_type -> hydraidepbgo.SubscribeToInfoRequest
+	83,  // 103: hydraidepbgo.HydraideService.Uint32SlicePush:input_type -> hydraidepbgo.AddToUint32SlicePushRequest
+	85,  // 104: hydraidepbgo.HydraideService.Uint32SliceDelete:input_type -> hydraidepbgo.Uint32SliceDeleteRequest
+	87,  // 105: hydraidepbgo.HydraideService.Uint32SliceSize:input_type -> hydraidepbgo.Uint32SliceSizeRequest
+	89,  // 106: hydraidepbgo.HydraideService.Uint32SliceIsValueExist:input_type -> hydraidepbgo.Uint32SliceIsValueExistRequest
+	51,  // 107: hydraidepbgo.HydraideService.IncrementInt8:input_type -> hydraidepbgo.IncrementInt8Request
+	54,  // 108: hydraidepbgo.HydraideService.IncrementInt16:input_type -> hydraidepbgo.IncrementInt16Request
+	57,  // 109: hydraidepbgo.HydraideService.IncrementInt32:input_type -> hydraidepbgo.IncrementInt32Request
+	60,  // 110: hydraidepbgo.HydraideService.IncrementInt64:input_type -> hydraidepbgo.IncrementInt64Request
+	63,  // 111: hydraidepbgo.HydraideService.IncrementUint8:input_type -> hydraidepbgo.IncrementUint8Request
+	66,  // 112: hydraidepbgo.HydraideService.IncrementUint16:input_type -> hydraidepbgo.IncrementUint16Request
+	69,  // 113: hydraidepbgo.HydraideService.IncrementUint32:input_type -> hydraidepbgo.IncrementUint32Request
+	72,  // 114: hydraidepbgo.HydraideService.IncrementUint64:input_type -> hydraidepbgo.IncrementUint64Request
+	76,  // 115: hydraidepbgo.HydraideService.IncrementFloat32:input_type -> hydraidepbgo.IncrementFloat32Request
+	79,  // 116: hydraidepbgo.HydraideService.IncrementFloat64:input_type -> hydraidepbgo.IncrementFloat64Request
+	8,   // 117: hydraidepbgo.HydraideService.Heartbeat:output_type -> hydraidepbgo.HeartbeatResponse
+	10,  // 118: hydraidepbgo.HydraideService.Lock:output_type -> hydraidepbgo.LockResponse
+	12,  // 119: hydraidepbgo.HydraideService.Unlock:output_type -> hydraidepbgo.UnlockResponse
+	21,  // 120: hydraidepbgo.HydraideService.RegisterSwamp:output_type -> hydraidepbgo.RegisterSwampResponse
+	23,  // 121: hydraidepbgo.HydraideService.DeRegisterSwamp:output_type -> hydraidepbgo.DeRegisterSwampResponse
+	27,  // 122: hydraidepbgo.HydraideService.Set:output_type -> hydraidepbgo.SetResponse
+	33,  // 123: hydraidepbgo.HydraideService.Get:output_type -> hydraidepbgo.GetResponse
+	36,  // 124: hydraidepbgo.HydraideService.GetAll:output_type -> hydraidepbgo.GetAllResponse
+	44,  // 125: hydraidepbgo.HydraideService.GetByIndex:output_type -> hydraidepbgo.GetByIndexResponse
+	38,  // 126: hydraidepbgo.HydraideService.ShiftExpiredTreasures:output_type -> hydraidepbgo.ShiftExpiredTreasuresResponse
+	14,  // 127: hydraidepbgo.HydraideService.Destroy:output_type -> hydraidepbgo.DestroyResponse
+	46,  // 128: hydraidepbgo.HydraideService.Delete:output_type -> hydraidepbgo.DeleteResponse
+	48,  // 129: hydraidepbgo.HydraideService.Count:output_type -> hydraidepbgo.CountResponse
+	92,  // 130: hydraidepbgo.HydraideService.IsSwampExist:output_type -> hydraidepbgo.IsSwampExistResponse
+	94,  // 131: hydraidepbgo.HydraideService.IsKeyExist:output_type -> hydraidepbgo.IsKeyExistResponse
+	18,  // 132: hydraidepbgo.HydraideService.SubscribeToEvents:output_type -> hydraidepbgo.SubscribeToEventsResponse
+	16,  // 133: hydraidepbgo.HydraideService.SubscribeToInfo:output_type -> hydraidepbgo.SubscribeToInfoResponse
+	84,  // 134: hydraidepbgo.HydraideService.Uint32SlicePush:output_type -> hydraidepbgo.AddToUint32SlicePushResponse
+	86,  // 135: hydraidepbgo.HydraideService.Uint32SliceDelete:output_type -> hydraidepbgo.Uint32SliceDeleteResponse
+	88,  // 136: hydraidepbgo.HydraideService.Uint32SliceSize:output_type -> hydraidepbgo.Uint32SliceSizeResponse
+	90,  // 137: hydraidepbgo.HydraideService.Uint32SliceIsValueExist:output_type -> hydraidepbgo.Uint32SliceIsValueExistResponse
+	53,  // 138: hydraidepbgo.HydraideService.IncrementInt8:output_type -> hydraidepbgo.IncrementInt8Response
+	56,  // 139: hydraidepbgo.HydraideService.IncrementInt16:output_type -> hydraidepbgo.IncrementInt16Response
+	59,  // 140: hydraidepbgo.HydraideService.IncrementInt32:output_type -> hydraidepbgo.IncrementInt32Response
+	62,  // 141: hydraidepbgo.HydraideService.IncrementInt64:output_type -> hydraidepbgo.IncrementInt64Response
+	65,  // 142: hydraidepbgo.HydraideService.IncrementUint8:output_type -> hydraidepbgo.IncrementUint8Response
+	68,  // 143: hydraidepbgo.HydraideService.IncrementUint16:output_type -> hydraidepbgo.IncrementUint16Response
+	71,  // 144: hydraidepbgo.HydraideService.IncrementUint32:output_type -> hydraidepbgo.IncrementUint32Response
+	74,  // 145: hydraidepbgo.HydraideService.IncrementUint64:output_type -> hydraidepbgo.IncrementUint64Response
+	78,  // 146: hydraidepbgo.HydraideService.IncrementFloat32:output_type -> hydraidepbgo.IncrementFloat32Response
+	81,  // 147: hydraidepbgo.HydraideService.IncrementFloat64:output_type -> hydraidepbgo.IncrementFloat64Response
+	117, // [117:148] is the sub-list for method output_type
+	86,  // [86:117] is the sub-list for method input_type
+	86,  // [86:86] is the sub-list for extension type_name
+	86,  // [86:86] is the sub-list for extension extendee
+	0,   // [0:86] is the sub-list for field type_name
 }
 
 func init() { file_hydraide_proto_init() }
@@ -6710,14 +7174,25 @@ func file_hydraide_proto_init() {
 	file_hydraide_proto_msgTypes[19].OneofWrappers = []any{}
 	file_hydraide_proto_msgTypes[21].OneofWrappers = []any{}
 	file_hydraide_proto_msgTypes[32].OneofWrappers = []any{}
-	file_hydraide_proto_msgTypes[88].OneofWrappers = []any{}
+	file_hydraide_proto_msgTypes[43].OneofWrappers = []any{}
+	file_hydraide_proto_msgTypes[44].OneofWrappers = []any{}
+	file_hydraide_proto_msgTypes[47].OneofWrappers = []any{}
+	file_hydraide_proto_msgTypes[50].OneofWrappers = []any{}
+	file_hydraide_proto_msgTypes[53].OneofWrappers = []any{}
+	file_hydraide_proto_msgTypes[56].OneofWrappers = []any{}
+	file_hydraide_proto_msgTypes[59].OneofWrappers = []any{}
+	file_hydraide_proto_msgTypes[62].OneofWrappers = []any{}
+	file_hydraide_proto_msgTypes[65].OneofWrappers = []any{}
+	file_hydraide_proto_msgTypes[69].OneofWrappers = []any{}
+	file_hydraide_proto_msgTypes[72].OneofWrappers = []any{}
+	file_hydraide_proto_msgTypes[89].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_hydraide_proto_rawDesc), len(file_hydraide_proto_rawDesc)),
 			NumEnums:      7,
-			NumMessages:   90,
+			NumMessages:   91,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

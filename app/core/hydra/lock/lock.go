@@ -3,10 +3,11 @@ package lock
 import (
 	"context"
 	"errors"
-	"github.com/google/uuid"
-	"github.com/hydraide/hydraide/docs/sdk/go/examples/applications/app-queue/utils/panichandler"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/hydraide/hydraide/sdk/go/hydraidego/utils/panichandler"
 )
 
 type Lock interface {

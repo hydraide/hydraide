@@ -1,12 +1,68 @@
 package hydraidego
 
 import (
-	"github.com/hydraide/hydraide/generated/hydraidepbgo"
-	"github.com/stretchr/testify/require"
+	"fmt"
+	"log/slog"
+	"os"
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/hydraide/hydraide/generated/hydraidepbgo"
+	"github.com/hydraide/hydraide/sdk/go/hydraidego/client"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"golang.org/x/net/context"
 )
+
+var hydraidegoInterface Hydraidego
+var clientInterface client.Client
+
+func TestMain(m *testing.M) {
+	fmt.Println("Setting up test environment...")
+	setup() // start the testing environment
+	code := m.Run()
+	fmt.Println("Tearing down test environment...")
+	teardown() // Stop the testing environment
+	os.Exit(code)
+}
+
+func setup() {
+
+	server := &client.Server{
+		Host:         os.Getenv("HYDRA_HOST"),
+		FromIsland:   0,
+		ToIsland:     1000,
+		CertFilePath: os.Getenv("HYDRA_CERT"),
+	}
+
+	servers := []*client.Server{server}
+	clientInterface = client.New(servers, 1000, 104857600)
+	if err := clientInterface.Connect(true); err != nil {
+		slog.Error("Failed to connect to Hydraide server", "error", err)
+		os.Exit(1) // exit if the connection fails
+	} else {
+		slog.Info("Connected to Hydraide server successfully")
+	}
+	hydraidegoInterface = New(clientInterface) // creates a new hydraidego instance
+
+}
+
+func teardown() {
+	// stop the microservice and exit the program
+	clientInterface.CloseConnection()
+	slog.Info("HydrAIDE server stopped gracefully. Program is exiting...")
+	// waiting for logs to be written to the file
+	time.Sleep(1 * time.Second)
+	// exit the program if the microservice is stopped gracefully
+	os.Exit(0)
+}
+
+// TestHydraidego_Heartbeat tests the heartbeat functionality of the Hydraidego interface.
+func TestHydraidego_Heartbeat(t *testing.T) {
+	err := hydraidegoInterface.Heartbeat(context.Background())
+	assert.NoError(t, err, "Heartbeat should not return an error")
+}
 
 type conversionTestCase struct {
 	name     string
