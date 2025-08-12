@@ -1,4 +1,4 @@
-package servicehelper
+package locker
 
 import (
 	"os"
@@ -8,14 +8,19 @@ import (
 
 // Test suite for the deleteLockFile function.
 func Test_deleteLockFile(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "lock-file-test-")
+	tempDir, err := os.MkdirTemp("", "hydraide-test-locks-")
 	if err != nil {
-		t.Fatalf("failed to create temp dir: %v", err)
+		t.Fatalf("Failed to create temp dir: %v", err)
 	}
 	defer os.RemoveAll(tempDir)
 
-	os.Setenv("HOME", tempDir)
-	os.Setenv("USERPROFILE", tempDir)
+	originalGetLockDirFunc := getLockDirFunc
+	getLockDirFunc = func() (string, error) {
+		return tempDir, nil
+	}
+	defer func() {
+		getLockDirFunc = originalGetLockDirFunc
+	}()
 
 	t.Run("should delete an existing lock file successfully", func(t *testing.T) {
 		instanceName := "test-instance-1"
@@ -27,7 +32,7 @@ func Test_deleteLockFile(t *testing.T) {
 		}
 
 		// Call the function under test.
-		err := deleteLockFile(instanceName)
+		err := DeleteLockFile(instanceName)
 		if err != nil {
 			t.Errorf("expected no error, but got: %v", err)
 		}
@@ -41,7 +46,7 @@ func Test_deleteLockFile(t *testing.T) {
 	t.Run("should return error if lock file doesn't exist", func(t *testing.T) {
 		instanceName := "non-existent-file"
 
-		err := deleteLockFile(instanceName)
+		err := DeleteLockFile(instanceName)
 		if err == nil {
 			t.Errorf("expected error but did not get any.")
 		}
@@ -59,7 +64,7 @@ func Test_deleteLockFile(t *testing.T) {
 			t.Fatalf("failed to change directory permissions: %v", err)
 		}
 
-		err := deleteLockFile(instanceName)
+		err := DeleteLockFile(instanceName)
 		if err == nil {
 			t.Errorf("expected an error due to permissions, but got nil")
 		}

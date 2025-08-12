@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/instancerunner/locker"
+	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/locker"
 )
 
 // SERVICE_STATUS_TICKER is time interval to check status of service
