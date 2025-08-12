@@ -28,6 +28,31 @@ With HydrAIDE, you don’t adapt to the database — **the database adapts to yo
 
 ---
 
+## 100+ Stars and Growing! (Star History)
+
+<a href="https://www.star-history.com/#hydraide/hydraide&Date">
+ <picture>
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=hydraide/hydraide&type=Date&theme=dark" />
+ </picture>
+</a>
+
+### 💖 Thank You, Community!
+
+When we envisioned HydrAIDE, our goal was to give developers a whole new way of thinking... A tool that doesn’t set limits, but unlocks possibilities.
+
+Over the past weeks, it’s been truly incredible to see so many of you discover, understand, and embrace this philosophy. 
+Every single star represents your trust, curiosity, and a shared desire to build something new and better.
+
+This chart is not just numbers. Every point is someone’s decision to give HydrAIDE a chance. 
+And to us, that’s the greatest recognition we could receive.
+
+Thank you for being part of this journey!   
+The best is yet to come…
+
+— Peter & the HydRAIDER Team
+
+---
+
 ### ⚙️ What HydrAIDE Does – In One Stack
 
 | Feature                                         | Description                                                                                                                                                                                                                                                                         |
