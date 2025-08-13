@@ -7,8 +7,10 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/instancerunner"
@@ -18,7 +20,7 @@ import (
 type InstanceHealth interface {
 	GetHealthStatus(ctx context.Context, instance string) HealhStatus
 
-	GetListHealthStatus(ctx context.Context, instances []string) ([]HealhStatus, error)
+	GetListHealthStatus(ctx context.Context, instances []string) []HealhStatus
 }
 
 type HealhStatus struct {
@@ -39,8 +41,40 @@ func (h *instanceHealth) GetHealthStatus(ctx context.Context, instance string) H
 	return h.performHealthCheck(ctx, instance)
 }
 
-func (h *instanceHealth) GetListHealthStatus(ctx context.Context, instances []string) ([]HealhStatus, error) {
-	return []HealhStatus{}, nil
+func (h *instanceHealth) GetListHealthStatus(ctx context.Context, instances []string) []HealhStatus {
+	totalCpus := runtime.NumCPU()
+	numGoroutines := len(instances) / 3
+	if numGoroutines < 2 {
+		numGoroutines = 2
+	} else if numGoroutines > totalCpus {
+		numGoroutines = totalCpus
+	}
+
+	healthStatusResult := make([]HealhStatus, len(instances))
+
+	// limit number of concurrent health checks to numGoroutines
+	rateLimit := make(chan struct{}, numGoroutines)
+	var wg sync.WaitGroup
+
+	for i, instance := range instances {
+		rateLimit <- struct{}{}
+		wg.Add(1)
+
+		go func(instance string, index int) {
+			defer func() {
+				<-rateLimit
+			}()
+			defer wg.Done()
+
+			ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+			defer cancel()
+
+			healthStatusResult[index] = h.performHealthCheck(ctx, instance)
+		}(instance, i)
+	}
+
+	wg.Wait()
+	return healthStatusResult
 }
 
 func (h *instanceHealth) performHealthCheck(ctx context.Context, instance string) HealhStatus {

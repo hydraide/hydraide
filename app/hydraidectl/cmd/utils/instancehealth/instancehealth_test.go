@@ -2,6 +2,7 @@ package instancehealth
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -72,11 +73,73 @@ func TestCheckHealth(t *testing.T) {
 	})
 }
 
+func getMockInstances(n int) []string {
+	instances := make([]string, n)
+	for i := range n {
+		instances[i] = fmt.Sprintf("instance-%d", i)
+	}
+	return instances
+}
+
+// BenchmarkHealthChecks contains nested benchmarks for concurrent and sequential tests.
+func BenchmarkHealthChecks(b *testing.B) {
+	h := NewInstanceHealth()
+	ctx := context.Background()
+
+	testCases := []struct {
+		name         string
+		numInstances int
+	}{
+		{"2_Instances", 2},
+		{"10_Instances", 10},
+		{"100_Instances", 100},
+		// {"1000_Instances", 1000},
+	}
+
+	// Group for the Concurrent benchmark
+	b.Run("Concurrent", func(b *testing.B) {
+		for _, tc := range testCases {
+			b.Run(tc.name, func(b *testing.B) {
+				instances := getMockInstances(tc.numInstances)
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					h.GetListHealthStatus(ctx, instances)
+				}
+			})
+		}
+	})
+
+	// Group for the Sequential benchmark
+	b.Run("Sequential", func(b *testing.B) {
+		for _, tc := range testCases {
+			b.Run(tc.name, func(b *testing.B) {
+				instances := getMockInstances(tc.numInstances)
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					// Here we simulate the sequential call
+					for _, instance := range instances {
+						h.GetHealthStatus(ctx, instance)
+					}
+				}
+			})
+		}
+	})
+}
+
 // Can be used as integration test - create a instance and replace the instance parameter.
 // func TestGetStatus(t *testing.T) {
 // 	instance := NewInstanceHealth()
 // 	status := instance.GetHealthStatus(context.TODO(), "new-health")
 // 	if status.Error != nil {
 // 		t.Errorf("expected some status without error, got error %s", status.Error)
+// 	}
+// }
+
+// func TestGetListStatus(t *testing.T) {
+// 	instance := NewInstanceHealth()
+// 	list := []string{}
+// 	statuses := instance.GetListHealthStatus(context.TODO(), list)
+// 	for _, status := range statuses {
+// 		fmt.Println(status)
 // 	}
 // }
