@@ -17,12 +17,42 @@ import (
 	"github.com/joho/godotenv"
 )
 
+// InstanceHealth defines the interface for checking the health status of a HydrAIDE instance.
+// It provides methods for checking the health of a single instance and a list of instances.
 type InstanceHealth interface {
+	// GetHealthStatus performs a health check on a single instance.
+	//
+	// The check verifies the instance exists, reads its configuration to find the
+	// health port, and makes an HTTP request to its health endpoint. A timeout
+	// is applied via the context to prevent the check from hanging indefinitely.
+	//
+	// Parameters:
+	//   ctx: The context for the operation, used for cancellation and deadlines.
+	//   instance: The name of the HydrAIDE instance to check.
+	//
+	// Returns:
+	//   A HealhStatus struct containing the instance name, status ("healthy",
+	//   "unhealthy", or "unknown"), and an 'error' if one occurred.
 	GetHealthStatus(ctx context.Context, instance string) HealhStatus
 
+	// GetListHealthStatus performs health checks on a list of instances concurrently.
+	//
+	// It uses a bounded worker pool to limit the number of simultaneous goroutines,
+	// preventing resource exhaustion. The degree of concurrency is dynamically
+	// determined by the total number of instances and available CPU cores.
+	//
+	// Parameters:
+	//   ctx: The context for the entire operation, used for cancellation and deadlines.
+	//   instances: A slice of strings representing the names of the instances to check.
+	//
+	// Returns:
+	//   A slice of HealhStatus structs, with each element corresponding to an
+	//   instance from the input slice. The order of the output slice
+	//   matches the order of the input.
 	GetListHealthStatus(ctx context.Context, instances []string) []HealhStatus
 }
 
+// HealhStatus represents the outcome of a health check for a single instance.
 type HealhStatus struct {
 	Instance string
 	Status   string
@@ -77,6 +107,9 @@ func (h *instanceHealth) GetListHealthStatus(ctx context.Context, instances []st
 	return healthStatusResult
 }
 
+// performHealthCheck carries out the full health check logic for a single instance.
+// It performs multiple steps including checking existence, parsing configuration,
+// and making an HTTP request to the health endpoint.
 func (h *instanceHealth) performHealthCheck(ctx context.Context, instance string) HealhStatus {
 	exists, err := h.instanceController.InstanceExists(ctx, instance)
 	if err != nil {
@@ -115,6 +148,9 @@ func (h *instanceHealth) performHealthCheck(ctx context.Context, instance string
 	return HealhStatus{Instance: instance, Status: status, Error: nil}
 }
 
+// checkHealth performs a low-level HTTP GET request to a URL.
+// It returns "healthy" if a 200 OK status is received, "unhealthy" for any other
+// status code, or an error if the request fails.
 func checkHealth(ctx context.Context, url string) (string, error) {
 
 	call, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
