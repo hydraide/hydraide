@@ -19,7 +19,7 @@ lock-free operations, real-time subscriptions, and stateless routing, all tailor
 7. [🗂️ Catalog Swamps](#-catalog-swamps)
 8. [📚 Good to Know: Split Catalogs When Needed](#-good-to-know-split-catalogs-when-needed)
 9. [🧯 When Not to Use Catalogs](#-when-not-to-use-catalogs)
-10. [➕ Increment / Decrement – Atomic State Without the Overhead](#-increment--decrement--atomic-state-without-the-overhead)
+10. [➕ Increment / Decrement – Atomic State Without the Overhead](#-increment--decrement--atomic-state-with-metadata-control)
 11. [📌 Slice & Reverse Indexing in HydrAIDE](#-slice--reverse-indexing-in-hydraide)
 
 ---
@@ -339,12 +339,6 @@ _ = h.CatalogReadMany(ctx, swampName, index, CatalogModelUser{}, func(m any) err
 Unlike relational databases, **HydrAIDE builds indexes in memory on-demand** using fast, in-memory hashing — reducing storage duplication and ensuring sub-ms reads in hydrated Swamps.
 To keep performance high, consider keeping the Swamp in memory longer (e.g. `CloseAfterIdle: 1h`).
 
-
-Tökéletes ötlet, Peti. Itt egy javasolt `#### 📚 Good to Know` szekció, amit **közvetlenül a `🧯 When Not to Use Catalogs`** után tudsz beilleszteni.
-
-Ez a rész segít a skálázhatósági problémák kezelésében, és gyakorlati példákon keresztül mutatja meg, hogyan lehet a Catalog Swampokat *logikailag szegmentálni*:
-
-
 ---
 
 ### 📚 Good to Know: Split Catalogs When Needed
@@ -480,9 +474,9 @@ Catalogs are not suitable when:
 
 ---
 
-### ➕ Increment / Decrement – Atomic State Without the Overhead
+### ➕ Increment / Decrement – Atomic State With Metadata Control
 
-HydrAIDE’s `Increment*` family of functions enables **atomic, type-safe updates** of numeric values — without reading, locking, or overwriting state manually.
+HydrAIDE’s `Increment*` family of functions enables **atomic, type-safe updates** of numeric values — without reading, locking, or manually overwriting state.
 
 Whether you're updating:
 
@@ -492,23 +486,23 @@ Whether you're updating:
 * a financial **balance**,
 * or a processing **threshold**,
 
-…you can do it with **one intent-first operation** — optionally guarded by conditions like *“only increment if current value < 100”*.
+…you can do it with **one intent-first operation** — optionally guarded by conditions like *“only increment if current value < 100”* **and** optionally applying lifecycle/audit metadata in the same atomic step.
 
 #### 🧠 Why this is a game-changer:
 
 * ⚡ **Atomic execution** — no race conditions, no read-modify-write logic
 * 🔒 **Treasure-level locking only** — never blocks the entire Swamp
 * 🧬 **Strongly typed** — choose from `int8`, `uint32`, `float64`, etc.
-* ✅ **Condition-aware** — support for rich comparisons:
-  `Equal`, `NotEqual`, `GreaterThan`, `LessThanOrEqual`, etc.
+* ✅ **Condition-aware** — support for rich comparisons: `Equal`, `NotEqual`, `GreaterThan`, `LessThanOrEqual`, etc.
+* 🏷️ **Metadata control** — set `CreatedAt`, `CreatedBy`, `UpdatedAt`, `UpdatedBy`, or `ExpiredAt` depending on whether the Treasure is created or updated
 
-> This isn’t just math — it’s **concurrent state mutation**, encoded as intention.
+> This isn’t just math — it’s **concurrent state mutation**, encoded as intention, with audit and TTL control built-in.
 
 #### 📌 One demo to rule them all
 
 All `Increment*` functions work the same way — only the type changes.
 
-To see a complete example in action (including conditional logic and memory-only Swamps), check out:
+To see a complete example in action (including conditional logic, metadata usage, and memory-only Swamps), check out:
 
 👉 [Catalog Model Rate Limit Counter](examples/models/increment.go)
 
@@ -516,10 +510,28 @@ This single model demonstrates how to:
 
 * atomically update a counter,
 * guard the operation with a relational condition,
+* set metadata fields differently for creation vs. update,
 * scale to thousands of users with no locks or I/O,
-* and reset the state via `Destroy()`.
+* and reset the state via `Destroy()` or ExpiredAt.
 
 It applies to **all numeric increment types**, from `int8` to `float64`.
+
+#### 💡 Metadata parameters
+
+Each `Increment*` function now supports two optional metadata descriptors:
+
+* `setIfNotExist` — applied if the Treasure must be created
+* `setIfExist` — applied if the Treasure already exists
+
+Example fields in `IncrementMetaRequest`:
+
+* `SetCreatedAt` — set creation timestamp automatically
+* `SetCreatedBy` — set creator ID
+* `SetUpdatedAt` — set update timestamp automatically
+* `SetUpdatedBy` — set updater ID
+* `ExpiredAt` — set absolute expiration timestamp
+
+This lets you control creation/update auditing and TTL in the same atomic call.
 
 ### Available Increment Functions
 
@@ -536,7 +548,7 @@ It applies to **all numeric increment types**, from `int8` to `float64`.
 | IncrementFloat32 | ✅ Ready    | ✅ `RateLimitCounter` (shared logic) |
 | IncrementFloat64 | ✅ Ready    | ✅ `RateLimitCounter` (shared logic) |
 
-> 💡 Only the numeric type changes — the logic stays the same.
+> 💡 Only the numeric type changes — the logic stays the same. The same metadata and condition patterns apply to all variants.
 
 ---
 

@@ -6,16 +6,17 @@ import (
 	"encoding/gob"
 	"errors"
 	"fmt"
+	"io"
+	"reflect"
+	"sync"
+	"time"
+
 	"github.com/hydraide/hydraide/generated/hydraidepbgo"
 	"github.com/hydraide/hydraide/sdk/go/hydraidego/client"
 	"github.com/hydraide/hydraide/sdk/go/hydraidego/name"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	"io"
-	"reflect"
-	"sync"
-	"time"
 )
 
 const (
@@ -72,16 +73,17 @@ type Hydraidego interface {
 	Count(ctx context.Context, swampName name.Name) (int32, error)
 	Destroy(ctx context.Context, swampName name.Name) error
 	Subscribe(ctx context.Context, swampName name.Name, getExistingData bool, model any, iterator SubscribeIteratorFunc) error
-	IncrementInt8(ctx context.Context, swampName name.Name, key string, value int8, condition *Int8Condition) (int8, error)
-	IncrementInt16(ctx context.Context, swampName name.Name, key string, value int16, condition *Int16Condition) (int16, error)
-	IncrementInt32(ctx context.Context, swampName name.Name, key string, value int32, condition *Int32Condition) (int32, error)
-	IncrementInt64(ctx context.Context, swampName name.Name, key string, value int64, condition *Int64Condition) (int64, error)
-	IncrementUint8(ctx context.Context, swampName name.Name, key string, value uint8, condition *Uint8Condition) (uint8, error)
-	IncrementUint16(ctx context.Context, swampName name.Name, key string, value uint16, condition *Uint16Condition) (uint16, error)
-	IncrementUint32(ctx context.Context, swampName name.Name, key string, value uint32, condition *Uint32Condition) (uint32, error)
-	IncrementUint64(ctx context.Context, swampName name.Name, key string, value uint64, condition *Uint64Condition) (uint64, error)
-	IncrementFloat32(ctx context.Context, swampName name.Name, key string, value float32, condition *Float32Condition) (float32, error)
-	IncrementFloat64(ctx context.Context, swampName name.Name, key string, value float64, condition *Float64Condition) (float64, error)
+
+	IncrementInt8(ctx context.Context, swampName name.Name, key string, value int8, condition *Int8Condition, setIfNotExist *IncrementMetaRequest, setIfExist *IncrementMetaRequest) (int8, *IncrementMetaResponse, error)
+	IncrementInt16(ctx context.Context, swampName name.Name, key string, value int16, condition *Int16Condition, setIfNotExist *IncrementMetaRequest, setIfExist *IncrementMetaRequest) (int16, *IncrementMetaResponse, error)
+	IncrementInt32(ctx context.Context, swampName name.Name, key string, value int32, condition *Int32Condition, setIfNotExist *IncrementMetaRequest, setIfExist *IncrementMetaRequest) (int32, *IncrementMetaResponse, error)
+	IncrementInt64(ctx context.Context, swampName name.Name, key string, value int64, condition *Int64Condition, setIfNotExist *IncrementMetaRequest, setIfExist *IncrementMetaRequest) (int64, *IncrementMetaResponse, error)
+	IncrementUint8(ctx context.Context, swampName name.Name, key string, value uint8, condition *Uint8Condition, setIfNotExist *IncrementMetaRequest, setIfExist *IncrementMetaRequest) (uint8, *IncrementMetaResponse, error)
+	IncrementUint16(ctx context.Context, swampName name.Name, key string, value uint16, condition *Uint16Condition, setIfNotExist *IncrementMetaRequest, setIfExist *IncrementMetaRequest) (uint16, *IncrementMetaResponse, error)
+	IncrementUint32(ctx context.Context, swampName name.Name, key string, value uint32, condition *Uint32Condition, setIfNotExist *IncrementMetaRequest, setIfExist *IncrementMetaRequest) (uint32, *IncrementMetaResponse, error)
+	IncrementUint64(ctx context.Context, swampName name.Name, key string, value uint64, condition *Uint64Condition, setIfNotExist *IncrementMetaRequest, setIfExist *IncrementMetaRequest) (uint64, *IncrementMetaResponse, error)
+	IncrementFloat32(ctx context.Context, swampName name.Name, key string, value float32, condition *Float32Condition, setIfNotExist *IncrementMetaRequest, setIfExist *IncrementMetaRequest) (float32, *IncrementMetaResponse, error)
+	IncrementFloat64(ctx context.Context, swampName name.Name, key string, value float64, condition *Float64Condition, setIfNotExist *IncrementMetaRequest, setIfExist *IncrementMetaRequest) (float64, *IncrementMetaResponse, error)
 	Uint32SlicePush(ctx context.Context, swampName name.Name, KeyValuesPair []*KeyValuesPair) error
 	Uint32SliceDelete(ctx context.Context, swampName name.Name, KeyValuesPair []*KeyValuesPair) error
 	Uint32SliceSize(ctx context.Context, swampName name.Name, key string) (int64, error)
@@ -2676,81 +2678,286 @@ type Float64Condition struct {
 	Value              float64
 }
 
+// RelationalOperator defines the set of supported relational comparison
+// operators for conditional increment operations in HydrAIDE.
+//
+// These operators are evaluated **atomically on the server** against the
+// current stored value of a Treasure before applying an increment.
+//
+// ✅ Where it's used:
+// Pass a RelationalOperator inside a type-specific condition struct
+// (e.g., `Int8Condition`, `Int32Condition`) when calling an Increment*
+// method to control whether the increment should occur.
+//
+// ✅ How it works:
+//   - The server retrieves the current value for the given Treasure.
+//   - It compares that value to the `Value` provided in your condition.
+//   - If the comparison passes, the increment is applied.
+//   - If the comparison fails, the increment is skipped, but the current
+//     value and metadata are still returned along with `ErrConditionNotMet`.
+//
+// ⚠️ Notes:
+//   - All comparisons are performed in the numeric domain of the increment
+//     type (e.g., int8, int32).
+//   - This is a strict **single-value** comparison — no complex expressions
+//     or logical chaining.
+//   - Equality and inequality are type-precise: int8(10) is not equal to
+//     int8(11), but will be equal to int8(10).
 type RelationalOperator int
 
 const (
+	// NotEqual means "current value != condition value"
 	NotEqual RelationalOperator = iota
+
+	// Equal means "current value == condition value"
 	Equal
+
+	// GreaterThanOrEqual means "current value >= condition value"
 	GreaterThanOrEqual
+
+	// GreaterThan means "current value > condition value"
 	GreaterThan
+
+	// LessThanOrEqual means "current value <= condition value"
 	LessThanOrEqual
+
+	// LessThan means "current value < condition value"
 	LessThan
 )
 
-// IncrementInt8 performs an atomic int8 increment on a Treasure inside the given Swamp.
+// IncrementMetaRequest defines optional metadata to be set when performing
+// an Increment operation in a HydrAIDE Catalog-type Swamp.
 //
-// If the specified Swamp or Treasure does not exist, this function will automatically create them.
-// This means you do **not** need to call CatalogCreate or CatalogSave beforehand.
+// This struct lets you specify creation, update, and expiration metadata
+// that HydrAIDE will automatically attach to the Treasure as part of the
+// same atomic increment call.
 //
-// If a condition is provided, the increment will only occur if the current value
-// satisfies the given relational constraint — evaluated **atomically on the server**.
+// 🧠 Why this matters:
+// Normally, if you want to set lifecycle metadata (`createdAt`, `updatedBy`, etc.),
+// you would have to check if the Treasure exists, then either create or update it
+// in separate calls. With IncrementMetaRequest, you can tell HydrAIDE what metadata
+// to set in either case — without doing any client-side existence checks.
 //
-// 🧠 This is the Int8 version of HydrAIDE’s type-safe increment operation.
+// ✅ Usage:
+// Pass a pointer to IncrementMetaRequest into the `setIfNotExist` or `setIfExist`
+// parameters of an `Increment*` method:
 //
-//	The same logic applies for other numeric types (Int16, Int32, Float64, etc.),
-//	and this function can be duplicated/adapted accordingly.
+//   - `setIfNotExist`: Applied only if the Treasure does not yet exist
+//   - `setIfExist`: Applied only if the Treasure already exists
 //
-// Parameters:
-//   - ctx:        context for cancellation and timeout
-//   - swampName:  target Swamp where the Treasure lives
-//   - key:        unique key of the Treasure to increment
-//   - value:      the delta (positive or negative) to add
-//   - condition:  optional constraint on the current value before incrementing
-//
-// Returns:
-//   - new int8 value after increment (if successful)
-//   - error if the operation failed, or if the condition was not met
+// HydrAIDE will atomically:
+//  1. Increment the numeric value (if condition passes)
+//  2. Apply the appropriate metadata based on existence
 //
 // ⚠️ Notes:
-//   - If the Treasure exists but holds a value of a **different type** (e.g., float64), this operation will fail.
-//   - Decrementing is supported by simply passing a **negative delta value**.
-//   - All proto values are transmitted as int32, but converted back to int8 here.
-//   - If the condition is not met, the function returns a specific ErrConditionNotMet error.
+// - All fields are optional; unset fields are ignored.
+// - ExpiredAt can be used to attach a TTL at increment time.
+// - This metadata mechanism is supported only in Catalog-type Swamps.
+type IncrementMetaRequest struct {
+	SetCreatedAt bool      // If true, sets CreatedAt to the current server time
+	SetCreatedBy string    // If non-empty, sets CreatedBy to this identifier
+	SetUpdatedAt bool      // If true, sets UpdatedAt to the current server time
+	SetUpdatedBy string    // If non-empty, sets UpdatedBy to this identifier
+	ExpiredAt    time.Time // If non-zero, sets ExpiredAt to this exact time
+}
+
+// IncrementMetaResponse contains the metadata returned by HydrAIDE
+// after an Increment operation.
 //
-// ✅ Conditional Logic:
+// Even if the increment condition fails, HydrAIDE still returns the
+// latest value and the current metadata, so you can inspect state without
+// making a separate read call.
 //
-//   - The `condition` lets you define rules for when an increment should occur.
+// ✅ When returned:
+//   - On any successful Increment* call (condition met or not)
+//   - On failed conditional increments, value/meta are still populated,
+//     but an ErrConditionNotMet is also returned
 //
-//   - It uses a `RelationalOperator` enum to compare the **current value** against a reference.
+// 📌 Typical uses:
+// - Auditing (knowing who created/updated a Treasure and when)
+// - Inspecting expiration state without a read query
+// - Confirming that metadata changes were applied as intended
+type IncrementMetaResponse struct {
+	CreatedAt time.Time // Timestamp when the Treasure was created
+	CreatedBy string    // Identifier of the creator
+	UpdatedAt time.Time // Timestamp when the Treasure was last updated
+	UpdatedBy string    // Identifier of the last updater
+	ExpiredAt time.Time // Expiration time of the Treasure (zero if none)
+}
+
+func convertMetaToProtoMeta(meta *IncrementMetaRequest) *hydraidepbgo.IncrementRequestMetadata {
+
+	if meta == nil {
+		return nil
+	}
+
+	protoMeta := &hydraidepbgo.IncrementRequestMetadata{}
+	if meta.SetCreatedAt {
+		protoMeta.CreatedAt = &meta.SetCreatedAt
+	}
+	if meta.SetCreatedBy != "" {
+		protoMeta.CreatedBy = &meta.SetCreatedBy
+	}
+	if meta.SetUpdatedAt {
+		protoMeta.UpdatedAt = &meta.SetUpdatedAt
+	}
+	if meta.SetUpdatedBy != "" {
+		protoMeta.UpdatedBy = &meta.SetUpdatedBy
+	}
+	if !meta.ExpiredAt.IsZero() {
+		protoMeta.ExpiredAt = timestamppb.New(meta.ExpiredAt)
+	}
+	return protoMeta
+
+}
+
+func convertIncrementMetaResponse(response *hydraidepbgo.IncrementResponseMetadata) *IncrementMetaResponse {
+
+	if response == nil {
+		return nil
+	}
+
+	meta := &IncrementMetaResponse{}
+	if response.CreatedAt != nil {
+		meta.CreatedAt = response.GetCreatedAt().AsTime()
+	}
+	if response.CreatedBy != nil {
+		meta.CreatedBy = response.GetCreatedBy()
+	}
+	if response.UpdatedAt != nil {
+		meta.UpdatedAt = response.GetUpdatedAt().AsTime()
+	}
+	if response.UpdatedBy != nil {
+		meta.UpdatedBy = response.GetUpdatedBy()
+	}
+	if response.ExpiredAt != nil {
+		meta.ExpiredAt = response.GetExpiredAt().AsTime()
+	}
+
+	return meta
+
+}
+
+// IncrementInt8 performs an atomic int8 increment on a Treasure inside the given Swamp,
+// with optional, server-side metadata control for both the "create" and "update" paths.
 //
-//     Supported operators include:
+// Core behavior
+// -------------
+//   - If the Swamp or Treasure does not exist, HydrAIDE will **create** them.
+//   - If a `condition` is provided, the increment runs **atomically on the server** only if
+//     the current value satisfies the given relational operator (>, >=, ==, etc.).
+//   - The function **always returns** the value and metadata that are currently stored for
+//     the Treasure. If the condition is not met, you'll get:
+//   - the current value (not incremented),
+//   - the resolved metadata (see below),
+//   - and `ErrConditionNotMet` as the error.
+//     This makes it easy to branch your logic without an extra read.
 //
-//   - Equal (==)
+// Metadata control (optional)
+// ---------------------------
+// You can provide two optional metadata descriptors to control lifecycle/audit fields
+// **in the same atomic call**, without pre-checking existence on the client:
 //
-//   - NotEqual (!=)
+//   - setIfNotExist (*IncrementMetaRequest):
+//     Applied if the Treasure must be **created** as part of this call.
+//     Typical use: set CreatedAt/CreatedBy and an initial ExpiredAt.
 //
-//   - GreaterThan (>)
+//   - setIfExist (*IncrementMetaRequest):
+//     Applied if the Treasure **already exists** (i.e., an update path).
+//     Typical use: set UpdatedAt/UpdatedBy and optionally refresh ExpiredAt.
 //
-//   - GreaterThanOrEqual (>=)
+// Fields in IncrementMetaRequest:
+//   - SetCreatedAt (bool) → when true, server sets CreatedAt=now.UTC()
+//   - SetCreatedBy (string) → when non-empty, server sets CreatedBy to this value
+//   - SetUpdatedAt (bool) → when true, server sets UpdatedAt=now.UTC()
+//   - SetUpdatedBy (string) → when non-empty, server sets UpdatedBy to this value
+//   - ExpiredAt (time.Time) → when non-zero, server sets ExpiredAt to this instant
 //
-//   - LessThan (<)
+// The server chooses which of the two (create/update) descriptors to apply based on whether
+// the Treasure existed **before** the increment attempt. You do **not** need to check
+// existence on the client side.
 //
-//   - LessThanOrEqual (<=)
+// Parameters
+// ----------
+//   - ctx:           context for cancellation and timeout
+//   - swampName:     target Swamp where the Treasure lives
+//   - key:           unique key of the Treasure to increment
+//   - value:         the delta (positive or negative) to add
+//   - condition:     optional constraint on the current value before incrementing
+//   - setIfNotExist: optional metadata settings if the Treasure must be created
+//   - setIfExist:    optional metadata settings if the Treasure already exists
 //
-//     Example:
-//     Only increment if the current value is greater than 10:
-//     &Int8Condition{RelationalOperator: GreaterThan, Value: 10}
+// Returns
+// -------
+//   - int8:                   the value stored after the call (incremented if condition succeeded)
+//   - *IncrementMetaResponse: the resolved metadata (CreatedAt/By, UpdatedAt/By, ExpiredAt)
+//   - error:                  nil on success; `ErrConditionNotMet` if the condition failed;
+//     or a transport/validation error
 //
-// ✅ Example usage:
+// Notes
+// -----
+//   - Decrementing is supported by passing a negative delta.
+//   - If the Treasure exists but has a **different value type** (e.g. float64), the call fails.
+//   - Proto values travel as int32 on the wire and are converted back to int8 here.
+//   - Conditional operators (Equal, NotEqual, GreaterThan, GreaterThanOrEqual,
+//     LessThan, LessThanOrEqual) compare against the **current** stored value.
 //
-//	IncrementInt8(ctx, "scoreboard", "user:42", 1, &Int8Condition{GreaterThan, 0})
-func (h *hydraidego) IncrementInt8(ctx context.Context, swampName name.Name, key string, value int8, condition *Int8Condition) (int8, error) {
+// Examples
+// --------
+// 1) Increment with automatic creation + creation metadata
+//
+//	newVal, meta, err := h.IncrementInt8(
+//	  ctx,
+//	  name.New().Sanctuary("scores").Realm("users").Swamp("global"),
+//	  "user:42",
+//	  1,
+//	  nil, // no condition
+//	  &IncrementMetaRequest{ // setIfNotExist
+//	    SetCreatedAt: true,
+//	    SetCreatedBy: "game-service",
+//	    ExpiredAt:    time.Now().Add(24 * time.Hour),
+//	  },
+//	  &IncrementMetaRequest{ // setIfExist
+//	    SetUpdatedAt: true,
+//	    SetUpdatedBy: "game-service",
+//	  },
+//	)
+//
+//	// If "user:42" did not exist, it's created, incremented, and Created* + ExpiredAt are set.
+//	// If it existed, it's incremented and Updated* are set.
+//	// In both cases, `meta` contains the resolved metadata.
+//
+// 2) Conditional increment that may not run
+//
+//	newVal, meta, err := h.IncrementInt8(
+//	  ctx, swamp, "counter", 5,
+//	  &Int8Condition{RelationalOperator: GreaterThan, Value: 10},
+//	  nil, nil,
+//	)
+//
+//	// If current value <= 10 → err == ErrConditionNotMet,
+//	// but you still get `newVal` (the unchanged current value) and `meta`.
+//
+// Implementation detail
+// ---------------------
+// Internally this calls the HydrAIDE gRPC Increment API for int8 and maps the optional
+// `setIfNotExist` / `setIfExist` descriptors to server-side metadata mutations. The server
+// applies exactly one of them (create vs. update) based on pre-increment existence, then
+// evaluates the condition atomically and returns both the resulting value and metadata.
+func (h *hydraidego) IncrementInt8(ctx context.Context, swampName name.Name, key string, value int8, condition *Int8Condition, setIfNotExist *IncrementMetaRequest, setIfExist *IncrementMetaRequest) (int8, *IncrementMetaResponse, error) {
 
 	r := &hydraidepbgo.IncrementInt8Request{
 		IslandID:    swampName.GetIslandID(h.client.GetAllIslands()),
 		SwampName:   swampName.Get(),
 		Key:         key,
 		IncrementBy: int32(value),
+	}
+
+	if setIfNotExist != nil {
+		r.SetIfNotExist = convertMetaToProtoMeta(setIfNotExist)
+	}
+	if setIfExist != nil {
+		r.SetIfExist = convertMetaToProtoMeta(setIfExist)
 	}
 
 	if condition != nil {
@@ -2762,84 +2969,139 @@ func (h *hydraidego) IncrementInt8(ctx context.Context, swampName name.Name, key
 	}
 
 	response, err := h.client.GetServiceClient(swampName).IncrementInt8(ctx, r)
-
 	if err != nil {
-		return 0, errorHandler(err)
+		return 0, nil, errorHandler(err)
 	}
 
 	// return with the new value if the increment was successful
 	if response.GetIsIncremented() {
-		return int8(response.GetValue()), nil
+		return int8(response.GetValue()), convertIncrementMetaResponse(response.GetMetadata()), nil
 	}
 
-	return 0, NewError(ErrConditionNotMet, fmt.Sprintf("%s: %d", errorMessageConditionNotMet, response.GetValue()))
+	return int8(response.GetValue()), convertIncrementMetaResponse(response.GetMetadata()), NewError(ErrConditionNotMet, fmt.Sprintf("%s: %d", errorMessageConditionNotMet, response.GetValue()))
 
 }
 
-// IncrementInt16 performs an atomic int16 increment on a Treasure inside the given Swamp.
+// IncrementInt16 performs an atomic int16 increment on a Treasure inside the given Swamp,
+// with optional, server-side metadata control for both the "create" and "update" paths.
 //
-// If the specified Swamp or Treasure does not exist, this function will automatically create them.
-// This means you do **not** need to call CatalogCreate or CatalogSave beforehand.
+// Core behavior
+// -------------
+//   - If the Swamp or Treasure does not exist, HydrAIDE will **create** them.
+//   - If a `condition` is provided, the increment runs **atomically on the server** only if
+//     the current value satisfies the given relational operator (>, >=, ==, etc.).
+//   - The function **always returns** the value and metadata that are currently stored for
+//     the Treasure. If the condition is not met, you'll get:
+//   - the current value (not incremented),
+//   - the resolved metadata (see below),
+//   - and `ErrConditionNotMet` as the error.
+//     This makes it easy to branch your logic without an extra read.
 //
-// If a condition is provided, the increment will only occur if the current value
-// satisfies the given relational constraint — evaluated **atomically on the server**.
+// Metadata control (optional)
+// ---------------------------
+// You can provide two optional metadata descriptors to control lifecycle/audit fields
+// **in the same atomic call**, without pre-checking existence on the client:
 //
-// 🧠 This is the Int16 version of HydrAIDE’s type-safe increment operation.
+//   - setIfNotExist (*IncrementMetaRequest):
+//     Applied if the Treasure must be **created** as part of this call.
+//     Typical use: set CreatedAt/CreatedBy and an initial ExpiredAt.
 //
-//	The same logic applies for other numeric types (Int8, Int32, Uint64, Float64, etc.),
-//	and this function can be duplicated/adapted accordingly.
+//   - setIfExist (*IncrementMetaRequest):
+//     Applied if the Treasure **already exists** (i.e., an update path).
+//     Typical use: set UpdatedAt/UpdatedBy and optionally refresh ExpiredAt.
 //
-// Parameters:
-//   - ctx:        context for cancellation and timeout
-//   - swampName:  target Swamp where the Treasure lives
-//   - key:        unique key of the Treasure to increment
-//   - value:      the delta (positive or negative) to add
-//   - condition:  optional constraint on the current value before incrementing
+// Fields in IncrementMetaRequest:
+//   - SetCreatedAt (bool) → when true, server sets CreatedAt=now.UTC()
+//   - SetCreatedBy (string) → when non-empty, server sets CreatedBy to this value
+//   - SetUpdatedAt (bool) → when true, server sets UpdatedAt=now.UTC()
+//   - SetUpdatedBy (string) → when non-empty, server sets UpdatedBy to this value
+//   - ExpiredAt (time.Time) → when non-zero, server sets ExpiredAt to this instant
 //
-// Returns:
-//   - new int16 value after increment (if successful)
-//   - error if the operation failed, or if the condition was not met
+// The server chooses which of the two (create/update) descriptors to apply based on whether
+// the Treasure existed **before** the increment attempt. You do **not** need to check
+// existence on the client side.
 //
-// ⚠️ Notes:
-//   - If the Treasure exists but holds a value of a **different type** (e.g., int32), this operation will fail.
-//   - Decrementing is supported by simply passing a **negative delta value**.
-//   - All proto values are transmitted as int32, but converted back to int16 here.
-//   - If the condition is not met, the function returns a specific ErrConditionNotMet error.
+// Parameters
+// ----------
+//   - ctx:           context for cancellation and timeout
+//   - swampName:     target Swamp where the Treasure lives
+//   - key:           unique key of the Treasure to increment
+//   - value:         the delta (positive or negative) to add
+//   - condition:     optional constraint on the current value before incrementing
+//   - setIfNotExist: optional metadata settings if the Treasure must be created
+//   - setIfExist:    optional metadata settings if the Treasure already exists
 //
-// ✅ Conditional Logic:
+// Returns
+// -------
+//   - int16:                  the value stored after the call (incremented if condition succeeded)
+//   - *IncrementMetaResponse: the resolved metadata (CreatedAt/By, UpdatedAt/By, ExpiredAt)
+//   - error:                  nil on success; `ErrConditionNotMet` if the condition failed;
+//     or a transport/validation error
 //
-//   - The `condition` lets you define rules for when an increment should occur.
+// Notes
+// -----
+//   - Decrementing is supported by passing a negative delta.
+//   - If the Treasure exists but has a **different value type** (e.g. float64), the call fails.
+//   - Proto values travel as int32 on the wire and are converted back to int16 here.
+//   - Conditional operators (Equal, NotEqual, GreaterThan, GreaterThanOrEqual,
+//     LessThan, LessThanOrEqual) compare against the **current** stored value.
 //
-//   - It uses a `RelationalOperator` enum to compare the **current value** against a reference.
+// Examples
+// --------
+// 1) Increment with automatic creation + creation metadata
 //
-//     Supported operators include:
+//	newVal, meta, err := h.IncrementInt16(
+//	  ctx,
+//	  name.New().Sanctuary("scores").Realm("users").Swamp("global"),
+//	  "user:42",
+//	  1,
+//	  nil, // no condition
+//	  &IncrementMetaRequest{ // setIfNotExist
+//	    SetCreatedAt: true,
+//	    SetCreatedBy: "game-service",
+//	    ExpiredAt:    time.Now().Add(24 * time.Hour),
+//	  },
+//	  &IncrementMetaRequest{ // setIfExist
+//	    SetUpdatedAt: true,
+//	    SetUpdatedBy: "game-service",
+//	  },
+//	)
 //
-//   - Equal (==)
+//	// If "user:42" did not exist, it's created, incremented, and Created* + ExpiredAt are set.
+//	// If it existed, it's incremented and Updated* are set.
+//	// In both cases, `meta` contains the resolved metadata.
 //
-//   - NotEqual (!=)
+// 2) Conditional increment that may not run
 //
-//   - GreaterThan (>)
+//	newVal, meta, err := h.IncrementInt16(
+//	  ctx, swamp, "counter", 5,
+//	  &Int16Condition{RelationalOperator: GreaterThan, Value: 10},
+//	  nil, nil,
+//	)
 //
-//   - GreaterThanOrEqual (>=)
+//	// If current value <= 10 → err == ErrConditionNotMet,
+//	// but you still get `newVal` (the unchanged current value) and `meta`.
 //
-//   - LessThan (<)
-//
-//   - LessThanOrEqual (<=)
-//
-//     Example:
-//     Only increment if the current value is less than or equal to 500:
-//     &Int16Condition{RelationalOperator: LessThanOrEqual, Value: 500}
-//
-// ✅ Example usage:
-//
-//	IncrementInt16(ctx, "metrics", "api:retry-count", 1, &Int16Condition{GreaterThan, 0})
-func (h *hydraidego) IncrementInt16(ctx context.Context, swampName name.Name, key string, value int16, condition *Int16Condition) (int16, error) {
+// Implementation detail
+// ---------------------
+// Internally this calls the HydrAIDE gRPC Increment API for int16 and maps the optional
+// `setIfNotExist` / `setIfExist` descriptors to server-side metadata mutations. The server
+// applies exactly one of them (create vs. update) based on pre-increment existence, then
+// evaluates the condition atomically and returns both the resulting value and metadata.
+func (h *hydraidego) IncrementInt16(ctx context.Context, swampName name.Name, key string, value int16, condition *Int16Condition, setIfNotExist *IncrementMetaRequest, setIfExist *IncrementMetaRequest) (int16, *IncrementMetaResponse, error) {
 
 	r := &hydraidepbgo.IncrementInt16Request{
 		IslandID:    swampName.GetIslandID(h.client.GetAllIslands()),
 		SwampName:   swampName.Get(),
 		Key:         key,
 		IncrementBy: int32(value),
+	}
+
+	if setIfNotExist != nil {
+		r.SetIfNotExist = convertMetaToProtoMeta(setIfNotExist)
+	}
+	if setIfExist != nil {
+		r.SetIfExist = convertMetaToProtoMeta(setIfExist)
 	}
 
 	if condition != nil {
@@ -2853,82 +3115,138 @@ func (h *hydraidego) IncrementInt16(ctx context.Context, swampName name.Name, ke
 	response, err := h.client.GetServiceClient(swampName).IncrementInt16(ctx, r)
 
 	if err != nil {
-		return 0, errorHandler(err)
+		return 0, nil, errorHandler(err)
 	}
 
 	// return with the new value if the increment was successful
 	if response.GetIsIncremented() {
-		return int16(response.GetValue()), nil
+		return int16(response.GetValue()), convertIncrementMetaResponse(response.GetMetadata()), nil
 	}
 
-	return 0, NewError(ErrConditionNotMet, fmt.Sprintf("%s: %d", errorMessageConditionNotMet, response.GetValue()))
+	return int16(response.GetValue()), convertIncrementMetaResponse(response.GetMetadata()), NewError(ErrConditionNotMet, fmt.Sprintf("%s: %d", errorMessageConditionNotMet, response.GetValue()))
 
 }
 
-// IncrementInt32 performs an atomic int32 increment on a Treasure inside the given Swamp.
+// IncrementInt32 performs an atomic int32 increment on a Treasure inside the given Swamp,
+// with optional, server-side metadata control for both the "create" and "update" paths.
 //
-// If the specified Swamp or Treasure does not exist, this function will automatically create them.
-// This means you do **not** need to call CatalogCreate or CatalogSave beforehand.
+// Core behavior
+// -------------
+//   - If the Swamp or Treasure does not exist, HydrAIDE will **create** them.
+//   - If a `condition` is provided, the increment runs **atomically on the server** only if
+//     the current value satisfies the given relational operator (>, >=, ==, etc.).
+//   - The function **always returns** the value and metadata that are currently stored for
+//     the Treasure. If the condition is not met, you'll get:
+//   - the current value (not incremented),
+//   - the resolved metadata (see below),
+//   - and `ErrConditionNotMet` as the error.
+//     This makes it easy to branch your logic without an extra read.
 //
-// If a condition is provided, the increment will only occur if the current value
-// satisfies the given relational constraint — evaluated **atomically on the server**.
+// Metadata control (optional)
+// ---------------------------
+// You can provide two optional metadata descriptors to control lifecycle/audit fields
+// **in the same atomic call**, without pre-checking existence on the client:
 //
-// 🧠 This is the Int32 version of HydrAIDE’s type-safe increment operation.
+//   - setIfNotExist (*IncrementMetaRequest):
+//     Applied if the Treasure must be **created** as part of this call.
+//     Typical use: set CreatedAt/CreatedBy and an initial ExpiredAt.
 //
-//	The same logic applies for other numeric types (Int8, Int16, Uint64, Float64, etc.),
-//	and this function can be duplicated/adapted accordingly.
+//   - setIfExist (*IncrementMetaRequest):
+//     Applied if the Treasure **already exists** (i.e., an update path).
+//     Typical use: set UpdatedAt/UpdatedBy and optionally refresh ExpiredAt.
 //
-// Parameters:
-//   - ctx:        context for cancellation and timeout
-//   - swampName:  target Swamp where the Treasure lives
-//   - key:        unique key of the Treasure to increment
-//   - value:      the delta (positive or negative) to add
-//   - condition:  optional constraint on the current value before incrementing
+// Fields in IncrementMetaRequest:
+//   - SetCreatedAt (bool) → when true, server sets CreatedAt=now.UTC()
+//   - SetCreatedBy (string) → when non-empty, server sets CreatedBy to this value
+//   - SetUpdatedAt (bool) → when true, server sets UpdatedAt=now.UTC()
+//   - SetUpdatedBy (string) → when non-empty, server sets UpdatedBy to this value
+//   - ExpiredAt (time.Time) → when non-zero, server sets ExpiredAt to this instant
 //
-// Returns:
-//   - new int32 value after increment (if successful)
-//   - error if the operation failed, or if the condition was not met
+// The server chooses which of the two (create/update) descriptors to apply based on whether
+// the Treasure existed **before** the increment attempt. You do **not** need to check
+// existence on the client side.
 //
-// ⚠️ Notes:
-//   - If the Treasure exists but holds a value of a **different type** (e.g., float64), this operation will fail.
-//   - Decrementing is supported by simply passing a **negative delta value**.
-//   - All proto values are transmitted as int32, and this function also returns an int32 directly.
-//   - If the condition is not met, the function returns a specific ErrConditionNotMet error.
+// Parameters
+// ----------
+//   - ctx:           context for cancellation and timeout
+//   - swampName:     target Swamp where the Treasure lives
+//   - key:           unique key of the Treasure to increment
+//   - value:         the delta (positive or negative) to add
+//   - condition:     optional constraint on the current value before incrementing
+//   - setIfNotExist: optional metadata settings if the Treasure must be created
+//   - setIfExist:    optional metadata settings if the Treasure already exists
 //
-// ✅ Conditional Logic:
+// Returns
+// -------
+//   - int32:                  the value stored after the call (incremented if condition succeeded)
+//   - *IncrementMetaResponse: the resolved metadata (CreatedAt/By, UpdatedAt/By, ExpiredAt)
+//   - error:                  nil on success; `ErrConditionNotMet` if the condition failed;
+//     or a transport/validation error
 //
-//   - The `condition` lets you define rules for when an increment should occur.
+// Notes
+// -----
+//   - Decrementing is supported by passing a negative delta.
+//   - If the Treasure exists but has a **different value type** (e.g. float64), the call fails.
+//   - Proto values travel as int32 on the wire and remain int32 here (no narrowing conversion).
+//   - Conditional operators (Equal, NotEqual, GreaterThan, GreaterThanOrEqual,
+//     LessThan, LessThanOrEqual) compare against the **current** stored value.
 //
-//   - It uses a `RelationalOperator` enum to compare the **current value** against a reference.
+// Examples
+// --------
+// 1) Increment with automatic creation + creation metadata
 //
-//     Supported operators include:
+//	newVal, meta, err := h.IncrementInt32(
+//	  ctx,
+//	  name.New().Sanctuary("scores").Realm("users").Swamp("global"),
+//	  "user:42",
+//	  1,
+//	  nil, // no condition
+//	  &IncrementMetaRequest{ // setIfNotExist
+//	    SetCreatedAt: true,
+//	    SetCreatedBy: "game-service",
+//	    ExpiredAt:    time.Now().Add(24 * time.Hour),
+//	  },
+//	  &IncrementMetaRequest{ // setIfExist
+//	    SetUpdatedAt: true,
+//	    SetUpdatedBy: "game-service",
+//	  },
+//	)
 //
-//   - Equal (==)
+//	// If "user:42" did not exist, it's created, incremented, and Created* + ExpiredAt are set.
+//	// If it existed, it's incremented and Updated* are set.
+//	// In both cases, `meta` contains the resolved metadata.
 //
-//   - NotEqual (!=)
+// 2) Conditional increment that may not run
 //
-//   - GreaterThan (>)
+//	newVal, meta, err := h.IncrementInt32(
+//	  ctx, swamp, "counter", 5,
+//	  &Int32Condition{RelationalOperator: GreaterThan, Value: 10},
+//	  nil, nil,
+//	)
 //
-//   - GreaterThanOrEqual (>=)
+//	// If current value <= 10 → err == ErrConditionNotMet,
+//	// but you still get `newVal` (the unchanged current value) and `meta`.
 //
-//   - LessThan (<)
-//
-//   - LessThanOrEqual (<=)
-//
-//     Example:
-//     Only increment if the current value is exactly 100:
-//     &Int32Condition{RelationalOperator: Equal, Value: 100}
-//
-// ✅ Example usage:
-//
-//	IncrementInt32(ctx, "user-stats", "user:1234:logins", 1, &Int32Condition{GreaterThanOrEqual, 0})
-func (h *hydraidego) IncrementInt32(ctx context.Context, swampName name.Name, key string, value int32, condition *Int32Condition) (int32, error) {
+// Implementation detail
+// ---------------------
+// Internally this calls the HydrAIDE gRPC Increment API for int32 and maps the optional
+// `setIfNotExist` / `setIfExist` descriptors to server-side metadata mutations. The server
+// applies exactly one of them (create vs. update) based on pre-increment existence, then
+// evaluates the condition atomically and returns both the resulting value and metadata.
+func (h *hydraidego) IncrementInt32(ctx context.Context, swampName name.Name, key string, value int32, condition *Int32Condition, setIfNotExist *IncrementMetaRequest, setIfExist *IncrementMetaRequest) (int32, *IncrementMetaResponse, error) {
 
 	r := &hydraidepbgo.IncrementInt32Request{
 		IslandID:    swampName.GetIslandID(h.client.GetAllIslands()),
 		SwampName:   swampName.Get(),
 		Key:         key,
 		IncrementBy: value,
+	}
+
+	if setIfNotExist != nil {
+		r.SetIfNotExist = convertMetaToProtoMeta(setIfNotExist)
+	}
+	if setIfExist != nil {
+		r.SetIfExist = convertMetaToProtoMeta(setIfExist)
 	}
 
 	if condition != nil {
@@ -2941,82 +3259,138 @@ func (h *hydraidego) IncrementInt32(ctx context.Context, swampName name.Name, ke
 	response, err := h.client.GetServiceClient(swampName).IncrementInt32(ctx, r)
 
 	if err != nil {
-		return 0, errorHandler(err)
+		return 0, nil, errorHandler(err)
 	}
 
 	// return with the new value if the increment was successful
 	if response.GetIsIncremented() {
-		return response.GetValue(), nil
+		return response.GetValue(), convertIncrementMetaResponse(response.GetMetadata()), nil
 	}
 
-	return 0, NewError(ErrConditionNotMet, fmt.Sprintf("%s: %d", errorMessageConditionNotMet, response.GetValue()))
+	return response.GetValue(), convertIncrementMetaResponse(response.GetMetadata()), NewError(ErrConditionNotMet, fmt.Sprintf("%s: %d", errorMessageConditionNotMet, response.GetValue()))
 
 }
 
-// IncrementInt64 performs an atomic int64 increment on a Treasure inside the given Swamp.
+// IncrementInt64 performs an atomic int64 increment on a Treasure inside the given Swamp,
+// with optional, server-side metadata control for both the "create" and "update" paths.
 //
-// If the specified Swamp or Treasure does not exist, this function will automatically create them.
-// This means you do **not** need to call CatalogCreate or CatalogSave beforehand.
+// Core behavior
+// -------------
+//   - If the Swamp or Treasure does not exist, HydrAIDE will **create** them.
+//   - If a `condition` is provided, the increment runs **atomically on the server** only if
+//     the current value satisfies the given relational operator (>, >=, ==, etc.).
+//   - The function **always returns** the value and metadata that are currently stored for
+//     the Treasure. If the condition is not met, you'll get:
+//   - the current value (not incremented),
+//   - the resolved metadata (see below),
+//   - and `ErrConditionNotMet` as the error.
+//     This makes it easy to branch your logic without an extra read.
 //
-// If a condition is provided, the increment will only occur if the current value
-// satisfies the given relational constraint — evaluated **atomically on the server**.
+// Metadata control (optional)
+// ---------------------------
+// You can provide two optional metadata descriptors to control lifecycle/audit fields
+// **in the same atomic call**, without pre-checking existence on the client:
 //
-// 🧠 This is the Int64 version of HydrAIDE’s type-safe increment operation.
+//   - setIfNotExist (*IncrementMetaRequest):
+//     Applied if the Treasure must be **created** as part of this call.
+//     Typical use: set CreatedAt/CreatedBy and an initial ExpiredAt.
 //
-//	The same logic applies for other numeric types (Int8, Int16, Int32, Uint64, Float64, etc.),
-//	and this function can be duplicated/adapted accordingly.
+//   - setIfExist (*IncrementMetaRequest):
+//     Applied if the Treasure **already exists** (i.e., an update path).
+//     Typical use: set UpdatedAt/UpdatedBy and optionally refresh ExpiredAt.
 //
-// Parameters:
-//   - ctx:        context for cancellation and timeout
-//   - swampName:  target Swamp where the Treasure lives
-//   - key:        unique key of the Treasure to increment
-//   - value:      the delta (positive or negative) to add
-//   - condition:  optional constraint on the current value before incrementing
+// Fields in IncrementMetaRequest:
+//   - SetCreatedAt (bool) → when true, server sets CreatedAt=now.UTC()
+//   - SetCreatedBy (string) → when non-empty, server sets CreatedBy to this value
+//   - SetUpdatedAt (bool) → when true, server sets UpdatedAt=now.UTC()
+//   - SetUpdatedBy (string) → when non-empty, server sets UpdatedBy to this value
+//   - ExpiredAt (time.Time) → when non-zero, server sets ExpiredAt to this instant
 //
-// Returns:
-//   - new int64 value after increment (if successful)
-//   - error if the operation failed, or if the condition was not met
+// The server chooses which of the two (create/update) descriptors to apply based on whether
+// the Treasure existed **before** the increment attempt. You do **not** need to check
+// existence on the client side.
 //
-// ⚠️ Notes:
-//   - If the Treasure exists but holds a value of a **different type** (e.g., int32 or float64), this operation will fail.
-//   - Decrementing is supported by simply passing a **negative delta value**.
-//   - All proto values are transmitted as int64 and returned as int64.
-//   - If the condition is not met, the function returns a specific ErrConditionNotMet error.
+// Parameters
+// ----------
+//   - ctx:           context for cancellation and timeout
+//   - swampName:     target Swamp where the Treasure lives
+//   - key:           unique key of the Treasure to increment
+//   - value:         the delta (positive or negative) to add
+//   - condition:     optional constraint on the current value before incrementing
+//   - setIfNotExist: optional metadata settings if the Treasure must be created
+//   - setIfExist:    optional metadata settings if the Treasure already exists
 //
-// ✅ Conditional Logic:
+// Returns
+// -------
+//   - int64:                  the value stored after the call (incremented if condition succeeded)
+//   - *IncrementMetaResponse: the resolved metadata (CreatedAt/By, UpdatedAt/By, ExpiredAt)
+//   - error:                  nil on success; `ErrConditionNotMet` if the condition failed;
+//     or a transport/validation error
 //
-//   - The `condition` lets you define rules for when an increment should occur.
+// Notes
+// -----
+//   - Decrementing is supported by passing a negative delta.
+//   - If the Treasure exists but has a **different value type** (e.g. float64), the call fails.
+//   - Proto values travel as int64 on the wire and remain int64 here (no narrowing conversion).
+//   - Conditional operators (Equal, NotEqual, GreaterThan, GreaterThanOrEqual,
+//     LessThan, LessThanOrEqual) compare against the **current** stored value.
 //
-//   - It uses a `RelationalOperator` enum to compare the **current value** against a reference.
+// Examples
+// --------
+// 1) Increment with automatic creation + creation metadata
 //
-//     Supported operators include:
+//	newVal, meta, err := h.IncrementInt64(
+//	  ctx,
+//	  name.New().Sanctuary("scores").Realm("users").Swamp("global"),
+//	  "user:42",
+//	  1,
+//	  nil, // no condition
+//	  &IncrementMetaRequest{ // setIfNotExist
+//	    SetCreatedAt: true,
+//	    SetCreatedBy: "game-service",
+//	    ExpiredAt:    time.Now().Add(24 * time.Hour),
+//	  },
+//	  &IncrementMetaRequest{ // setIfExist
+//	    SetUpdatedAt: true,
+//	    SetUpdatedBy: "game-service",
+//	  },
+//	)
 //
-//   - Equal (==)
+//	// If "user:42" did not exist, it's created, incremented, and Created* + ExpiredAt are set.
+//	// If it existed, it's incremented and Updated* are set.
+//	// In both cases, `meta` contains the resolved metadata.
 //
-//   - NotEqual (!=)
+// 2) Conditional increment that may not run
 //
-//   - GreaterThan (>)
+//	newVal, meta, err := h.IncrementInt64(
+//	  ctx, swamp, "counter", 5,
+//	  &Int64Condition{RelationalOperator: GreaterThan, Value: 10},
+//	  nil, nil,
+//	)
 //
-//   - GreaterThanOrEqual (>=)
+//	// If current value <= 10 → err == ErrConditionNotMet,
+//	// but you still get `newVal` (the unchanged current value) and `meta`.
 //
-//   - LessThan (<)
-//
-//   - LessThanOrEqual (<=)
-//
-//     Example:
-//     Only increment if the current value is greater than or equal to 10,000:
-//     &Int64Condition{RelationalOperator: GreaterThanOrEqual, Value: 10000}
-//
-// ✅ Example usage:
-//
-//	IncrementInt64(ctx, "finance", "user:987:balance", 500, &Int64Condition{LessThan, 100000})
-func (h *hydraidego) IncrementInt64(ctx context.Context, swampName name.Name, key string, value int64, condition *Int64Condition) (int64, error) {
+// Implementation detail
+// ---------------------
+// Internally this calls the HydrAIDE gRPC Increment API for int64 and maps the optional
+// `setIfNotExist` / `setIfExist` descriptors to server-side metadata mutations. The server
+// applies exactly one of them (create vs. update) based on pre-increment existence, then
+// evaluates the condition atomically and returns both the resulting value and metadata.
+func (h *hydraidego) IncrementInt64(ctx context.Context, swampName name.Name, key string, value int64, condition *Int64Condition, setIfNotExist *IncrementMetaRequest, setIfExist *IncrementMetaRequest) (int64, *IncrementMetaResponse, error) {
 
 	r := &hydraidepbgo.IncrementInt64Request{
 		IslandID:    swampName.GetIslandID(h.client.GetAllIslands()),
 		SwampName:   swampName.Get(),
 		Key:         key,
 		IncrementBy: value,
+	}
+
+	if setIfNotExist != nil {
+		r.SetIfNotExist = convertMetaToProtoMeta(setIfNotExist)
+	}
+	if setIfExist != nil {
+		r.SetIfExist = convertMetaToProtoMeta(setIfExist)
 	}
 
 	if condition != nil {
@@ -3029,81 +3403,137 @@ func (h *hydraidego) IncrementInt64(ctx context.Context, swampName name.Name, ke
 	response, err := h.client.GetServiceClient(swampName).IncrementInt64(ctx, r)
 
 	if err != nil {
-		return 0, errorHandler(err)
+		return 0, nil, errorHandler(err)
 	}
 
 	// return with the new value if the increment was successful
 	if response.GetIsIncremented() {
-		return response.GetValue(), nil
+		return response.GetValue(), convertIncrementMetaResponse(response.GetMetadata()), nil
 	}
 
-	return 0, NewError(ErrConditionNotMet, fmt.Sprintf("%s: %d", errorMessageConditionNotMet, response.GetValue()))
+	return response.GetValue(), convertIncrementMetaResponse(response.GetMetadata()), NewError(ErrConditionNotMet, fmt.Sprintf("%s: %d", errorMessageConditionNotMet, response.GetValue()))
 
 }
 
-// IncrementUint8 performs an atomic uint8 increment on a Treasure inside the given Swamp.
+// IncrementUint8 performs an atomic uint8 increment on a Treasure inside the given Swamp,
+// with optional, server-side metadata control for both the "create" and "update" paths.
 //
-// If the specified Swamp or Treasure does not exist, this function will automatically create them.
-// This means you do **not** need to call CatalogCreate or CatalogSave beforehand.
+// Core behavior
+// -------------
+//   - If the Swamp or Treasure does not exist, HydrAIDE will **create** them.
+//   - If a `condition` is provided, the increment runs **atomically on the server** only if
+//     the current value satisfies the given relational operator (>, >=, ==, etc.).
+//   - The function **always returns** the value and metadata that are currently stored for
+//     the Treasure. If the condition is not met, you'll get:
+//   - the current value (not incremented),
+//   - the resolved metadata (see below),
+//   - and `ErrConditionNotMet` as the error.
+//     This makes it easy to branch your logic without an extra read.
 //
-// If a condition is provided, the increment will only occur if the current value
-// satisfies the given relational constraint — evaluated **atomically on the server**.
+// Metadata control (optional)
+// ---------------------------
+// You can provide two optional metadata descriptors to control lifecycle/audit fields
+// **in the same atomic call**, without pre-checking existence on the client:
 //
-// 🧠 This is the Uint8 version of HydrAIDE’s type-safe increment operation.
+//   - setIfNotExist (*IncrementMetaRequest):
+//     Applied if the Treasure must be **created** as part of this call.
+//     Typical use: set CreatedAt/CreatedBy and an initial ExpiredAt.
 //
-//	The same logic applies for other numeric types (Int16, Uint32, Float64, etc.),
-//	and this function can be duplicated/adapted accordingly.
+//   - setIfExist (*IncrementMetaRequest):
+//     Applied if the Treasure **already exists** (i.e., an update path).
+//     Typical use: set UpdatedAt/UpdatedBy and optionally refresh ExpiredAt.
 //
-// Parameters:
-//   - ctx:        context for cancellation and timeout
-//   - swampName:  target Swamp where the Treasure lives
-//   - key:        unique key of the Treasure to increment
-//   - value:      the delta (positive or negative) to add (note: negative values will underflow)
-//   - condition:  optional constraint on the current value before incrementing
+// Fields in IncrementMetaRequest:
+//   - SetCreatedAt (bool) → when true, server sets CreatedAt=now.UTC()
+//   - SetCreatedBy (string) → when non-empty, server sets CreatedBy to this value
+//   - SetUpdatedAt (bool) → when true, server sets UpdatedAt=now.UTC()
+//   - SetUpdatedBy (string) → when non-empty, server sets UpdatedBy to this value
+//   - ExpiredAt (time.Time) → when non-zero, server sets ExpiredAt to this instant
 //
-// Returns:
-//   - new uint8 value after increment (if successful)
-//   - error if the operation failed, or if the condition was not met
+// The server chooses which of the two (create/update) descriptors to apply based on whether
+// the Treasure existed **before** the increment attempt. You do **not** need to check
+// existence on the client side.
 //
-// ⚠️ Notes:
-//   - If the Treasure exists but holds a value of a **different type** (e.g., int64 or float32), this operation will fail.
-//   - Since this is an unsigned type, **negative delta values are not allowed** (and may cause underflow).
-//   - All proto values are transmitted as uint32, and this function converts them to uint8.
-//   - If the condition is not met, the function returns a specific ErrConditionNotMet error.
+// Parameters
+// ----------
+//   - ctx:           context for cancellation and timeout
+//   - swampName:     target Swamp where the Treasure lives
+//   - key:           unique key of the Treasure to increment
+//   - value:         the delta (positive or negative) to add
+//   - condition:     optional constraint on the current value before incrementing
+//   - setIfNotExist: optional metadata settings if the Treasure must be created
+//   - setIfExist:    optional metadata settings if the Treasure already exists
 //
-// ✅ Conditional Logic:
+// Returns
+// -------
+//   - uint8:                  the value stored after the call (incremented if condition succeeded)
+//   - *IncrementMetaResponse: the resolved metadata (CreatedAt/By, UpdatedAt/By, ExpiredAt)
+//   - error:                  nil on success; `ErrConditionNotMet` if the condition failed;
+//     or a transport/validation error
 //
-//   - The `condition` lets you define rules for when an increment should occur.
+// Notes
+// -----
+//   - Decrementing is supported by passing a negative delta (taking into account uint8 underflow rules).
+//   - If the Treasure exists but has a **different value type** (e.g. float64), the call fails.
+//   - Proto values travel as uint32 on the wire and are converted back to uint8 here.
+//   - Conditional operators (Equal, NotEqual, GreaterThan, GreaterThanOrEqual,
+//     LessThan, LessThanOrEqual) compare against the **current** stored value.
 //
-//   - It uses a `RelationalOperator` enum to compare the **current value** against a reference.
+// Examples
+// --------
+// 1) Increment with automatic creation + creation metadata
 //
-//     Supported operators include:
+//	newVal, meta, err := h.IncrementUint8(
+//	  ctx,
+//	  name.New().Sanctuary("scores").Realm("users").Swamp("global"),
+//	  "user:42",
+//	  1,
+//	  nil, // no condition
+//	  &IncrementMetaRequest{ // setIfNotExist
+//	    SetCreatedAt: true,
+//	    SetCreatedBy: "game-service",
+//	    ExpiredAt:    time.Now().Add(24 * time.Hour),
+//	  },
+//	  &IncrementMetaRequest{ // setIfExist
+//	    SetUpdatedAt: true,
+//	    SetUpdatedBy: "game-service",
+//	  },
+//	)
 //
-//   - Equal (==)
+//	// If "user:42" did not exist, it's created, incremented, and Created* + ExpiredAt are set.
+//	// If it existed, it's incremented and Updated* are set.
+//	// In both cases, `meta` contains the resolved metadata.
 //
-//   - NotEqual (!=)
+// 2) Conditional increment that may not run
 //
-//   - GreaterThan (>)
+//	newVal, meta, err := h.IncrementUint8(
+//	  ctx, swamp, "counter", 5,
+//	  &Uint8Condition{RelationalOperator: GreaterThan, Value: 10},
+//	  nil, nil,
+//	)
 //
-//   - GreaterThanOrEqual (>=)
+//	// If current value <= 10 → err == ErrConditionNotMet,
+//	// but you still get `newVal` (the unchanged current value) and `meta`.
 //
-//   - LessThan (<)
-//
-//   - LessThanOrEqual (<=)
-//
-//     Example:
-//     Only increment if the current value is less than 255:
-//     &Uint8Condition{RelationalOperator: LessThan, Value: 255}
-//
-// ✅ Example usage:
-//
-//	IncrementUint8(ctx, "badge-points", "user:100:stars", 1, &Uint8Condition{GreaterThanOrEqual, 0})
-func (h *hydraidego) IncrementUint8(ctx context.Context, swampName name.Name, key string, value uint8, condition *Uint8Condition) (uint8, error) {
+// Implementation detail
+// ---------------------
+// Internally this calls the HydrAIDE gRPC Increment API for uint8 and maps the optional
+// `setIfNotExist` / `setIfExist` descriptors to server-side metadata mutations. The server
+// applies exactly one of them (create vs. update) based on pre-increment existence, then
+// evaluates the condition atomically and returns both the resulting value and metadata.
+func (h *hydraidego) IncrementUint8(ctx context.Context, swampName name.Name, key string, value uint8, condition *Uint8Condition, setIfNotExist *IncrementMetaRequest, setIfExist *IncrementMetaRequest) (uint8, *IncrementMetaResponse, error) {
 	r := &hydraidepbgo.IncrementUint8Request{
 		IslandID:    swampName.GetIslandID(h.client.GetAllIslands()),
 		SwampName:   swampName.Get(),
 		Key:         key,
 		IncrementBy: uint32(value),
+	}
+
+	if setIfNotExist != nil {
+		r.SetIfNotExist = convertMetaToProtoMeta(setIfNotExist)
+	}
+	if setIfExist != nil {
+		r.SetIfExist = convertMetaToProtoMeta(setIfExist)
 	}
 
 	if condition != nil {
@@ -3116,79 +3546,136 @@ func (h *hydraidego) IncrementUint8(ctx context.Context, swampName name.Name, ke
 
 	response, err := h.client.GetServiceClient(swampName).IncrementUint8(ctx, r)
 	if err != nil {
-		return 0, errorHandler(err)
+		return 0, nil, errorHandler(err)
 	}
 
 	if response.GetIsIncremented() {
-		return uint8(response.GetValue()), nil
+		return uint8(response.GetValue()), convertIncrementMetaResponse(response.GetMetadata()), nil
 	}
 
-	return 0, NewError(ErrConditionNotMet, fmt.Sprintf("%s: %d", errorMessageConditionNotMet, response.GetValue()))
+	return uint8(response.GetValue()), convertIncrementMetaResponse(response.GetMetadata()), NewError(ErrConditionNotMet, fmt.Sprintf("%s: %d", errorMessageConditionNotMet, response.GetValue()))
+
 }
 
-// IncrementUint16 performs an atomic uint16 increment on a Treasure inside the given Swamp.
+// IncrementUint16 performs an atomic uint16 increment on a Treasure inside the given Swamp,
+// with optional, server-side metadata control for both the "create" and "update" paths.
 //
-// If the specified Swamp or Treasure does not exist, this function will automatically create them.
-// This means you do **not** need to call CatalogCreate or CatalogSave beforehand.
+// Core behavior
+// -------------
+//   - If the Swamp or Treasure does not exist, HydrAIDE will **create** them.
+//   - If a `condition` is provided, the increment runs **atomically on the server** only if
+//     the current value satisfies the given relational operator (>, >=, ==, etc.).
+//   - The function **always returns** the value and metadata that are currently stored for
+//     the Treasure. If the condition is not met, you'll get:
+//   - the current value (not incremented),
+//   - the resolved metadata (see below),
+//   - and `ErrConditionNotMet` as the error.
+//     This makes it easy to branch your logic without an extra read.
 //
-// If a condition is provided, the increment will only occur if the current value
-// satisfies the given relational constraint — evaluated **atomically on the server**.
+// Metadata control (optional)
+// ---------------------------
+// You can provide two optional metadata descriptors to control lifecycle/audit fields
+// **in the same atomic call**, without pre-checking existence on the client:
 //
-// 🧠 This is the Uint16 version of HydrAIDE’s type-safe increment operation.
+//   - setIfNotExist (*IncrementMetaRequest):
+//     Applied if the Treasure must be **created** as part of this call.
+//     Typical use: set CreatedAt/CreatedBy and an initial ExpiredAt.
 //
-//	The same logic applies for other numeric types (Uint8, Uint32, Float64, etc.),
-//	and this function can be duplicated/adapted accordingly.
+//   - setIfExist (*IncrementMetaRequest):
+//     Applied if the Treasure **already exists** (i.e., an update path).
+//     Typical use: set UpdatedAt/UpdatedBy and optionally refresh ExpiredAt.
 //
-// Parameters:
-//   - ctx:        context for cancellation and timeout
-//   - swampName:  target Swamp where the Treasure lives
-//   - key:        unique key of the Treasure to increment
-//   - value:      the delta (positive value to add — negative values are not supported)
-//   - condition:  optional constraint on the current value before incrementing
+// Fields in IncrementMetaRequest:
+//   - SetCreatedAt (bool) → when true, server sets CreatedAt=now.UTC()
+//   - SetCreatedBy (string) → when non-empty, server sets CreatedBy to this value
+//   - SetUpdatedAt (bool) → when true, server sets UpdatedAt=now.UTC()
+//   - SetUpdatedBy (string) → when non-empty, server sets UpdatedBy to this value
+//   - ExpiredAt (time.Time) → when non-zero, server sets ExpiredAt to this instant
 //
-// Returns:
-//   - new uint16 value after increment (if successful)
-//   - error if the operation failed, or if the condition was not met
+// The server chooses which of the two (create/update) descriptors to apply based on whether
+// the Treasure existed **before** the increment attempt. You do **not** need to check
+// existence on the client side.
 //
-// ⚠️ Notes:
-//   - If the Treasure exists but holds a value of a **different type** (e.g., int32 or float64), this operation will fail.
-//   - Since this is an unsigned type, **negative delta values are not allowed** (and may cause underflow).
-//   - All proto values are transmitted as uint32, and this function converts them to uint16.
-//   - If the condition is not met, the function returns a specific ErrConditionNotMet error.
+// Parameters
+// ----------
+//   - ctx:           context for cancellation and timeout
+//   - swampName:     target Swamp where the Treasure lives
+//   - key:           unique key of the Treasure to increment
+//   - value:         the delta (positive or negative) to add
+//   - condition:     optional constraint on the current value before incrementing
+//   - setIfNotExist: optional metadata settings if the Treasure must be created
+//   - setIfExist:    optional metadata settings if the Treasure already exists
 //
-// ✅ Conditional Logic:
+// Returns
+// -------
+//   - uint16:                 the value stored after the call (incremented if condition succeeded)
+//   - *IncrementMetaResponse: the resolved metadata (CreatedAt/By, UpdatedAt/By, ExpiredAt)
+//   - error:                  nil on success; `ErrConditionNotMet` if the condition failed;
+//     or a transport/validation error
 //
-//   - The `condition` lets you define rules for when an increment should occur.
+// Notes
+// -----
+//   - Decrementing is supported by passing a negative delta (taking into account uint16 underflow rules).
+//   - If the Treasure exists but has a **different value type** (e.g. float64), the call fails.
+//   - Proto values travel as uint32 on the wire and are converted back to uint16 here.
+//   - Conditional operators (Equal, NotEqual, GreaterThan, GreaterThanOrEqual,
+//     LessThan, LessThanOrEqual) compare against the **current** stored value.
 //
-//   - It uses a `RelationalOperator` enum to compare the **current value** against a reference.
+// Examples
+// --------
+// 1) Increment with automatic creation + creation metadata
 //
-//     Supported operators include:
+//	newVal, meta, err := h.IncrementUint16(
+//	  ctx,
+//	  name.New().Sanctuary("scores").Realm("users").Swamp("global"),
+//	  "user:42",
+//	  1,
+//	  nil, // no condition
+//	  &IncrementMetaRequest{ // setIfNotExist
+//	    SetCreatedAt: true,
+//	    SetCreatedBy: "game-service",
+//	    ExpiredAt:    time.Now().Add(24 * time.Hour),
+//	  },
+//	  &IncrementMetaRequest{ // setIfExist
+//	    SetUpdatedAt: true,
+//	    SetUpdatedBy: "game-service",
+//	  },
+//	)
 //
-//   - Equal (==)
+//	// If "user:42" did not exist, it's created, incremented, and Created* + ExpiredAt are set.
+//	// If it existed, it's incremented and Updated* are set.
+//	// In both cases, `meta` contains the resolved metadata.
 //
-//   - NotEqual (!=)
+// 2) Conditional increment that may not run
 //
-//   - GreaterThan (>)
+//	newVal, meta, err := h.IncrementUint16(
+//	  ctx, swamp, "counter", 5,
+//	  &Uint16Condition{RelationalOperator: GreaterThan, Value: 10},
+//	  nil, nil,
+//	)
 //
-//   - GreaterThanOrEqual (>=)
+//	// If current value <= 10 → err == ErrConditionNotMet,
+//	// but you still get `newVal` (the unchanged current value) and `meta`.
 //
-//   - LessThan (<)
-//
-//   - LessThanOrEqual (<=)
-//
-//     Example:
-//     Only increment if the current value is less than 10000:
-//     &Uint16Condition{RelationalOperator: LessThan, Value: 10000}
-//
-// ✅ Example usage:
-//
-//	IncrementUint16(ctx, "api-quota", "user:42:limit", 250, &Uint16Condition{GreaterThanOrEqual, 100})
-func (h *hydraidego) IncrementUint16(ctx context.Context, swampName name.Name, key string, value uint16, condition *Uint16Condition) (uint16, error) {
+// Implementation detail
+// ---------------------
+// Internally this calls the HydrAIDE gRPC Increment API for uint16 and maps the optional
+// `setIfNotExist` / `setIfExist` descriptors to server-side metadata mutations. The server
+// applies exactly one of them (create vs. update) based on pre-increment existence, then
+// evaluates the condition atomically and returns both the resulting value and metadata.
+func (h *hydraidego) IncrementUint16(ctx context.Context, swampName name.Name, key string, value uint16, condition *Uint16Condition, setIfNotExist *IncrementMetaRequest, setIfExist *IncrementMetaRequest) (uint16, *IncrementMetaResponse, error) {
 	r := &hydraidepbgo.IncrementUint16Request{
 		IslandID:    swampName.GetIslandID(h.client.GetAllIslands()),
 		SwampName:   swampName.Get(),
 		Key:         key,
 		IncrementBy: uint32(value),
+	}
+
+	if setIfNotExist != nil {
+		r.SetIfNotExist = convertMetaToProtoMeta(setIfNotExist)
+	}
+	if setIfExist != nil {
+		r.SetIfExist = convertMetaToProtoMeta(setIfExist)
 	}
 
 	if condition != nil {
@@ -3201,79 +3688,137 @@ func (h *hydraidego) IncrementUint16(ctx context.Context, swampName name.Name, k
 
 	response, err := h.client.GetServiceClient(swampName).IncrementUint16(ctx, r)
 	if err != nil {
-		return 0, errorHandler(err)
+		return 0, nil, errorHandler(err)
 	}
 
 	if response.GetIsIncremented() {
-		return uint16(response.GetValue()), nil
+		return uint16(response.GetValue()), convertIncrementMetaResponse(response.GetMetadata()), nil
 	}
 
-	return 0, NewError(ErrConditionNotMet, fmt.Sprintf("%s: %d", errorMessageConditionNotMet, response.GetValue()))
+	return uint16(response.GetValue()), convertIncrementMetaResponse(response.GetMetadata()), NewError(ErrConditionNotMet, fmt.Sprintf("%s: %d", errorMessageConditionNotMet, response.GetValue()))
 }
 
-// IncrementUint32 performs an atomic uint32 increment on a Treasure inside the given Swamp.
+// IncrementUint32 performs an atomic uint32 increment on a Treasure inside the given Swamp,
+// with optional, server-side metadata control for both the "create" and "update" paths.
 //
-// If the specified Swamp or Treasure does not exist, this function will automatically create them.
-// This means you do **not** need to call CatalogCreate or CatalogSave beforehand.
+// Core behavior
+// -------------
+//   - If the Swamp or Treasure does not exist, HydrAIDE will **create** them.
+//   - If a `condition` is provided, the increment runs **atomically on the server** only if
+//     the current value satisfies the given relational operator (>, >=, ==, etc.).
+//   - The function **always returns** the value and metadata that are currently stored for
+//     the Treasure. If the condition is not met, you'll get:
+//   - the current value (not incremented),
+//   - the resolved metadata (see below),
+//   - and `ErrConditionNotMet` as the error.
+//     This makes it easy to branch your logic without an extra read.
 //
-// If a condition is provided, the increment will only occur if the current value
-// satisfies the given relational constraint — evaluated **atomically on the server**.
+// Metadata control (optional)
+// ---------------------------
+// You can provide two optional metadata descriptors to control lifecycle/audit fields
+// **in the same atomic call**, without pre-checking existence on the client:
 //
-// 🧠 This is the Uint32 version of HydrAIDE’s type-safe increment operation.
+//   - setIfNotExist (*IncrementMetaRequest):
+//     Applied if the Treasure must be **created** as part of this call.
+//     Typical use: set CreatedAt/CreatedBy and an initial ExpiredAt.
 //
-//	The same logic applies for other numeric types (Uint8, Uint16, Float64, etc.),
-//	and this function can be duplicated/adapted accordingly.
+//   - setIfExist (*IncrementMetaRequest):
+//     Applied if the Treasure **already exists** (i.e., an update path).
+//     Typical use: set UpdatedAt/UpdatedBy and optionally refresh ExpiredAt.
 //
-// Parameters:
-//   - ctx:        context for cancellation and timeout
-//   - swampName:  target Swamp where the Treasure lives
-//   - key:        unique key of the Treasure to increment
-//   - value:      the delta (positive value to add — negative values are not supported)
-//   - condition:  optional constraint on the current value before incrementing
+// Fields in IncrementMetaRequest:
+//   - SetCreatedAt (bool) → when true, server sets CreatedAt=now.UTC()
+//   - SetCreatedBy (string) → when non-empty, server sets CreatedBy to this value
+//   - SetUpdatedAt (bool) → when true, server sets UpdatedAt=now.UTC()
+//   - SetUpdatedBy (string) → when non-empty, server sets UpdatedBy to this value
+//   - ExpiredAt (time.Time) → when non-zero, server sets ExpiredAt to this instant
 //
-// Returns:
-//   - new uint32 value after increment (if successful)
-//   - error if the operation failed, or if the condition was not met
+// The server chooses which of the two (create/update) descriptors to apply based on whether
+// the Treasure existed **before** the increment attempt. You do **not** need to check
+// existence on the client side.
 //
-// ⚠️ Notes:
-//   - If the Treasure exists but holds a value of a **different type** (e.g., int64 or float32), this operation will fail.
-//   - Since this is an unsigned type, **negative delta values are not allowed** (and may cause underflow).
-//   - All proto values are transmitted and returned as uint32 — no conversion is required in this case.
-//   - If the condition is not met, the function returns a specific ErrConditionNotMet error.
+// Parameters
+// ----------
+//   - ctx:           context for cancellation and timeout
+//   - swampName:     target Swamp where the Treasure lives
+//   - key:           unique key of the Treasure to increment
+//   - value:         the delta (positive or negative) to add
+//   - condition:     optional constraint on the current value before incrementing
+//   - setIfNotExist: optional metadata settings if the Treasure must be created
+//   - setIfExist:    optional metadata settings if the Treasure already exists
 //
-// ✅ Conditional Logic:
+// Returns
+// -------
+//   - uint32:                 the value stored after the call (incremented if condition succeeded)
+//   - *IncrementMetaResponse: the resolved metadata (CreatedAt/By, UpdatedAt/By, ExpiredAt)
+//   - error:                  nil on success; `ErrConditionNotMet` if the condition failed;
+//     or a transport/validation error
 //
-//   - The `condition` lets you define rules for when an increment should occur.
+// Notes
+// -----
+//   - Decrementing is supported by passing a “negative” delta conceptually — for uint32 this
+//     means you must handle wrap-around semantics yourself. Prefer signed types if you need
+//     true negative deltas.
+//   - If the Treasure exists but has a **different value type** (e.g. float64), the call fails.
+//   - Proto values travel as uint32 on the wire and remain uint32 here (no narrowing conversion).
+//   - Conditional operators (Equal, NotEqual, GreaterThan, GreaterThanOrEqual,
+//     LessThan, LessThanOrEqual) compare against the **current** stored value.
 //
-//   - It uses a `RelationalOperator` enum to compare the **current value** against a reference.
+// Examples
+// --------
+// 1) Increment with automatic creation + creation metadata
 //
-//     Supported operators include:
+//	newVal, meta, err := h.IncrementUint32(
+//	  ctx,
+//	  name.New().Sanctuary("scores").Realm("users").Swamp("global"),
+//	  "user:42",
+//	  1,
+//	  nil, // no condition
+//	  &IncrementMetaRequest{ // setIfNotExist
+//	    SetCreatedAt: true,
+//	    SetCreatedBy: "game-service",
+//	    ExpiredAt:    time.Now().Add(24 * time.Hour),
+//	  },
+//	  &IncrementMetaRequest{ // setIfExist
+//	    SetUpdatedAt: true,
+//	    SetUpdatedBy: "game-service",
+//	  },
+//	)
 //
-//   - Equal (==)
+//	// If "user:42" did not exist, it's created, incremented, and Created* + ExpiredAt are set.
+//	// If it existed, it's incremented and Updated* are set.
+//	// In both cases, `meta` contains the resolved metadata.
 //
-//   - NotEqual (!=)
+// 2) Conditional increment that may not run
 //
-//   - GreaterThan (>)
+//	newVal, meta, err := h.IncrementUint32(
+//	  ctx, swamp, "counter", 5,
+//	  &Uint32Condition{RelationalOperator: GreaterThan, Value: 10},
+//	  nil, nil,
+//	)
 //
-//   - GreaterThanOrEqual (>=)
+//	// If current value <= 10 → err == ErrConditionNotMet,
+//	// but you still get `newVal` (the unchanged current value) and `meta`.
 //
-//   - LessThan (<)
-//
-//   - LessThanOrEqual (<=)
-//
-//     Example:
-//     Only increment if the current value is greater than 1,000,000:
-//     &Uint32Condition{RelationalOperator: GreaterThan, Value: 1_000_000}
-//
-// ✅ Example usage:
-//
-//	IncrementUint32(ctx, "metrics", "user:42:pageviews", 100, &Uint32Condition{LessThanOrEqual, 5_000_000})
-func (h *hydraidego) IncrementUint32(ctx context.Context, swampName name.Name, key string, value uint32, condition *Uint32Condition) (uint32, error) {
+// Implementation detail
+// ---------------------
+// Internally this calls the HydrAIDE gRPC Increment API for uint32 and maps the optional
+// `setIfNotExist` / `setIfExist` descriptors to server-side metadata mutations. The server
+// applies exactly one of them (create vs. update) based on pre-increment existence, then
+// evaluates the condition atomically and returns both the resulting value and metadata.
+func (h *hydraidego) IncrementUint32(ctx context.Context, swampName name.Name, key string, value uint32, condition *Uint32Condition, setIfNotExist *IncrementMetaRequest, setIfExist *IncrementMetaRequest) (uint32, *IncrementMetaResponse, error) {
 	r := &hydraidepbgo.IncrementUint32Request{
 		IslandID:    swampName.GetIslandID(h.client.GetAllIslands()),
 		SwampName:   swampName.Get(),
 		Key:         key,
 		IncrementBy: value,
+	}
+
+	if setIfNotExist != nil {
+		r.SetIfNotExist = convertMetaToProtoMeta(setIfNotExist)
+	}
+	if setIfExist != nil {
+		r.SetIfExist = convertMetaToProtoMeta(setIfExist)
 	}
 
 	if condition != nil {
@@ -3285,79 +3830,135 @@ func (h *hydraidego) IncrementUint32(ctx context.Context, swampName name.Name, k
 
 	response, err := h.client.GetServiceClient(swampName).IncrementUint32(ctx, r)
 	if err != nil {
-		return 0, errorHandler(err)
+		return 0, nil, errorHandler(err)
 	}
 
 	if response.GetIsIncremented() {
-		return response.GetValue(), nil
+		return response.GetValue(), convertIncrementMetaResponse(response.GetMetadata()), nil
 	}
 
-	return 0, NewError(ErrConditionNotMet, fmt.Sprintf("%s: %d", errorMessageConditionNotMet, response.GetValue()))
+	return response.GetValue(), convertIncrementMetaResponse(response.GetMetadata()), NewError(ErrConditionNotMet, fmt.Sprintf("%s: %d", errorMessageConditionNotMet, response.GetValue()))
 }
 
-// IncrementUint64 performs an atomic uint64 increment on a Treasure inside the given Swamp.
+// IncrementUint64 performs an atomic uint64 increment on a Treasure inside the given Swamp,
+// with optional, server-side metadata control for both the "create" and "update" paths.
 //
-// If the specified Swamp or Treasure does not exist, this function will automatically create them.
-// This means you do **not** need to call CatalogCreate or CatalogSave beforehand.
+// Core behavior
+// -------------
+//   - If the Swamp or Treasure does not exist, HydrAIDE will **create** them.
+//   - If a `condition` is provided, the increment runs **atomically on the server** only if
+//     the current value satisfies the given relational operator (>, >=, ==, etc.).
+//   - The function **always returns** the value and metadata that are currently stored for
+//     the Treasure. If the condition is not met, you'll get:
+//   - the current value (not incremented),
+//   - the resolved metadata (see below),
+//   - and `ErrConditionNotMet` as the error.
+//     This makes it easy to branch your logic without an extra read.
 //
-// If a condition is provided, the increment will only occur if the current value
-// satisfies the given relational constraint — evaluated **atomically on the server**.
+// Metadata control (optional)
+// ---------------------------
+// You can provide two optional metadata descriptors to control lifecycle/audit fields
+// **in the same atomic call**, without pre-checking existence on the client:
 //
-// 🧠 This is the Uint64 version of HydrAIDE’s type-safe increment operation.
+//   - setIfNotExist (*IncrementMetaRequest):
+//     Applied if the Treasure must be **created** as part of this call.
+//     Typical use: set CreatedAt/CreatedBy and an initial ExpiredAt.
 //
-//	The same logic applies for other numeric types (Uint8, Uint32, Float64, etc.),
-//	and this function can be duplicated/adapted accordingly.
+//   - setIfExist (*IncrementMetaRequest):
+//     Applied if the Treasure **already exists** (i.e., an update path).
+//     Typical use: set UpdatedAt/UpdatedBy and optionally refresh ExpiredAt.
 //
-// Parameters:
-//   - ctx:        context for cancellation and timeout
-//   - swampName:  target Swamp where the Treasure lives
-//   - key:        unique key of the Treasure to increment
-//   - value:      the delta (positive value to add — negative values are not supported)
-//   - condition:  optional constraint on the current value before incrementing
+// Fields in IncrementMetaRequest:
+//   - SetCreatedAt (bool) → when true, server sets CreatedAt=now.UTC()
+//   - SetCreatedBy (string) → when non-empty, server sets CreatedBy to this value
+//   - SetUpdatedAt (bool) → when true, server sets UpdatedAt=now.UTC()
+//   - SetUpdatedBy (string) → when non-empty, server sets UpdatedBy to this value
+//   - ExpiredAt (time.Time) → when non-zero, server sets ExpiredAt to this instant
 //
-// Returns:
-//   - new uint64 value after increment (if successful)
-//   - error if the operation failed, or if the condition was not met
+// The server chooses which of the two (create/update) descriptors to apply based on whether
+// the Treasure existed **before** the increment attempt. You do **not** need to check
+// existence on the client side.
 //
-// ⚠️ Notes:
-//   - If the Treasure exists but holds a value of a **different type** (e.g., int32 or float64), this operation will fail.
-//   - Since this is an unsigned type, **negative delta values are not allowed** (and may cause underflow).
-//   - All proto values are transmitted and returned as uint64 — no conversion is required in this case.
-//   - If the condition is not met, the function returns a specific ErrConditionNotMet error.
+// Parameters
+// ----------
+//   - ctx:           context for cancellation and timeout
+//   - swampName:     target Swamp where the Treasure lives
+//   - key:           unique key of the Treasure to increment
+//   - value:         the delta to add (uint64)
+//   - condition:     optional constraint on the current value before incrementing
+//   - setIfNotExist: optional metadata settings if the Treasure must be created
+//   - setIfExist:    optional metadata settings if the Treasure already exists
 //
-// ✅ Conditional Logic:
+// Returns
+// -------
+//   - uint64:                 the value stored after the call (incremented if condition succeeded)
+//   - *IncrementMetaResponse: the resolved metadata (CreatedAt/By, UpdatedAt/By, ExpiredAt)
+//   - error:                  nil on success; `ErrConditionNotMet` if the condition failed;
+//     or a transport/validation error
 //
-//   - The `condition` lets you define rules for when an increment should occur.
+// Notes
+// -----
+//   - Unsigned underflow/overflow semantics apply. If you need negative deltas, prefer a signed type.
+//   - If the Treasure exists but has a **different value type** (e.g. float64), the call fails.
+//   - Proto values travel as uint64 on the wire and remain uint64 here (no narrowing conversion).
+//   - Conditional operators (Equal, NotEqual, GreaterThan, GreaterThanOrEqual,
+//     LessThan, LessThanOrEqual) compare against the **current** stored value.
 //
-//   - It uses a `RelationalOperator` enum to compare the **current value** against a reference.
+// Examples
+// --------
+// 1) Increment with automatic creation + creation metadata
 //
-//     Supported operators include:
+//	newVal, meta, err := h.IncrementUint64(
+//	  ctx,
+//	  name.New().Sanctuary("scores").Realm("users").Swamp("global"),
+//	  "user:42",
+//	  1,
+//	  nil, // no condition
+//	  &IncrementMetaRequest{ // setIfNotExist
+//	    SetCreatedAt: true,
+//	    SetCreatedBy: "game-service",
+//	    ExpiredAt:    time.Now().Add(24 * time.Hour),
+//	  },
+//	  &IncrementMetaRequest{ // setIfExist
+//	    SetUpdatedAt: true,
+//	    SetUpdatedBy: "game-service",
+//	  },
+//	)
 //
-//   - Equal (==)
+//	// If "user:42" did not exist, it's created, incremented, and Created* + ExpiredAt are set.
+//	// If it existed, it's incremented and Updated* are set.
+//	// In both cases, `meta` contains the resolved metadata.
 //
-//   - NotEqual (!=)
+// 2) Conditional increment that may not run
 //
-//   - GreaterThan (>)
+//	newVal, meta, err := h.IncrementUint64(
+//	  ctx, swamp, "counter", 5,
+//	  &Uint64Condition{RelationalOperator: GreaterThan, Value: 10},
+//	  nil, nil,
+//	)
 //
-//   - GreaterThanOrEqual (>=)
+//	// If current value <= 10 → err == ErrConditionNotMet,
+//	// but you still get `newVal` (the unchanged current value) and `meta`.
 //
-//   - LessThan (<)
-//
-//   - LessThanOrEqual (<=)
-//
-//     Example:
-//     Only increment if the current value is less than 1 billion:
-//     &Uint64Condition{RelationalOperator: LessThan, Value: 1_000_000_000}
-//
-// ✅ Example usage:
-//
-//	IncrementUint64(ctx, "billing", "user:abc:total-bytes-used", 1_000_000, &Uint64Condition{LessThanOrEqual, 5_000_000_000})
-func (h *hydraidego) IncrementUint64(ctx context.Context, swampName name.Name, key string, value uint64, condition *Uint64Condition) (uint64, error) {
+// Implementation detail
+// ---------------------
+// Internally this calls the HydrAIDE gRPC Increment API for uint64 and maps the optional
+// `setIfNotExist` / `setIfExist` descriptors to server-side metadata mutations. The server
+// applies exactly one of them (create vs. update) based on pre-increment existence, then
+// evaluates the condition atomically and returns both the resulting value and metadata.
+func (h *hydraidego) IncrementUint64(ctx context.Context, swampName name.Name, key string, value uint64, condition *Uint64Condition, setIfNotExist *IncrementMetaRequest, setIfExist *IncrementMetaRequest) (uint64, *IncrementMetaResponse, error) {
 	r := &hydraidepbgo.IncrementUint64Request{
 		IslandID:    swampName.GetIslandID(h.client.GetAllIslands()),
 		SwampName:   swampName.Get(),
 		Key:         key,
 		IncrementBy: value,
+	}
+
+	if setIfNotExist != nil {
+		r.SetIfNotExist = convertMetaToProtoMeta(setIfNotExist)
+	}
+	if setIfExist != nil {
+		r.SetIfExist = convertMetaToProtoMeta(setIfExist)
 	}
 
 	if condition != nil {
@@ -3369,80 +3970,136 @@ func (h *hydraidego) IncrementUint64(ctx context.Context, swampName name.Name, k
 
 	response, err := h.client.GetServiceClient(swampName).IncrementUint64(ctx, r)
 	if err != nil {
-		return 0, errorHandler(err)
+		return 0, nil, errorHandler(err)
 	}
 
 	if response.GetIsIncremented() {
-		return response.GetValue(), nil
+		return response.GetValue(), convertIncrementMetaResponse(response.GetMetadata()), nil
 	}
 
-	return 0, NewError(ErrConditionNotMet, fmt.Sprintf("%s: %d", errorMessageConditionNotMet, response.GetValue()))
+	return response.GetValue(), convertIncrementMetaResponse(response.GetMetadata()), NewError(ErrConditionNotMet, fmt.Sprintf("%s: %d", errorMessageConditionNotMet, response.GetValue()))
 }
 
-// IncrementFloat32 performs an atomic float32 increment on a Treasure inside the given Swamp.
+// IncrementFloat32 performs an atomic float32 increment on a Treasure inside the given Swamp,
+// with optional, server-side metadata control for both the "create" and "update" paths.
 //
-// If the specified Swamp or Treasure does not exist, this function will automatically create them.
-// This means you do **not** need to call CatalogCreate or CatalogSave beforehand.
+// Core behavior
+// -------------
+//   - If the Swamp or Treasure does not exist, HydrAIDE will **create** them.
+//   - If a `condition` is provided, the increment runs **atomically on the server** only if
+//     the current value satisfies the given relational operator (>, >=, ==, etc.).
+//   - The function **always returns** the value and metadata that are currently stored for
+//     the Treasure. If the condition is not met, you'll get:
+//   - the current value (not incremented),
+//   - the resolved metadata (see below),
+//   - and `ErrConditionNotMet` as the error.
+//     This makes it easy to branch your logic without an extra read.
 //
-// If a condition is provided, the increment will only occur if the current value
-// satisfies the given relational constraint — evaluated **atomically on the server**.
+// Metadata control (optional)
+// ---------------------------
+// You can provide two optional metadata descriptors to control lifecycle/audit fields
+// **in the same atomic call**, without pre-checking existence on the client:
 //
-// 🧠 This is the Float32 version of HydrAIDE’s type-safe increment operation.
+//   - setIfNotExist (*IncrementMetaRequest):
+//     Applied if the Treasure must be **created** as part of this call.
+//     Typical use: set CreatedAt/CreatedBy and an initial ExpiredAt.
 //
-//	The same logic applies for other numeric types (Int32, Float64, etc.), and this function can be
-//	duplicated/adapted accordingly.
+//   - setIfExist (*IncrementMetaRequest):
+//     Applied if the Treasure **already exists** (i.e., an update path).
+//     Typical use: set UpdatedAt/UpdatedBy and optionally refresh ExpiredAt.
 //
-// Parameters:
-//   - ctx:        context for cancellation and timeout
-//   - swampName:  target Swamp where the Treasure lives
-//   - key:        unique key of the Treasure to increment
-//   - value:      the amount to increment by (can be negative to decrement)
-//   - condition:  optional constraint on the current value before incrementing
+// Fields in IncrementMetaRequest:
+//   - SetCreatedAt (bool) → when true, server sets CreatedAt=now.UTC()
+//   - SetCreatedBy (string) → when non-empty, server sets CreatedBy to this value
+//   - SetUpdatedAt (bool) → when true, server sets UpdatedAt=now.UTC()
+//   - SetUpdatedBy (string) → when non-empty, server sets UpdatedBy to this value
+//   - ExpiredAt (time.Time) → when non-zero, server sets ExpiredAt to this instant
 //
-// Returns:
-//   - new float32 value after increment (if successful)
-//   - error if the operation failed, or if the condition was not met
+// The server chooses which of the two (create/update) descriptors to apply based on whether
+// the Treasure existed **before** the increment attempt. You do **not** need to check
+// existence on the client side.
 //
-// ⚠️ Notes:
-//   - If the Treasure exists but holds a value of a **different type** (e.g., int64), this operation will fail.
-//   - Decrementing is supported by simply passing a **negative delta value**.
-//   - All proto values are transmitted as float32 and returned as float32.
-//   - Floating-point equality comparisons (`==`, `!=`) may be affected by precision limits — use with care.
-//   - If the condition is not met, the function returns a specific ErrConditionNotMet error.
+// Parameters
+// ----------
+//   - ctx:           context for cancellation and timeout
+//   - swampName:     target Swamp where the Treasure lives
+//   - key:           unique key of the Treasure to increment
+//   - value:         the delta (positive or negative) to add
+//   - condition:     optional constraint on the current value before incrementing
+//   - setIfNotExist: optional metadata settings if the Treasure must be created
+//   - setIfExist:    optional metadata settings if the Treasure already exists
 //
-// ✅ Conditional Logic:
+// Returns
+// -------
+//   - float32:               the value stored after the call (incremented if condition succeeded)
+//   - *IncrementMetaResponse: the resolved metadata (CreatedAt/By, UpdatedAt/By, ExpiredAt)
+//   - error:                  nil on success; `ErrConditionNotMet` if the condition failed;
+//     or a transport/validation error
 //
-//   - The `condition` lets you define rules for when an increment should occur.
+// Notes
+// -----
+//   - Decrementing is supported by passing a negative delta.
+//   - If the Treasure exists but has a **different value type** (e.g. int64), the call fails.
+//   - Conditional operators (Equal, NotEqual, GreaterThan, GreaterThanOrEqual,
+//     LessThan, LessThanOrEqual) compare against the **current** stored value.
+//   - Floating point precision follows Go's float32 rules; tiny differences can
+//     affect equality-based conditions.
 //
-//   - It uses a `RelationalOperator` enum to compare the **current value** against a reference.
+// Examples
+// --------
+// 1) Increment with automatic creation + creation metadata
 //
-//     Supported operators include:
+//	newVal, meta, err := h.IncrementFloat32(
+//	  ctx,
+//	  name.New().Sanctuary("scores").Realm("users").Swamp("global"),
+//	  "user:42",
+//	  1.5,
+//	  nil, // no condition
+//	  &IncrementMetaRequest{ // setIfNotExist
+//	    SetCreatedAt: true,
+//	    SetCreatedBy: "calc-service",
+//	    ExpiredAt:    time.Now().Add(24 * time.Hour),
+//	  },
+//	  &IncrementMetaRequest{ // setIfExist
+//	    SetUpdatedAt: true,
+//	    SetUpdatedBy: "calc-service",
+//	  },
+//	)
 //
-//   - Equal (==)
+//	// If "user:42" did not exist, it's created, incremented, and Created* + ExpiredAt are set.
+//	// If it existed, it's incremented and Updated* are set.
+//	// In both cases, `meta` contains the resolved metadata.
 //
-//   - NotEqual (!=)
+// 2) Conditional increment that may not run
 //
-//   - GreaterThan (>)
+//	newVal, meta, err := h.IncrementFloat32(
+//	  ctx, swamp, "ratio", 0.25,
+//	  &Float32Condition{RelationalOperator: GreaterThan, Value: 5.0},
+//	  nil, nil,
+//	)
 //
-//   - GreaterThanOrEqual (>=)
+//	// If current value <= 5.0 → err == ErrConditionNotMet,
+//	// but you still get `newVal` (the unchanged current value) and `meta`.
 //
-//   - LessThan (<)
-//
-//   - LessThanOrEqual (<=)
-//
-//     Example:
-//     Only increment if the current value is less than 99.9:
-//     &Float32Condition{RelationalOperator: LessThan, Value: 99.9}
-//
-// ✅ Example usage:
-//
-//	IncrementFloat32(ctx, "analytics", "user:session-duration", 2.5, &Float32Condition{GreaterThan, 0})
-func (h *hydraidego) IncrementFloat32(ctx context.Context, swampName name.Name, key string, value float32, condition *Float32Condition) (float32, error) {
+// Implementation detail
+// ---------------------
+// Internally this calls the HydrAIDE gRPC Increment API for float32 and maps the optional
+// `setIfNotExist` / `setIfExist` descriptors to server-side metadata mutations. The server
+// applies exactly one of them (create vs. update) based on pre-increment existence, then
+// evaluates the condition atomically and returns both the resulting value and metadata.
+func (h *hydraidego) IncrementFloat32(ctx context.Context, swampName name.Name, key string, value float32, condition *Float32Condition, setIfNotExist *IncrementMetaRequest, setIfExist *IncrementMetaRequest) (float32, *IncrementMetaResponse, error) {
 	r := &hydraidepbgo.IncrementFloat32Request{
 		IslandID:    swampName.GetIslandID(h.client.GetAllIslands()),
 		SwampName:   swampName.Get(),
 		Key:         key,
 		IncrementBy: value,
+	}
+
+	if setIfNotExist != nil {
+		r.SetIfNotExist = convertMetaToProtoMeta(setIfNotExist)
+	}
+	if setIfExist != nil {
+		r.SetIfExist = convertMetaToProtoMeta(setIfExist)
 	}
 
 	if condition != nil {
@@ -3454,80 +4111,137 @@ func (h *hydraidego) IncrementFloat32(ctx context.Context, swampName name.Name, 
 
 	response, err := h.client.GetServiceClient(swampName).IncrementFloat32(ctx, r)
 	if err != nil {
-		return 0, errorHandler(err)
+		return 0, nil, errorHandler(err)
 	}
 
 	if response.GetIsIncremented() {
-		return response.GetValue(), nil
+		return response.GetValue(), convertIncrementMetaResponse(response.GetMetadata()), nil
 	}
 
-	return 0, NewError(ErrConditionNotMet, fmt.Sprintf("%s: %f", errorMessageConditionNotMet, response.GetValue()))
+	return response.GetValue(), convertIncrementMetaResponse(response.GetMetadata()), NewError(ErrConditionNotMet, fmt.Sprintf("%s: %f", errorMessageConditionNotMet, response.GetValue()))
 }
 
-// IncrementFloat64 performs an atomic float64 increment on a Treasure inside the given Swamp.
+// IncrementFloat64 performs an atomic float64 increment on a Treasure inside the given Swamp,
+// with optional, server-side metadata control for both the "create" and "update" paths.
 //
-// If the specified Swamp or Treasure does not exist, this function will automatically create them.
-// This means you do **not** need to call CatalogCreate or CatalogSave beforehand.
+// Core behavior
+// -------------
+//   - If the Swamp or Treasure does not exist, HydrAIDE will **create** them.
+//   - If a `condition` is provided, the increment runs **atomically on the server** only if
+//     the current value satisfies the given relational operator (>, >=, ==, etc.).
+//   - The function **always returns** the value and metadata that are currently stored for
+//     the Treasure. If the condition is not met, you'll get:
+//   - the current value (not incremented),
+//   - the resolved metadata (see below),
+//   - and `ErrConditionNotMet` as the error.
+//     This makes it easy to branch your logic without an extra read.
 //
-// If a condition is provided, the increment will only occur if the current value
-// satisfies the given relational constraint — evaluated **atomically on the server**.
+// Metadata control (optional)
+// ---------------------------
+// You can provide two optional metadata descriptors to control lifecycle/audit fields
+// **in the same atomic call**, without pre-checking existence on the client:
 //
-// 🧠 This is the Float64 version of HydrAIDE’s type-safe increment operation.
+//   - setIfNotExist (*IncrementMetaRequest):
+//     Applied if the Treasure must be **created** as part of this call.
+//     Typical use: set CreatedAt/CreatedBy and an initial ExpiredAt.
 //
-//	The same logic applies for other numeric types (Int64, Float32, etc.), and this function can be
-//	duplicated/adapted accordingly.
+//   - setIfExist (*IncrementMetaRequest):
+//     Applied if the Treasure **already exists** (i.e., an update path).
+//     Typical use: set UpdatedAt/UpdatedBy and optionally refresh ExpiredAt.
 //
-// Parameters:
-//   - ctx:        context for cancellation and timeout
-//   - swampName:  target Swamp where the Treasure lives
-//   - key:        unique key of the Treasure to increment
-//   - value:      the amount to increment by (can be negative to decrement)
-//   - condition:  optional constraint on the current value before incrementing
+// Fields in IncrementMetaRequest:
+//   - SetCreatedAt (bool) → when true, server sets CreatedAt=now.UTC()
+//   - SetCreatedBy (string) → when non-empty, server sets CreatedBy to this value
+//   - SetUpdatedAt (bool) → when true, server sets UpdatedAt=now.UTC()
+//   - SetUpdatedBy (string) → when non-empty, server sets UpdatedBy to this value
+//   - ExpiredAt (time.Time) → when non-zero, server sets ExpiredAt to this instant
 //
-// Returns:
-//   - new float64 value after increment (if successful)
-//   - error if the operation failed, or if the condition was not met
+// The server chooses which of the two (create/update) descriptors to apply based on whether
+// the Treasure existed **before** the increment attempt. You do **not** need to check
+// existence on the client side.
 //
-// ⚠️ Notes:
-//   - If the Treasure exists but holds a value of a **different type** (e.g., int64), this operation will fail.
-//   - Decrementing is supported by simply passing a **negative delta value**.
-//   - All proto values are transmitted and returned as float64 — no conversion needed.
-//   - Floating-point equality comparisons (`==`, `!=`) may be affected by precision limits — consider using tolerances.
-//   - If the condition is not met, the function returns a specific ErrConditionNotMet error.
+// Parameters
+// ----------
+//   - ctx:           context for cancellation and timeout
+//   - swampName:     target Swamp where the Treasure lives
+//   - key:           unique key of the Treasure to increment
+//   - value:         the delta (positive or negative) to add
+//   - condition:     optional constraint on the current value before incrementing
+//   - setIfNotExist: optional metadata settings if the Treasure must be created
+//   - setIfExist:    optional metadata settings if the Treasure already exists
 //
-// ✅ Conditional Logic:
+// Returns
+// -------
+//   - float64:               the value stored after the call (incremented if condition succeeded)
+//   - *IncrementMetaResponse: the resolved metadata (CreatedAt/By, UpdatedAt/By, ExpiredAt)
+//   - error:                  nil on success; `ErrConditionNotMet` if the condition failed;
+//     or a transport/validation error
 //
-//   - The `condition` lets you define rules for when an increment should occur.
+// Notes
+// -----
+//   - Decrementing is supported by passing a negative delta.
+//   - If the Treasure exists but has a **different value type** (e.g. int32), the call fails.
+//   - Conditional operators (Equal, NotEqual, GreaterThan, GreaterThanOrEqual,
+//     LessThan, LessThanOrEqual) compare against the **current** stored value.
+//   - Floating point precision follows Go's float64 rules; tiny differences can
+//     affect equality-based conditions.
 //
-//   - It uses a `RelationalOperator` enum to compare the **current value** against a reference.
+// Examples
+// --------
+// 1) Increment with automatic creation + creation metadata
 //
-//     Supported operators include:
+//	newVal, meta, err := h.IncrementFloat64(
+//	  ctx,
+//	  name.New().Sanctuary("scores").Realm("users").Swamp("global"),
+//	  "user:42",
+//	  2.75,
+//	  nil, // no condition
+//	  &IncrementMetaRequest{ // setIfNotExist
+//	    SetCreatedAt: true,
+//	    SetCreatedBy: "calc-service",
+//	    ExpiredAt:    time.Now().Add(24 * time.Hour),
+//	  },
+//	  &IncrementMetaRequest{ // setIfExist
+//	    SetUpdatedAt: true,
+//	    SetUpdatedBy: "calc-service",
+//	  },
+//	)
 //
-//   - Equal (==)
+//	// If "user:42" did not exist, it's created, incremented, and Created* + ExpiredAt are set.
+//	// If it existed, it's incremented and Updated* are set.
+//	// In both cases, `meta` contains the resolved metadata.
 //
-//   - NotEqual (!=)
+// 2) Conditional increment that may not run
 //
-//   - GreaterThan (>)
+//	newVal, meta, err := h.IncrementFloat64(
+//	  ctx, swamp, "ratio", 0.5,
+//	  &Float64Condition{RelationalOperator: GreaterThan, Value: 10.0},
+//	  nil, nil,
+//	)
 //
-//   - GreaterThanOrEqual (>=)
+//	// If current value <= 10.0 → err == ErrConditionNotMet,
+//	// but you still get `newVal` (the unchanged current value) and `meta`.
 //
-//   - LessThan (<)
-//
-//   - LessThanOrEqual (<=)
-//
-//     Example:
-//     Only increment if the current value is greater than or equal to 1000.0:
-//     &Float64Condition{RelationalOperator: GreaterThanOrEqual, Value: 1000.0}
-//
-// ✅ Example usage:
-//
-//	IncrementFloat64(ctx, "finance", "user:abc:wallet-balance", 49.95, &Float64Condition{LessThan, 10_000.0})
-func (h *hydraidego) IncrementFloat64(ctx context.Context, swampName name.Name, key string, value float64, condition *Float64Condition) (float64, error) {
+// Implementation detail
+// ---------------------
+// Internally this calls the HydrAIDE gRPC Increment API for float64 and maps the optional
+// `setIfNotExist` / `setIfExist` descriptors to server-side metadata mutations. The server
+// applies exactly one of them (create vs. update) based on pre-increment existence, then
+// evaluates the condition atomically and returns both the resulting value and metadata.
+func (h *hydraidego) IncrementFloat64(ctx context.Context, swampName name.Name, key string, value float64, condition *Float64Condition, setIfNotExist *IncrementMetaRequest, setIfExist *IncrementMetaRequest) (float64, *IncrementMetaResponse, error) {
+
 	r := &hydraidepbgo.IncrementFloat64Request{
 		IslandID:    swampName.GetIslandID(h.client.GetAllIslands()),
 		SwampName:   swampName.Get(),
 		Key:         key,
 		IncrementBy: value,
+	}
+
+	if setIfNotExist != nil {
+		r.SetIfNotExist = convertMetaToProtoMeta(setIfNotExist)
+	}
+	if setIfExist != nil {
+		r.SetIfExist = convertMetaToProtoMeta(setIfExist)
 	}
 
 	if condition != nil {
@@ -3539,14 +4253,15 @@ func (h *hydraidego) IncrementFloat64(ctx context.Context, swampName name.Name, 
 
 	response, err := h.client.GetServiceClient(swampName).IncrementFloat64(ctx, r)
 	if err != nil {
-		return 0, errorHandler(err)
+		return 0, nil, errorHandler(err)
 	}
 
 	if response.GetIsIncremented() {
-		return response.GetValue(), nil
+		return response.GetValue(), convertIncrementMetaResponse(response.GetMetadata()), nil
 	}
 
-	return 0, NewError(ErrConditionNotMet, fmt.Sprintf("%s: %f", errorMessageConditionNotMet, response.GetValue()))
+	return response.GetValue(), convertIncrementMetaResponse(response.GetMetadata()), NewError(ErrConditionNotMet, fmt.Sprintf("%s: %f", errorMessageConditionNotMet, response.GetValue()))
+
 }
 
 type KeyValuesPair struct {

@@ -3,26 +3,25 @@ package e2etests
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"os"
+	"strconv"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
 	"github.com/hydraide/hydraide/app/server/server"
 	"github.com/hydraide/hydraide/generated/hydraidepbgo"
 	"github.com/hydraide/hydraide/sdk/go/hydraidego/client"
 	"github.com/hydraide/hydraide/sdk/go/hydraidego/name"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	"log/slog"
-	"os"
-	"sync"
-	"testing"
-	"time"
 )
 
 var serverInterface server.Server
 var clientInterface client.Client
 var serverGlobalName name.Name
-
-const (
-	testPort = 4888
-)
 
 func TestMain(m *testing.M) {
 
@@ -53,11 +52,31 @@ func setup() {
 		panic("HYDRA_CERT environment variable is not set")
 	}
 
+	if os.Getenv("HYDRA_E2E_GRPC_CONN_ANALYSIS") == "" {
+		slog.Warn("HYDRA_E2E_GRPC_CONN_ANALYSIS environment variable is not set, using default value: false")
+		if err := os.Setenv("HYDRA_E2E_GRPC_CONN_ANALYSIS", "false"); err != nil {
+			slog.Error("error while setting HYDRA_E2E_GRPC_CONN_ANALYSIS environment variable", "error", err)
+			panic(fmt.Sprintf("error while setting HYDRA_E2E_GRPC_CONN_ANALYSIS environment variable: %v", err))
+		}
+	}
+
+	port := strings.Split(os.Getenv("HYDRA_TEST_SERVER"), ":")
+	if len(port) != 2 {
+		slog.Error("HYDRA_TEST_SERVER environment variable is not set or invalid")
+		panic("HYDRA_TEST_SERVER environment variable is not set or invalid")
+	}
+
+	portAsNUmber, err := strconv.Atoi(port[1])
+	if err != nil {
+		slog.Error("HYDRA_TEST_SERVER port is not a valid number", "error", err)
+		panic(fmt.Sprintf("HYDRA_TEST_SERVER port is not a valid number: %v", err))
+	}
+
 	// start the new Hydra server
 	serverInterface = server.New(&server.Configuration{
 		CertificateCrtFile:  os.Getenv("HYDRA_SERVER_CRT"),
 		CertificateKeyFile:  os.Getenv("HYDRA_SERVER_KEY"),
-		HydraServerPort:     testPort,
+		HydraServerPort:     portAsNUmber,
 		HydraMaxMessageSize: 1024 * 1024 * 1024, // 1 GB
 	})
 
@@ -85,7 +104,7 @@ func createGrpcClient() {
 	// create a new gRPC client object
 	servers := []*client.Server{
 		{
-			Host:         fmt.Sprintf("localhost:%d", testPort),
+			Host:         os.Getenv("HYDRA_TEST_SERVER"),
 			FromIsland:   0,
 			ToIsland:     100,
 			CertFilePath: os.Getenv("HYDRA_CERT"),
@@ -94,7 +113,7 @@ func createGrpcClient() {
 
 	// 100 folders and 2 gig message size
 	clientInterface = client.New(servers, 100, 2147483648)
-	if err := clientInterface.Connect(true); err != nil {
+	if err := clientInterface.Connect(false); err != nil {
 		slog.Error("error while connecting to the server", "error", err)
 	}
 
@@ -376,6 +395,51 @@ func TestGateway_SubscribeToEvent(t *testing.T) {
 	wg.Wait()
 
 	slog.Info("all events received successfully")
+
+}
+
+func TestGateway_Increase(t *testing.T) {
+
+	writeInterval := int64(1)
+	maxFileSize := int64(65536)
+
+	swampPattern := name.New().Sanctuary("dizzlets").Realm("*").Swamp("*")
+	selectedClient := clientInterface.GetServiceClient(swampPattern)
+	_, err := selectedClient.RegisterSwamp(context.Background(), &hydraidepbgo.RegisterSwampRequest{
+		SwampPattern:   swampPattern.Get(),
+		CloseAfterIdle: int64(3600),
+		WriteInterval:  &writeInterval,
+		MaxFileSize:    &maxFileSize,
+	})
+
+	swampName := name.New().Sanctuary("dizzlets").Realm("testing").Swamp("incrementInt16")
+	swampClient := clientInterface.GetServiceClient(swampName)
+	defer func() {
+		_, err = swampClient.Destroy(context.Background(), &hydraidepbgo.DestroyRequest{
+			SwampName: swampName.Get(),
+		})
+		assert.NoError(t, err)
+	}()
+
+	key := "increment-key"
+	// try to set a value to the swamp
+	response, err := swampClient.IncrementInt16(context.Background(), &hydraidepbgo.IncrementInt16Request{
+		SwampName:   swampName.Get(),
+		Key:         key,
+		IncrementBy: 1,
+		Condition:   nil,
+		SetIfNotExist: &hydraidepbgo.IncrementRequestMetadata{
+			ExpiredAt: timestamppb.New(time.Now().UTC().Add(1 * time.Hour)),
+		},
+	})
+
+	assert.NoError(t, err)
+	assert.NotNil(t, response)
+
+	slog.Debug("response from the server", "response", response)
+
+	assert.Equal(t, int32(1), response.GetValue(), "the value should be 1")
+	assert.Greater(t, response.GetMetadata().GetExpiredAt().AsTime().Unix(), time.Now().UTC().Add(30*time.Minute).Unix(), "the expiration time should be in the future")
 
 }
 
