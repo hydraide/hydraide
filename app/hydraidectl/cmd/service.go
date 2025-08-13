@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	buildmeta "github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/buildmetadata"
+	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/elevation"
 	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/filesystem"
 	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/servicehelper"
 	"github.com/spf13/cobra"
@@ -15,13 +16,13 @@ import (
 var instanceName string
 var noPrompt bool
 
-const (
-	TEMP_FILENAME = "hydraide-cache"
-)
-
 var serviceCmd = &cobra.Command{
 	Use:   "service",
-	Short: "Set up a persistent service for hydraserver",
+	Short: "Set up a persistent service for HydrAIDE and start it",
+	Long: `Configures HydrAIDE to run as a persistent background service on your system.
+This command registers the current HydrAIDE instance as an OS-level service,
+ensuring it starts automatically on system boot and keeps running in the background.
+Once installed, the service is started immediately.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if instanceName == "" {
 			fmt.Println("Please provide a unique instance name using the --instance flag.")
@@ -42,9 +43,8 @@ var serviceCmd = &cobra.Command{
 			return
 		}
 
-		if os.Geteuid() != 0 {
-			fmt.Println("This command must be run as root or with sudo to create a system service.")
-			fmt.Println("Please run 'sudo hydraidectl service --instance " + instanceName + "'")
+		if !elevation.IsElevated() {
+			fmt.Println(elevation.Hint(instanceName))
 			return
 		}
 
@@ -99,5 +99,9 @@ func init() {
 
 	serviceCmd.Flags().StringVarP(&instanceName, "instance", "i", "", "Unique name for the service instance")
 	serviceCmd.Flags().BoolVar(&noPrompt, "no-prompt", false, "Skip prompts and enable/start the service automatically")
-	serviceCmd.MarkFlagRequired("instance")
+	if err := serviceCmd.MarkFlagRequired("instance"); err != nil {
+		fmt.Println("Error marking 'instance' flag as required:", err)
+		os.Exit(1)
+	}
+
 }

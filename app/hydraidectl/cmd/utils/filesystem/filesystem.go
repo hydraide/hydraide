@@ -3,9 +3,13 @@ package filesystem
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
+	"time"
 )
 
 // FileSystem defines an interface for common file and directory operations.
@@ -152,7 +156,11 @@ func (fs *fileSystemImpl) CreateFileOnly(ctx context.Context, path string, perm 
 		fs.logger.ErrorContext(ctx, "Failed to create empty file", "path", cleanPath, "error", err)
 		return fmt.Errorf("failed to create empty file %s: %w", cleanPath, err)
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			fs.logger.ErrorContext(ctx, "Failed to close file after creation", "path", cleanPath, "error", err)
+		}
+	}()
 
 	// Set file permissions
 	if err := file.Chmod(perm); err != nil {
@@ -263,17 +271,194 @@ func (fs *fileSystemImpl) RemoveDir(ctx context.Context, path string) error {
 	return nil
 }
 
-// RemoveDir implements the RemoveDir method of the FileSystem interface.
+// MoveFile moves a file from the given source path to the destination path,
+// ensuring the target directory exists before attempting the move.
+//
+// Behavior:
+//  1. Cleans and normalizes both source and destination paths.
+//  2. Ensures the destination directory exists by creating it (with 0755 permissions) if missing.
+//  3. Attempts a fast move via os.Rename() when possible (same filesystem).
+//  4. If the move fails due to a cross-device error, falls back to a copy-then-delete strategy.
+//  5. Logs detailed debug, info, and error messages for each step and outcome.
+//  6. Returns a wrapped error if the operation fails at any stage.
 func (fs *fileSystemImpl) MoveFile(ctx context.Context, src, dst string) error {
 	cleanSrc := filepath.Clean(src)
 	cleanDst := filepath.Clean(dst)
 	fs.logger.DebugContext(ctx, "Moving file", "from", cleanSrc, "to", cleanDst)
-	if err := os.Rename(cleanSrc, cleanDst); err != nil {
+
+	// Ensure target dir exists before any move attempt
+	if err := os.MkdirAll(filepath.Dir(cleanDst), 0o755); err != nil {
+		fs.logger.ErrorContext(ctx, "Failed to create target directory", "error", err)
+		return fmt.Errorf("failed to create target directory %s: %w", filepath.Dir(cleanDst), err)
+	}
+
+	// Fast path
+	if err := os.Rename(cleanSrc, cleanDst); err == nil {
+		fs.logger.InfoContext(ctx, "File moved successfully (rename)")
+		return nil
+	} else if isCrossDevice(cleanSrc, cleanDst, err) {
+		fs.logger.DebugContext(ctx, "Cross-device move detected, falling back to copy+delete")
+		if err := fs.copyThenReplace(ctx, cleanSrc, cleanDst); err != nil {
+			fs.logger.ErrorContext(ctx, "Copy+delete fallback failed", "error", err)
+			return fmt.Errorf("failed to move file from %s to %s: %w", cleanSrc, cleanDst, err)
+		}
+		fs.logger.InfoContext(ctx, "File moved successfully (copy+delete)")
+		return nil
+	} else {
 		fs.logger.ErrorContext(ctx, "Failed to move file", "error", err)
 		return fmt.Errorf("failed to move file from %s to %s: %w", cleanSrc, cleanDst, err)
 	}
-	fs.logger.InfoContext(ctx, "File moved successfully")
+}
+
+// isCrossDevice detects cross-device/drive moves.
+// On Unix it checks for EXDEV; on Windows it compares drive letters (C:, D:, G:...).
+func isCrossDevice(src, dst string, renameErr error) bool {
+	// Unix-like: EXDEV
+	// (We avoid importing syscall/windows-specific constants; EXDEV is portable enough for Unix.)
+	var exdev error
+	// syscall.EXDEV is available on Unix builds; to keep this file portable without build tags,
+	// we use a heuristic: if volumes differ on Windows, treat as cross-device; on others return false unless we can match EXDEV.
+	// If you want exact EXDEV matching on Unix, gate a tiny build-tagged helper, but this is usually enough.
+
+	if runtime.GOOS == "windows" {
+		// Different drive letters => cross-device
+		return !strings.EqualFold(filepath.VolumeName(src), filepath.VolumeName(dst))
+	}
+
+	// Best-effort: many Go runtimes wrap EXDEV; try string contains as a fallback hint.
+	// (Optional: import "syscall" and check errors.Is(err, syscall.EXDEV) behind !windows build tag.)
+	_ = exdev // placeholder to show intent
+	// Loose heuristic for non-Windows: if rename failed and paths are on different mount roots,
+	// callers will still hit fallback only when needed; otherwise the first rename would have succeeded.
+	return strings.Contains(strings.ToLower(renameErr.Error()), "cross-device") ||
+		strings.Contains(strings.ToLower(renameErr.Error()), "exdev")
+}
+
+// copyThenReplace copies src -> dst atomically (temp file + rename), then removes src.
+func (fs *fileSystemImpl) copyThenReplace(ctx context.Context, src, dst string) error {
+	// Ensure target dir exists
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return fmt.Errorf("create target dir: %w", err)
+	}
+
+	// If destination exists, remove it to mimic "replace" semantics across platforms
+	if _, err := os.Lstat(dst); err == nil {
+		if err := os.Remove(dst); err != nil {
+			return fmt.Errorf("remove existing destination: %w", err)
+		}
+	}
+
+	// Open source
+	sf, err := os.Open(src)
+	if err != nil {
+		return fmt.Errorf("open src: %w", err)
+	}
+	defer func() {
+		if err := sf.Close(); err != nil {
+			fs.logger.ErrorContext(ctx, "Failed to close source file", "path", src, "error", err)
+		}
+	}()
+
+	// Stat source for mode
+	st, err := sf.Stat()
+	if err != nil {
+		return fmt.Errorf("stat src: %w", err)
+	}
+
+	// Temp file in destination dir for atomic rename
+	tmp := dst + ".tmp-copy"
+	df, err := os.OpenFile(tmp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, st.Mode())
+	if err != nil {
+		return fmt.Errorf("create temp dst: %w", err)
+	}
+
+	// Copy
+	if _, err := io.Copy(df, sf); err != nil {
+		if err := df.Close(); err != nil {
+			fs.logger.ErrorContext(ctx, "Failed to close destination file", "path", tmp, "error", err)
+			// Attempt to remove temp file even if close failed
+			_ = os.Remove(tmp)
+			return fmt.Errorf("close dst after copy error: %w", err)
+		}
+		if err := os.Remove(tmp); err != nil {
+			fs.logger.ErrorContext(ctx, "Failed to remove temp file after copy error", "path", tmp, "error", err)
+			// Log but do not return here; we want to return the original copy error
+			return fmt.Errorf("remove temp file after copy error: %w", err)
+		}
+		return fmt.Errorf("copy data: %w", err)
+	}
+
+	// Flush to disk
+	if err := df.Sync(); err != nil {
+		_ = df.Close()
+		_ = os.Remove(tmp)
+		return fmt.Errorf("sync dst: %w", err)
+	}
+	if err := df.Close(); err != nil {
+		_ = os.Remove(tmp)
+		return fmt.Errorf("close dst: %w", err)
+	}
+
+	// Atomic rename temp -> final
+	if err := os.Rename(tmp, dst); err != nil {
+		_ = os.Remove(tmp)
+		return fmt.Errorf("rename temp to final: %w", err)
+	}
+
+	// Remove source with Windows-friendly retry
+	if err := fs.removeWithRetry(ctx, src); err != nil {
+		return fmt.Errorf("remove src after copy (after retries): %w", err)
+	}
+
 	return nil
+}
+
+// removeWithRetry attempts to delete a file with multiple retries.
+// This is mainly needed for Windows, where file deletion can fail if the file
+// is still locked or in use by another process (e.g. antivirus scan, delayed file close).
+//
+// On Windows, unlike Linux/Unix, a file cannot be deleted while any process
+// still has an open handle to it. This means that even right after writing
+// or copying a file, the OS or another program might briefly keep it locked.
+// Common causes:
+//   - Antivirus or indexing services scanning the file
+//   - Another process (even our own) not having closed it yet
+//   - Slow filesystem flushes on network or external drives
+//
+// This helper works around the issue by:
+//  1. Forcing file permissions to writable in case it's read-only.
+//  2. Retrying deletion multiple times (up to ~3 seconds total) with exponential backoff.
+//  3. Respecting the provided context for early cancellation.
+//
+// If all attempts fail, it returns the last error.
+func (fs *fileSystemImpl) removeWithRetry(ctx context.Context, path string) error {
+	// Retry parameters: 8 attempts, starting at 50ms and doubling each time (~3s total wait)
+	const (
+		maxAttempts = 8
+		baseDelay   = 50 * time.Millisecond
+	)
+
+	// Ensure the file isn't read-only before attempting removal
+	_ = os.Chmod(path, 0o666)
+
+	var lastErr error
+	for i := 0; i < maxAttempts; i++ {
+		// Attempt deletion
+		if err := os.Remove(path); err == nil || os.IsNotExist(err) {
+			return nil // Success or already gone
+		} else {
+			lastErr = err
+		}
+
+		// Check for cancellation before retrying
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(time.Duration(1<<i) * baseDelay): // Exponential backoff
+		}
+	}
+
+	return fmt.Errorf("remove with retry failed: %w", lastErr)
 }
 
 // RemoveDirIncremental implements the RemoveDirIncremental method of the FileSystem interface.

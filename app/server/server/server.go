@@ -5,6 +5,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
+	"net"
+	"os"
+	"runtime/debug"
+	"sync"
+	"time"
+
 	"github.com/hydraide/hydraide/app/core/filesystem"
 	"github.com/hydraide/hydraide/app/core/settings"
 	"github.com/hydraide/hydraide/app/core/zeus"
@@ -17,12 +24,6 @@ import (
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
-	"log/slog"
-	"net"
-	"os"
-	"runtime/debug"
-	"sync"
-	"time"
 )
 
 const (

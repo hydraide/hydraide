@@ -3,6 +3,11 @@ package swamp
 import (
 	"context"
 	"errors"
+	"log/slog"
+	"sync"
+	"sync/atomic"
+	"time"
+
 	"github.com/hydraide/hydraide/app/core/hydra/swamp/beacon"
 	"github.com/hydraide/hydraide/app/core/hydra/swamp/chronicler"
 	"github.com/hydraide/hydraide/app/core/hydra/swamp/metadata"
@@ -10,10 +15,6 @@ import (
 	"github.com/hydraide/hydraide/app/core/hydra/swamp/treasure/guard"
 	"github.com/hydraide/hydraide/app/core/hydra/swamp/vigil"
 	"github.com/hydraide/hydraide/app/name"
-	"log/slog"
-	"sync"
-	"sync/atomic"
-	"time"
 )
 
 const (
@@ -563,14 +564,14 @@ type Swamp interface {
 	// This function useful if we want to iterate over the beacon and get the treasures from it
 	GetBeacon(beaconType BeaconType, order BeaconOrder) beacon.Beacon
 
-	IncrementUint8(key string, i uint8, condition *IncrementUInt8Condition) (newValue uint8, incremented bool, err error)
-	IncrementUint16(key string, i uint16, condition *IncrementUInt16Condition) (newValue uint16, incremented bool, err error)
-	IncrementUint32(key string, i uint32, condition *IncrementUInt32Condition) (newValue uint32, incremented bool, err error)
-	IncrementUint64(key string, i uint64, condition *IncrementUInt64Condition) (newValue uint64, incremented bool, err error)
+	IncrementUint8(key string, i uint8, condition *IncrementUInt8Condition, metadataRequestIfNotExist *IncrementMetadataRequest, metadataRequestIfExist *IncrementMetadataRequest) (newValue uint8, incremented bool, metadataResponse *IncrementMetadataResponse, err error)
+	IncrementUint16(key string, i uint16, condition *IncrementUInt16Condition, metadataRequestIfNotExist *IncrementMetadataRequest, metadataRequestIfExist *IncrementMetadataRequest) (newValue uint16, incremented bool, metadataResponse *IncrementMetadataResponse, err error)
+	IncrementUint32(key string, i uint32, condition *IncrementUInt32Condition, metadataRequestIfNotExist *IncrementMetadataRequest, metadataRequestIfExist *IncrementMetadataRequest) (newValue uint32, incremented bool, metadataResponse *IncrementMetadataResponse, err error)
+	IncrementUint64(key string, i uint64, condition *IncrementUInt64Condition, metadataRequestIfNotExist *IncrementMetadataRequest, metadataRequestIfExist *IncrementMetadataRequest) (newValue uint64, incremented bool, metadataResponse *IncrementMetadataResponse, err error)
 
-	IncrementInt8(key string, i int8, condition *IncrementInt8Condition) (newValue int8, incremented bool, err error)
-	IncrementInt16(key string, i int16, condition *IncrementInt16Condition) (newValue int16, incremented bool, err error)
-	IncrementInt32(key string, i int32, condition *IncrementInt32Condition) (newValue int32, incremented bool, err error)
+	IncrementInt8(key string, i int8, condition *IncrementInt8Condition, metadataRequestIfNotExist *IncrementMetadataRequest, metadataRequestIfExist *IncrementMetadataRequest) (newValue int8, incremented bool, metadataResponse *IncrementMetadataResponse, err error)
+	IncrementInt16(key string, i int16, condition *IncrementInt16Condition, metadataRequestIfNotExist *IncrementMetadataRequest, metadataRequestIfExist *IncrementMetadataRequest) (newValue int16, incremented bool, metadataResponse *IncrementMetadataResponse, err error)
+	IncrementInt32(key string, i int32, condition *IncrementInt32Condition, metadataRequestIfNotExist *IncrementMetadataRequest, metadataRequestIfExist *IncrementMetadataRequest) (newValue int32, incremented bool, metadataResponse *IncrementMetadataResponse, err error)
 
 	// IncrementInt64 increases or decreases the value associated with a given key based on a condition.
 	//
@@ -607,9 +608,9 @@ type Swamp interface {
 	//     log.Fatal(err)
 	// }
 	// fmt.Println("New Value:", newValue, "Incremented:", incremented)
-	IncrementInt64(key string, i int64, condition *IncrementInt64Condition) (newValue int64, incremented bool, err error)
+	IncrementInt64(key string, i int64, condition *IncrementInt64Condition, metadataRequestIfNotExist *IncrementMetadataRequest, metadataRequestIfExist *IncrementMetadataRequest) (newValue int64, incremented bool, metadataResponse *IncrementMetadataResponse, err error)
 
-	IncrementFloat32(key string, f float32, condition *IncrementFloat32Condition) (newValue float32, incremented bool, err error)
+	IncrementFloat32(key string, f float32, condition *IncrementFloat32Condition, metadataRequestIfNotExist *IncrementMetadataRequest, metadataRequestIfExist *IncrementMetadataRequest) (newValue float32, incremented bool, metadataResponse *IncrementMetadataResponse, err error)
 
 	// IncrementFloat64 64 increases or decreases the value associated with a given key based on a condition.
 	//
@@ -646,7 +647,7 @@ type Swamp interface {
 	//     log.Fatal(err)
 	// }
 	// fmt.Println("New Value:", newValue, "Incremented:", incremented)
-	IncrementFloat64(key string, f float64, condition *IncrementFloat64Condition) (newValue float64, incremented bool, err error)
+	IncrementFloat64(key string, f float64, condition *IncrementFloat64Condition, metadataRequestIfNotExist *IncrementMetadataRequest, metadataRequestIfExist *IncrementMetadataRequest) (newValue float64, incremented bool, metadataResponse *IncrementMetadataResponse, err error)
 }
 
 const (
@@ -950,36 +951,118 @@ const (
 	RelationalOperatorLessThanOrEqual    RelationalOperator = 6
 )
 
-func (s *swamp) IncrementUint8(key string, i uint8, condition *IncrementUInt8Condition) (newValue uint8, incremented bool, err error) {
+type IncrementMetadataRequest struct {
+	SetCreatedAt bool      // indicates if we need to update the SetCreatedAt field to the actual time
+	CreatedBy    string    // indicates to set the CreatedBy field to this value
+	SetUpdatedAt bool      // indicates if we need to update the SetUpdatedAt field to the actual time
+	UpdatedBy    string    // indicates to set the UpdatedBy field to this value
+	ExpiredAt    time.Time // indicates to set the ExpiredAt field to this value
+}
+
+type IncrementMetadataResponse struct {
+	CreatedAt time.Time // Optional - The time when the treasure was created
+	CreatedBy string    // Optional - The user who created the treasure
+	UpdatedAt time.Time // Optional - The time when the treasure was last updated
+	UpdatedBy string    // Optional - The user who last updated the treasure
+	ExpiredAt time.Time // Optional - The time when the treasure will expire
+}
+
+func (s *swamp) setMetaForIncrement(treasureObj treasure.Treasure, guardID guard.ID, meta *IncrementMetadataRequest) {
+	// ha a treasure nem létezett, akkor beállítjuk a metaadatokat, ha vannak
+	if meta.SetCreatedAt {
+		treasureObj.SetCreatedAt(guardID, time.Now().UTC())
+	}
+	if meta.CreatedBy != "" {
+		treasureObj.SetCreatedBy(guardID, meta.CreatedBy)
+	}
+	if meta.SetUpdatedAt {
+		treasureObj.SetModifiedAt(guardID, time.Now().UTC())
+	}
+	if meta.UpdatedBy != "" {
+		treasureObj.SetModifiedBy(guardID, meta.UpdatedBy)
+	}
+	if !meta.ExpiredAt.IsZero() {
+		treasureObj.SetExpirationTime(guardID, meta.ExpiredAt)
+	}
+}
+
+func (s *swamp) createMetaForIncrementResponse(treasureObj treasure.Treasure) *IncrementMetadataResponse {
+
+	// create a new metadata response
+	metaResponse := &IncrementMetadataResponse{}
+
+	isSet := false
+	if treasureObj.GetCreatedAt() != 0 {
+		isSet = true
+		metaResponse.CreatedAt = time.Unix(0, treasureObj.GetCreatedAt())
+	}
+	if treasureObj.GetCreatedBy() != "" {
+		isSet = true
+		metaResponse.CreatedBy = treasureObj.GetCreatedBy()
+	}
+	if treasureObj.GetModifiedAt() != 0 {
+		isSet = true
+		metaResponse.UpdatedAt = time.Unix(0, treasureObj.GetModifiedAt())
+	}
+	if treasureObj.GetModifiedBy() != "" {
+		isSet = true
+		metaResponse.UpdatedBy = treasureObj.GetModifiedBy()
+	}
+	if treasureObj.GetExpirationTime() != 0 {
+		isSet = true
+		metaResponse.ExpiredAt = time.Unix(0, treasureObj.GetExpirationTime())
+	}
+
+	if !isSet {
+		// if no metadata is set, return nil
+		return nil
+	}
+
+	return metaResponse
+
+}
+
+func (s *swamp) IncrementUint8(key string, i uint8, condition *IncrementUInt8Condition, metadataRequestIfNotExist *IncrementMetadataRequest, metadataRequestIfExist *IncrementMetadataRequest) (newValue uint8, incremented bool, metadataResponse *IncrementMetadataResponse, err error) {
+
 	// get the key treasure by its key
 	treasureObj := s.beaconKey.Get(key)
-	// ha a treasure nem létezik még, akkor létrehozzuk azt
+	var guardID guard.ID
+
+	// create the treasure object if it does not exist
 	if treasureObj == nil {
-		// a treasure még nem létezett, így létrehozzuk azt
-		func() {
-			treasureObj = s.CreateTreasure(key)
-			guardID := treasureObj.StartTreasureGuard(true)
-			defer treasureObj.ReleaseTreasureGuard(guardID)
-			treasureObj.SetContentUint8(guardID, 0)
-		}()
+
+		treasureObj = s.CreateTreasure(key)
+		// create the quard for the treasure object
+		guardID = treasureObj.StartTreasureGuard(true)
+		treasureObj.SetContentUint8(guardID, 0)
+
+		if metadataRequestIfNotExist != nil {
+			s.setMetaForIncrement(treasureObj, guardID, metadataRequestIfNotExist)
+		}
 
 	} else {
+
 		// ha a treasure létezett, már, akkor ellenőrizzük a tartalom típusát
 		contentType := treasureObj.GetContentType()
 		// ha nem integer volt benne eddig, akkor hibát dobunk
 		if contentType != treasure.ContentTypeUint8 {
-			return 0, false, errors.New(ErrorValueIsNotInt)
+			return 0, false, nil, errors.New(ErrorValueIsNotInt)
 		}
+
+		guardID = treasureObj.StartTreasureGuard(true)
+		if metadataRequestIfExist != nil {
+			s.setMetaForIncrement(treasureObj, guardID, metadataRequestIfExist)
+		}
+
 	}
 
-	// biztosítjuk, hogy a treasure-hoz egyszerre csak egy goroutine férjen hozzá
-	guardID := treasureObj.StartTreasureGuard(true, guard.BodyAuthID)
+	// release the guard when the function returns
 	defer treasureObj.ReleaseTreasureGuard(guardID)
 
 	// lekérdezzük a jelenlegi integer értékét a treasure-nek
 	contentInt, err := treasureObj.GetContentUint8()
 	if err != nil {
-		return 0, false, errors.New(ErrorValueIsNotInt)
+		return 0, false, nil, errors.New(ErrorValueIsNotInt)
 	}
 
 	// ellenőrizzük a feltételt, ha van megadva
@@ -987,71 +1070,83 @@ func (s *swamp) IncrementUint8(key string, i uint8, condition *IncrementUInt8Con
 		switch condition.RelationalOperator {
 		case RelationalOperatorEqual:
 			if contentInt != condition.Value {
-				return contentInt, false, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorNotEqual:
 			if contentInt == condition.Value {
-				return contentInt, false, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorGreaterThan:
 			if contentInt <= condition.Value {
-				return contentInt, false, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorGreaterThanOrEqual:
 			if contentInt < condition.Value {
-				return contentInt, false, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorLessThan:
 			if contentInt >= condition.Value {
-				return contentInt, false, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorLessThanOrEqual:
 			if contentInt > condition.Value {
-				return contentInt, false, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		}
 	}
 
 	// increment or decrement the value
 	contentInt += i
-	// beállítjuk az új értéket
+	// create new value
 	treasureObj.SetContentUint8(guardID, contentInt)
-	// elmentjük a treasure-t
+	// save the treasure
 	treasureObj.Save(guardID)
 
 	// visszaadjuk az új értéket és hogy incrementálva lett-e
-	return contentInt, true, nil
+	return contentInt, true, s.createMetaForIncrementResponse(treasureObj), nil
+
 }
-func (s *swamp) IncrementUint16(key string, i uint16, condition *IncrementUInt16Condition) (newValue uint16, incremented bool, err error) {
+
+func (s *swamp) IncrementUint16(key string, i uint16, condition *IncrementUInt16Condition, metadataRequestIfNotExist *IncrementMetadataRequest, metadataRequestIfExist *IncrementMetadataRequest) (newValue uint16, incremented bool, metadataResponse *IncrementMetadataResponse, err error) {
+
 	// get the key treasure by its key
 	treasureObj := s.beaconKey.Get(key)
+	var guardID guard.ID
+
 	// ha a treasure nem létezik még, akkor létrehozzuk azt
 	if treasureObj == nil {
+
 		// a treasure még nem létezett, így létrehozzuk azt
-		func() {
-			treasureObj = s.CreateTreasure(key)
-			guardID := treasureObj.StartTreasureGuard(true)
-			defer treasureObj.ReleaseTreasureGuard(guardID)
-			treasureObj.SetContentUint16(guardID, 0)
-		}()
+		treasureObj = s.CreateTreasure(key)
+		guardID = treasureObj.StartTreasureGuard(true)
+		treasureObj.SetContentUint16(guardID, 0)
+
+		if metadataRequestIfNotExist != nil {
+			s.setMetaForIncrement(treasureObj, guardID, metadataRequestIfNotExist)
+		}
 
 	} else {
+
 		// ha a treasure létezett, már, akkor ellenőrizzük a tartalom típusát
 		contentType := treasureObj.GetContentType()
 		// ha nem integer volt benne eddig, akkor hibát dobunk
 		if contentType != treasure.ContentTypeUint16 {
-			return 0, false, errors.New(ErrorValueIsNotInt)
+			return 0, false, nil, errors.New(ErrorValueIsNotInt)
 		}
+
+		guardID = treasureObj.StartTreasureGuard(true)
+		if metadataRequestIfExist != nil {
+			s.setMetaForIncrement(treasureObj, guardID, metadataRequestIfExist)
+		}
+
 	}
 
-	// biztosítjuk, hogy a treasure-hoz egyszerre csak egy goroutine férjen hozzá
-	guardID := treasureObj.StartTreasureGuard(true, guard.BodyAuthID)
 	defer treasureObj.ReleaseTreasureGuard(guardID)
 
 	// lekérdezzük a jelenlegi integer értékét a treasure-nek
 	contentInt, err := treasureObj.GetContentUint16()
 	if err != nil {
-		return 0, false, errors.New(ErrorValueIsNotInt)
+		return 0, false, nil, errors.New(ErrorValueIsNotInt)
 	}
 
 	// ellenőrizzük a feltételt, ha van megadva
@@ -1059,27 +1154,27 @@ func (s *swamp) IncrementUint16(key string, i uint16, condition *IncrementUInt16
 		switch condition.RelationalOperator {
 		case RelationalOperatorEqual:
 			if contentInt != condition.Value {
-				return contentInt, false, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorNotEqual:
 			if contentInt == condition.Value {
-				return contentInt, false, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorGreaterThan:
 			if contentInt <= condition.Value {
-				return contentInt, false, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorGreaterThanOrEqual:
 			if contentInt < condition.Value {
-				return contentInt, false, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorLessThan:
 			if contentInt >= condition.Value {
-				return contentInt, false, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorLessThanOrEqual:
 			if contentInt > condition.Value {
-				return contentInt, false, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		}
 	}
@@ -1092,38 +1187,47 @@ func (s *swamp) IncrementUint16(key string, i uint16, condition *IncrementUInt16
 	treasureObj.Save(guardID)
 
 	// visszaadjuk az új értéket és hogy incrementálva lett-e
-	return contentInt, true, nil
+	return contentInt, true, s.createMetaForIncrementResponse(treasureObj), nil
+
 }
-func (s *swamp) IncrementUint32(key string, i uint32, condition *IncrementUInt32Condition) (newValue uint32, incremented bool, err error) {
+func (s *swamp) IncrementUint32(key string, i uint32, condition *IncrementUInt32Condition, metadataRequestIfNotExist *IncrementMetadataRequest, metadataRequestIfExist *IncrementMetadataRequest) (newValue uint32, incremented bool, metadataResponse *IncrementMetadataResponse, err error) {
+
 	// get the key treasure by its key
 	treasureObj := s.beaconKey.Get(key)
+	var guardID guard.ID
+
 	// ha a treasure nem létezik még, akkor létrehozzuk azt
 	if treasureObj == nil {
+
 		// a treasure még nem létezett, így létrehozzuk azt
-		func() {
-			treasureObj = s.CreateTreasure(key)
-			guardID := treasureObj.StartTreasureGuard(true)
-			defer treasureObj.ReleaseTreasureGuard(guardID)
-			treasureObj.SetContentUint32(guardID, 0)
-		}()
+		treasureObj = s.CreateTreasure(key)
+		guardID = treasureObj.StartTreasureGuard(true)
+		treasureObj.SetContentUint32(guardID, 0)
+
+		if metadataRequestIfNotExist != nil {
+			s.setMetaForIncrement(treasureObj, guardID, metadataRequestIfNotExist)
+		}
 
 	} else {
 		// ha a treasure létezett, már, akkor ellenőrizzük a tartalom típusát
 		contentType := treasureObj.GetContentType()
 		// ha nem integer volt benne eddig, akkor hibát dobunk
 		if contentType != treasure.ContentTypeUint32 {
-			return 0, false, errors.New(ErrorValueIsNotInt)
+			return 0, false, nil, errors.New(ErrorValueIsNotInt)
+		}
+
+		guardID = treasureObj.StartTreasureGuard(true)
+		if metadataRequestIfExist != nil {
+			s.setMetaForIncrement(treasureObj, guardID, metadataRequestIfExist)
 		}
 	}
 
-	// biztosítjuk, hogy a treasure-hoz egyszerre csak egy goroutine férjen hozzá
-	guardID := treasureObj.StartTreasureGuard(true, guard.BodyAuthID)
 	defer treasureObj.ReleaseTreasureGuard(guardID)
 
 	// lekérdezzük a jelenlegi integer értékét a treasure-nek
 	contentInt, err := treasureObj.GetContentUint32()
 	if err != nil {
-		return 0, false, errors.New(ErrorValueIsNotInt)
+		return 0, false, nil, errors.New(ErrorValueIsNotInt)
 	}
 
 	// ellenőrizzük a feltételt, ha van megadva
@@ -1131,27 +1235,27 @@ func (s *swamp) IncrementUint32(key string, i uint32, condition *IncrementUInt32
 		switch condition.RelationalOperator {
 		case RelationalOperatorEqual:
 			if contentInt != condition.Value {
-				return contentInt, false, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorNotEqual:
 			if contentInt == condition.Value {
-				return contentInt, false, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorGreaterThan:
 			if contentInt <= condition.Value {
-				return contentInt, false, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorGreaterThanOrEqual:
 			if contentInt < condition.Value {
-				return contentInt, false, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorLessThan:
 			if contentInt >= condition.Value {
-				return contentInt, false, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorLessThanOrEqual:
 			if contentInt > condition.Value {
-				return contentInt, false, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		}
 	}
@@ -1164,38 +1268,48 @@ func (s *swamp) IncrementUint32(key string, i uint32, condition *IncrementUInt32
 	treasureObj.Save(guardID)
 
 	// visszaadjuk az új értéket és hogy incrementálva lett-e
-	return contentInt, true, nil
+	return contentInt, true, s.createMetaForIncrementResponse(treasureObj), nil
+
 }
-func (s *swamp) IncrementUint64(key string, i uint64, condition *IncrementUInt64Condition) (newValue uint64, incremented bool, err error) {
+func (s *swamp) IncrementUint64(key string, i uint64, condition *IncrementUInt64Condition, metadataRequestIfNotExist *IncrementMetadataRequest, metadataRequestIfExist *IncrementMetadataRequest) (newValue uint64, incremented bool, metadataResponse *IncrementMetadataResponse, err error) {
 	// get the key treasure by its key
+
 	treasureObj := s.beaconKey.Get(key)
+	var guardID guard.ID
+
 	// ha a treasure nem létezik még, akkor létrehozzuk azt
 	if treasureObj == nil {
-		// a treasure még nem létezett, így létrehozzuk azt
-		func() {
-			treasureObj = s.CreateTreasure(key)
-			guardID := treasureObj.StartTreasureGuard(true)
-			defer treasureObj.ReleaseTreasureGuard(guardID)
-			treasureObj.SetContentUint64(guardID, 0)
-		}()
+
+		treasureObj = s.CreateTreasure(key)
+		guardID = treasureObj.StartTreasureGuard(true)
+		treasureObj.SetContentUint64(guardID, 0)
+
+		if metadataRequestIfNotExist != nil {
+			s.setMetaForIncrement(treasureObj, guardID, metadataRequestIfNotExist)
+		}
 
 	} else {
 		// ha a treasure létezett, már, akkor ellenőrizzük a tartalom típusát
 		contentType := treasureObj.GetContentType()
 		// ha nem integer volt benne eddig, akkor hibát dobunk
 		if contentType != treasure.ContentTypeUint64 {
-			return 0, false, errors.New(ErrorValueIsNotInt)
+			return 0, false, nil, errors.New(ErrorValueIsNotInt)
 		}
+
+		guardID = treasureObj.StartTreasureGuard(true)
+		if metadataRequestIfExist != nil {
+			s.setMetaForIncrement(treasureObj, guardID, metadataRequestIfExist)
+		}
+
 	}
 
 	// biztosítjuk, hogy a treasure-hoz egyszerre csak egy goroutine férjen hozzá
-	guardID := treasureObj.StartTreasureGuard(true, guard.BodyAuthID)
 	defer treasureObj.ReleaseTreasureGuard(guardID)
 
 	// lekérdezzük a jelenlegi integer értékét a treasure-nek
 	contentInt, err := treasureObj.GetContentUint64()
 	if err != nil {
-		return 0, false, errors.New(ErrorValueIsNotInt)
+		return 0, false, nil, errors.New(ErrorValueIsNotInt)
 	}
 
 	// ellenőrizzük a feltételt, ha van megadva
@@ -1203,27 +1317,27 @@ func (s *swamp) IncrementUint64(key string, i uint64, condition *IncrementUInt64
 		switch condition.RelationalOperator {
 		case RelationalOperatorEqual:
 			if contentInt != condition.Value {
-				return contentInt, false, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorNotEqual:
 			if contentInt == condition.Value {
-				return contentInt, false, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorGreaterThan:
 			if contentInt <= condition.Value {
-				return contentInt, false, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorGreaterThanOrEqual:
 			if contentInt < condition.Value {
-				return contentInt, false, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorLessThan:
 			if contentInt >= condition.Value {
-				return contentInt, false, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorLessThanOrEqual:
 			if contentInt > condition.Value {
-				return contentInt, false, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		}
 	}
@@ -1236,38 +1350,46 @@ func (s *swamp) IncrementUint64(key string, i uint64, condition *IncrementUInt64
 	treasureObj.Save(guardID)
 
 	// visszaadjuk az új értéket és hogy incrementálva lett-e
-	return contentInt, true, nil
+	return contentInt, true, s.createMetaForIncrementResponse(treasureObj), nil
 }
-func (s *swamp) IncrementInt8(key string, i int8, condition *IncrementInt8Condition) (newValue int8, incremented bool, err error) {
+func (s *swamp) IncrementInt8(key string, i int8, condition *IncrementInt8Condition, metadataRequestIfNotExist *IncrementMetadataRequest, metadataRequestIfExist *IncrementMetadataRequest) (newValue int8, incremented bool, metadataResponse *IncrementMetadataResponse, err error) {
+
 	// get the key treasure by its key
 	treasureObj := s.beaconKey.Get(key)
-	// ha a treasure nem létezik még, akkor létrehozzuk azt
+	var guardID guard.ID
+
+	// if thre treasure does not exist yet, we create it
 	if treasureObj == nil {
-		// a treasure még nem létezett, így létrehozzuk azt
-		func() {
-			treasureObj = s.CreateTreasure(key)
-			guardID := treasureObj.StartTreasureGuard(true)
-			defer treasureObj.ReleaseTreasureGuard(guardID)
-			treasureObj.SetContentInt8(guardID, 0)
-		}()
+
+		treasureObj = s.CreateTreasure(key)
+		guardID = treasureObj.StartTreasureGuard(true)
+		treasureObj.SetContentInt8(guardID, 0)
+		if metadataRequestIfNotExist != nil {
+			s.setMetaForIncrement(treasureObj, guardID, metadataRequestIfNotExist)
+		}
 
 	} else {
-		// ha a treasure létezett, már, akkor ellenőrizzük a tartalom típusát
+		// check the type of the treasure content
 		contentType := treasureObj.GetContentType()
-		// ha nem integer volt benne eddig, akkor hibát dobunk
+		// return with error if the content type is not int8
 		if contentType != treasure.ContentTypeInt8 {
-			return 0, false, errors.New(ErrorValueIsNotInt)
+			return 0, false, nil, errors.New(ErrorValueIsNotInt)
 		}
+
+		guardID = treasureObj.StartTreasureGuard(true)
+		if metadataRequestIfExist != nil {
+			s.setMetaForIncrement(treasureObj, guardID, metadataRequestIfExist)
+		}
+
 	}
 
 	// biztosítjuk, hogy a treasure-hoz egyszerre csak egy goroutine férjen hozzá
-	guardID := treasureObj.StartTreasureGuard(true, guard.BodyAuthID)
 	defer treasureObj.ReleaseTreasureGuard(guardID)
 
 	// lekérdezzük a jelenlegi integer értékét a treasure-nek
 	contentInt, err := treasureObj.GetContentInt8()
 	if err != nil {
-		return 0, false, errors.New(ErrorValueIsNotInt)
+		return 0, false, nil, errors.New(ErrorValueIsNotInt)
 	}
 
 	// ellenőrizzük a feltételt, ha van megadva
@@ -1275,27 +1397,27 @@ func (s *swamp) IncrementInt8(key string, i int8, condition *IncrementInt8Condit
 		switch condition.RelationalOperator {
 		case RelationalOperatorEqual:
 			if contentInt != condition.Value {
-				return contentInt, false, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorNotEqual:
 			if contentInt == condition.Value {
-				return contentInt, false, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorGreaterThan:
 			if contentInt <= condition.Value {
-				return contentInt, false, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorGreaterThanOrEqual:
 			if contentInt < condition.Value {
-				return contentInt, false, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorLessThan:
 			if contentInt >= condition.Value {
-				return contentInt, false, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorLessThanOrEqual:
 			if contentInt > condition.Value {
-				return contentInt, false, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		}
 	}
@@ -1308,38 +1430,47 @@ func (s *swamp) IncrementInt8(key string, i int8, condition *IncrementInt8Condit
 	treasureObj.Save(guardID)
 
 	// visszaadjuk az új értéket és hogy incrementálva lett-e
-	return contentInt, true, nil
+	return contentInt, true, s.createMetaForIncrementResponse(treasureObj), nil
+
 }
-func (s *swamp) IncrementInt16(key string, i int16, condition *IncrementInt16Condition) (newValue int16, incremented bool, err error) {
+func (s *swamp) IncrementInt16(key string, i int16, condition *IncrementInt16Condition, metadataRequestIfNotExist *IncrementMetadataRequest, metadataRequestIfExist *IncrementMetadataRequest) (newValue int16, incremented bool, metadataResponse *IncrementMetadataResponse, err error) {
 	// get the key treasure by its key
 	treasureObj := s.beaconKey.Get(key)
+	var guardID guard.ID
+
 	// ha a treasure nem létezik még, akkor létrehozzuk azt
 	if treasureObj == nil {
-		// a treasure még nem létezett, így létrehozzuk azt
-		func() {
-			treasureObj = s.CreateTreasure(key)
-			guardID := treasureObj.StartTreasureGuard(true)
-			defer treasureObj.ReleaseTreasureGuard(guardID)
-			treasureObj.SetContentInt16(guardID, 0)
-		}()
+
+		treasureObj = s.CreateTreasure(key)
+		guardID = treasureObj.StartTreasureGuard(true)
+		treasureObj.SetContentInt16(guardID, 0)
+
+		if metadataRequestIfNotExist != nil {
+			s.setMetaForIncrement(treasureObj, guardID, metadataRequestIfNotExist)
+		}
 
 	} else {
 		// ha a treasure létezett, már, akkor ellenőrizzük a tartalom típusát
 		contentType := treasureObj.GetContentType()
 		// ha nem integer volt benne eddig, akkor hibát dobunk
 		if contentType != treasure.ContentTypeInt16 {
-			return 0, false, errors.New(ErrorValueIsNotInt)
+			return 0, false, nil, errors.New(ErrorValueIsNotInt)
 		}
+
+		guardID = treasureObj.StartTreasureGuard(true)
+		if metadataRequestIfExist != nil {
+			s.setMetaForIncrement(treasureObj, guardID, metadataRequestIfExist)
+		}
+
 	}
 
 	// biztosítjuk, hogy a treasure-hoz egyszerre csak egy goroutine férjen hozzá
-	guardID := treasureObj.StartTreasureGuard(true, guard.BodyAuthID)
 	defer treasureObj.ReleaseTreasureGuard(guardID)
 
 	// lekérdezzük a jelenlegi integer értékét a treasure-nek
 	contentInt, err := treasureObj.GetContentInt16()
 	if err != nil {
-		return 0, false, errors.New(ErrorValueIsNotInt)
+		return 0, false, nil, errors.New(ErrorValueIsNotInt)
 	}
 
 	// ellenőrizzük a feltételt, ha van megadva
@@ -1347,27 +1478,27 @@ func (s *swamp) IncrementInt16(key string, i int16, condition *IncrementInt16Con
 		switch condition.RelationalOperator {
 		case RelationalOperatorEqual:
 			if contentInt != condition.Value {
-				return contentInt, false, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorNotEqual:
 			if contentInt == condition.Value {
-				return contentInt, false, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorGreaterThan:
 			if contentInt <= condition.Value {
-				return contentInt, false, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorGreaterThanOrEqual:
 			if contentInt < condition.Value {
-				return contentInt, false, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorLessThan:
 			if contentInt >= condition.Value {
-				return contentInt, false, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorLessThanOrEqual:
 			if contentInt > condition.Value {
-				return contentInt, false, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		}
 	}
@@ -1380,38 +1511,45 @@ func (s *swamp) IncrementInt16(key string, i int16, condition *IncrementInt16Con
 	treasureObj.Save(guardID)
 
 	// visszaadjuk az új értéket és hogy incrementálva lett-e
-	return contentInt, true, nil
+	return contentInt, true, s.createMetaForIncrementResponse(treasureObj), nil
 }
-func (s *swamp) IncrementInt32(key string, i int32, condition *IncrementInt32Condition) (newValue int32, incremented bool, err error) {
+func (s *swamp) IncrementInt32(key string, i int32, condition *IncrementInt32Condition, metadataRequestIfNotExist *IncrementMetadataRequest, metadataRequestIfExist *IncrementMetadataRequest) (newValue int32, incremented bool, metadataResponse *IncrementMetadataResponse, err error) {
+
 	// get the key treasure by its key
 	treasureObj := s.beaconKey.Get(key)
+	var guardID guard.ID
+
 	// ha a treasure nem létezik még, akkor létrehozzuk azt
 	if treasureObj == nil {
-		// a treasure még nem létezett, így létrehozzuk azt
-		func() {
-			treasureObj = s.CreateTreasure(key)
-			guardID := treasureObj.StartTreasureGuard(true)
-			defer treasureObj.ReleaseTreasureGuard(guardID)
-			treasureObj.SetContentInt32(guardID, 0)
-		}()
+
+		treasureObj = s.CreateTreasure(key)
+		guardID = treasureObj.StartTreasureGuard(true)
+		treasureObj.SetContentInt32(guardID, 0)
+		if metadataRequestIfNotExist != nil {
+			s.setMetaForIncrement(treasureObj, guardID, metadataRequestIfNotExist)
+		}
 
 	} else {
 		// ha a treasure létezett, már, akkor ellenőrizzük a tartalom típusát
 		contentType := treasureObj.GetContentType()
 		// ha nem integer volt benne eddig, akkor hibát dobunk
 		if contentType != treasure.ContentTypeInt32 {
-			return 0, false, errors.New(ErrorValueIsNotInt)
+			return 0, false, nil, errors.New(ErrorValueIsNotInt)
 		}
+
+		guardID = treasureObj.StartTreasureGuard(true)
+		if metadataRequestIfExist != nil {
+			s.setMetaForIncrement(treasureObj, guardID, metadataRequestIfExist)
+		}
+
 	}
 
-	// biztosítjuk, hogy a treasure-hoz egyszerre csak egy goroutine férjen hozzá
-	guardID := treasureObj.StartTreasureGuard(true, guard.BodyAuthID)
 	defer treasureObj.ReleaseTreasureGuard(guardID)
 
 	// lekérdezzük a jelenlegi integer értékét a treasure-nek
 	contentInt, err := treasureObj.GetContentInt32()
 	if err != nil {
-		return 0, false, errors.New(ErrorValueIsNotInt)
+		return 0, false, nil, errors.New(ErrorValueIsNotInt)
 	}
 
 	// ellenőrizzük a feltételt, ha van megadva
@@ -1419,27 +1557,27 @@ func (s *swamp) IncrementInt32(key string, i int32, condition *IncrementInt32Con
 		switch condition.RelationalOperator {
 		case RelationalOperatorEqual:
 			if contentInt != condition.Value {
-				return contentInt, false, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorNotEqual:
 			if contentInt == condition.Value {
-				return contentInt, false, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorGreaterThan:
 			if contentInt <= condition.Value {
-				return contentInt, false, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorGreaterThanOrEqual:
 			if contentInt < condition.Value {
-				return contentInt, false, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorLessThan:
 			if contentInt >= condition.Value {
-				return contentInt, false, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorLessThanOrEqual:
 			if contentInt > condition.Value {
-				return contentInt, false, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		}
 	}
@@ -1452,40 +1590,45 @@ func (s *swamp) IncrementInt32(key string, i int32, condition *IncrementInt32Con
 	treasureObj.Save(guardID)
 
 	// visszaadjuk az új értéket és hogy incrementálva lett-e
-	return contentInt, true, nil
+	return contentInt, true, s.createMetaForIncrementResponse(treasureObj), nil
 }
 
-func (s *swamp) IncrementInt64(key string, i int64, condition *IncrementInt64Condition) (newValue int64, incremented bool, err error) {
+func (s *swamp) IncrementInt64(key string, i int64, condition *IncrementInt64Condition, metadataRequestIfNotExist *IncrementMetadataRequest, metadataRequestIfExist *IncrementMetadataRequest) (newValue int64, incremented bool, metadataResponse *IncrementMetadataResponse, err error) {
 
 	// get the key treasure by its key
 	treasureObj := s.beaconKey.Get(key)
+	var guardID guard.ID
+
 	// ha a treasure nem létezik még, akkor létrehozzuk azt
 	if treasureObj == nil {
 		// a treasure még nem létezett, így létrehozzuk azt
-		func() {
-			treasureObj = s.CreateTreasure(key)
-			guardID := treasureObj.StartTreasureGuard(true)
-			defer treasureObj.ReleaseTreasureGuard(guardID)
-			treasureObj.SetContentInt64(guardID, 0)
-		}()
+		treasureObj = s.CreateTreasure(key)
+		guardID = treasureObj.StartTreasureGuard(true)
+		treasureObj.SetContentInt64(guardID, 0)
+		if metadataRequestIfNotExist != nil {
+			s.setMetaForIncrement(treasureObj, guardID, metadataRequestIfNotExist)
+		}
 
 	} else {
 		// ha a treasure létezett, már, akkor ellenőrizzük a tartalom típusát
 		contentType := treasureObj.GetContentType()
 		// ha nem integer volt benne eddig, akkor hibát dobunk
 		if contentType != treasure.ContentTypeInt64 {
-			return 0, false, errors.New(ErrorValueIsNotInt)
+			return 0, false, nil, errors.New(ErrorValueIsNotInt)
 		}
+		guardID = treasureObj.StartTreasureGuard(true)
+		if metadataRequestIfExist != nil {
+			s.setMetaForIncrement(treasureObj, guardID, metadataRequestIfExist)
+		}
+
 	}
 
-	// biztosítjuk, hogy a treasure-hoz egyszerre csak egy goroutine férjen hozzá
-	guardID := treasureObj.StartTreasureGuard(true, guard.BodyAuthID)
 	defer treasureObj.ReleaseTreasureGuard(guardID)
 
 	// lekérdezzük a jelenlegi integer értékét a treasure-nek
 	contentInt, err := treasureObj.GetContentInt64()
 	if err != nil {
-		return 0, false, errors.New(ErrorValueIsNotInt)
+		return 0, false, nil, errors.New(ErrorValueIsNotInt)
 	}
 
 	// ellenőrizzük a feltételt, ha van megadva
@@ -1493,27 +1636,27 @@ func (s *swamp) IncrementInt64(key string, i int64, condition *IncrementInt64Con
 		switch condition.RelationalOperator {
 		case RelationalOperatorEqual:
 			if contentInt != condition.Value {
-				return contentInt, false, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorNotEqual:
 			if contentInt == condition.Value {
-				return contentInt, false, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorGreaterThan:
 			if contentInt <= condition.Value {
-				return contentInt, false, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorGreaterThanOrEqual:
 			if contentInt < condition.Value {
-				return contentInt, false, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorLessThan:
 			if contentInt >= condition.Value {
-				return contentInt, false, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorLessThanOrEqual:
 			if contentInt > condition.Value {
-				return contentInt, false, nil
+				return contentInt, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		}
 	}
@@ -1526,7 +1669,7 @@ func (s *swamp) IncrementInt64(key string, i int64, condition *IncrementInt64Con
 	treasureObj.Save(guardID)
 
 	// visszaadjuk az új értéket és hogy incrementálva lett-e
-	return contentInt, true, nil
+	return contentInt, true, s.createMetaForIncrementResponse(treasureObj), nil
 
 }
 
@@ -1540,37 +1683,43 @@ type IncrementFloat64Condition struct {
 	Value              float64
 }
 
-func (s *swamp) IncrementFloat32(key string, f float32, condition *IncrementFloat32Condition) (newValue float32, incremented bool, err error) {
+func (s *swamp) IncrementFloat32(key string, f float32, condition *IncrementFloat32Condition, metadataRequestIfNotExist *IncrementMetadataRequest, metadataRequestIfExist *IncrementMetadataRequest) (newValue float32, incremented bool, metadataResponse *IncrementMetadataResponse, err error) {
 
 	// get the key treasure by its key
 	treasureObj := s.beaconKey.Get(key)
+	var guardID guard.ID
+
 	// ha a treasure nem létezik még, akkor létrehozzuk azt
 	if treasureObj == nil {
 		// a treasure még nem létezett, így létrehozzuk azt
-		func() {
-			treasureObj = s.CreateTreasure(key)
-			guardID := treasureObj.StartTreasureGuard(true)
-			defer treasureObj.ReleaseTreasureGuard(guardID)
-			treasureObj.SetContentFloat32(guardID, 0)
-		}()
+		treasureObj = s.CreateTreasure(key)
+		guardID = treasureObj.StartTreasureGuard(true)
+		treasureObj.SetContentFloat32(guardID, 0)
+		if metadataRequestIfNotExist != nil {
+			s.setMetaForIncrement(treasureObj, guardID, metadataRequestIfNotExist)
+		}
 
 	} else {
 		// ha a treasure létezett, már, akkor ellenőrizzük a tartalom típusát
 		contentType := treasureObj.GetContentType()
 		// ha nem float volt benne eddig, akkor hibát dobunk
 		if contentType != treasure.ContentTypeFloat32 {
-			return 0, false, errors.New(ErrorValueIsNotFloat)
+			return 0, false, nil, errors.New(ErrorValueIsNotFloat)
 		}
+
+		guardID = treasureObj.StartTreasureGuard(true)
+		if metadataRequestIfExist != nil {
+			s.setMetaForIncrement(treasureObj, guardID, metadataRequestIfExist)
+		}
+
 	}
 
-	// ensure that only one goroutine can access the treasure object at a time
-	guardID := treasureObj.StartTreasureGuard(true, guard.BodyAuthID)
 	defer treasureObj.ReleaseTreasureGuard(guardID)
 
 	// get the float value and return an error if it fails
 	contentFloat, err := treasureObj.GetContentFloat32()
 	if err != nil {
-		return 0, false, errors.New(ErrorValueIsNotFloat)
+		return 0, false, nil, errors.New(ErrorValueIsNotFloat)
 	}
 
 	// check the condition if provided
@@ -1578,27 +1727,27 @@ func (s *swamp) IncrementFloat32(key string, f float32, condition *IncrementFloa
 		switch condition.RelationalOperator {
 		case RelationalOperatorEqual:
 			if contentFloat != condition.Value {
-				return contentFloat, false, nil
+				return contentFloat, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorNotEqual:
 			if contentFloat == condition.Value {
-				return contentFloat, false, nil
+				return contentFloat, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorGreaterThan:
 			if contentFloat <= condition.Value {
-				return contentFloat, false, nil
+				return contentFloat, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorGreaterThanOrEqual:
 			if contentFloat < condition.Value {
-				return contentFloat, false, nil
+				return contentFloat, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorLessThan:
 			if contentFloat >= condition.Value {
-				return contentFloat, false, nil
+				return contentFloat, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorLessThanOrEqual:
 			if contentFloat > condition.Value {
-				return contentFloat, false, nil
+				return contentFloat, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		}
 	}
@@ -1612,40 +1761,45 @@ func (s *swamp) IncrementFloat32(key string, f float32, condition *IncrementFloa
 	treasureObj.Save(guardID)
 
 	// return the new value and whether it was incremented
-	return contentFloat, true, nil
+	return contentFloat, true, s.createMetaForIncrementResponse(treasureObj), nil
+
 }
 
-func (s *swamp) IncrementFloat64(key string, f float64, condition *IncrementFloat64Condition) (newValue float64, incremented bool, err error) {
+func (s *swamp) IncrementFloat64(key string, f float64, condition *IncrementFloat64Condition, metadataRequestIfNotExist *IncrementMetadataRequest, metadataRequestIfExist *IncrementMetadataRequest) (newValue float64, incremented bool, metadataResponse *IncrementMetadataResponse, err error) {
 
 	// get the key treasure by its key
 	treasureObj := s.beaconKey.Get(key)
+	var guardID guard.ID
+
 	// ha a treasure nem létezik még, akkor létrehozzuk azt
 	if treasureObj == nil {
-		// a treasure még nem létezett, így létrehozzuk azt
-		func() {
-			treasureObj = s.CreateTreasure(key)
-			guardID := treasureObj.StartTreasureGuard(true)
-			defer treasureObj.ReleaseTreasureGuard(guardID)
-			treasureObj.SetContentFloat64(guardID, 0)
-		}()
-
+		treasureObj = s.CreateTreasure(key)
+		guardID = treasureObj.StartTreasureGuard(true)
+		treasureObj.SetContentFloat64(guardID, 0)
+		if metadataRequestIfNotExist != nil {
+			s.setMetaForIncrement(treasureObj, guardID, metadataRequestIfNotExist)
+		}
 	} else {
 		// ha a treasure létezett, már, akkor ellenőrizzük a tartalom típusát
 		contentType := treasureObj.GetContentType()
 		// ha nem float volt benne eddig, akkor hibát dobunk
 		if contentType != treasure.ContentTypeFloat64 {
-			return 0, false, errors.New(ErrorValueIsNotFloat)
+			return 0, false, nil, errors.New(ErrorValueIsNotFloat)
 		}
+
+		guardID = treasureObj.StartTreasureGuard(true)
+		if metadataRequestIfExist != nil {
+			s.setMetaForIncrement(treasureObj, guardID, metadataRequestIfExist)
+		}
+
 	}
 
-	// ensure that only one goroutine can access the treasure object at a time
-	guardID := treasureObj.StartTreasureGuard(true, guard.BodyAuthID)
 	defer treasureObj.ReleaseTreasureGuard(guardID)
 
 	// get the float value and return an error if it fails
 	contentFloat, err := treasureObj.GetContentFloat64()
 	if err != nil {
-		return 0, false, errors.New(ErrorValueIsNotFloat)
+		return 0, false, nil, errors.New(ErrorValueIsNotFloat)
 	}
 
 	// check the condition if provided
@@ -1653,27 +1807,27 @@ func (s *swamp) IncrementFloat64(key string, f float64, condition *IncrementFloa
 		switch condition.RelationalOperator {
 		case RelationalOperatorEqual:
 			if contentFloat != condition.Value {
-				return contentFloat, false, nil
+				return contentFloat, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorNotEqual:
 			if contentFloat == condition.Value {
-				return contentFloat, false, nil
+				return contentFloat, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorGreaterThan:
 			if contentFloat <= condition.Value {
-				return contentFloat, false, nil
+				return contentFloat, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorGreaterThanOrEqual:
 			if contentFloat < condition.Value {
-				return contentFloat, false, nil
+				return contentFloat, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorLessThan:
 			if contentFloat >= condition.Value {
-				return contentFloat, false, nil
+				return contentFloat, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		case RelationalOperatorLessThanOrEqual:
 			if contentFloat > condition.Value {
-				return contentFloat, false, nil
+				return contentFloat, false, s.createMetaForIncrementResponse(treasureObj), nil
 			}
 		}
 	}
@@ -1687,7 +1841,7 @@ func (s *swamp) IncrementFloat64(key string, f float64, condition *IncrementFloa
 	treasureObj.Save(guardID)
 
 	// return the new value and whether it was incremented
-	return contentFloat, true, nil
+	return contentFloat, true, s.createMetaForIncrementResponse(treasureObj), nil
 }
 
 func (s *swamp) GetBeacon(beaconType BeaconType, order BeaconOrder) beacon.Beacon {

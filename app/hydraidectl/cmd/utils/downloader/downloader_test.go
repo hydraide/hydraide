@@ -16,7 +16,11 @@ func TestDownloadHydraServerWithBasePath(t *testing.T) {
 	basePath := os.TempDir() + "/HydraideTest"
 	err := os.MkdirAll(basePath, os.ModePerm)
 	assert.NoError(t, err, "Failed to create base path")
-	defer os.RemoveAll(basePath) // Cleanup after test
+	defer func() {
+		if err := os.RemoveAll(basePath); err != nil {
+			log.Printf("Failed to clean up base path: %v", err)
+		}
+	}()
 
 	// Step 2: Create object using New method
 	d := New()
@@ -57,7 +61,11 @@ func TestSetProgressCallback(t *testing.T) {
 // TestDownloadHydraServer tests the DownloadHydraServer method
 func TestDownloadHydraServer(t *testing.T) {
 	tempDir := os.TempDir() + "/HydraideTest"
-	defer os.RemoveAll(tempDir) // Cleanup after test
+	defer func() {
+		if err := os.RemoveAll(tempDir); err != nil {
+			log.Printf("Failed to clean up temp directory: %v", err)
+		}
+	}()
 
 	d := &DefaultDownloader{httpClient: &http.Client{}}
 
@@ -80,7 +88,7 @@ func TestGetLatestVersion(t *testing.T) {
 
 	version, err := d.GetLatestVersion()
 	assert.NoError(t, err, "GetLatestVersion should not return an error")
-	assert.Equal(t, "server/v2.1.4", version, "GetLatestVersion should return the correct version")
+	assert.Equal(t, "server/v2.1.5", version, "GetLatestVersion should return the correct version")
 }
 
 // TestProgressReader tests the ProgressReader struct
@@ -107,11 +115,15 @@ func TestVerifyChecksum(t *testing.T) {
 	d := &DefaultDownloader{}
 	file, err := os.CreateTemp("", "testfile")
 	assert.NoError(t, err, "Temporary file creation should not return an error")
-	defer os.Remove(file.Name())
+	defer func() {
+		if err := os.Remove(file.Name()); err != nil {
+			log.Printf("Failed to clean up temporary file: %v", err)
+		}
+	}()
 
 	_, err = file.WriteString("test data")
 	assert.NoError(t, err, "Writing to temporary file should not return an error")
-	file.Close()
+	_ = file.Close()
 
 	expectedChecksum := "sha256:9e6c6b7b8b8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8"
 	err = d.verifyChecksum(file.Name(), expectedChecksum)

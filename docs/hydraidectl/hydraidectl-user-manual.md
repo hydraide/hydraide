@@ -70,10 +70,9 @@ It:
 * Prompts to start and enable the service immediately
 * At the end, allows you to choose whether to start the instance right away or defer it for later
 
-This command **requires administrative privileges**:
+This command **requires administrative privileges**
 
-* On Linux: run with `sudo`
-* On Windows: run from an Administrator PowerShell session
+- On Linux: run with `sudo`
 
 **Example:**
 
