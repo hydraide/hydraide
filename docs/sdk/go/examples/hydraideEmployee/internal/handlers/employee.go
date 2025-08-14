@@ -65,13 +65,13 @@ func (h *EmployeeHandler) CreateEmployee(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Add the employee to the main index for listing.
-	if err := models.BulkAddToIndex(h.Repo, []string{emp.ID}); err != nil {
+	if err := models.NewEmployeeIndex("").BulkAddToIndex(h.Repo, []string{emp.ID}); err != nil {
 		http.Error(w, "Failed to update main index", http.StatusInternalServerError)
 		return
 	}
 
 	// Add the employee to the search index for fast searching.
-	if err := models.BulkAddToSearchIndex(h.Repo, []*models.Employee{&emp}); err != nil {
+	if err := models.NewSearchIndex("").BulkAddToSearchIndex(h.Repo, []*models.Employee{&emp}); err != nil {
 		log.Printf("Warning: Failed to add employee %s to search index: %v", emp.ID, err)
 	}
 
@@ -183,10 +183,10 @@ func (h *EmployeeHandler) UpdateEmployee(w http.ResponseWriter, r *http.Request,
 	}
 
 	// Update search index by removing old tokens and adding new ones
-	if err := models.BulkRemoveFromSearchIndex(h.Repo, []*models.Employee{&oldEmpData}); err != nil {
+	if err := models.NewSearchIndex("").BulkRemoveFromSearchIndex(h.Repo, []*models.Employee{&oldEmpData}); err != nil {
 		log.Printf("Warning: Failed to remove old search tokens for %s: %v", id, err)
 	}
-	if err := models.BulkAddToSearchIndex(h.Repo, []*models.Employee{existingEmp}); err != nil {
+	if err := models.NewSearchIndex("").BulkAddToSearchIndex(h.Repo, []*models.Employee{existingEmp}); err != nil {
 		log.Printf("Warning: Failed to add new search tokens for %s: %v", id, err)
 	}
 
@@ -196,7 +196,7 @@ func (h *EmployeeHandler) UpdateEmployee(w http.ResponseWriter, r *http.Request,
 func (h *EmployeeHandler) DeleteEmployee(w http.ResponseWriter, r *http.Request, id string) {
 	empToDelete := &models.Employee{ID: id}
 	if err := empToDelete.Load(h.Repo); err == nil {
-		if err := models.BulkRemoveFromSearchIndex(h.Repo, []*models.Employee{empToDelete}); err != nil {
+		if err := models.NewSearchIndex("").BulkRemoveFromSearchIndex(h.Repo, []*models.Employee{empToDelete}); err != nil {
 			log.Printf("Warning: Failed to remove employee %s from search index: %v", id, err)
 		}
 	}
@@ -206,7 +206,7 @@ func (h *EmployeeHandler) DeleteEmployee(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	if err := models.BulkRemoveFromIndex(h.Repo, []string{id}); err != nil && !hydraidego.IsNotFound(err) {
+	if err := models.NewEmployeeIndex("").BulkRemoveFromIndex(h.Repo, []string{id}); err != nil && !hydraidego.IsNotFound(err) {
 		http.Error(w, "Failed to remove employee from main index", http.StatusInternalServerError)
 		return
 	}
@@ -232,7 +232,7 @@ func (h *EmployeeHandler) ListEmployees(w http.ResponseWriter, r *http.Request) 
 	}
 
 	offset := (page - 1) * limit
-	ids, totalItems, err := models.GetPaginatedIDs(h.Repo, offset, limit)
+	ids, totalItems, err := models.NewEmployeeIndex("").GetPaginatedIDs(h.Repo, offset, limit)
 	if err != nil {
 		http.Error(w, "Could not retrieve employee index", http.StatusInternalServerError)
 		log.Printf("Error fetching paginated IDs: %v", err)
@@ -279,7 +279,7 @@ func (h *EmployeeHandler) SearchEmployees(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	ids, err := models.FindEmployeeIDsByToken(h.Repo, query)
+	ids, err := models.NewSearchIndex("").FindEmployeeIDsByToken(h.Repo, query)
 	if err != nil {
 		http.Error(w, "Error during search", http.StatusInternalServerError)
 		return
@@ -311,12 +311,12 @@ func (h *EmployeeHandler) BulkCreateEmployees(w http.ResponseWriter, r *http.Req
 		employeeIDs = append(employeeIDs, emp.ID)
 	}
 
-	if err := models.BulkAddToIndex(h.Repo, employeeIDs); err != nil {
+	if err := models.NewEmployeeIndex("").BulkAddToIndex(h.Repo, employeeIDs); err != nil {
 		http.Error(w, "Failed to bulk update main index", http.StatusInternalServerError)
 		return
 	}
 
-	if err := models.BulkAddToSearchIndex(h.Repo, createdEmployees); err != nil {
+	if err := models.NewSearchIndex("").BulkAddToSearchIndex(h.Repo, createdEmployees); err != nil {
 		log.Printf("Warning: Failed to bulk add employees to search index: %v", err)
 	}
 
@@ -372,10 +372,10 @@ func (h *EmployeeHandler) BulkUpdateEmployees(w http.ResponseWriter, r *http.Req
 		updatedEmployeeData = append(updatedEmployeeData, existingEmp)
 	}
 
-	if err := models.BulkRemoveFromSearchIndex(h.Repo, oldEmployeeData); err != nil {
+	if err := models.NewSearchIndex("").BulkRemoveFromSearchIndex(h.Repo, oldEmployeeData); err != nil {
 		log.Printf("Warning: Failed to bulk remove old search tokens: %v", err)
 	}
-	if err := models.BulkAddToSearchIndex(h.Repo, updatedEmployeeData); err != nil {
+	if err := models.NewSearchIndex("").BulkAddToSearchIndex(h.Repo, updatedEmployeeData); err != nil {
 		log.Printf("Warning: Failed to bulk add new search tokens: %v", err)
 	}
 

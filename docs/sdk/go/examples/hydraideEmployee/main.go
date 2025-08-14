@@ -29,13 +29,14 @@ func main() {
 	repo := db.GetRepo()
 
 	// Register Hydraide data patterns for employees, index, and search.
-	if err := models.RegisterEmployeePattern(repo); err != nil {
+	emp := &models.Employee{}
+	if err := emp.RegisterEmployeePattern(repo); err != nil {
 		log.Fatalf("Failed to register employee pattern: %v", err)
 	}
-	if err := models.RegisterIndexPattern(repo); err != nil {
+	if err := models.NewEmployeeIndex("").RegisterIndexPattern(repo); err != nil {
 		log.Fatalf("Failed to register index pattern: %v", err)
 	}
-	if err := models.RegisterSearchIndexPattern(repo); err != nil {
+	if err := models.NewSearchIndex("").RegisterSearchIndexPattern(repo); err != nil {
 		log.Fatalf("Failed to register search index pattern: %v", err)
 	}
 

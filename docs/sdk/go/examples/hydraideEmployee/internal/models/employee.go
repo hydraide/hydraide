@@ -95,20 +95,36 @@ func (e *Employee) Destroy(r repo.Repo) error {
 //
 // Example:
 //
-//	err := RegisterEmployeePattern(repo)
-func RegisterEmployeePattern(r repo.Repo) error {
+//	emp := &Employee{}
+//	err := emp.RegisterEmployeePattern(repo)
+func (e *Employee) RegisterEmployeePattern(r repo.Repo) error {
 	ctx, cancel := hydraidehelper.CreateHydraContext()
 	defer cancel()
 
-	pattern := name.New().Sanctuary(employeeSanctuary).Realm(employeeRealm).Swamp("*")
+	// Build a swamp pattern for employee data.
+	// Sanctuary and Realm are logical groupings for isolation and organization.
+	// Swamp("*") means this pattern applies to all employees (wildcard).
+	pattern := name.New().
+		Sanctuary(employeeSanctuary). // Logical isolation, e.g., for multi-tenancy or security.
+		Realm(employeeRealm).         // Further grouping, e.g., by department or region.
+		Swamp("*")                    // Wildcard: applies to all employees in this context.
 
 	req := &hydraidego.RegisterSwampRequest{
-		SwampPattern:    pattern,
-		CloseAfterIdle:  5 * time.Minute,
-		IsInMemorySwamp: false,
+		SwampPattern:   pattern,         // The pattern that defines which data this swamp manages.
+		CloseAfterIdle: 5 * time.Minute, // Closes the swamp if idle for 5 minutes.
+		// Why 5 minutes? This balances resource usage and responsiveness:
+		// - Frees up memory/resources if not used for a while.
+		// - 5 minutes is long enough to avoid frequent open/close cycles during bursts,
+		//   but short enough to clean up unused swamps quickly.
+		IsInMemorySwamp: false, // Store data on disk (not just in memory).
+		// Why false? Disk storage is persistent and survives restarts,
+		// while in-memory is faster but volatile.
 		FilesystemSettings: &hydraidego.SwampFilesystemSettings{
-			WriteInterval: 1 * time.Second,
-			MaxFileSize:   1048576,
+			WriteInterval: 1 * time.Second, // How often to flush changes to disk.
+			// 1s means changes are saved quickly, reducing data loss risk.
+			MaxFileSize: 1048576, // Maximum file size in bytes (1MB).
+			// Prevents files from growing too large, which helps with performance
+			// and makes file management easier.
 		},
 	}
 

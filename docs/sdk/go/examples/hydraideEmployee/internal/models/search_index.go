@@ -11,161 +11,137 @@ import (
 	"github.com/hydraide/hydraide/sdk/go/hydraidego/utils/repo"
 )
 
-const (
-	searchIndexSanctuary = "search_index"
-	searchIndexRealm     = "tokens"
-)
-
-// SearchIndex represents an entry in the employee search index in Hydraide DB.
+// SearchIndex represents an entry in the search index in Hydraide DB.
 //
-// This struct is used to associate search tokens with employee IDs for fast lookup.
+// This struct is used to map search tokens to employee IDs for fast lookup.
 //
 // Field:
 //   - EmployeeID: The unique ID of the employee (used as the key in Hydraide).
 //
 // Example:
 //
-//	searchEntry := &SearchIndex{EmployeeID: "emp-1234"}
+//	searchIndex := NewSearchIndex("emp-1234")
+//
+// All methods for SearchIndex use pointer receivers for clarity and maintainability.
 type SearchIndex struct {
 	EmployeeID string `hydraide:"key"`
 }
 
+// NewSearchIndex initializes a new SearchIndex object.
+func NewSearchIndex(employeeID string) *SearchIndex {
+	return &SearchIndex{EmployeeID: employeeID}
+}
+
 // createSearchSwampName builds the Hydraide swamp name for a search token.
 // Each token is stored in its own swamp for fast lookup.
-func createSearchSwampName(token string) name.Name {
+func (si *SearchIndex) createSearchSwampName(token string) name.Name {
 	// Simple token validation to prevent empty swamp names
+	token = strings.TrimSpace(token)
 	if token == "" {
 		token = "empty"
 	}
-	return name.New().Sanctuary(searchIndexSanctuary).Realm(searchIndexRealm).Swamp(token)
+	return name.New().Sanctuary("company_search").Realm("employee_tokens").Swamp(token)
 }
 
 // TokenizeEmployee generates a list of unique search tokens from an employee's data.
 //
-// Tokens are extracted from first name, last name, email, and position.
-// Only tokens longer than 2 characters are included.
-//
-// Params:
-//   - emp: Pointer to Employee struct.
-//
-// Returns:
-//   - []string: Slice of unique tokens.
-//
 // Example:
 //
-//	tokens := TokenizeEmployee(emp)
-func TokenizeEmployee(emp *Employee) []string {
+//	tokens := NewSearchIndex("").TokenizeEmployee(emp)
+func (si *SearchIndex) TokenizeEmployee(emp *Employee) []string {
 	re := regexp.MustCompile(`\w+`)
-	fullText := strings.Join([]string{emp.FirstName, emp.LastName, emp.Email, emp.Position}, " ")
-	tokens := re.FindAllString(strings.ToLower(fullText), -1)
-	uniqueTokens := make(map[string]bool)
-	for _, token := range tokens {
-		if len(token) > 2 {
-			uniqueTokens[token] = true
+	fields := []string{
+		emp.FirstName,
+		emp.LastName,
+		emp.Email,
+		emp.Position,
+	}
+	tokenSet := make(map[string]struct{})
+	for _, field := range fields {
+		for _, token := range re.FindAllString(strings.ToLower(field), -1) {
+			tokenSet[token] = struct{}{}
 		}
 	}
-	result := make([]string, 0, len(uniqueTokens))
-	for token := range uniqueTokens {
-		result = append(result, token)
+	tokens := make([]string, 0, len(tokenSet))
+	for token := range tokenSet {
+		tokens = append(tokens, token)
 	}
-	return result
+	return tokens
 }
 
 // BulkAddToSearchIndex adds multiple employees to the search index in Hydraide DB.
 //
-// For each employee, tokens are generated and associated with their ID for fast search.
-//
-// Params:
-//   - r: Hydraide repository.
-//   - employees: Slice of Employee pointers to add.
-//
 // Example:
 //
-// err := BulkAddToSearchIndex(repo, []*Employee{emp1, emp2})
-func BulkAddToSearchIndex(r repo.Repo, employees []*Employee) error {
+//	err := NewSearchIndex("").BulkAddToSearchIndex(repo, []*Employee{emp1, emp2})
+func (si *SearchIndex) BulkAddToSearchIndex(r repo.Repo, employees []*Employee) error {
 	tokenToEmpIDs := make(map[string][]string)
-
 	for _, emp := range employees {
-		tokens := TokenizeEmployee(emp)
+		tokens := si.TokenizeEmployee(emp)
 		for _, token := range tokens {
 			tokenToEmpIDs[token] = append(tokenToEmpIDs[token], emp.ID)
 		}
 	}
 
-	requests := make([]*hydraidego.CatalogManyToManyRequest, 0, len(tokenToEmpIDs))
-	for token, empIDs := range tokenToEmpIDs {
-		models := make([]any, len(empIDs))
-		for i, empID := range empIDs {
-			models[i] = &SearchIndex{EmployeeID: empID}
-		}
-		req := &hydraidego.CatalogManyToManyRequest{
-			SwampName: createSearchSwampName(token),
-			Models:    models,
-		}
-		requests = append(requests, req)
-	}
-
 	ctx, cancel := hydraidehelper.CreateHydraContext()
 	defer cancel()
-	return r.GetHydraidego().CatalogSaveManyToMany(ctx, requests, nil)
+
+	for token, empIDs := range tokenToEmpIDs {
+		models := make([]any, len(empIDs))
+		for i, id := range empIDs {
+			models[i] = &SearchIndex{EmployeeID: id}
+		}
+		req := &hydraidego.CatalogManyToManyRequest{
+			SwampName: si.createSearchSwampName(token),
+			Models:    models,
+		}
+		if err := r.GetHydraidego().CatalogSaveManyToMany(ctx, []*hydraidego.CatalogManyToManyRequest{req}, nil); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // BulkRemoveFromSearchIndex removes multiple employees from the search index in Hydraide DB.
 //
-// For each employee, tokens are generated and their ID is removed from the associated swamps.
-//
-// Params:
-//   - r: Hydraide repository.
-//   - employees: Slice of Employee pointers to remove.
-//
 // Example:
 //
-//	err := BulkRemoveFromSearchIndex(repo, []*Employee{emp1, emp2})
-func BulkRemoveFromSearchIndex(r repo.Repo, employees []*Employee) error {
+//	err := NewSearchIndex("").BulkRemoveFromSearchIndex(repo, []*Employee{emp1, emp2})
+func (si *SearchIndex) BulkRemoveFromSearchIndex(r repo.Repo, employees []*Employee) error {
 	tokenToEmpIDs := make(map[string][]string)
-
 	for _, emp := range employees {
-		tokens := TokenizeEmployee(emp)
+		tokens := si.TokenizeEmployee(emp)
 		for _, token := range tokens {
 			tokenToEmpIDs[token] = append(tokenToEmpIDs[token], emp.ID)
 		}
 	}
 
-	requests := make([]*hydraidego.CatalogDeleteManyFromManyRequest, 0, len(tokenToEmpIDs))
-	for token, empIDs := range tokenToEmpIDs {
-		req := &hydraidego.CatalogDeleteManyFromManyRequest{
-			SwampName: createSearchSwampName(token),
-			Keys:      empIDs,
-		}
-		requests = append(requests, req)
-	}
-
 	ctx, cancel := hydraidehelper.CreateHydraContext()
 	defer cancel()
-	return r.GetHydraidego().CatalogDeleteManyFromMany(ctx, requests, nil)
+
+	for token, empIDs := range tokenToEmpIDs {
+		req := &hydraidego.CatalogDeleteManyFromManyRequest{
+			SwampName: si.createSearchSwampName(token),
+			Keys:      empIDs,
+		}
+		if err := r.GetHydraidego().CatalogDeleteManyFromMany(ctx, []*hydraidego.CatalogDeleteManyFromManyRequest{req}, nil); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // FindEmployeeIDsByToken searches for employee IDs by a given token.
 //
-// This is used to implement fast search functionality in the API.
-//
-// Params:
-//   - r: Hydraide repository.
-//   - token: The search token to look up.
-//
-// Returns:
-//   - []string: Slice of matching employee IDs.
-//   - error: Any error encountered.
-//
 // Example:
 //
-//	ids, err := FindEmployeeIDsByToken(repo, "developer")
-func FindEmployeeIDsByToken(r repo.Repo, token string) ([]string, error) {
+//	ids, err := NewSearchIndex("").FindEmployeeIDsByToken(repo, "developer")
+func (si *SearchIndex) FindEmployeeIDsByToken(r repo.Repo, token string) ([]string, error) {
 	ctx, cancel := hydraidehelper.CreateHydraContext()
 	defer cancel()
-
 	var ids []string
-	swampName := createSearchSwampName(strings.ToLower(token))
+
+	swampName := si.createSearchSwampName(strings.ToLower(token))
 	index := &hydraidego.Index{IndexType: hydraidego.IndexKey, IndexOrder: hydraidego.IndexOrderAsc, Limit: 0}
 
 	err := r.GetHydraidego().CatalogReadMany(ctx, swampName, index, SearchIndex{}, func(model any) error {
@@ -174,7 +150,6 @@ func FindEmployeeIDsByToken(r repo.Repo, token string) ([]string, error) {
 		}
 		return nil
 	})
-
 	if err != nil && !hydraidego.IsSwampNotFound(err) {
 		return nil, err
 	}
@@ -183,23 +158,17 @@ func FindEmployeeIDsByToken(r repo.Repo, token string) ([]string, error) {
 
 // RegisterSearchIndexPattern registers the Hydraide pattern for the search index.
 //
-// This must be called before using the search index for fast lookup.
-//
-// Params:
-//   - r: Hydraide repository.
-//
 // Example:
 //
-//	err := RegisterSearchIndexPattern(repo)
-func RegisterSearchIndexPattern(r repo.Repo) error {
+//	err := NewSearchIndex("").RegisterSearchIndexPattern(repo)
+func (si *SearchIndex) RegisterSearchIndexPattern(r repo.Repo) error {
 	ctx, cancel := hydraidehelper.CreateHydraContext()
 	defer cancel()
 
-	pattern := name.New().Sanctuary(searchIndexSanctuary).Realm(searchIndexRealm).Swamp("*")
-
+	// Register a pattern for each possible token (for demo, register a generic one)
 	req := &hydraidego.RegisterSwampRequest{
-		SwampPattern:    pattern,
-		CloseAfterIdle:  10 * time.Minute,
+		SwampPattern:    si.createSearchSwampName("{token}"),
+		CloseAfterIdle:  1 * time.Hour,
 		IsInMemorySwamp: false,
 		FilesystemSettings: &hydraidego.SwampFilesystemSettings{
 			WriteInterval: 10 * time.Second,

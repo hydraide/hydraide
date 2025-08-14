@@ -24,13 +24,20 @@ const (
 //
 // Example:
 //
-//	indexEntry := &EmployeeIndex{EmployeeID: "emp-1234"}
+//	indexEntry := NewEmployeeIndex("emp-1234")
+//
+// All methods for EmployeeIndex use pointer receivers for clarity and maintainability.
 type EmployeeIndex struct {
 	EmployeeID string `hydraide:"key"`
 }
 
+// NewEmployeeIndex initializes a new EmployeeIndex object.
+func NewEmployeeIndex(employeeID string) *EmployeeIndex {
+	return &EmployeeIndex{EmployeeID: employeeID}
+}
+
 // createIndexSwampName builds the Hydraide swamp name for the employee index.
-func createIndexSwampName() name.Name {
+func (ei *EmployeeIndex) createIndexSwampName() name.Name {
 	return name.New().Sanctuary(indexSanctuary).Realm(indexRealm).Swamp(indexSwamp)
 }
 
@@ -44,8 +51,8 @@ func createIndexSwampName() name.Name {
 //
 // Example:
 //
-//	err := BulkAddToIndex(repo, []string{"emp-1", "emp-2"})
-func BulkAddToIndex(r repo.Repo, employeeIDs []string) error {
+//	err := NewEmployeeIndex("").BulkAddToIndex(repo, []string{"emp-1", "emp-2"})
+func (ei *EmployeeIndex) BulkAddToIndex(r repo.Repo, employeeIDs []string) error {
 	ctx, cancel := hydraidehelper.CreateHydraContext()
 	defer cancel()
 
@@ -54,7 +61,7 @@ func BulkAddToIndex(r repo.Repo, employeeIDs []string) error {
 		models[i] = &EmployeeIndex{EmployeeID: id}
 	}
 
-	return r.GetHydraidego().CatalogSaveMany(ctx, createIndexSwampName(), models, nil)
+	return r.GetHydraidego().CatalogSaveMany(ctx, ei.createIndexSwampName(), models, nil)
 }
 
 // BulkRemoveFromIndex removes multiple employee IDs from the main index in Hydraide DB.
@@ -67,11 +74,11 @@ func BulkAddToIndex(r repo.Repo, employeeIDs []string) error {
 //
 // Example:
 //
-//	err := BulkRemoveFromIndex(repo, []string{"emp-1", "emp-2"})
-func BulkRemoveFromIndex(r repo.Repo, employeeIDs []string) error {
+//	err := NewEmployeeIndex("").BulkRemoveFromIndex(repo, []string{"emp-1", "emp-2"})
+func (ei *EmployeeIndex) BulkRemoveFromIndex(r repo.Repo, employeeIDs []string) error {
 	ctx, cancel := hydraidehelper.CreateHydraContext()
 	defer cancel()
-	return r.GetHydraidego().CatalogDeleteMany(ctx, createIndexSwampName(), employeeIDs, nil)
+	return r.GetHydraidego().CatalogDeleteMany(ctx, ei.createIndexSwampName(), employeeIDs, nil)
 }
 
 // GetPaginatedIDs retrieves a paginated list of employee IDs from the index.
@@ -90,12 +97,12 @@ func BulkRemoveFromIndex(r repo.Repo, employeeIDs []string) error {
 //
 // Example:
 //
-//	ids, total, err := GetPaginatedIDs(repo, 0, 10)
-func GetPaginatedIDs(r repo.Repo, offset int, limit int) (ids []string, total int, err error) {
+//	ids, total, err := NewEmployeeIndex("").GetPaginatedIDs(repo, 0, 10)
+func (ei *EmployeeIndex) GetPaginatedIDs(r repo.Repo, offset int, limit int) (ids []string, total int, err error) {
 	ctx, cancel := hydraidehelper.CreateHydraContext()
 	defer cancel()
 
-	swampName := createIndexSwampName()
+	swampName := ei.createIndexSwampName()
 
 	totalCount, err := r.GetHydraidego().Count(ctx, swampName)
 	if err != nil {
@@ -137,13 +144,13 @@ func GetPaginatedIDs(r repo.Repo, offset int, limit int) (ids []string, total in
 //
 // Example:
 //
-//	err := RegisterIndexPattern(repo)
-func RegisterIndexPattern(r repo.Repo) error {
+//	err := NewEmployeeIndex("").RegisterIndexPattern(repo)
+func (ei *EmployeeIndex) RegisterIndexPattern(r repo.Repo) error {
 	ctx, cancel := hydraidehelper.CreateHydraContext()
 	defer cancel()
 
 	req := &hydraidego.RegisterSwampRequest{
-		SwampPattern:    createIndexSwampName(),
+		SwampPattern:    ei.createIndexSwampName(),
 		CloseAfterIdle:  1 * time.Hour,
 		IsInMemorySwamp: false,
 		FilesystemSettings: &hydraidego.SwampFilesystemSettings{
