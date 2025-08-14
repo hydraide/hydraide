@@ -54,9 +54,9 @@ type InstanceHealth interface {
 
 // HealhStatus represents the outcome of a health check for a single instance.
 type HealhStatus struct {
-	Instance string
-	Status   string
-	Error    error
+	InstanceName string
+	Status       string
+	Error        error
 }
 
 // Implementation of InstanceHealth interface
@@ -113,39 +113,39 @@ func (h *instanceHealth) GetListHealthStatus(ctx context.Context, instances []st
 func (h *instanceHealth) performHealthCheck(ctx context.Context, instance string) HealhStatus {
 	exists, err := h.instanceController.InstanceExists(ctx, instance)
 	if err != nil {
-		return HealhStatus{Instance: instance, Status: "unknown", Error: err}
+		return HealhStatus{InstanceName: instance, Status: "unknown", Error: err}
 	}
 	if !exists {
-		return HealhStatus{Instance: instance, Status: "unknown", Error: fmt.Errorf("instance does not exist")}
+		return HealhStatus{InstanceName: instance, Status: "unknown", Error: fmt.Errorf("instance does not exist")}
 	}
 
 	workDir, err := getWorkingDirectory(instance)
 	if err != nil {
-		return HealhStatus{Instance: instance, Status: "unknown", Error: err}
+		return HealhStatus{InstanceName: instance, Status: "unknown", Error: err}
 	}
 	envPath := filepath.Join(workDir, ".env")
 	envMap, err := godotenv.Read(envPath)
 	if err != nil {
-		return HealhStatus{Instance: instance, Status: "unknown", Error: err}
+		return HealhStatus{InstanceName: instance, Status: "unknown", Error: err}
 	}
 
 	healthPortString, ok := envMap["HEALTH_CHECK_PORT"]
 	if !ok {
-		return HealhStatus{Instance: instance, Status: "unknown", Error: fmt.Errorf("HEALTH_CHECK_PORT is missing")}
+		return HealhStatus{InstanceName: instance, Status: "unknown", Error: fmt.Errorf("HEALTH_CHECK_PORT is missing")}
 	}
 
 	healthport, err := strconv.Atoi(healthPortString)
 	if err != nil {
-		return HealhStatus{Instance: instance, Status: "unknown", Error: err}
+		return HealhStatus{InstanceName: instance, Status: "unknown", Error: err}
 	}
 
 	url := fmt.Sprintf("http://localhost:%v/health", healthport)
 	status, err := checkHealth(ctx, url)
 
 	if err != nil {
-		return HealhStatus{Instance: instance, Status: "unknown", Error: err}
+		return HealhStatus{InstanceName: instance, Status: "unknown", Error: err}
 	}
-	return HealhStatus{Instance: instance, Status: status, Error: nil}
+	return HealhStatus{InstanceName: instance, Status: status, Error: nil}
 }
 
 // checkHealth performs a low-level HTTP GET request to a URL.
