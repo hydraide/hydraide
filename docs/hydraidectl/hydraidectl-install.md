@@ -72,4 +72,21 @@ It will download and replace the previous version automatically.
 
 ---
 
-For more CLI usage, see the full `hydraidectl` documentation.
+### 📖 Next Steps
+
+You can now manage your HydrAIDE instances with `hydraidectl`.  
+
+## Available Commands
+
+* [`init`](hydraidectl-user-manual.md#init--interactive-setup-wizard) – Initialize a new HydrAIDE instance interactively
+* [`service`](hydraidectl-user-manual.md#service--set-up-persistent-system-service) – Create and manage a persistent system service
+* [`start`](hydraidectl-user-manual.md#start--start-an-instance) – Start a specific HydrAIDE instance
+* [`stop`](hydraidectl-user-manual.md#stop--stop-a-running-instance) – Gracefully stop an instance
+* [`restart`](hydraidectl-user-manual.md#restart--restart-instance) – Restart a running or stopped instance
+* [`list`](hydraidectl-user-manual.md#list--show-all-instances) – Show all registered HydrAIDE instances on the host
+* [`health`](hydraidectl-user-manual.md#health--instance-health) – Display health of an instance
+* [`destroy`](hydraidectl-user-manual.md#destroy--remove-instance) – Fully delete an instance, optionally including all its data
+
+For details, see the [HydrAIDECtl User Manual](hydraidectl-user-manual.md).
+
+---
