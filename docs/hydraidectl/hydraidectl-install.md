@@ -90,4 +90,3 @@ You can now manage your HydrAIDE instances with `hydraidectl`.
 For details, see the [HydrAIDECtl User Manual](hydraidectl-user-manual.md).
 
 ---
-
