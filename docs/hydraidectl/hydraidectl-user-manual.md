@@ -26,6 +26,7 @@ Although `hydraidectl` is stable and production-tested, new features are under d
 * [`stop` – Gracefully stop an instance](#stop--stop-a-running-instance)
 * [`restart` – Restart a running or stopped instance](#restart--restart-instance)
 * [`list` – Show all registered HydrAIDE instances on the host](#list--show-all-instances)
+* [`health`– Display health of an instance](#health--instance-health)
 * [`destroy` – Fully delete an instance, optionally including all its data](#restart--restart-instance)
 
 ---
@@ -140,15 +141,59 @@ sudo hydraidectl restart --instance dev-local
 
 ## `list` – Show All Instances
 
-Displays all registered HydrAIDE services and their status.
+Displays all registered HydrAIDE services, their Status, and Health.
 
 Output options:
 
-* Default (human readable)
-* `--quiet` (names only)
-* `--json` (machine-readable)
+* Default (human-readable table with `Name`, `Status`, `Health`)
+* `--quiet` (names only, skips health/status)
+* `--json` (machine-readable, includes `"health": "healthy|unhealthy|unknown"`)
+* `--no-health` (skip health probing for faster listing)
 
-Also detects duplicate services and warns accordingly.
+The `Health` column is determined by running a short health probe (2s timeout) against each instance’s configured health endpoint. If the configuration is missing or the check times out, `unknown` is shown.
+
+**Example:**
+
+```bash
+sudo hydraidectl list --json
+```
+```bash
+sudo hydraidectl list --no-health
+```
+
+---
+
+
+## `health` – Instance Health
+
+Checks the runtime health of a specific HydrAIDE instance.
+
+**Synopsis:**
+```bash
+hydraidectl health --instance <name>
+```
+
+**Behavior:**
+* Reads the instance’s `.env` file (created by `init`) to locate health settings.
+* Performs an HTTP GET request to the configured health endpoint.
+* Returns:
+  * `healthy` if endpoint returns HTTP 200 OK within 2 seconds
+  * `unhealthy` if endpoint returns non-200, times out, or connection fails
+* Exit codes:
+  * `0` → healthy
+  * `1` → unhealthy
+  * `3` → instance not found or config missing
+
+**Examples:**
+```bash
+sudo hydraidectl health --instance dev-local
+# healthy
+```
+
+```bash
+sudo hydraidectl health --instance test
+# unhealthy
+```
 
 ---
 
