@@ -4,6 +4,11 @@ on:
   push:
     tags:
       - "server/v*" # Triggers on tags like server/v1.2.3, etc.
+env:
+  # Use docker.io for Docker Hub if empty
+  REGISTRY: ghcr.io
+  # github.repository as <account>/<repo>
+  IMAGE_NAME: ${{ github.repository }} # hydraide/hydraide
 
 jobs:
   release:
