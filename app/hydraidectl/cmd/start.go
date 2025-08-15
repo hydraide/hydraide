@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -11,6 +12,15 @@ import (
 	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/instancerunner"
 	"github.com/spf13/cobra"
 )
+
+// Used by start/stop/restart lifecycle commands to print result in json format
+type JsonLifecycleInfo struct {
+	Instance  string `json:"instance"`
+	Action    string `json:"action"`
+	Status    string `json:"status"`
+	Message   string `json:"message"`
+	Timestamp string `json:"timestamp"`
+}
 
 var startInstance string
 
@@ -22,8 +32,12 @@ var startCmd = &cobra.Command{
 		if os.Geteuid() != 0 {
 			fmt.Println("This command must be run as root or with sudo to create a system service.")
 			fmt.Println("Please run 'sudo hydraidectl start --instance " + instanceName + "'")
-			return
+			os.Exit(3)
 		}
+
+		jsonOutput, _ := cmd.Flags().GetBool("json")
+		outputFormat, _ := cmd.Flags().GetString("output")
+		printJson := jsonOutput || outputFormat == "json"
 
 		instanceController := instancerunner.NewInstanceController(
 			instancerunner.WithTimeout(20*time.Second),
@@ -32,22 +46,35 @@ var startCmd = &cobra.Command{
 
 		if instanceController == nil {
 			fmt.Printf("❌ unsupported operating system: %s", runtime.GOOS)
-			return
+			os.Exit(3)
 		}
 
 		ctx := context.Background()
 
 		exists, err := instanceController.InstanceExists(ctx, startInstance)
 		if err != nil {
+			if printJson {
+				printJsonStart(err)
+				return
+			}
 			fmt.Println("failed to verify instance existence: ", err)
 		}
 
 		if !exists {
+			if printJson {
+				printJsonStart(fmt.Errorf("instance '%s' not found", startInstance))
+				return
+			}
 			fmt.Printf("❌ Instance \"%s\" not found.\nUse `hydraidectl list-instances` to see available instances.\n", startInstance)
 			os.Exit(1)
 		}
 
 		err = instanceController.StartInstance(ctx, startInstance)
+
+		if printJson {
+			printJsonStart(err)
+			return
+		}
 
 		if err != nil {
 			switch {
@@ -77,5 +104,35 @@ func init() {
 	rootCmd.AddCommand(startCmd)
 
 	startCmd.Flags().StringVarP(&startInstance, "instance", "i", "", "Name of the service instance")
+	startCmd.Flags().BoolP("json", "j", false, "Return structured output in JSON format")
+	startCmd.Flags().StringP("output", "o", "", "Output format")
 	startCmd.MarkFlagRequired("instance")
+}
+
+func printJsonStart(err error) {
+	var jsonResponse *JsonLifecycleInfo
+	if err != nil {
+		jsonResponse = &JsonLifecycleInfo{
+			Instance:  startInstance,
+			Action:    "start",
+			Status:    "error",
+			Message:   err.Error(),
+			Timestamp: time.Now().UTC().Format(time.RFC3339),
+		}
+	} else {
+		jsonResponse = &JsonLifecycleInfo{
+			Instance:  startInstance,
+			Action:    "start",
+			Status:    "success",
+			Message:   "instance started successfully",
+			Timestamp: time.Now().UTC().Format(time.RFC3339),
+		}
+	}
+
+	outputJSON, err := json.MarshalIndent(jsonResponse, "", "  ")
+	if err != nil {
+		fmt.Printf("Error generating JSON output: %v", err)
+		os.Exit(3)
+	}
+	fmt.Println(string(outputJSON))
 }
