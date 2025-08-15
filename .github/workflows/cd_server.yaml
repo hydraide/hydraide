@@ -99,14 +99,20 @@ jobs:
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
-          GOARM: ${{ matrix.goarm || '' }}
           CGO_ENABLED: 0
           VERSION: ${{ steps.buildinfo.outputs.version }}
           COMMIT_SHA: ${{ steps.buildinfo.outputs.commit }}
           BUILD_DATE: ${{ steps.buildinfo.outputs.date }}
         shell: bash
         run: |
-          echo "Building for $GOOS/$GOARCH${GOARM:+ (GOARM=$GOARM)}"
+          # Conditionally set GOARM if defined in matrix
+          if [ -n "${{ matrix.goarm }}" ]; then
+            export GOARM="${{ matrix.goarm }}"
+            echo "Building for $GOOS/$GOARCH (GOARM=$GOARM)"
+          else
+            echo "Building for $GOOS/$GOARCH"
+          fi
+
           LDFLAGS="-s -w -trimpath \
             -X main.version=${VERSION} \
             -X main.commit=${COMMIT_SHA} \
@@ -116,6 +122,7 @@ jobs:
             -X main.goarch=${GOARCH}"
           go build -tags netgo -ldflags "$LDFLAGS" -o "${{ matrix.binary_name }}${{ matrix.ext }}" ./app/server
           chmod +x "${{ matrix.binary_name }}${{ matrix.ext }}"
+
 
       - name: Package artifact (+checksums)
         shell: bash
@@ -159,7 +166,7 @@ jobs:
         with:
           pattern: hydraide-*
           path: ./artifacts
-          # merge-multiple true: minden dist fájl egy mappába kerül
+          # merge-multiple true: all dist files go into one folder
           merge-multiple: true
 
       - name: Create GitHub release with assets
