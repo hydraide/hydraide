@@ -113,16 +113,18 @@ jobs:
             echo "Building for $GOOS/$GOARCH"
           fi
 
-          LDFLAGS="-s -w -trimpath \
+          LDFLAGS="-s -w \
             -X main.version=${VERSION} \
             -X main.commit=${COMMIT_SHA} \
             -X main.date=${BUILD_DATE} \
             -X main.builtBy=GitHubActions \
             -X main.goos=${GOOS} \
             -X main.goarch=${GOARCH}"
-          go build -tags netgo -ldflags "$LDFLAGS" -o "${{ matrix.binary_name }}${{ matrix.ext }}" ./app/server
-          chmod +x "${{ matrix.binary_name }}${{ matrix.ext }}"
 
+          # IMPORTANT: -trimpath kint, nem az -ldflags-ben
+          go build -trimpath -tags netgo -ldflags "$LDFLAGS" -o "${{ matrix.binary_name }}${{ matrix.ext }}" ./app/server
+          chmod +x "${{ matrix.binary_name }}${{ matrix.ext }}"
+      
 
       - name: Package artifact (+checksums)
         shell: bash
