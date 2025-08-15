@@ -162,7 +162,7 @@ jobs:
           echo "Creating release for version: $VERSION"
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           pattern: hydraide-*
           path: ./artifacts
@@ -195,13 +195,13 @@ jobs:
 
       # Only need linux/amd64 and linux/arm64 artifacts for Docker image
       - name: Download amd64 artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: hydraide-linux-amd64
           path: docker-context/
 
       - name: Download arm64 artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: hydraide-linux-arm64
           path: docker-context/
