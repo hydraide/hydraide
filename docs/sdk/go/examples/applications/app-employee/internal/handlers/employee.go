@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"hydraideEmployee/internal/models"
+	"github.com/hydraide/hydraide/docs/sdk/go/examples/applications/app-employee/internal/models"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"

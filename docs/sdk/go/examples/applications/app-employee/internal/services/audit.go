@@ -5,7 +5,7 @@ import (
 	"log"
 	"time"
 
-	"hydraideEmployee/internal/models"
+	"github.com/hydraide/hydraide/docs/sdk/go/examples/applications/app-employee/internal/models"
 
 	"github.com/hydraide/hydraide/sdk/go/hydraidego"
 	"github.com/hydraide/hydraide/sdk/go/hydraidego/name"

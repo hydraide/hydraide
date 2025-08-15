@@ -4,10 +4,12 @@ import (
 	"log"
 	"net/http"
 
-	"hydraideEmployee/internal/db"
-	"hydraideEmployee/internal/handlers"
-	"hydraideEmployee/internal/models"
-	"hydraideEmployee/internal/services"
+	"github.com/hydraide/hydraide/docs/sdk/go/examples/applications/app-employee/internal/handlers"
+	"github.com/hydraide/hydraide/docs/sdk/go/examples/applications/app-employee/internal/services"
+
+	"github.com/hydraide/hydraide/docs/sdk/go/examples/applications/app-employee/internal/models"
+
+	"github.com/hydraide/hydraide/docs/sdk/go/examples/applications/app-employee/internal/db"
 
 	"github.com/gorilla/mux"
 )
