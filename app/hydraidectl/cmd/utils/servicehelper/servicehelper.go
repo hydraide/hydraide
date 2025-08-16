@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/locker"
 )
 
 // ServiceManager defines the interface for managing platform-specific services.
@@ -467,6 +469,12 @@ func (s *serviceManagerImpl) RemoveService(instanceName string) error {
 			slog.Info("Service stopped successfully", "service", serviceName)
 		}
 
+		// delete lock file
+		if err := locker.DeleteLockFile(instanceName); err != nil {
+			// log the error and continue
+			slog.Error("Failed to delete lock file for instance", "instanceName", instanceName)
+		}
+
 		// Disable the service
 		slog.Info("Disabling service", "service", serviceName)
 		cmd = exec.Command("systemctl", "disable", fmt.Sprintf("%s.service", serviceName))
@@ -506,6 +514,12 @@ func (s *serviceManagerImpl) RemoveService(instanceName string) error {
 			slog.Warn("Failed to stop NSSM service", "error", err, "output", string(output))
 		} else {
 			slog.Info("NSSM service stopped successfully", "service", serviceName)
+		}
+
+		// delete lock file
+		if err := locker.DeleteLockFile(instanceName); err != nil {
+			// log the error and continue
+			slog.Error("Failed to delete lock file for instance", "instanceName", instanceName)
 		}
 
 		// Remove the service

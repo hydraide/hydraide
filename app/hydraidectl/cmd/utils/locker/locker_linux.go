@@ -45,14 +45,12 @@ func (l *posixLocker) Unlock() error {
 // getLockDirectory returns the path to the directory where lock files are stored.
 // It creates the directory if it does not exist.
 func getLockDir() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
+	dir := "/var/lock/hydraide"
+
+	if err := os.MkdirAll(dir, 0o777); err != nil {
+		return "", fmt.Errorf("failed to create system lock directory '%s': %w", dir, err)
 	}
-	dir := filepath.Join(home, ".hydraide", "locks")
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return "", err
-	}
+
 	return dir, nil
 }
 
