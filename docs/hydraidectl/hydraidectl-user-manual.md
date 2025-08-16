@@ -31,32 +31,68 @@ Although `hydraidectl` is stable and production-tested, new features are under d
 
 ---
 
+Nagyon jó, hogy ezt kiemeled, mert az **`init`** dokumentáció így most nem adja át elég tisztán, hogy pontosan **milyen fájlok keletkeznek, mire jók, és hova kell őket másolni**.
+Az új mTLS-es felépítés szerint így érdemes átírni:
+
+---
+
 ## `init` – Interactive Setup Wizard
 
-Use this to create a new HydrAIDE instance.
+Use this command to create a new HydrAIDE instance.
 
 You will be prompted for:
 
 * Unique instance name (e.g. `prod`, `dev-local`)
 * TLS settings: CN, IPs, domains
 * Listening port
-* Data base path
+* Data storage path
 * Logging level and options
 * Optional Graylog integration
 
-The init command creates the config, generates certs, and prepares a new instance for service installation. Note that this command only sets up the instance – it does not start it. To run the instance as a background service, you must follow it with the `service` command.
+The `init` command generates the full instance configuration and prepares all required TLS certificates and keys.
+⚠️ Note: `init` only sets up the instance – it does not start it. To run the instance as a background service, follow with the `service` command.
 
-This command does not require `sudo`. It runs under the current user context and creates the config files in your home or workspace directory.&#x20;
+This command does **not** require `sudo`. It runs under the current user context and creates the config and certificate files inside the chosen instance directory.
 
-At the end of the initialization, a `certificate` folder is generated inside the chosen instance directory. This folder contains the generated server and client certificates.
+### Certificate generation
 
-The **client certificate** is essential for authenticating your client application. Make sure to extract it and place it in your application's configuration or runtime path.
+At the end of initialization, a `certificate/` folder is created inside the instance directory.
+It contains the following files:
 
-**Example:**
+| File             | Purpose                                                                  | Who uses it                                          |
+| ---------------- | ------------------------------------------------------------------------ | ---------------------------------------------------- |
+| **`ca.crt`**     | Root CA certificate. Used to verify both server and client certificates. | Copy to every client, and keep a copy on the server. |
+| **`ca.key`**     | Root CA private key. Used only to sign new server/client certificates.   | **Must remain on the server**. Never share.          |
+| **`server.crt`** | TLS certificate for this HydrAIDE server.                                | Used only by the server.                             |
+| **`server.key`** | Private key for the server certificate.                                  | **Must remain on the server**.                       |
+| **`client.crt`** | Client certificate signed by the CA.                                     | Copy to each client that will connect.               |
+| **`client.key`** | Private key for the client certificate.                                  | Copy to each client together with `client.crt`.      |
+
+### What to copy to clients
+
+When setting up a client application, you must copy:
+
+* `ca.crt` → so the client can validate the server’s identity.
+* `client.crt` + `client.key` → so the client can authenticate itself to the server.
+
+These three files go into the client’s configuration/runtime path.
+
+### What stays on the server
+
+* `ca.key` → keep strictly private (used only for signing).
+* `server.crt` + `server.key` → used by the HydrAIDE server itself.
+* The `certificate/` directory should remain intact in the instance folder.
+
+**Example usage:**
 
 ```bash
 hydraidectl init
 ```
+
+After initialization:
+
+* Server runs with → `server.crt`, `server.key`, and `ca.crt`
+* Client apps must be configured with → `client.crt`, `client.key`, and `ca.crt`
 
 ---
 
