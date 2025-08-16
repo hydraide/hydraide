@@ -43,7 +43,9 @@ func (s *TestModelCatalogQueue) SetupSuite() {
 			// "/etc/hydraide/certs/ca.crt"
 			// For generating the certificate, refer to the install guide and use
 			// the official script provided during HydrAIDE install-scripts.
-			CertFilePath: os.Getenv("HYDRA_CERT"),
+			CACrtPath:     os.Getenv("HYDRAIDE_CA_CERT"),
+			ClientCrtPath: os.Getenv("HYDRAIDE_CLIENT_CERT"),
+			ClientKeyPath: os.Getenv("HYDRAIDE_CLIENT_KEY"),
 		},
 	}, 100, 10485760, false)
 
