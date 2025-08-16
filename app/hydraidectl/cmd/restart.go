@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -22,8 +23,12 @@ var restartCmd = &cobra.Command{
 		if os.Geteuid() != 0 {
 			fmt.Println("This command must be run as root or with sudo to create a system service.")
 			fmt.Println("Please run 'sudo hydraidectl restart --instance " + instanceName + "'")
-			return
+			os.Exit(3)
 		}
+
+		jsonOutput, _ := cmd.Flags().GetBool("json")
+		outputFormat, _ := cmd.Flags().GetString("output")
+		printJson := jsonOutput || outputFormat == "json"
 
 		instanceController := instancerunner.NewInstanceController(
 			instancerunner.WithTimeout(30*time.Second),
@@ -32,25 +37,40 @@ var restartCmd = &cobra.Command{
 
 		if instanceController == nil {
 			fmt.Printf("❌ unsupported operating system: %s", runtime.GOOS)
-			return
+			os.Exit(3)
 		}
 
 		ctx := context.Background()
 
 		exists, err := instanceController.InstanceExists(ctx, restartInstance)
 		if err != nil {
+			if printJson {
+				printJsonRestart(err)
+				return
+			}
 			fmt.Println("failed to verify instance existence: ", err)
 		}
 
 		if !exists {
+			if printJson {
+				printJsonRestart(fmt.Errorf("instance '%s' does not exist", restartInstance))
+				return
+			}
 			fmt.Printf("❌ Instance \"%s\" not found.\nUse `hydraidectl list-instances` to see available instances.\n", restartInstance)
 			os.Exit(1)
 		}
 
 		// Stop the instance
-		fmt.Printf("🔁 Restarting instance \"%s\"...\n", restartInstance)
+		if !printJson {
+			fmt.Printf("🔁 Restarting instance \"%s\"...\n", restartInstance)
+		}
 
 		err = instanceController.StopInstance(ctx, restartInstance)
+
+		if printJson && err != nil {
+			printJsonRestart(err)
+			return
+		}
 
 		if err != nil {
 			switch {
@@ -72,12 +92,19 @@ var restartCmd = &cobra.Command{
 				os.Exit(3)
 			}
 		} else {
-			fmt.Printf("✅ Instance \"%s\" has been stopped. Status: inactive\n", restartInstance)
+			if !printJson {
+				fmt.Printf("✅ Instance \"%s\" has been stopped. Status: inactive\n", restartInstance)
+			}
 		}
 
 		// We only proceed with the start if the stop phase didn't have a fatal error.
 		// A fatal error would have already exited the program above.
 		err = instanceController.StartInstance(ctx, restartInstance)
+
+		if printJson {
+			printJsonRestart(err)
+			return
+		}
 
 		if err != nil {
 
@@ -104,4 +131,34 @@ func init() {
 
 	restartCmd.Flags().StringVarP(&restartInstance, "instance", "i", "", "Name of the service instance")
 	restartCmd.MarkFlagRequired("instance")
+	restartCmd.Flags().BoolP("json", "j", false, "Return structured output in JSON format")
+	restartCmd.Flags().StringP("output", "o", "", "Output format")
+}
+
+func printJsonRestart(err error) {
+	var jsonResponse *JsonLifecycleInfo
+	if err != nil {
+		jsonResponse = &JsonLifecycleInfo{
+			Instance:  restartInstance,
+			Action:    "restart",
+			Status:    "error",
+			Message:   err.Error(),
+			Timestamp: time.Now().UTC().Format(time.RFC3339),
+		}
+	} else {
+		jsonResponse = &JsonLifecycleInfo{
+			Instance:  restartInstance,
+			Action:    "restart",
+			Status:    "success",
+			Message:   "instance restarted successfully",
+			Timestamp: time.Now().UTC().Format(time.RFC3339),
+		}
+	}
+
+	outputJSON, err := json.MarshalIndent(jsonResponse, "", "  ")
+	if err != nil {
+		fmt.Printf("Error generating JSON output: %v", err)
+		os.Exit(3)
+	}
+	fmt.Println(string(outputJSON))
 }
