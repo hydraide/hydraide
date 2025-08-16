@@ -25,8 +25,10 @@ var destroyCmd = &cobra.Command{
 	Short: "Stops, disables, and removes a HydrAIDE instance.",
 	Long: `Stops and removes a HydrAIDE instance.
 
-This command will always perform a graceful shutdown and remove the system service definition.
-Use the --purge flag to also permanently delete the entire base directory, including all data, certificates, and the server binary. This action is irreversible and requires manual confirmation.`,
+⚠️ This command will always perform a graceful shutdown and remove the system service definition.
+⚠️ Use the --purge flag to also permanently delete the entire base directory, including all data, certificates, and the server binary. 
+⚠️ This action is irreversible and requires manual confirmation.
+`,
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 		defer cancel()
@@ -116,5 +118,9 @@ func init() {
 	rootCmd.AddCommand(destroyCmd)
 	destroyCmd.Flags().StringVarP(&destroyInstance, "instance", "i", "", "Name of the HydrAIDE instance to destroy (required)")
 	destroyCmd.Flags().BoolVar(&purgeData, "purge", false, "Permanently delete the entire base path for the instance")
-	destroyCmd.MarkFlagRequired("instance")
+	if err := destroyCmd.MarkFlagRequired("instance"); err != nil {
+		fmt.Println("❌ Error marking 'instance' flag as required:", err)
+		os.Exit(1)
+	}
+
 }

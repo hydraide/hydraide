@@ -3,13 +3,14 @@ package hydrex
 import (
 	"context"
 	"fmt"
-	"github.com/hydraide/hydraide/sdk/go/hydraidego"
-	"github.com/hydraide/hydraide/sdk/go/hydraidego/client"
-	"github.com/stretchr/testify/assert"
 	"log/slog"
 	"os"
 	"testing"
 	"time"
+
+	"github.com/hydraide/hydraide/sdk/go/hydraidego"
+	"github.com/hydraide/hydraide/sdk/go/hydraidego/client"
+	"github.com/stretchr/testify/assert"
 )
 
 var hydraidegoInterface hydraidego.Hydraidego
@@ -27,14 +28,20 @@ func TestMain(m *testing.M) {
 func setup() {
 
 	server := &client.Server{
-		Host:         "",
+		Host:         os.Getenv("HYDRA_HOST"),
 		FromIsland:   0,
-		ToIsland:     0,
-		CertFilePath: "",
+		ToIsland:     1000,
+		CertFilePath: os.Getenv("HYDRA_CERT"),
 	}
 
 	servers := []*client.Server{server}
 	clientInterface = client.New(servers, 1000, 104857600)
+	if err := clientInterface.Connect(true); err != nil {
+		slog.Error("Failed to connect to Hydraide server", "error", err)
+		os.Exit(1) // exit if the connection fails
+	} else {
+		slog.Info("Connected to Hydraide server successfully")
+	}
 	hydraidegoInterface = hydraidego.New(clientInterface) // creates a new hydraidego instance
 
 }

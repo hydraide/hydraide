@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/elevation"
 	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/instancerunner"
 	"github.com/spf13/cobra"
 )
@@ -16,12 +17,14 @@ var stopInstance string
 
 var stopCmd = &cobra.Command{
 	Use:   "stop",
-	Short: "Stop the HydrAIDE instance",
+	Short: "Stop the HydrAIDE instance if it is running",
+	Long: `Stops an existing HydrAIDE instance that has been previously created and registered as a service.
+This command can only be used if the instance was first set up with 'init' and then configured as a service with 'service'.
+If the instance is not running, the command does nothing.`,
 	Run: func(cmd *cobra.Command, args []string) {
 
-		if os.Geteuid() != 0 {
-			fmt.Println("This command must be run as root or with sudo to create a system service.")
-			fmt.Println("Please run 'sudo hydraidectl stop --instance " + instanceName + "'")
+		if !elevation.IsElevated() {
+			fmt.Println(elevation.Hint(instanceName))
 			return
 		}
 

@@ -40,14 +40,19 @@ If you're new to HydrAIDE, feel free to:
 
 ---
 
-## Docs & SDK Reference
+## 🚀 Demo Applications & Model examples
 
-- [Installation Guide](docs/how-to-install-hydraide.md)
-- [Go SDK reference](docs/sdk/go/go-sdk.md)
-- [Thinking in HydrAIDE](docs/thinking-in-hydraide/thinking-in-hydraide.md)
-- [FAQ for AI & SDK usage](docs/hydraide-questions-answers-for-llm.md)
+Explore ready-to-run demo applications built in Go to better understand the HydrAIDE Go SDK and its unique data modeling approach.
 
-These are optimized for both humans and tools like ChatGPT — use whatever helps you learn faster.
+- All demo apps are located in the [Example Applications in Go](https://github.com/hydraide/hydraide/tree/main/docs/sdk/go/examples/applications) folder.
+- Model Examples [CRUD operations, subscriptions, etc.](https://github.com/hydraide/hydraide/tree/main/docs/sdk/go/examples/models)
+- Full Go SDK Documentation: [Go SDK Documentation](docs/sdk/go/go-sdk.md)
+
+These examples are a great starting point to learn how to:
+
+* Structure your HydrAIDE-powered services
+* Use profile and catalog models
+* Handle real-time, reactive data flows efficiently
 
 ---
 

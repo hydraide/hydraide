@@ -4,14 +4,15 @@ package settings
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/hydraide/hydraide/app/core/settings/setting"
-	"github.com/hydraide/hydraide/app/name"
 	"log/slog"
 	"os"
 	"path"
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/hydraide/hydraide/app/core/settings/setting"
+	"github.com/hydraide/hydraide/app/name"
 )
 
 // Settings is the interface for managing configuration settings
