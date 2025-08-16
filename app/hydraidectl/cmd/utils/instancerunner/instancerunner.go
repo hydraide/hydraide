@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -125,17 +127,21 @@ func (c *systemdController) StartInstance(ctx context.Context, instance string) 
 		return ErrServiceAlreadyRunning
 	}
 
-	locker, err := locker.NewLocker(instance)
+	instLock, err := locker.NewLocker(instance)
 	if err != nil {
 		logger.Error("Failed to get Instance Locker")
 		return NewOperationError(instance, "get locker", err)
 	}
-	if err := locker.Lock(); err != nil {
+	if err := instLock.Lock(); err != nil {
 		return NewOperationError(instance, "lock instance", err)
 	}
 	logger.Debug("Locked instance", "instance_name", instance)
 	// Use defer to ensure the lock is always released when the function exits.
-	defer locker.Unlock()
+	defer func() {
+		if err := instLock.Unlock(); err != nil {
+			logger.Error("Failed to unlock instance", "instance_name", instance, "error", err)
+		}
+	}()
 	return c.startInstanceOp(ctx, service)
 }
 
@@ -221,17 +227,21 @@ func (c *systemdController) StopInstance(ctx context.Context, instance string) e
 		return ErrServiceNotRunning
 	}
 
-	locker, err := locker.NewLocker(instance)
+	lockerInst, err := locker.NewLocker(instance)
 	if err != nil {
 		logger.Error("Failed to get instance locker")
 		return NewOperationError(instance, "Acquire lock", err)
 	}
-	if err := locker.Lock(); err != nil {
+	if err := lockerInst.Lock(); err != nil {
 		return fmt.Errorf("failed to lock instance '%s': %w", instance, err)
 	}
 	logger.Debug("File lock instance", "instance_name", instance)
 	// Use defer to ensure the lock is always released when the function exits.
-	defer locker.Unlock()
+	defer func() {
+		if err := lockerInst.Unlock(); err != nil {
+			logger.Error("Failed to unlock instance", "instance_name", instance, "error", err)
+		}
+	}()
 
 	return c.stopInstanceOp(ctx, service)
 }
@@ -298,15 +308,19 @@ func (c *systemdController) RestartInstance(ctx context.Context, instanceName st
 	}
 
 	// Acquire the lock for the entire restart operation.
-	locker, err := locker.NewLocker(instanceName)
+	lockerInst, err := locker.NewLocker(instanceName)
 	if err != nil {
 		logger.Error("Failed to get instance locker")
 		return NewOperationError(instanceName, "acquire locker", err)
 	}
-	if err := locker.Lock(); err != nil {
+	if err := lockerInst.Lock(); err != nil {
 		return NewOperationError(instanceName, "lock instance", err)
 	}
-	defer locker.Unlock()
+	defer func() {
+		if err := lockerInst.Unlock(); err != nil {
+			logger.Error("Failed to unlock instance", "instance_name", instanceName, "error", err)
+		}
+	}()
 
 	logger.Info("Performing restart of the instance", "instance_name", instanceName)
 	// Stop the service gracefully.
@@ -326,7 +340,7 @@ func (c *systemdController) RestartInstance(ctx context.Context, instanceName st
 }
 
 // InstanceExists checks if the service file for a given instance exists on the system.
-func (c *systemdController) InstanceExists(ctx context.Context, instanceName string) (bool, error) {
+func (c *systemdController) InstanceExists(_ context.Context, instanceName string) (bool, error) {
 	service := fmt.Sprintf("hydraserver-%s.service", instanceName)
 	return c.checkServiceExists(service)
 }
@@ -397,15 +411,19 @@ func (c *windowsController) StartInstance(ctx context.Context, instance string) 
 		return ErrServiceNotFound
 	}
 
-	locker, err := locker.NewLocker(instance)
+	lockerInst, err := locker.NewLocker(instance)
 	if err != nil {
 		return NewOperationError(instance, "acquire locker", err)
 	}
-	if err := locker.Lock(); err != nil {
+	if err := lockerInst.Lock(); err != nil {
 		return NewOperationError(instance, "lock instance", err)
 	}
 	// Use defer to ensure the lock is always released when the function exits.
-	defer locker.Unlock()
+	defer func() {
+		if err := lockerInst.Unlock(); err != nil {
+			logger.Error("Failed to unlock instance", "instance_name", instance, "error", err)
+		}
+	}()
 
 	return c.startInstanceOp(ctx, service)
 }
@@ -477,14 +495,18 @@ func (c *windowsController) StopInstance(ctx context.Context, instance string) e
 		return ErrServiceNotFound
 	}
 
-	locker, err := locker.NewLocker(instance)
+	lockerInst, err := locker.NewLocker(instance)
 	if err != nil {
 		return NewOperationError(instance, "acquire locker", err)
 	}
-	if err := locker.Lock(); err != nil {
+	if err := lockerInst.Lock(); err != nil {
 		return NewOperationError(instance, "lock instance", err)
 	}
-	defer locker.Unlock()
+	defer func() {
+		if err := lockerInst.Unlock(); err != nil {
+			logger.Error("Failed to unlock instance", "instance_name", instance, "error", err)
+		}
+	}()
 
 	return c.stopInstanceOp(ctx, service)
 }
@@ -548,14 +570,18 @@ func (c *windowsController) RestartInstance(ctx context.Context, instance string
 
 	logger.Info("[windows] Restarting instance", "instance_name", instance)
 
-	locker, err := locker.NewLocker(instance)
+	lockerInst, err := locker.NewLocker(instance)
 	if err != nil {
 		return NewOperationError(instance, "acquire locker", err)
 	}
-	if err := locker.Lock(); err != nil {
+	if err := lockerInst.Lock(); err != nil {
 		return NewOperationError(instance, "lock instance", err)
 	}
-	defer locker.Unlock()
+	defer func() {
+		if err := lockerInst.Unlock(); err != nil {
+			logger.Error("Failed to unlock instance", "instance_name", instance, "error", err)
+		}
+	}()
 
 	service := fmt.Sprintf("hydraserver-%s", instance)
 	if err := c.stopInstanceOp(ctx, service); err != nil && !errors.Is(err, ErrServiceNotRunning) {
@@ -610,36 +636,271 @@ func (c *windowsController) checkServiceExists(ctx context.Context, service stri
 // isServiceRunning returns true if the Windows service is running.
 func (c *windowsController) isServiceRunning(ctx context.Context, service string) (bool, error) {
 	if c.useNssm {
-		// `nssm status` exits with code 0 if running.
 		cmd := exec.CommandContext(ctx, "nssm", "status", service)
-		err := cmd.Run()
+		output, err := cmd.CombinedOutput()
 		if err != nil {
 			if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 2 {
 				return false, ErrServiceNotFound
 			}
 			return false, &CmdError{
 				Command: "nssm status",
-				Err:     err,
-			}
-		}
-		return err == nil, nil
-	} else {
-		// Use PowerShell to check the service status.
-		cmd := exec.CommandContext(ctx, "powershell", "-Command", fmt.Sprintf("(Get-Service -Name '%s').Status -eq 'Running'", service))
-		output, err := cmd.Output()
-		if err != nil {
-			// If the service is not found, it's not running, and we can return ErrServiceNotFound.
-			if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
-				return false, ErrServiceNotFound
-			}
-			return false, &CmdError{
-				Command: "powershell Get-Service",
 				Output:  string(output),
 				Err:     err,
 			}
 		}
-		return strings.TrimSpace(string(output)) == "True", nil
+
+		status := strings.TrimSpace(string(output))
+		switch status {
+		case "SERVICE_RUNNING":
+			return true, nil
+		case "SERVICE_STOPPED":
+			return false, nil
+		default:
+			// Bizonytalan státusz → hibával jelezzük
+			return false, fmt.Errorf("unexpected NSSM status: %s", status)
+		}
 	}
+
+	// fallback PowerShell ágra (amit már jól kezelsz)
+	cmd := exec.CommandContext(ctx, "powershell", "-Command",
+		fmt.Sprintf("(Get-Service -Name '%s').Status -eq 'Running'", service))
+	output, err := cmd.Output()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
+			return false, ErrServiceNotFound
+		}
+		return false, &CmdError{
+			Command: "powershell Get-Service",
+			Output:  string(output),
+			Err:     err,
+		}
+	}
+	return strings.TrimSpace(string(output)) == "True", nil
+}
+
+// === macOS (launchd) controller =====================================
+
+type darwinController struct {
+	timeout                  time.Duration
+	gracefulStartStopTimeout time.Duration
+}
+
+const (
+	darwinPlistDir = "/Library/LaunchDaemons"
+	// A servicehelper-ben használt label minta:
+	// label := fmt.Sprintf("com.hydraide.%s-%s", BASE_SERVICE_NAME, instanceName)
+	// ahol BASE_SERVICE_NAME = "hydraserver"
+)
+
+func darwinLabel(instance string) string {
+	return fmt.Sprintf("com.hydraide.hydraserver-%s", instance)
+}
+
+func (c *darwinController) StartInstance(ctx context.Context, instance string) error {
+	ctx, cancel := context.WithTimeout(ctx, c.timeout)
+	defer cancel()
+
+	label := darwinLabel(instance)
+
+	exists, err := c.checkServiceExists(ctx, label)
+	if err != nil {
+		return NewOperationError(instance, "check service existence (darwin)", err)
+	}
+	if !exists {
+		return ErrServiceNotFound
+	}
+
+	instLock, err := locker.NewLocker(instance)
+	if err != nil {
+		return NewOperationError(instance, "acquire locker", err)
+	}
+	if err := instLock.Lock(); err != nil {
+		return NewOperationError(instance, "lock instance", err)
+	}
+	defer func() {
+		if err := instLock.Unlock(); err != nil {
+			logger.Error("Failed to unlock instance", "instance_name", instance, "error", err)
+		}
+	}()
+
+	return c.startInstanceOp(ctx, label)
+}
+
+func (c *darwinController) startInstanceOp(ctx context.Context, label string) error {
+	running, _ := c.isServiceRunning(ctx, label)
+	if running {
+		logger.Info("[darwin] Service already running", "label", label)
+		return ErrServiceAlreadyRunning
+	}
+
+	// Ha nincs betöltve, próbáljunk bootstrap-elni a meglévő plistből
+	plistPath := filepath.Join(darwinPlistDir, label+".plist")
+	if err := exec.CommandContext(ctx, "launchctl", "print", "system/"+label).Run(); err != nil {
+		// bootstrap (ha már "bootstrapelve" van, ez hibát adhat; ez oké, alább folytatjuk)
+		_ = exec.CommandContext(ctx, "launchctl", "bootstrap", "system", plistPath).Run()
+	}
+
+	// enable + kickstart
+	_ = exec.CommandContext(ctx, "launchctl", "enable", "system/"+label).Run()
+	if out, err := exec.CommandContext(ctx, "launchctl", "kickstart", "-k", "system/"+label).CombinedOutput(); err != nil {
+		return NewOperationError(label, "launchctl kickstart", &CmdError{
+			Command: "launchctl kickstart",
+			Output:  string(out),
+			Err:     err,
+		})
+	}
+
+	// Poll, amíg fut
+	pollCtx, cancel := context.WithTimeout(ctx, c.gracefulStartStopTimeout)
+	defer cancel()
+
+	tick := time.NewTicker(SERVICE_STATUS_TICKER)
+	defer tick.Stop()
+
+	for {
+		select {
+		case <-pollCtx.Done():
+			return NewOperationError(label, "graceful start", pollCtx.Err())
+		case <-tick.C:
+			running, err := c.isServiceRunning(ctx, label)
+			if err != nil {
+				// ha print hibát ad, még nem fut
+				continue
+			}
+			if running {
+				logger.Info("[darwin] Service confirmed started", "label", label)
+				return nil
+			}
+		}
+	}
+}
+
+func (c *darwinController) StopInstance(ctx context.Context, instance string) error {
+	ctx, cancel := context.WithTimeout(ctx, c.timeout)
+	defer cancel()
+
+	label := darwinLabel(instance)
+
+	exists, err := c.checkServiceExists(ctx, label)
+	if err != nil {
+		return NewOperationError(instance, "check service existence (darwin)", err)
+	}
+	if !exists {
+		return ErrServiceNotFound
+	}
+
+	instLock, err := locker.NewLocker(instance)
+	if err != nil {
+		return NewOperationError(instance, "acquire locker", err)
+	}
+	if err := instLock.Lock(); err != nil {
+		return NewOperationError(instance, "lock instance", err)
+	}
+	defer func() {
+		if err := instLock.Unlock(); err != nil {
+			logger.Error("Failed to unlock instance", "instance_name", instance, "error", err)
+		}
+	}()
+
+	return c.stopInstanceOp(ctx, label)
+}
+
+func (c *darwinController) stopInstanceOp(ctx context.Context, label string) error {
+	running, _ := c.isServiceRunning(ctx, label)
+	if !running {
+		logger.Info("[darwin] Service already stopped", "label", label)
+		return ErrServiceNotRunning
+	}
+
+	// A legegyszerűbb és megbízható: bootout (unload-ol)
+	if out, err := exec.CommandContext(ctx, "launchctl", "bootout", "system", label).CombinedOutput(); err != nil {
+		return NewOperationError(label, "launchctl bootout", &CmdError{
+			Command: "launchctl bootout",
+			Output:  string(out),
+			Err:     err,
+		})
+	}
+
+	// Poll, amíg eltűnik a print
+	pollCtx, cancel := context.WithTimeout(ctx, c.gracefulStartStopTimeout)
+	defer cancel()
+
+	tick := time.NewTicker(SERVICE_STATUS_TICKER)
+	defer tick.Stop()
+
+	for {
+		select {
+		case <-pollCtx.Done():
+			return NewOperationError(label, "graceful stop", pollCtx.Err())
+		case <-tick.C:
+			err := exec.CommandContext(ctx, "launchctl", "print", "system/"+label).Run()
+			if err != nil {
+				// már nincs betöltve => kész
+				logger.Info("[darwin] Service confirmed stopped", "label", label)
+				return nil
+			}
+		}
+	}
+}
+
+func (c *darwinController) RestartInstance(ctx context.Context, instance string) error {
+	ctx, cancel := context.WithTimeout(ctx, c.timeout)
+	defer cancel()
+
+	instLock, err := locker.NewLocker(instance)
+	if err != nil {
+		return NewOperationError(instance, "acquire locker", err)
+	}
+	if err := instLock.Lock(); err != nil {
+		return NewOperationError(instance, "lock instance", err)
+	}
+	defer func() {
+		if err := instLock.Unlock(); err != nil {
+			logger.Error("Failed to unlock instance", "instance_name", instance, "error", err)
+		}
+	}()
+
+	label := darwinLabel(instance)
+
+	if err := c.stopInstanceOp(ctx, label); err != nil && !errors.Is(err, ErrServiceNotRunning) {
+		return NewOperationError(instance, "stop for restart", err)
+	}
+	if err := c.startInstanceOp(ctx, label); err != nil {
+		return NewOperationError(instance, "start after stop", err)
+	}
+	return nil
+}
+
+func (c *darwinController) InstanceExists(ctx context.Context, instance string) (bool, error) {
+	return c.checkServiceExists(ctx, darwinLabel(instance))
+}
+
+func (c *darwinController) checkServiceExists(ctx context.Context, label string) (bool, error) {
+	// Ha betöltve van:
+	if err := exec.CommandContext(ctx, "launchctl", "print", "system/"+label).Run(); err == nil {
+		return true, nil
+	}
+	// Ha nincs betöltve, de a plist létezik, akkor az instance létezik (csak disabled/unloaded).
+	plistPath := filepath.Join(darwinPlistDir, label+".plist")
+	if _, err := os.Stat(plistPath); err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
+func (c *darwinController) isServiceRunning(ctx context.Context, label string) (bool, error) {
+	// Ha a print sikeres, tekintsük futónak. (launchd nem ad egyszerű "running" exit-kódot.)
+	// Alternatíva: kimenet elemzés, de itt bőven elég a print sikeressége.
+	if err := exec.CommandContext(ctx, "launchctl", "print", "system/"+label).Run(); err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() != 0 {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }
 
 // checkNssmExists checks if nssm.exe is available in the system's PATH.
@@ -653,7 +914,6 @@ func checkNssmExists() bool {
 // Take timeout in seconds to time out start/stop/restart operations.
 func NewInstanceController(options ...Option) InstanceController {
 
-	// timeout defaults to 5 seconds
 	cfg := &opts{timeout: 20 * time.Second, startStopTimout: 10 * time.Second}
 	for _, option := range options {
 		option(cfg)
@@ -667,12 +927,22 @@ func NewInstanceController(options ...Option) InstanceController {
 		} else {
 			logger.Info("NSSM not found. Falling back to PowerShell for Windows service management.")
 		}
-		return &windowsController{useNssm: useNssm, timeout: cfg.timeout, gracefulStartStopTimeout: cfg.startStopTimout}
+		return &windowsController{
+			useNssm: useNssm,
+			timeout: cfg.timeout, gracefulStartStopTimeout: cfg.startStopTimout,
+		}
 	case "linux":
-		return &systemdController{timeout: cfg.timeout, gracefulStartStopTimeout: cfg.startStopTimout}
+		return &systemdController{
+			timeout: cfg.timeout, gracefulStartStopTimeout: cfg.startStopTimout,
+		}
+	case "darwin":
+		return &darwinController{
+			timeout: cfg.timeout, gracefulStartStopTimeout: cfg.startStopTimout,
+		}
 	default:
 		return nil
 	}
+
 }
 
 // Option will help set configurations for instance runner

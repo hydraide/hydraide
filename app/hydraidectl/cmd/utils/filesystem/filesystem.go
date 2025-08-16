@@ -116,7 +116,7 @@ type fileSystemImpl struct {
 	logger *slog.Logger
 }
 
-// NewFileSystem creates a new FileSystem instance with the provided logger.
+// New creates a new FileSystem instance with the provided logger.
 // If no logger is provided, a default logger is created.
 func New() FileSystem {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{

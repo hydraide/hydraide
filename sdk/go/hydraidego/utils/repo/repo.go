@@ -63,6 +63,7 @@ type repo struct {
 //   - If no HydrAIDE servers can be reached during Connect(), the function panics.
 //     This is intentional, as the app cannot proceed without a connected data engine.
 func New(servers []*client.Server, allIslands uint64, maxMessageSize int, connectionAnalysis bool) Repo {
+
 	// Initialize the HydrAIDE gRPC client.
 	clientInterface := client.New(servers, allIslands, maxMessageSize)
 

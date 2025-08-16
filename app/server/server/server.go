@@ -3,6 +3,8 @@ package server
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -34,6 +36,7 @@ const (
 type Configuration struct {
 	CertificateCrtFile string // Server CRT file path
 	CertificateKeyFile string // Server Key file path
+	ClientCAFile       string // Client CA file path
 	// Hydra settings
 	HydraServerPort       int   // the port where the hydra server listens
 	HydraMaxMessageSize   int   // the maximum message size in bytes
@@ -76,12 +79,12 @@ func (s *server) IsHydraRunning() bool {
 
 func (s *server) Start() error {
 
-	slog.Info("starting the hydra server...")
+	slog.Info("starting the HydrAIDE server...")
 	// check if the server is already running
 	s.mu.Lock()
 	if s.serverRunning {
 		s.mu.Unlock()
-		return errors.New("hydra server is already running")
+		return errors.New("HydrAIDE server is already running")
 	}
 	s.serverRunning = true
 	s.mu.Unlock()
@@ -166,28 +169,65 @@ func (s *server) Start() error {
 	// start the main server and waiting for incoming requests
 	go func() {
 
+		// Guard the goroutine against panics so the process can log and continue shutting down cleanly.
 		defer func() {
 			if r := recover(); r != nil {
 				// get the stack trace
 				stackTrace := debug.Stack()
-				slog.Error("caught panic in hydra gRPC server", "error", r, "stack", string(stackTrace))
+				slog.Error("caught panic in HydrAIDE gRPC server", "error", r, "stack", string(stackTrace))
 			}
 		}()
 
-		// start the gRPC server
+		// Resolve a TCP listener on the configured port. This is a hard failure: without a port, we cannot serve.
 		lis, err := net.Listen("tcp", fmt.Sprintf(":%d", s.configuration.HydraServerPort))
 		if err != nil {
 			slog.Error("can not create listener for the hydra server", "error", err)
-			panic("can not create listener for the hydra server")
+			panic("can not create listener for the HydrAIDE server")
 		}
 
-		// load cert and key files for the server
-		creds, err := credentials.NewServerTLSFromFile(s.configuration.CertificateCrtFile, s.configuration.CertificateKeyFile)
+		// Load the server's certificate and private key from disk.
+		// These identify the server to clients during the TLS handshake.
+		srvCert, err := tls.LoadX509KeyPair(
+			s.configuration.CertificateCrtFile,
+			s.configuration.CertificateKeyFile,
+		)
 		if err != nil {
-			slog.Error("failed to load TLS credentials", "error", err)
-			panic("failed to load TLS credentials")
+			slog.Error("failed to load server TLS keypair", "error", err)
+			panic("failed to load server TLS keypair")
 		}
 
+		// Read the Client CA bundle. Clients must present certificates issued by this CA (mTLS).
+		caPEM, err := os.ReadFile(s.configuration.ClientCAFile)
+		if err != nil {
+			slog.Error("failed to read client CA file", "error", err, "path", s.configuration.ClientCAFile)
+			panic("failed to read client CA file")
+		}
+
+		// Build a certificate pool from the CA bundle to verify incoming client certs.
+		clientCAPool := x509.NewCertPool()
+		if !clientCAPool.AppendCertsFromPEM(caPEM) {
+			slog.Error("failed to append client CA to pool", "path", s.configuration.ClientCAFile)
+			panic("failed to append client CA to pool")
+		}
+
+		// Configure TLS:
+		// - Present the server certificate
+		// - REQUIRE and VERIFY client certificates (mutual TLS)
+		// - Limit to TLS 1.3 for modern security defaults
+		tlsCfg := &tls.Config{
+			Certificates: []tls.Certificate{srvCert},
+			ClientAuth:   tls.RequireAndVerifyClientCert, // verify client certs
+			ClientCAs:    clientCAPool,                   // client ca pool for mTLS
+			MinVersion:   tls.VersionTLS13,
+		}
+
+		// Turn the TLS config into gRPC transport credentials.
+		creds := credentials.NewTLS(tlsCfg)
+
+		// Keepalive tuning to detect dead connections and free resources:
+		// - Send a ping after 4m of idleness
+		// - Close if no ACK within 20s
+		// - Proactively close connections idle for 5m
 		kaParams := keepalive.ServerParameters{
 			// IF the connection is idle for 4 minutes, the server will send a keepalive ping.
 			Time: 4 * time.Minute,
@@ -197,6 +237,11 @@ func (s *server) Start() error {
 			MaxConnectionIdle: 5 * time.Minute,
 		}
 
+		// Construct the gRPC server with:
+		// - TLS creds (mTLS)
+		// - Message size limits (protects memory / abuse)
+		// - Unary interceptor for centralized logging/metrics/auth decisions
+		// - Keepalive parameters (connection hygiene)
 		s.grpcServer = grpc.NewServer(
 			grpc.Creds(creds),
 			grpc.MaxSendMsgSize(s.configuration.HydraMaxMessageSize),
@@ -205,11 +250,13 @@ func (s *server) Start() error {
 			grpc.KeepaliveParams(kaParams),          // keepalive parameters
 		)
 
-		// registering the server
+		// Register the Hydraide gRPC service implementation.
 		hydrapb.RegisterHydraideServiceServer(s.grpcServer, &grpcServer)
 
+		// Log the listening port for operational visibility.
 		slog.Info(fmt.Sprintf("HydrAIDE server is listening on port: %d", s.configuration.HydraServerPort))
-		// create the server and start listening for requests
+
+		// Start serving and block this goroutine until the server returns an error (e.g., shutdown).
 		if err = s.grpcServer.Serve(lis); err != nil {
 			slog.Error("can not start the HydrAIDE server", "error", err)
 		}
@@ -228,7 +275,7 @@ func (s *server) Stop() {
 	s.mu.Lock()
 	if !s.serverRunning {
 		s.mu.Unlock()
-		slog.Info("hydra server stopped gracefully. Program is exiting...")
+		slog.Info("HydrAIDE server stopped gracefully. Program is exiting...")
 		return
 	}
 	s.serverRunning = false
@@ -247,7 +294,7 @@ func (s *server) Stop() {
 	}
 
 	if s.zeusInterface != nil {
-		// stop the Hydra gracefully. This is a blocker function until all swamps are stopped gracefully
+		// stop the HydrAIDE gracefully. This is a blocker function until all swamps are stopped gracefully
 		s.zeusInterface.StopHydra()
 		slog.Info("HydrAIDE server stopped gracefully. Program is exiting...")
 	}
