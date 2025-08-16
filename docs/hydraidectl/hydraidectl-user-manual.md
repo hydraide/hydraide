@@ -89,52 +89,186 @@ Useful for persistent background running across reboots.
 
 Starts a registered HydrAIDE instance by name. Requires `sudo`.
 
-It:
+**Behavior**
+* Validates that the instance exists before attempting to start.
+* Starts the system service only if it is not already running.
+* Uses command timeout 20s, graceful start/stop 10s.
 
-* Validates that the instance exists
-* Starts the system service (`systemctl start hydraserver-<instance>`) **only if it is not already running**
+**Flags**
+* `--instance` / `-i` (required) — instance name.  
+* `--json` / `-j` — produce structured JSON output.  
+* `--output` / `-o` — output format (e.g. `json`).
 
-**Example:**
-
+**CLI examples**
 ```bash
+# Start an instance (interactive/plain output)
 sudo hydraidectl start --instance dev-local
+
+# Start an instance and return JSON
+sudo hydraidectl start --instance prod --json
 ```
 
+**JSON success example (produced by `--json`):**
+```json
+{
+  "instance": "prod",
+  "action": "start",
+  "status": "success",
+  "message": "instance started successfully",
+  "timestamp": "2025-08-10T14:30:00Z"
+}
+```
+
+**Error examples (plain output)**
+* If the instance does not exist:
+  ```
+  ❌ Instance "dev-local" not found.
+  Use `hydraidectl list` to see available instances.
+  ```
+* If the instance is already running:
+  ```
+  🟡 Instance "dev-local" is already running. No action taken.
+  ```
+
+**Notes**
+* If the command is run without root privileges it prints guidance and exits.
+* Return codes are useful for automation (see "Exit codes" section below).
+* json output for errors is same as success json output with error message and status 'error'
+
 ---
+
 
 ## `stop` – Stop a Running Instance
 
 Stops a specific instance cleanly. Also requires `sudo`.
 
-Features:
+**Behavior**
+* Validates the instance exists before attempting to stop.
+* Performs a **graceful shutdown** and may take longer depending on in-memory state (for example, flushing open Swamps to disk).
+* Intentionally **never forcefully terminates** the service (no `kill -9`) to avoid data corruption.
+* Uses command timeout 20s, graceful stop timeout 10s (prints timeout error post timeout).
 
-* Graceful shutdown
-* May take longer depending on the number of open Swamps that need to be flushed to disk
-* Never forcefully terminate a HydrAIDE instance (e.g., with `kill -9`) — this can result in data corruption
+**Flags**
+* `--instance` / `-i` (required) — instance name.  
+* `--json` / `-j` — produce structured JSON output.  
+* `--output` / `-o` — output format.
 
-**Example:**
-
+**CLI examples**
 ```bash
+# Stop an instance (plain output)
 sudo hydraidectl stop --instance dev-local
+
+# Stop an instance and return JSON
+sudo hydraidectl stop --instance prod --json
 ```
+
+**JSON success example:**
+```json
+{
+  "instance": "prod",
+  "action": "stop",
+  "status": "success",
+  "message": "instance stopped successfully",
+  "timestamp": "2025-08-10T14:31:00Z"
+}
+```
+
+**Plain output & user guidance**
+* While stopping the CLI prints friendly status and a caution:
+  ```
+  🟡 Shutting down instance "dev-local"...
+  ⚠️  HydrAIDE shutdown in progress... Do not power off or kill the service. Data may be flushing to disk.
+  ```
+* On success:
+  ```
+  ✅ Instance "dev-local" has been stopped. Status: inactive
+  ```
+
+**Notes**
+* Consider using `--json` for automation or CI tasks that must parse the result.
+* The stopping operation may take longer if there is significant disk flush or compaction work.
 
 ---
 
 ## `restart` – Restart Instance
 
-Combines stop and start in one command. Requires elevated permissions.
+Combines `stop` then `start`. Requires `sudo`.
 
-* Stops the instance with graceful handling
-* Starts it again if no fatal errors
-* Logs success or failure per step
+**Behavior**
+* Validates instance existence first.
+* Calls `StopInstance` then, if the stop phase did not return a fatal error, calls `StartInstance`.
+* Uses `instancerunner` with configured timeouts (common defaults: overall restart timeout 30s, graceful start/stop 10s).
 
-This is useful when applying configuration changes, after updates, or for general recovery operations.
+**Flags**
+* `--instance` / `-i` (required) — instance name.  
+* `--json` / `-j` — produce structured JSON output.  
+* `--output` / `-o` — output format.
 
-**Example:**
-
+**CLI examples**
 ```bash
+# Restart an instance (plain output)
 sudo hydraidectl restart --instance dev-local
+
+# Restart an instance and return JSON
+sudo hydraidectl restart --instance test --json
 ```
+
+**JSON success example:**
+```json
+{
+  "instance": "test",
+  "action": "restart",
+  "status": "success",
+  "message": "instance restarted successfully",
+  "timestamp": "2025-08-10T14:33:00Z"
+}
+```
+
+**JSON error example:**
+```json
+{
+  "instance": "test",
+  "action": "restart",
+  "status": "error",
+  "message": "Service 'test' not found.",
+  "timestamp": "2025-08-10T14:32:10Z"
+}
+```
+
+**Plain output progression**
+* On plain restart the CLI prints:
+  ```
+  🔁 Restarting instance "dev-local"...
+  ```
+* If stop succeeded:
+  ```
+  ✅ Instance "dev-local" has been stopped. Status: inactive
+  ```
+* Then after start finishes:
+  ```
+  ✅ Restart complete. Status: active
+  ```
+
+---
+
+## Exit codes (useful for scripts / automation)
+
+Common exit codes returned by the CLI (useful when scripting):
+* `0` — success (start / stop / restart succeeded).
+* `1` — instance not found (or related not found errors).
+* `2` — no-op condition: instance already running (for `start`) or already stopped (for `stop`).
+* `3` — generic/fatal error (permission missing, unsupported OS, unexpected failure).
+
+---
+
+## Implementation notes / error types
+
+The CLI maps certain `instancerunner` error types to friendly messages and specific exit codes:
+* `ErrServiceNotFound` → prints “Instance not found” and exits with `1`.
+* `ErrServiceAlreadyRunning` → prints “already running” and exits with `2`.
+* `ErrServiceNotRunning` → prints “already stopped” and exits with `2`.
+* `*instancerunner.CmdError` → when a command produced output and an error, the CLI prints the wrapped command error and its output for debugging.
+* `*instancerunner.OperationError` → used (in restart start-phase) to signal start-phase errors and printed accordingly.
 
 ---
 
@@ -161,7 +295,6 @@ sudo hydraidectl list --no-health
 ```
 
 ---
-
 
 ## `health` – Instance Health
 
@@ -200,8 +333,7 @@ sudo hydraidectl health --instance test
 
 Destroys the selected instance and optionally purges its data.
 
-Behavior:
-
+**Behavior:**
 * Gracefully stops instance (if running)
 * Removes service definition
 * If `--purge` flag is passed, deletes base directory (irreversible)
