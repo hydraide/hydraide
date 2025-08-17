@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -25,8 +26,12 @@ If the instance is not running, the command does nothing.`,
 
 		if !elevation.IsElevated() {
 			fmt.Println(elevation.Hint(instanceName))
-			return
+			os.Exit(3)
 		}
+
+		jsonOutput, _ := cmd.Flags().GetBool("json")
+		outputFormat, _ := cmd.Flags().GetString("output")
+		printJson := jsonOutput || outputFormat == "json"
 
 		instanceController := instancerunner.NewInstanceController(
 			instancerunner.WithTimeout(20*time.Second),
@@ -35,25 +40,40 @@ If the instance is not running, the command does nothing.`,
 
 		if instanceController == nil {
 			fmt.Printf("❌ unsupported operating system: %s", runtime.GOOS)
-			return
+			os.Exit(3)
 		}
 
 		ctx := context.Background()
 
 		exists, err := instanceController.InstanceExists(ctx, stopInstance)
 		if err != nil {
+			if printJson {
+				printJsonStop(err)
+				return
+			}
 			fmt.Println("failed to verify instance existence: ", err)
 		}
 
 		if !exists {
+			if printJson {
+				printJsonStop(fmt.Errorf("instance '%s' does not exist", stopInstance))
+				return
+			}
 			fmt.Printf("❌ Instance \"%s\" not found.\nUse `hydraidectl list-instances` to see available instances.\n", stopInstance)
 			os.Exit(1)
 		}
 
-		fmt.Printf("🟡 Shutting down instance \"%s\"...\n", stopInstance)
-		fmt.Println("⚠️  HydrAIDE shutdown in progress... Do not power off or kill the service. Data may be flushing to disk.")
+		if !printJson {
+			fmt.Printf("🟡 Shutting down instance \"%s\"...\n", stopInstance)
+			fmt.Println("⚠️  HydrAIDE shutdown in progress... Do not power off or kill the service. Data may be flushing to disk.")
+		}
 
 		err = instanceController.StopInstance(ctx, stopInstance)
+
+		if printJson {
+			printJsonStop(err)
+			return
+		}
 
 		if err != nil {
 			switch {
@@ -93,4 +113,35 @@ func init() {
 		fmt.Println("Error marking 'instance' flag as required:", err)
 		os.Exit(1)
 	}
+
+	stopCmd.Flags().BoolP("json", "j", false, "Return structured output in JSON format")
+	stopCmd.Flags().StringP("output", "o", "", "Output format")
+}
+
+func printJsonStop(err error) {
+	var jsonResponse *JsonLifecycleInfo
+	if err != nil {
+		jsonResponse = &JsonLifecycleInfo{
+			Instance:  stopInstance,
+			Action:    "stop",
+			Status:    "error",
+			Message:   err.Error(),
+			Timestamp: time.Now().UTC().Format(time.RFC3339),
+		}
+	} else {
+		jsonResponse = &JsonLifecycleInfo{
+			Instance:  stopInstance,
+			Action:    "stop",
+			Status:    "success",
+			Message:   "instance stopped successfully",
+			Timestamp: time.Now().UTC().Format(time.RFC3339),
+		}
+	}
+
+	outputJSON, err := json.MarshalIndent(jsonResponse, "", "  ")
+	if err != nil {
+		fmt.Printf("Error generating JSON output: %v", err)
+		os.Exit(3)
+	}
+	fmt.Println(string(outputJSON))
 }

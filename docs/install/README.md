@@ -82,8 +82,8 @@ sudo hydraidectl service --instance <your-instance-name>
 
 This installs and starts HydrAIDE as a persistent systemd service.
 
-> During initialization, a `certificate/` folder is created, which includes a `client.crt` file. 
-> This certificate is required when connecting to HydrAIDE from a client SDK.
+> During initialization, a `certificate/` folder is created, which includes a `ca.crt` `client.key` `client.crt` files. 
+> These certificates are required when connecting to HydrAIDE from a client SDK.
 
 You're now ready to connect via gRPC — HydrAIDE is live and secure.
 

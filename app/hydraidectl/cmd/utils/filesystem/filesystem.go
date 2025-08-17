@@ -116,7 +116,7 @@ type fileSystemImpl struct {
 	logger *slog.Logger
 }
 
-// NewFileSystem creates a new FileSystem instance with the provided logger.
+// New creates a new FileSystem instance with the provided logger.
 // If no logger is provided, a default logger is created.
 func New() FileSystem {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
@@ -405,11 +405,10 @@ func (fs *fileSystemImpl) copyThenReplace(ctx context.Context, src, dst string) 
 		return fmt.Errorf("rename temp to final: %w", err)
 	}
 
-	// Remove source with Windows-friendly retry
-	if err := fs.removeWithRetry(ctx, src); err != nil {
-		return fmt.Errorf("remove src after copy (after retries): %w", err)
+	// Remove source (best effort)
+	if err := os.Remove(src); err != nil {
+		return fmt.Errorf("remove src after copy: %w", err)
 	}
-
 	return nil
 }
 
