@@ -106,7 +106,7 @@ type FileSystem interface {
 	//   - error: Any error encountered during file reading
 	ReadFile(ctx context.Context, path string) ([]byte, error)
 
-	// than CheckIf...Exists as it provides full file info (size, permissions, etc.)
+	// Stat than CheckIf...Exists as it provides full file info (size, permissions, etc.)
 	// and is the idiomatic way to check for existence in Go via `os.IsNotExist(err)`.
 	Stat(ctx context.Context, path string) (os.FileInfo, error)
 }
@@ -134,8 +134,6 @@ func (fs *fileSystemImpl) CreateDir(ctx context.Context, path string, perm os.Fi
 		fs.logger.ErrorContext(ctx, "Failed to create directory", "path", cleanPath, "error", err)
 		return fmt.Errorf("failed to create directory %s: %w", cleanPath, err)
 	}
-
-	fs.logger.InfoContext(ctx, "Directory created successfully", "path", cleanPath)
 	return nil
 }
 
@@ -535,14 +533,11 @@ func (fs *fileSystemImpl) ReadFile(ctx context.Context, path string) ([]byte, er
 	cleanPath := filepath.Clean(path)
 	fs.logger.DebugContext(ctx, "Reading file", "path", cleanPath)
 
-	fmt.Println("🔍 Reading file:", cleanPath)
 	content, err := os.ReadFile(cleanPath)
 	if err != nil {
 		fs.logger.ErrorContext(ctx, "Failed to read file", "path", cleanPath, "error", err)
 		return nil, fmt.Errorf("failed to read file %s: %w", cleanPath, err)
 	}
-
-	fs.logger.InfoContext(ctx, "File read successfully", "path", cleanPath)
 	return content, nil
 }
 

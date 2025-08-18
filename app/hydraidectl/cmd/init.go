@@ -44,9 +44,11 @@ var initCmd = &cobra.Command{
 This command guides you through the process of creating a new HydrAIDE instance, including setting its service name, storage location, and configuration.`,
 
 	Run: func(cmd *cobra.Command, args []string) {
+
 		reader := bufio.NewReader(os.Stdin)
 		fs := filesystem.New()
 		bm, err := buildmeta.New(fs)
+
 		if err != nil {
 			fmt.Printf("❌ Failed to initialize metadata store: %v\n", err)
 			os.Exit(1)
@@ -514,7 +516,7 @@ This command guides you through the process of creating a new HydrAIDE instance,
 		fmt.Println("✅ .env file created/updated successfully at:", envPath)
 
 		// Download the latest binary
-		serverDownloaderObject := downloader.New()
+
 		var bar *progressbar.ProgressBar
 		progressFn := func(downloaded, total int64, percent float64) {
 			if bar == nil {
@@ -529,19 +531,24 @@ This command guides you through the process of creating a new HydrAIDE instance,
 			}
 		}
 
-		serverDownloaderObject.SetProgressCallback(progressFn)
-		if err := serverDownloaderObject.DownloadHydraServer("latest", envCfg.HydraideBasePath); err != nil {
+		serverDownloaderObject := downloader.New()
+		downloadedVersion, err := serverDownloaderObject.DownloadHydraServer("latest", envCfg.HydraideBasePath)
+		if err != nil {
+			serverDownloaderObject.SetProgressCallback(progressFn)
 			fmt.Printf("❌ Failed to download HydrAIDE server binary: %v\n", err)
 			os.Exit(1)
 		}
 
-		fmt.Println("\n✅ HydrAIDE server binary downloaded successfully.")
+		fmt.Printf("\n✅ HydrAIDE server binary (%s) downloaded successfully.\n", downloadedVersion)
 
 		// Save instance metadata
 		fmt.Println("\n💾 Saving instance metadata...")
+
 		instanceData := buildmeta.InstanceMetadata{
 			BasePath: envCfg.HydraideBasePath,
+			Version:  downloadedVersion,
 		}
+
 		if err := bm.SaveInstance(instanceName, instanceData); err != nil {
 			fmt.Printf("❌ Failed to save metadata for instance '%s': %v\n", instanceName, err)
 			os.Exit(1)
