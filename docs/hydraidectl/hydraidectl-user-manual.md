@@ -28,6 +28,7 @@ Although `hydraidectl` is stable and production-tested, new features are under d
 * [`list` – Show all registered HydrAIDE instances on the host](#list--show-all-instances)
 * [`health`– Display health of an instance](#health--instance-health)
 * [`destroy` – Fully delete an instance, optionally including all its data](#restart--restart-instance)
+* [`cert` – Fully delete an instance, optionally including all its data](#restart--restart-instance)
 
 ---
 
@@ -389,4 +390,63 @@ Destroy with full purge:
 
 ```bash
 sudo hydraidectl destroy --instance dev-local --purge
+```
+
+---
+
+## `cert` – Generate TLS Certificates (without modifying instances)
+
+The `cert` command is used to generate new TLS certificates without altering or reinitializing an existing HydrAIDE instance.
+This is useful when:
+
+* Certificates have expired and must be renewed.
+* You want to rotate certificates for security reasons.
+* You need to generate certificates specifically for a **Docker-based deployment**, where the server and client certificates will be mounted into containers.
+
+⚠️ **Important:**
+This command does **not replace** the `init` process. During initialization, certificate generation already occurs automatically.
+`cert` is intended only for later re-generation or for Docker setups where you need the certs separately.
+
+### How it works
+
+1. Prompts you to enter the **target folder path** where certificates should be placed.
+   (The folder must exist and be writable.)
+2. Asks the same certificate questions as `init` (CN, DNS SANs, IP SANs).
+3. Generates a new CA, server, and client certificate set.
+4. Copies all generated certificate files into the specified folder.
+
+This allows you to safely regenerate and distribute TLS material without touching the running instance.
+
+### Certificate generation
+
+The following files are created:
+
+| File             | Purpose                                                                  | Who uses it                                          |
+| ---------------- | ------------------------------------------------------------------------ | ---------------------------------------------------- |
+| **`ca.crt`**     | Root CA certificate. Used to verify both server and client certificates. | Copy to every client, and keep a copy on the server. |
+| **`ca.key`**     | Root CA private key. Used only to sign new server/client certificates.   | **Must remain on the server**. Never share.          |
+| **`server.crt`** | TLS certificate for this HydrAIDE server.                                | Used only by the server.                             |
+| **`server.key`** | Private key for the server certificate.                                  | **Must remain on the server**.                       |
+| **`client.crt`** | Client certificate signed by the CA.                                     | Copy to each client that will connect.               |
+| **`client.key`** | Private key for the client certificate.                                  | Copy to each client together with `client.crt`.      |
+
+### What to copy to clients
+
+When setting up a client application, copy:
+
+* `ca.crt` → so the client can validate the server’s identity.
+* `client.crt` + `client.key` → so the client can authenticate itself to the server.
+
+These three files must be placed in the client’s configuration/runtime path.
+
+### What stays on the server
+
+* `ca.key` → keep strictly private (used only for signing).
+* `server.crt` + `server.key` → used by the HydrAIDE server itself.
+* The full set of certificates should remain intact in the chosen folder.
+
+**Example usage:**
+
+```bash
+hydraidectl cert
 ```
