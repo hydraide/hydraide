@@ -19,12 +19,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-type CertConfig struct {
-	CN  string
-	DNS []string
-	IP  []string
-}
-
 type EnvConfig struct {
 	LogLevel               string
 	LogTimeFormat          string
@@ -77,65 +71,14 @@ This command guides you through the process of creating a new HydrAIDE instance,
 
 		fmt.Printf("\n🚀 Starting HydrAIDE setup for instance: \"%s\"\n\n", instanceName)
 
-		var cert CertConfig
 		var envCfg EnvConfig
 
 		validator := validator.New()
 		ctx := context.Background()
 
-		// Certificate CN – default = localhost
-		fmt.Println("🌐 TLS Certificate Setup")
-		fmt.Println("🔖 Common Name (CN) is the main name assigned to the certificate.")
-		fmt.Println("It usually identifies your company or internal system.")
-		fmt.Print("CN (e.g. yourcompany, api.hydraide.local) [default: hydraide]: ")
-		cnInput, _ := reader.ReadString('\n')
-		cert.CN = strings.TrimSpace(cnInput)
-		if cert.CN == "" {
-			cert.CN = "hydraide"
-		}
-
-		// Add localhost
-		cert.DNS = append(cert.DNS, "localhost")
-		cert.IP = append(cert.IP, "127.0.0.1")
-
-		// Additional IP addresses
-		fmt.Println("\n🌐 Add additional IP addresses to the certificate?")
-		fmt.Println("By default, '127.0.0.1' is included for localhost access.")
-		fmt.Println()
-		fmt.Println("Now, list any other IP addresses where clients will access the HydrAIDE server.")
-		fmt.Println("For example, if the HydrAIDE container is reachable at 192.168.106.100:4900, include that IP.")
-		fmt.Println("These IPs must match the address used in the TLS connection, or it will fail.")
-		fmt.Print("Do you want to add other IPs besides 127.0.0.1? (y/n) [default: n]: ")
-
-		ans, _ := reader.ReadString('\n')
-		if strings.ToLower(strings.TrimSpace(ans)) == "y" {
-			fmt.Print("Enter IPs (comma-separated, e.g. 192.168.1.5,10.0.0.12): ")
-			ipInput, _ := reader.ReadString('\n')
-			ips := strings.Split(strings.TrimSpace(ipInput), ",")
-			for _, ip := range ips {
-				ip = strings.TrimSpace(ip)
-				if ip != "" {
-					cert.IP = append(cert.IP, ip)
-				}
-			}
-		}
-
-		fmt.Println("\n🌐 Will clients connect via a domain name (FQDN)?")
-		fmt.Println("This includes public domains (e.g. api.example.com) or internal DNS (e.g. hydraide.lan).")
-		fmt.Println("To ensure secure TLS connections, you must list any domains that clients will use.")
-		fmt.Print("Add domain names to the certificate? (y/n) [default: n]: ")
-		ans, _ = reader.ReadString('\n')
-		if strings.ToLower(strings.TrimSpace(ans)) == "y" {
-			fmt.Print("Enter domain names (comma-separated, e.g. api.example.com,hydraide.local): ")
-			dnsInput, _ := reader.ReadString('\n')
-			domains := strings.Split(strings.TrimSpace(dnsInput), ",")
-			for _, d := range domains {
-				d = strings.TrimSpace(d)
-				if d != "" {
-					cert.DNS = append(cert.DNS, d)
-				}
-			}
-		}
+		// start the certificate prompting
+		certPrompts := certificate.NewPrompts()
+		certPrompts.Start(reader)
 
 		fmt.Println("\n🔌 Port Configuration")
 		fmt.Println("This is the port where the HydrAIDE binary server will listen for client connections.")
@@ -364,9 +307,9 @@ This command guides you through the process of creating a new HydrAIDE instance,
 		// CONFIGURATION SUMMARY
 		fmt.Println("\n🔧 Configuration Summary:")
 		fmt.Println("=== NETWORK ===")
-		fmt.Println("  • CN:         ", cert.CN)
-		fmt.Println("  • DNS SANs:   ", strings.Join(cert.DNS, ", "))
-		fmt.Println("  • IP SANs:    ", strings.Join(cert.IP, ", "))
+		fmt.Println("  • CN:         ", certPrompts.GetCN())
+		fmt.Println("  • DNS SANs:   ", strings.Join(certPrompts.GetDNS(), ", "))
+		fmt.Println("  • IP SANs:    ", strings.Join(certPrompts.GetIP(), ", "))
 		fmt.Println("  • Main Port:  ", envCfg.HydraidePort)
 		fmt.Println("  • Health Port:", envCfg.HealthCheckPort)
 
@@ -435,6 +378,7 @@ This command guides you through the process of creating a new HydrAIDE instance,
 				fmt.Printf("✅ Created directory: %s\n", folder)
 			}
 		} else {
+
 			// All folders exist, warn about potential data loss
 			fmt.Println("\n⚠️ WARNING: All required folders already exist:", strings.Join(folders, ", "))
 			fmt.Println("🚨 Continuing may DELETE ALL EXISTING DATA in these folders!")
@@ -497,7 +441,7 @@ This command guides you through the process of creating a new HydrAIDE instance,
 
 		// Generate the TLS certificate
 		fmt.Println("\n🔒 Generating TLS certificate...")
-		certGen := certificate.New(cert.CN, cert.DNS, cert.IP)
+		certGen := certificate.New(certPrompts.GetCN(), certPrompts.GetDNS(), certPrompts.GetIP())
 		if err := certGen.Generate(); err != nil {
 			fmt.Println("❌ Error generating TLS certificate:", err)
 			return
