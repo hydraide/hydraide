@@ -22,15 +22,18 @@ type Prompts interface {
 	GetCN() string
 	GetDNS() []string
 	GetIP() []string
+	GenerateCert()
+	GetCertificateFiles() []string
 }
 
 // prompts is the concrete implementation of Prompts.
 // It stores the Common Name (CN), DNS names, and IP addresses
 // that will be embedded into the certificate’s Subject Alternative Name (SAN).
 type prompts struct {
-	CN  string
-	DNS []string
-	IP  []string
+	CN               string
+	DNS              []string
+	IP               []string
+	certificateFiles []string
 }
 
 // NewPrompts creates and returns a new Prompts instance
@@ -42,9 +45,10 @@ type prompts struct {
 //	p.Start(bufio.NewReader(os.Stdin))
 func NewPrompts() Prompts {
 	return &prompts{
-		CN:  "",
-		DNS: []string{},
-		IP:  []string{},
+		CN:               "",
+		DNS:              []string{},
+		IP:               []string{},
+		certificateFiles: []string{},
 	}
 }
 
@@ -61,7 +65,7 @@ func NewPrompts() Prompts {
 // TLS clients must connect using one of these values for validation to succeed.
 func (p *prompts) Start(reader *bufio.Reader) {
 	// Common Name (CN)
-	fmt.Println("🌐 TLS Certificate Setup")
+	fmt.Println("\n🌐 TLS Certificate Setup")
 	fmt.Println("🔖 Common Name (CN) is the main name assigned to the certificate.")
 	fmt.Println("It usually identifies your company or internal system.")
 	fmt.Print("CN (e.g. yourcompany, api.hydraide.local) [default: hydraide]: ")
@@ -111,6 +115,37 @@ func (p *prompts) Start(reader *bufio.Reader) {
 			}
 		}
 	}
+}
+
+// GenerateCert creates the TLS certificate using the collected parameters.
+func (p *prompts) GenerateCert() {
+
+	// Generate the TLS certificate
+	fmt.Println("\n🔒 Generating TLS certificate...")
+	certGen := New(p.CN, p.DNS, p.IP)
+	if err := certGen.Generate(); err != nil {
+		fmt.Println("❌ Error generating TLS certificate:", err)
+		return
+	}
+	fmt.Println("✅ TLS certificate generated successfully.")
+
+	caCRT, caKEY, serverCRT, serverKEY, clientCRT, clientKEY := certGen.Files()
+	p.certificateFiles = []string{caCRT, caKEY, serverCRT, serverKEY, clientCRT, clientKEY}
+
+	fmt.Println("\n📄 TLS Certificate Files:")
+	fmt.Println("  • CA CRT:     ", caCRT)
+	fmt.Println("  • CA KEY:     ", caKEY)
+	fmt.Println("  • Server CRT: ", serverCRT)
+	fmt.Println("  • Server KEY: ", serverKEY)
+	fmt.Println("  • Client CRT: ", clientCRT)
+	fmt.Println("  • Client KEY: ", clientKEY)
+
+}
+
+// GetCertificateFiles returns the list of generated certificate files.
+func (p *prompts) GetCertificateFiles() []string {
+	// Returns the list of generated certificate files
+	return p.certificateFiles
 }
 
 // GetCN returns the Common Name (CN) provided by the user or the default.

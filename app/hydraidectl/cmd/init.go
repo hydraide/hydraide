@@ -439,32 +439,12 @@ This command guides you through the process of creating a new HydrAIDE instance,
 			fmt.Printf("✅ Directory exists: %s\n", fullPath)
 		}
 
-		// Generate the TLS certificate
-		fmt.Println("\n🔒 Generating TLS certificate...")
-		certGen := certificate.New(certPrompts.GetCN(), certPrompts.GetDNS(), certPrompts.GetIP())
-		if err := certGen.Generate(); err != nil {
-			fmt.Println("❌ Error generating TLS certificate:", err)
-			return
-		}
-		fmt.Println("✅ TLS certificate generated successfully.")
-
-		var certFiles []string
-		caCRT, caKEY, serverCRT, serverKEY, clientCRT, clientKEY := certGen.Files()
-		certFiles = []string{caCRT, caKEY, serverCRT, serverKEY, clientCRT, clientKEY}
-
-		fmt.Println("\n📄 TLS Certificate Files:")
-		fmt.Println("  • CA CRT:     ", caCRT)
-		fmt.Println("  • CA KEY:     ", caKEY)
-		fmt.Println("  • Server CRT: ", serverCRT)
-		fmt.Println("  • Server KEY: ", serverKEY)
-		fmt.Println("  • Client CRT: ", clientCRT)
-		fmt.Println("  • Client KEY: ", clientKEY)
-
+		certPrompts.GenerateCert()
 		// Copy the server and client TLS certificates to the certificate directory
 		fmt.Println("\n📂 Copying TLS certificates to the certificate directory...")
 
 		// move all certFiles to the certificate directory
-		for _, file := range certFiles {
+		for _, file := range certPrompts.GetCertificateFiles() {
 			destPath := filepath.Join(envCfg.HydraideBasePath, "certificate", filepath.Base(file))
 			fmt.Printf("  • Moving %s to %s\n", file, destPath)
 			if err := fs.MoveFile(ctx, file, destPath); err != nil {
