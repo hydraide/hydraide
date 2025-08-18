@@ -6,6 +6,17 @@ import (
 	"strings"
 )
 
+// Prompts defines the interface for collecting TLS certificate parameters
+// interactively from the user.
+//
+// ✅ Use this when:
+// - You need to generate a self-signed TLS certificate for HydrAIDE
+// - You want to prompt for Common Name (CN), IP addresses, and domain names
+//
+// Typical flow:
+//  1. Call NewPrompts() to create an empty prompt handler
+//  2. Call Start(reader) with a *bufio.Reader (e.g. os.Stdin)
+//  3. Retrieve the collected values via GetCN(), GetIP(), GetDNS()
 type Prompts interface {
 	Start(reader *bufio.Reader)
 	GetCN() string
@@ -13,25 +24,43 @@ type Prompts interface {
 	GetIP() []string
 }
 
+// prompts is the concrete implementation of Prompts.
+// It stores the Common Name (CN), DNS names, and IP addresses
+// that will be embedded into the certificate’s Subject Alternative Name (SAN).
 type prompts struct {
 	CN  string
 	DNS []string
 	IP  []string
 }
 
+// NewPrompts creates and returns a new Prompts instance
+// with default, empty values.
+//
+// Example:
+//
+//	p := certificate.NewPrompts()
+//	p.Start(bufio.NewReader(os.Stdin))
 func NewPrompts() Prompts {
-
 	return &prompts{
 		CN:  "",
 		DNS: []string{},
 		IP:  []string{},
 	}
-
 }
 
+// Start launches the interactive prompt sequence to collect
+// certificate configuration details from the user.
+//
+// 🧭 Steps:
+//  1. Ask for the Common Name (CN) → defaults to "hydraide"
+//  2. Automatically include "localhost" (DNS) and "127.0.0.1" (IP)
+//  3. Optionally add more IP addresses
+//  4. Optionally add fully qualified domain names (FQDNs)
+//
+// These inputs determine the certificate’s Subject Alternative Names (SANs).
+// TLS clients must connect using one of these values for validation to succeed.
 func (p *prompts) Start(reader *bufio.Reader) {
-
-	// Certificate CN – default = localhost
+	// Common Name (CN)
 	fmt.Println("🌐 TLS Certificate Setup")
 	fmt.Println("🔖 Common Name (CN) is the main name assigned to the certificate.")
 	fmt.Println("It usually identifies your company or internal system.")
@@ -42,16 +71,14 @@ func (p *prompts) Start(reader *bufio.Reader) {
 		p.CN = "hydraide"
 	}
 
-	// Add localhost
+	// Always include localhost
 	p.DNS = append(p.DNS, "localhost")
 	p.IP = append(p.IP, "127.0.0.1")
 
 	// Additional IP addresses
 	fmt.Println("\n🌐 Add additional IP addresses to the certificate?")
 	fmt.Println("By default, '127.0.0.1' is included for localhost access.")
-	fmt.Println()
 	fmt.Println("Now, list any other IP addresses where clients will access the HydrAIDE server.")
-	fmt.Println("For example, if the HydrAIDE container is reachable at 192.168.106.100:4900, include that IP.")
 	fmt.Println("These IPs must match the address used in the TLS connection, or it will fail.")
 	fmt.Print("Do you want to add other IPs besides 127.0.0.1? (y/n) [default: n]: ")
 
@@ -68,9 +95,9 @@ func (p *prompts) Start(reader *bufio.Reader) {
 		}
 	}
 
+	// Domain names (FQDNs)
 	fmt.Println("\n🌐 Will clients connect via a domain name (FQDN)?")
 	fmt.Println("This includes public domains (e.g. api.example.com) or internal DNS (e.g. hydraide.lan).")
-	fmt.Println("To ensure secure TLS connections, you must list any domains that clients will use.")
 	fmt.Print("Add domain names to the certificate? (y/n) [default: n]: ")
 	ans, _ = reader.ReadString('\n')
 	if strings.ToLower(strings.TrimSpace(ans)) == "y" {
@@ -84,17 +111,19 @@ func (p *prompts) Start(reader *bufio.Reader) {
 			}
 		}
 	}
-
 }
 
+// GetCN returns the Common Name (CN) provided by the user or the default.
 func (p *prompts) GetCN() string {
 	return p.CN
 }
 
+// GetDNS returns all DNS names collected for SAN.
 func (p *prompts) GetDNS() []string {
 	return p.DNS
 }
 
+// GetIP returns all IP addresses collected for SAN.
 func (p *prompts) GetIP() []string {
 	return p.IP
 }
