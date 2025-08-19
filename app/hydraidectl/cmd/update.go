@@ -124,18 +124,15 @@ var updateCmd = &cobra.Command{
 		// (Re)create service definition for the updated binary
 		_ = serviceHelperInterface.RemoveService(updateInstance)
 		_ = serviceHelperInterface.GenerateServiceFile(updateInstance, instanceMeta.BasePath)
+		_ = instanceController.StartInstance(ctx, updateInstance)
 
-		// Start instance (all-in-one behavior)
-		if err := instanceController.StartInstance(ctx, updateInstance); err != nil {
-			fmt.Printf("Error while starting the instance %q: %v\n", updateInstance, err)
-			os.Exit(1)
-		}
 		fmt.Printf("Instance %q has been successfully updated to version %s and started.\n", updateInstance, downloadedVersion)
 
 		// Wait until healthy (respecting context timeout)
 		instanceHealthInterface := instancehealth.NewInstanceHealth()
 		startWait := time.Now()
 		for {
+
 			// Check for timeout/cancellation
 			select {
 			case <-ctx.Done():
@@ -152,7 +149,9 @@ var updateCmd = &cobra.Command{
 
 			fmt.Printf("Waiting for instance %q to become healthy...\n", updateInstance)
 			time.Sleep(1 * time.Second)
+
 		}
+
 	},
 }
 
