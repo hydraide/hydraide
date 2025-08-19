@@ -43,8 +43,8 @@ If the instance is already running, the command does nothing.`,
 		printJson := jsonOutput || outputFormat == "json"
 
 		instanceController := instancerunner.NewInstanceController(
-			instancerunner.WithTimeout(20*time.Second),
-			instancerunner.WithGracefulStartStopTimeout(10*time.Second),
+			instancerunner.WithTimeout(30*time.Second),
+			instancerunner.WithGracefulStartStopTimeout(600*time.Second),
 		)
 
 		if instanceController == nil {

@@ -8,11 +8,7 @@ The `hydraidectl` CLI allows for easy installation, management, and lifecycle co
 
 Although `hydraidectl` is stable and production-tested, new features are under development, including:
 
-* `update` (binary or config upgrade)
-* `healthcheck` (status monitoring)
-* `log view` (log file reader)
-* `non-interactive init` (headless installs in AWS or scripts)
-* `offline install` (for edge or air-gapped systems)
+* `non-interactive init & offline install` (for edge or air-gapped systems)
 
 \* ***If you need a command that is not listed among the current or upcoming features, please create a new issue so it can be considered for implementation***
 
@@ -28,12 +24,8 @@ Although `hydraidectl` is stable and production-tested, new features are under d
 * [`list` – Show all registered HydrAIDE instances on the host](#list--show-all-instances)
 * [`health`– Display health of an instance](#health--instance-health)
 * [`destroy` – Fully delete an instance, optionally including all its data](#restart--restart-instance)
-* [`cert` – Fully delete an instance, optionally including all its data](#restart--restart-instance)
-
----
-
-Nagyon jó, hogy ezt kiemeled, mert az **`init`** dokumentáció így most nem adja át elég tisztán, hogy pontosan **milyen fájlok keletkeznek, mire jók, és hova kell őket másolni**.
-Az új mTLS-es felépítés szerint így érdemes átírni:
+* [`cert` – Generate TLS Certificates (without modifying instances)](#cert--generate-tls-certificates-without-modifying-instances)
+* [`update` – Update an Instance In‑Place](#update--update-an-instance-inplace-allinone)
 
 ---
 
@@ -311,16 +303,85 @@ The CLI maps certain `instancerunner` error types to friendly messages and speci
 
 ## `list` – Show All Instances
 
-Displays all registered HydrAIDE services, their Status, and Health.
+Displays all registered HydrAIDE instances, their metadata, and runtime status.
+Instances are shown in **ascending alphabetical order by name**.
 
-Output options:
+**What it shows:**
 
-* Default (human-readable table with `Name`, `Status`, `Health`)
-* `--quiet` (names only, skips health/status)
-* `--json` (machine-readable, includes `"health": "healthy|unhealthy|unknown"`)
-* `--no-health` (skip health probing for faster listing)
+* Total number of instances found (all initialized with `init`, even if no service has been created yet)
+* The **latest HydrAIDE server version** available on GitHub
+* For each instance:
 
-The `Health` column is determined by running a short health probe (2s timeout) against each instance’s configured health endpoint. If the configuration is missing or the check times out, `unknown` is shown.
+    * `Name` — instance name
+    * `Server Port` — listening port
+    * `Server Version` — currently running HydrAIDE binary version
+    * `Update Available` — whether a newer version than the running one exists
+
+        * `no` → instance is already up to date
+        * `yes` → instance can be updated (⚠️ shown in table view)
+    * `Service Status` — whether a system service exists and if it’s `active` or `inactive`
+    * `Health` — health probe status (`healthy`, `unhealthy`, or `unknown`)
+    * `Base Path` — filesystem path where the instance keeps binaries, certificates, environment variables, and data
+
+---
+
+**Example output (plain table, including outdated instances):**
+
+```
+Scanning for HydrAIDE instances...
+Found 5 HydrAIDE instances:
+Latest server version: v2.2.1
+Name        Server Port   Server Version   Update Available   Service Status   Health     Base Path
+----------------------------------------------------------------------------------------------------
+alpha       4777          v2.1.0           ⚠️ yes             active           healthy    /home/user/alpha
+beta        4855          v2.2.1           no                 active           healthy    /home/user/beta
+gamma       4988          v2.1.0           ⚠️ yes             active           healthy    /home/user/gamma
+delta       4322          v2.2.1           no                 active           healthy    /home/user/delta
+epsilon     4666          v2.0.1           ⚠️ yes             active           healthy    /home/user/epsilon
+```
+
+---
+
+**JSON output example:**
+
+```json
+[
+  {
+    "name": "delta",
+    "server_port": "4322",
+    "server_version": "v2.2.1",
+    "update_available": "no",
+    "status": "active",
+    "health": "healthy",
+    "base_path": "/home/user/delta"
+  },
+  {
+    "name": "epsilon",
+    "server_port": "4666",
+    "server_version": "v2.0.1",
+    "update_available": "yes",
+    "status": "active",
+    "health": "healthy",
+    "base_path": "/home/user/epsilon"
+  }
+]
+```
+
+---
+
+**Flags:**
+
+* `--quiet` — print only instance names (no columns, no health/status)
+* `--json` — return full machine-readable JSON with all fields
+* `--no-health` — skip health probe for faster listing
+
+**Notes:**
+
+* Health probe uses a 2s timeout against the instance’s configured endpoint.
+  If missing or unreachable, health will be `unknown`.
+* Instances without a created service are still listed (status will indicate missing service).
+* If **update is available**, the table clearly marks it with ⚠️ and JSON will return `"update_available": "yes"`.
+* This command is useful both for quick overviews and for automation via JSON output.
 
 **Example:**
 
@@ -450,3 +511,80 @@ These three files must be placed in the client’s configuration/runtime path.
 ```bash
 hydraidectl cert
 ```
+
+---
+
+## `update` – Update an Instance In‑Place (all‑in‑one)
+
+Updates a HydrAIDE instance to the **latest available server binary**.
+If an update is available, the command performs the entire flow end‑to‑end:
+
+1. **Gracefully stop** the instance (only if it’s running)
+2. **Download** the latest server binary into the instance’s base path (with a progress bar)
+3. **Update metadata** and **(re)generate** the service definition
+4. **Start** the instance
+5. **Wait** until the instance reports **`healthy`** (or until the operation times out)
+
+If the instance is **already on the latest version**, this command is a **no‑op** (it **does not stop** the server).
+
+### Prerequisites
+
+* The instance must have been **initialized** earlier via `hydraidectl init`.
+* Starting/stopping services may **require administrative privileges** depending on your OS/service manager.
+
+### Synopsis
+
+```bash
+hydraidectl update --instance <name>
+```
+
+### Flags
+
+* `--instance` / `-i` **(required)** — the target instance name.
+
+### Behavior & Timeouts
+
+* Version check: compares the instance’s recorded version with the **latest available** version.
+* Graceful stop: only if status is not `inactive`/`unknown`.
+* Progress: shows a **byte‑accurate progress bar** during download.
+* Service file: removes the old service definition and **generates a fresh one** for the updated binary.
+* Start: immediately starts the instance after updating.
+* Health wait: polls the instance until it becomes **`healthy`**.
+
+    * Overall operation context timeout: **600s**
+    * Controller command timeout: **20s**
+    * Graceful start/stop timeout: **600s**
+
+### Examples
+
+```bash
+# Update an instance named "prod"
+hydraidectl update --instance prod
+```
+
+**Typical outputs**
+
+* Already up to date:
+
+  ```
+  The instance "prod" is already up to date (version X.Y.Z).
+  ```
+* Successful update + start:
+
+  ```
+  Instance "prod" stopped gracefully.
+  Downloading  45.2 MB / 45.2 MB
+  Instance "prod" has been successfully updated to version X.Y.Z and started.
+  Waiting for instance "prod" to become healthy...
+  Instance "prod" is now healthy and ready for use. (Waited 7s)
+  ```
+* Could not determine the latest version:
+
+  ```
+  Unable to determine the latest version of HydrAIDE. Please try again later.
+  ```
+
+### Exit Codes
+
+* `0` — success **or** no‑op (already up to date)
+* `1` — error (metadata access, stop/start failure, download error, health timeout, etc.)
