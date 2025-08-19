@@ -11,6 +11,7 @@ import (
 
 	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/elevation"
 	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/instancerunner"
+	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/validator"
 	"github.com/spf13/cobra"
 )
 
@@ -24,9 +25,8 @@ type JsonLifecycleInfo struct {
 }
 
 var (
-	startInstance   string
-	cmdTimeout      time.Duration
-	gracefulTimeout time.Duration
+	startInstance string
+	cmdTimeout    time.Duration
 )
 
 var startCmd = &cobra.Command{
@@ -46,8 +46,9 @@ If the instance is already running, the command does nothing.`,
 		outputFormat, _ := cmd.Flags().GetString("output")
 		printJson := jsonOutput || outputFormat == "json"
 
-		// Validate timeouts
-		if err := validateTimeoutValue("cmd-timeout", cmdTimeout); err != nil {
+		// Validate timeout
+		v := validator.New()
+		if err := v.ValidateTimeout(context.Background(), "cmd-timeout", cmdTimeout); err != nil {
 			if printJson {
 				printJsonStart(err)
 				return
@@ -56,26 +57,14 @@ If the instance is already running, the command does nothing.`,
 			os.Exit(3)
 		}
 
-		if err := validateTimeoutValue("graceful-timeout", gracefulTimeout); err != nil {
-			if printJson {
-				printJsonStart(err)
-				return
-			}
-			fmt.Printf("❌ %v\n", err)
-			os.Exit(3)
-		}
-
-		// Warn if timeouts are very small
+		// Warn if timeout is very small
 		if cmdTimeout < 2*time.Second && !printJson {
 			fmt.Printf("⚠️  Warning: cmd-timeout of %v is very small and may cause issues\n", cmdTimeout)
-		}
-		if gracefulTimeout < 2*time.Second && !printJson {
-			fmt.Printf("⚠️  Warning: graceful-timeout of %v is very small and may cause issues\n", gracefulTimeout)
 		}
 
 		instanceController := instancerunner.NewInstanceController(
 			instancerunner.WithTimeout(cmdTimeout),
-			instancerunner.WithGracefulStartStopTimeout(gracefulTimeout),
+			instancerunner.WithGracefulStartStopTimeout(60*time.Second), // Default 60s for graceful operations
 		)
 
 		if instanceController == nil {
@@ -141,7 +130,6 @@ func init() {
 	startCmd.Flags().BoolP("json", "j", false, "Return structured output in JSON format")
 	startCmd.Flags().StringP("output", "o", "", "Output format")
 	startCmd.Flags().DurationVar(&cmdTimeout, "cmd-timeout", 20*time.Second, "Timeout for the command execution (min: 1s, max: 15m)")
-	startCmd.Flags().DurationVar(&gracefulTimeout, "graceful-timeout", 10*time.Second, "Timeout for graceful start/stop operations (min: 1s, max: 15m)")
 	if err := startCmd.MarkFlagRequired("instance"); err != nil {
 		fmt.Printf("Error marking 'instance' flag as required: %v\n", err)
 		os.Exit(1)

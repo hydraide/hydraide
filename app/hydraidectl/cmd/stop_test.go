@@ -1,8 +1,11 @@
 package cmd
 
 import (
+	"context"
 	"testing"
 	"time"
+
+	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/validator"
 )
 
 func TestValidateStopTimeout(t *testing.T) {
@@ -61,7 +64,8 @@ func TestValidateStopTimeout(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := validateTimeoutValue("cmd-timeout", tt.timeout)
+			v := validator.New()
+			err := v.ValidateTimeout(context.Background(), "cmd-timeout", tt.timeout)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("validateTimeoutValue() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -81,8 +85,8 @@ func TestValidateStopGracefulTimeout(t *testing.T) {
 		errMsg  string
 	}{
 		{
-			name:    "valid graceful-timeout - 10 seconds",
-			timeout: 10 * time.Second,
+			name:    "valid graceful-timeout - 60 seconds (default)",
+			timeout: 60 * time.Second,
 			wantErr: false,
 		},
 		{
@@ -121,7 +125,8 @@ func TestValidateStopGracefulTimeout(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := validateTimeoutValue("graceful-timeout", tt.timeout)
+			v := validator.New()
+			err := v.ValidateTimeout(context.Background(), "graceful-timeout", tt.timeout)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("validateTimeoutValue() error = %v, wantErr %v", err, tt.wantErr)
 				return

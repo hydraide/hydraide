@@ -11,6 +11,7 @@ import (
 
 	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/elevation"
 	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/instancerunner"
+	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/validator"
 	"github.com/spf13/cobra"
 )
 
@@ -38,7 +39,8 @@ If the instance is not running, the command does nothing.`,
 		printJson := jsonOutput || outputFormat == "json"
 
 		// Validate timeouts
-		if err := validateTimeoutValue("cmd-timeout", stopCmdTimeout); err != nil {
+		v := validator.New()
+		if err := v.ValidateTimeout(context.Background(), "cmd-timeout", stopCmdTimeout); err != nil {
 			if printJson {
 				printJsonStop(err)
 				return
@@ -47,7 +49,7 @@ If the instance is not running, the command does nothing.`,
 			os.Exit(3)
 		}
 
-		if err := validateTimeoutValue("graceful-timeout", stopGracefulTimeout); err != nil {
+		if err := v.ValidateTimeout(context.Background(), "graceful-timeout", stopGracefulTimeout); err != nil {
 			if printJson {
 				printJsonStop(err)
 				return
@@ -141,7 +143,7 @@ func init() {
 
 	stopCmd.Flags().StringVarP(&stopInstance, "instance", "i", "", "Name of the service instance")
 	stopCmd.Flags().DurationVar(&stopCmdTimeout, "cmd-timeout", 20*time.Second, "Timeout for the command execution (min: 1s, max: 15m)")
-	stopCmd.Flags().DurationVar(&stopGracefulTimeout, "graceful-timeout", 10*time.Second, "Timeout for graceful start/stop operations (min: 1s, max: 15m)")
+	stopCmd.Flags().DurationVar(&stopGracefulTimeout, "graceful-timeout", 60*time.Second, "Timeout for graceful start/stop operations (min: 1s, max: 15m)")
 	if err := stopCmd.MarkFlagRequired("instance"); err != nil {
 		fmt.Println("Error marking 'instance' flag as required:", err)
 		os.Exit(1)
