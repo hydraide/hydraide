@@ -30,7 +30,7 @@ With HydrAIDE, you don’t adapt to the database — **the database adapts to yo
 
 ## ⭐ 100+ Stars and Growing! (Star History)
 
-[![Star History Chart](https://api.star-history.com/svg?repos=hydraide/hydraide&type=Date&theme=dark)](https://www.star-history.com/#hydraide/hydraide&Date")
+[![Star History Chart](https://api.star-history.com/svg?repos=hydraide/hydraide&type=Date&theme=dark)](https://www.star-history.com/#hydraide/hydraide)
 
 ### 💖 Thank You, Community!
 
