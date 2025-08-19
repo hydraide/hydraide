@@ -13,28 +13,12 @@ import (
 	buildmeta "github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/buildmetadata"
 	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/certificate"
 	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/downloader"
+	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/env"
 	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/filesystem"
 	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/validator"
 	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
 )
-
-type EnvConfig struct {
-	LogLevel               string
-	LogTimeFormat          string
-	SystemResourceLogging  bool
-	GraylogEnabled         bool
-	GraylogServer          string
-	GraylogServiceName     string
-	GRPCMaxMessageSize     int64
-	GRPCServerErrorLogging bool
-	CloseAfterIdle         int
-	WriteInterval          int
-	FileSize               int64
-	HydraidePort           string
-	HydraideBasePath       string
-	HealthCheckPort        string
-}
 
 var initCmd = &cobra.Command{
 
@@ -73,7 +57,7 @@ This command guides you through the process of creating a new HydrAIDE instance,
 
 		fmt.Printf("\n🚀 Starting HydrAIDE setup for instance: \"%s\"\n\n", instanceName)
 
-		var envCfg EnvConfig
+		envSettings := &env.Settings{}
 
 		validator := validator.New()
 		ctx := context.Background()
@@ -93,7 +77,7 @@ This command guides you through the process of creating a new HydrAIDE instance,
 			portInput = strings.TrimSpace(portInput)
 
 			if portInput == "" {
-				envCfg.HydraidePort = "4900"
+				envSettings.HydrAIDEGRPCPort = "4900"
 				break
 			}
 
@@ -103,7 +87,7 @@ This command guides you through the process of creating a new HydrAIDE instance,
 				continue
 			}
 
-			envCfg.HydraidePort = validPort
+			envSettings.HydrAIDEGRPCPort = validPort
 			break
 		}
 
@@ -114,10 +98,10 @@ This command guides you through the process of creating a new HydrAIDE instance,
 			defaultBasePath = `C:\mnt\hydraide`
 		}
 		fmt.Printf("Base path (default: %s): ", defaultBasePath)
-		envCfg.HydraideBasePath, _ = reader.ReadString('\n')
-		envCfg.HydraideBasePath = strings.TrimSpace(envCfg.HydraideBasePath)
-		if envCfg.HydraideBasePath == "" {
-			envCfg.HydraideBasePath = defaultBasePath
+		envSettings.HydrAIDEBasePath, _ = reader.ReadString('\n')
+		envSettings.HydrAIDEBasePath = strings.TrimSpace(envSettings.HydrAIDEBasePath)
+		if envSettings.HydrAIDEBasePath == "" {
+			envSettings.HydrAIDEBasePath = defaultBasePath
 		}
 
 		// LOG_LEVEL
@@ -137,7 +121,7 @@ This command guides you through the process of creating a new HydrAIDE instance,
 				continue
 			}
 
-			envCfg.LogLevel = logLevel
+			envSettings.LogLevel = logLevel
 			break
 		}
 
@@ -148,21 +132,21 @@ This command guides you through the process of creating a new HydrAIDE instance,
 		fmt.Print("Enable system resource logging? (y/n) [default: n]: ")
 		resLogInput, _ := reader.ReadString('\n')
 		resLogInput = strings.ToLower(strings.TrimSpace(resLogInput))
-		envCfg.SystemResourceLogging = (resLogInput == "y" || resLogInput == "yes")
+		envSettings.SystemResourceLogging = resLogInput == "y" || resLogInput == "yes"
 
 		// GRAYLOG CONFIGURATION
 		fmt.Println("\n📊 Graylog Integration")
 		fmt.Print("Enable Graylog centralized logging? (y/n) [default: n]: ")
 		graylogInput, _ := reader.ReadString('\n')
 		graylogInput = strings.ToLower(strings.TrimSpace(graylogInput))
-		envCfg.GraylogEnabled = (graylogInput == "y" || graylogInput == "yes")
+		envSettings.GraylogEnabled = graylogInput == "y" || graylogInput == "yes"
 
-		if envCfg.GraylogEnabled {
+		if envSettings.GraylogEnabled {
 			fmt.Println("🌐 Graylog Server Address")
 			fmt.Println("   Format: host:port (e.g., graylog.example.com:5140)")
 			fmt.Print("Graylog server address: ")
 			graylogServer, _ := reader.ReadString('\n')
-			envCfg.GraylogServer = strings.TrimSpace(graylogServer)
+			envSettings.GraylogServer = strings.TrimSpace(graylogServer)
 
 			fmt.Println("\n📛 Graylog Service Identifier")
 			fmt.Println("   Unique name for this HydrAIDE instance in Graylog")
@@ -172,7 +156,7 @@ This command guides you through the process of creating a new HydrAIDE instance,
 			if serviceName == "" {
 				serviceName = "hydraide-prod"
 			}
-			envCfg.GraylogServiceName = serviceName
+			envSettings.GraylogServiceName = serviceName
 		}
 
 		// GRPC CONFIGURATION
@@ -198,7 +182,7 @@ This command guides you through the process of creating a new HydrAIDE instance,
 				continue
 			}
 			fmt.Printf("✅ Valid size: %s (%d bytes)\n", validator.FormatSize(ctx, size), size)
-			envCfg.GRPCMaxMessageSize = size
+			envSettings.GRPCMaxMessageSize = size
 			break
 		}
 
@@ -208,7 +192,7 @@ This command guides you through the process of creating a new HydrAIDE instance,
 		fmt.Print("Enable gRPC error logging? (y/n) [default: y]: ")
 		grpcErrInput, _ := reader.ReadString('\n')
 		grpcErrInput = strings.ToLower(strings.TrimSpace(grpcErrInput))
-		envCfg.GRPCServerErrorLogging = (grpcErrInput != "n" && grpcErrInput != "no")
+		envSettings.GRPCServerErrorLogging = grpcErrInput != "n" && grpcErrInput != "no"
 
 		// SWAMP STORAGE SETTINGS
 		fmt.Println("\n🏞️ Swamp Storage Configuration")
@@ -220,21 +204,21 @@ This command guides you through the process of creating a new HydrAIDE instance,
 		idleInput, _ := reader.ReadString('\n')
 		idleInput = strings.TrimSpace(idleInput)
 		if idleInput == "" {
-			envCfg.CloseAfterIdle = 10
+			envSettings.SwampCloseAfterIdle = 10
 		} else {
 			if idle, err := strconv.Atoi(idleInput); err == nil {
 
-				envCfg.CloseAfterIdle = idle
-				if envCfg.CloseAfterIdle < 10 || envCfg.CloseAfterIdle > 3600 {
+				envSettings.SwampCloseAfterIdle = idle
+				if envSettings.SwampCloseAfterIdle < 10 || envSettings.SwampCloseAfterIdle > 3600 {
 					fmt.Printf("⚠️ Idle timeout must be between 10 and 3600 seconds. Using default 10s.\n")
-					envCfg.CloseAfterIdle = 10
+					envSettings.SwampCloseAfterIdle = 10
 				} else {
-					fmt.Printf("✅ Idle timeout set to %d seconds.\n", envCfg.CloseAfterIdle)
+					fmt.Printf("✅ Idle timeout set to %d seconds.\n", envSettings.SwampCloseAfterIdle)
 				}
 
 			} else {
 				fmt.Printf("⚠️ Invalid number, using default 10s. Error: %v\n", err)
-				envCfg.CloseAfterIdle = 10
+				envSettings.SwampCloseAfterIdle = 10
 			}
 		}
 
@@ -245,13 +229,13 @@ This command guides you through the process of creating a new HydrAIDE instance,
 		writeInput, _ := reader.ReadString('\n')
 		writeInput = strings.TrimSpace(writeInput)
 		if writeInput == "" {
-			envCfg.WriteInterval = 5
+			envSettings.SwampWriteInterval = 5
 		} else {
 			if interval, err := strconv.Atoi(writeInput); err == nil {
-				envCfg.WriteInterval = interval
+				envSettings.SwampWriteInterval = interval
 			} else {
 				fmt.Printf("⚠️ Invalid number, using default 5s. Error: %v\n", err)
-				envCfg.WriteInterval = 5
+				envSettings.SwampWriteInterval = 5
 			}
 		}
 
@@ -272,7 +256,7 @@ This command guides you through the process of creating a new HydrAIDE instance,
 				continue
 			}
 
-			envCfg.FileSize = validSize
+			envSettings.SwampDefaultFileSize = validSize
 			break
 		}
 
@@ -287,7 +271,7 @@ This command guides you through the process of creating a new HydrAIDE instance,
 			healthPortInput = strings.TrimSpace(healthPortInput)
 
 			if healthPortInput == "" {
-				envCfg.HealthCheckPort = "4901"
+				envSettings.HydrAIDEHealthCheckPort = "4901"
 				break
 			}
 
@@ -297,12 +281,12 @@ This command guides you through the process of creating a new HydrAIDE instance,
 				continue
 			}
 
-			if validPort == envCfg.HydraidePort {
+			if validPort == envSettings.HydrAIDEGRPCPort {
 				fmt.Println("❌ Health check port cannot be the same as the main port. Please choose a different port.")
 				continue
 			}
 
-			envCfg.HealthCheckPort = validPort
+			envSettings.HydrAIDEHealthCheckPort = validPort
 			break
 		}
 
@@ -312,30 +296,30 @@ This command guides you through the process of creating a new HydrAIDE instance,
 		fmt.Println("  • CN:         ", certPrompts.GetCN())
 		fmt.Println("  • DNS SANs:   ", strings.Join(certPrompts.GetDNS(), ", "))
 		fmt.Println("  • IP SANs:    ", strings.Join(certPrompts.GetIP(), ", "))
-		fmt.Println("  • Main Port:  ", envCfg.HydraidePort)
-		fmt.Println("  • Health Port:", envCfg.HealthCheckPort)
+		fmt.Println("  • Main Port:  ", envSettings.HydrAIDEGRPCPort)
+		fmt.Println("  • Health Port:", envSettings.HydrAIDEHealthCheckPort)
 
 		fmt.Println("\n=== LOGGING ===")
-		fmt.Println("  • Log Level:       ", envCfg.LogLevel)
-		fmt.Println("  • Resource Logging:", envCfg.SystemResourceLogging)
-		fmt.Println("  • Graylog Enabled: ", envCfg.GraylogEnabled)
-		if envCfg.GraylogEnabled {
-			fmt.Println("      • Server:     ", envCfg.GraylogServer)
-			fmt.Println("      • Service:    ", envCfg.GraylogServiceName)
+		fmt.Println("  • Log Level:       ", envSettings.LogLevel)
+		fmt.Println("  • Resource Logging:", envSettings.SystemResourceLogging)
+		fmt.Println("  • Graylog Enabled: ", envSettings.GraylogEnabled)
+		if envSettings.GraylogEnabled {
+			fmt.Println("      • Server:     ", envSettings.GraylogServer)
+			fmt.Println("      • Service:    ", envSettings.GraylogServiceName)
 		}
 
 		fmt.Println("\n=== gRPC ===")
-		fmt.Printf("  • Max Message Size: %s (%d bytes)\n", validator.FormatSize(ctx, envCfg.GRPCMaxMessageSize), envCfg.GRPCMaxMessageSize)
-		fmt.Println("  • Error Logging:   ", envCfg.GRPCServerErrorLogging)
+		fmt.Printf("  • Max Message Size: %s (%d bytes)\n", validator.FormatSize(ctx, envSettings.GRPCMaxMessageSize), envSettings.GRPCMaxMessageSize)
+		fmt.Println("  • Error Logging:   ", envSettings.GRPCServerErrorLogging)
 
 		fmt.Println("\n=== STORAGE ===")
-		fmt.Println("  • Close After Idle: ", envCfg.CloseAfterIdle, "seconds")
-		fmt.Println("  • Write Interval:   ", envCfg.WriteInterval, "seconds")
+		fmt.Println("  • Close After Idle: ", envSettings.SwampCloseAfterIdle, "seconds")
+		fmt.Println("  • Write Interval:   ", envSettings.SwampWriteInterval, "seconds")
 		fmt.Printf("  • File Fragment Size: %d bytes (%.2f KB)\n",
-			envCfg.FileSize, float64(envCfg.FileSize)/1024)
+			envSettings.SwampDefaultFileSize, float64(envSettings.SwampDefaultFileSize)/1024)
 
 		fmt.Println("\n=== PATHS ===")
-		fmt.Println("  • Base Path:  ", envCfg.HydraideBasePath)
+		fmt.Println("  • Base Path:  ", envSettings.HydrAIDEBasePath)
 
 		// Confirmation
 		fmt.Print("\n✅ Proceed with installation? (y/n) [default: n]: ")
@@ -356,7 +340,7 @@ This command guides you through the process of creating a new HydrAIDE instance,
 		allExist := true
 		var missingFolders []string
 		for _, folder := range folders {
-			fullPath := filepath.Join(envCfg.HydraideBasePath, folder)
+			fullPath := filepath.Join(envSettings.HydrAIDEBasePath, folder)
 			exists, err := fs.CheckIfDirExists(ctx, fullPath)
 			if err != nil {
 				fmt.Printf("❌ Error checking directory %s: %v\n", fullPath, err)
@@ -406,7 +390,7 @@ This command guides you through the process of creating a new HydrAIDE instance,
 
 			// Delete existing folders to ensure a clean slate
 			for _, folder := range folders {
-				fullPath := filepath.Join(envCfg.HydraideBasePath, folder)
+				fullPath := filepath.Join(envSettings.HydrAIDEBasePath, folder)
 				if err := fs.RemoveDir(ctx, fullPath); err != nil {
 					fmt.Printf("❌ Error deleting directory %s: %v\n", fullPath, err)
 					return
@@ -416,7 +400,7 @@ This command guides you through the process of creating a new HydrAIDE instance,
 
 			// Recreate the folders
 			for _, folder := range folders {
-				fullPath := filepath.Join(envCfg.HydraideBasePath, folder)
+				fullPath := filepath.Join(envSettings.HydrAIDEBasePath, folder)
 				if err := fs.CreateDir(ctx, fullPath, 0755); err != nil {
 					fmt.Printf("❌ Error creating directory %s: %v\n", fullPath, err)
 					return
@@ -428,7 +412,7 @@ This command guides you through the process of creating a new HydrAIDE instance,
 		// Verify all folders exist after creation
 		fmt.Println("\n📂 Verifying application folders...")
 		for _, folder := range folders {
-			fullPath := filepath.Join(envCfg.HydraideBasePath, folder)
+			fullPath := filepath.Join(envSettings.HydrAIDEBasePath, folder)
 			exists, err := fs.CheckIfDirExists(ctx, fullPath)
 			if err != nil {
 				fmt.Printf("❌ Error checking directory %s: %v\n", fullPath, err)
@@ -447,7 +431,7 @@ This command guides you through the process of creating a new HydrAIDE instance,
 
 		// move all certFiles to the certificate directory
 		for _, file := range certPrompts.GetCertificateFiles() {
-			destPath := filepath.Join(envCfg.HydraideBasePath, "certificate", filepath.Base(file))
+			destPath := filepath.Join(envSettings.HydrAIDEBasePath, "certificate", filepath.Base(file))
 			fmt.Printf("  • Moving %s to %s\n", file, destPath)
 			if err := fs.MoveFile(ctx, file, destPath); err != nil {
 				fmt.Println("❌ Error moving certificate file:", err)
@@ -459,22 +443,20 @@ This command guides you through the process of creating a new HydrAIDE instance,
 		fmt.Println("✅ TLS certificates copied successfully.")
 
 		// Create the .env file
-		envPath := filepath.Join(envCfg.HydraideBasePath, ".env")
-		exists, err := fs.CheckIfFileExists(ctx, envPath)
-		if err != nil {
-			fmt.Println("❌ Error checking .env file:", err)
-			return
-		}
-		if exists {
-			fmt.Printf("\n⚠️ Found existing .env file at: %s\n", envPath)
+		envInterface := env.New(fs, envSettings.HydrAIDEBasePath)
+		// if env file already exists, prompt for overwrite
+		if envInterface.IsExists(ctx) {
+
+			fmt.Printf("\n⚠️ Found existing .env file at: %s\n", envInterface.GetEnvPath())
 			// Show current content
-			existingContent, err := os.ReadFile(envPath)
-			if err == nil {
-				fmt.Println("\n📄 Current .env content:")
-				fmt.Println(strings.Repeat("-", 40))
-				fmt.Println(string(existingContent))
-				fmt.Println(strings.Repeat("-", 40))
+			existingSettings, err := envInterface.Load(ctx)
+			if err != nil {
+				fmt.Println("❌ Error loading existing .env file:", err)
+				return
 			}
+
+			fmt.Printf("Current settings in .env file:\n")
+			fmt.Printf("%+v\n", existingSettings)
 
 			// Confirm overwrite
 			fmt.Print("\n❓ Do you want to overwrite this file? (y/n) [default: y]: ")
@@ -485,35 +467,17 @@ This command guides you through the process of creating a new HydrAIDE instance,
 				fmt.Println("✅ Proceeding with installation using existing configuration")
 				return
 			}
+
 			fmt.Println("🔄 Overwriting existing .env file...")
+
 		}
 
-		// Write .env file
-		var sb strings.Builder
-		sb.WriteString("# HydrAIDE Configuration\n")
-		sb.WriteString("# Generated automatically - DO NOT EDIT MANUALLY\n\n")
-		sb.WriteString(fmt.Sprintf("LOG_LEVEL=%s\n", envCfg.LogLevel))
-		sb.WriteString("LOG_TIME_FORMAT=2006-01-02T15:04:05Z07:00\n")
-		sb.WriteString(fmt.Sprintf("SYSTEM_RESOURCE_LOGGING=%t\n", envCfg.SystemResourceLogging))
-		sb.WriteString(fmt.Sprintf("GRAYLOG_ENABLED=%t\n", envCfg.GraylogEnabled))
-		sb.WriteString(fmt.Sprintf("GRAYLOG_SERVER=%s\n", envCfg.GraylogServer))
-		sb.WriteString(fmt.Sprintf("GRAYLOG_SERVICE_NAME=%s\n", envCfg.GraylogServiceName))
-		sb.WriteString(fmt.Sprintf("GRPC_MAX_MESSAGE_SIZE=%d\n", envCfg.GRPCMaxMessageSize))
-		sb.WriteString(fmt.Sprintf("GRPC_SERVER_ERROR_LOGGING=%t\n", envCfg.GRPCServerErrorLogging))
-		sb.WriteString(fmt.Sprintf("HYDRAIDE_ROOT_PATH=%s\n", envCfg.HydraideBasePath))
-		sb.WriteString(fmt.Sprintf("HYDRAIDE_SERVER_PORT=%s\n", envCfg.HydraidePort))
-		sb.WriteString(fmt.Sprintf("HYDRAIDE_DEFAULT_CLOSE_AFTER_IDLE=%d\n", envCfg.CloseAfterIdle))
-		sb.WriteString(fmt.Sprintf("HYDRAIDE_DEFAULT_WRITE_INTERVAL=%d\n", envCfg.WriteInterval))
-		sb.WriteString(fmt.Sprintf("HYDRAIDE_DEFAULT_FILE_SIZE=%d\n", envCfg.FileSize))
-		sb.WriteString(fmt.Sprintf("HEALTH_CHECK_PORT=%s\n", envCfg.HealthCheckPort))
-		sb.WriteString("\n")
-
-		content := []byte(sb.String())
-		if err := fs.WriteFile(ctx, envPath, content, 0644); err != nil {
-			fmt.Println("❌ Error writing .env file:", err)
-			return
+		if err := envInterface.Set(ctx, envSettings); err != nil {
+			fmt.Printf("❌ Error writing to .env file: %v\n", err)
+			os.Exit(1)
 		}
-		fmt.Println("✅ .env file created/updated successfully at:", envPath)
+
+		fmt.Println("✅ .env file created/updated successfully at:", envInterface.GetEnvPath())
 
 		// Download the latest binary
 
@@ -532,7 +496,7 @@ This command guides you through the process of creating a new HydrAIDE instance,
 		}
 
 		serverDownloaderObject := downloader.New()
-		downloadedVersion, err := serverDownloaderObject.DownloadHydraServer("latest", envCfg.HydraideBasePath)
+		downloadedVersion, err := serverDownloaderObject.DownloadHydraServer("latest", envSettings.HydrAIDEBasePath)
 		if err != nil {
 			serverDownloaderObject.SetProgressCallback(progressFn)
 			fmt.Printf("❌ Failed to download HydrAIDE server binary: %v\n", err)
@@ -545,7 +509,7 @@ This command guides you through the process of creating a new HydrAIDE instance,
 		fmt.Println("\n💾 Saving instance metadata...")
 
 		instanceData := buildmeta.InstanceMetadata{
-			BasePath: envCfg.HydraideBasePath,
+			BasePath: envSettings.HydrAIDEBasePath,
 			Version:  downloadedVersion,
 		}
 
@@ -559,6 +523,7 @@ This command guides you through the process of creating a new HydrAIDE instance,
 		fmt.Println("✅ Installation complete!")
 		fmt.Printf("👉 You can now register this instance as a system service by running:\n")
 		fmt.Printf("   sudo hydraidectl service --instance %s\n", instanceName)
+
 	},
 }
 

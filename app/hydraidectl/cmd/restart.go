@@ -36,7 +36,7 @@ and then configured as a service with 'service'.`,
 
 		instanceController := instancerunner.NewInstanceController(
 			instancerunner.WithTimeout(30*time.Second),
-			instancerunner.WithGracefulStartStopTimeout(10*time.Second),
+			instancerunner.WithGracefulStartStopTimeout(600*time.Second),
 		)
 
 		if instanceController == nil {

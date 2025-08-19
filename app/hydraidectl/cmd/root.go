@@ -21,7 +21,8 @@ Usage:
   hydraidectl <command>
 
 Try:
-  hydraidectl init
+  hydraidectl init 
+  hydraidectl update
   hydraidectl start
   hydraidectl restart
   hydraidectl stop

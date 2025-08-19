@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	buildmeta "github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/buildmetadata"
 	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/downloader"
+	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/env"
 	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/filesystem"
 	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/instancedetector"
 	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/instancehealth"
@@ -26,14 +28,13 @@ func init() {
 // instance struct with Json annotation
 type instance struct {
 	Name            string `json:"name"`
-	Version         string `json:"version,omitempty"`
+	ServerPort      string `json:"server_port,omitempty"`
+	ServerVersion   string `json:"server_version,omitempty"`
 	UpdateAvailable string `json:"update_available,omitempty"`
 	Status          string `json:"status"`
 	Health          string `json:"health,omitempty"`
 	BasePath        string `json:"base_path,omitempty"`
 }
-
-var Healths []instancedetector.Instance
 
 var listCmd = &cobra.Command{
 	Use:   "list",
@@ -77,6 +78,15 @@ var listCmd = &cobra.Command{
 			return
 		}
 
+		// Gyűjtsük ki és rendezzük a neveket (case-insensitive névsor)
+		names := make([]string, 0, len(allInstances))
+		for name := range allInstances {
+			names = append(names, name)
+		}
+		sort.Slice(names, func(i, j int) bool {
+			return strings.ToLower(names[i]) < strings.ToLower(names[j])
+		})
+
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
@@ -86,26 +96,36 @@ var listCmd = &cobra.Command{
 			return
 		}
 
-		instancesWithHealth := make([]instance, 0)
-		for name, meta := range allInstances {
+		instancesWithHealth := make([]instance, 0, len(allInstances))
+
+		filesystemInterface := filesystem.New()
+
+		// FIGYELEM: innentől névsorrendben iterálunk
+		for _, name := range names {
+			meta := allInstances[name]
 
 			status, err := detector.GetInstanceStatus(ctx, name)
-
 			if err != nil {
 				status = "unknown"
 			}
 
 			if meta.Version == "" {
-				meta.Version = "unknown" // No version info if not available
-			} else {
-				meta.Version = fmt.Sprintf("%s", meta.Version) // Ensure version is a string
+				meta.Version = "unknown"
+			}
+
+			envInterface := env.New(filesystemInterface, meta.BasePath)
+			loadedEnv, err := envInterface.Load(ctx)
+			if err != nil {
+				fmt.Printf("Error loading environment for instance '%s': %v\n", name, err)
+				continue
 			}
 
 			ins := instance{
-				Name:     name,
-				Version:  meta.Version, // No version info if no health is requested
-				Status:   status,
-				BasePath: meta.BasePath,
+				Name:          name,
+				ServerPort:    loadedEnv.HydrAIDEGRPCPort,
+				ServerVersion: meta.Version,
+				Status:        status,
+				BasePath:      meta.BasePath,
 			}
 
 			if latestVersion != "unknown" && meta.Version != latestVersion {
@@ -122,7 +142,6 @@ var listCmd = &cobra.Command{
 			}
 
 			instancesWithHealth = append(instancesWithHealth, ins)
-
 		}
 
 		switch {
@@ -160,14 +179,14 @@ var listCmd = &cobra.Command{
 			const colWidth = 20
 
 			// Print headers.
-			headerFormat := fmt.Sprintf("%%-%ds %%-%ds %%-%ds %%-%ds %%-%ds\n", colWidth, colWidth, colWidth, colWidth, colWidth)
+			headerFormat := fmt.Sprintf("%%-%ds %%-%ds %%-%ds %%-%ds %%-%ds %%-%ds\n", colWidth, colWidth, colWidth, colWidth, colWidth, colWidth)
 			if !noHealth {
-				headerFormat = fmt.Sprintf("%%-%ds %%-%ds %%-%ds %%-%ds %%-%ds %%-%ds\n", colWidth, colWidth, colWidth, colWidth, colWidth, colWidth)
-				fmt.Printf(headerFormat, "Name", "Version", "Update Available", "Service Status", "Health", "Base Path")
-				fmt.Printf("%s\n", strings.Repeat("-", colWidth*7+2))
+				headerFormat = fmt.Sprintf("%%-%ds %%-%ds %%-%ds %%-%ds %%-%ds %%-%ds %%-%ds\n", colWidth, colWidth, colWidth, colWidth, colWidth, colWidth, colWidth)
+				fmt.Printf(headerFormat, "Name", "Server Port", "Server Version", "Update Available", "Service Status", "Health", "Base Path")
+				fmt.Printf("%s\n", strings.Repeat("-", colWidth*8+2))
 			} else {
-				fmt.Printf(headerFormat, "Name", "Version", "Update Available", "Service Status", "Base Path")
-				fmt.Printf("%s\n", strings.Repeat("-", colWidth*6+1))
+				fmt.Printf(headerFormat, "Name", "Server Port", "Server Version", "Update Available", "Service Status", "Base Path")
+				fmt.Printf("%s\n", strings.Repeat("-", colWidth*7+1))
 			}
 
 			// Print data rows.
@@ -180,9 +199,9 @@ var listCmd = &cobra.Command{
 				}
 
 				if !noHealth {
-					fmt.Printf("%-*s %-*s %-*s %-*s %-*s %-*s %s\n", colWidth, inst.Name, colWidth, inst.Version, colWidth, inst.UpdateAvailable, colWidth, inst.Status, colWidth, inst.Health, colWidth, inst.BasePath, warning)
+					fmt.Printf("%-*s %-*s %-*s %-*s %-*s %-*s %-*s %s\n", colWidth, inst.Name, colWidth, inst.ServerPort, colWidth, inst.ServerVersion, colWidth, inst.UpdateAvailable, colWidth, inst.Status, colWidth, inst.Health, colWidth, inst.BasePath, warning)
 				} else {
-					fmt.Printf("%-*s %-*s %-*s %-*s %-*s %s\n", colWidth, inst.Name, colWidth, inst.Version, colWidth, inst.UpdateAvailable, colWidth, inst.Status, colWidth, inst.BasePath, warning)
+					fmt.Printf("%-*s %-*s %-*s %-*s %-*s %-*s %s\n", colWidth, inst.Name, colWidth, inst.ServerPort, colWidth, inst.ServerVersion, colWidth, inst.UpdateAvailable, colWidth, inst.Status, colWidth, inst.BasePath, warning)
 				}
 
 			}
