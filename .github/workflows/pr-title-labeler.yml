@@ -14,8 +14,6 @@ concurrency:
 
 jobs:
   label-by-title:
-    # Draft PR-eket hagyjuk ki (ha akarod, vedd ki ezt a sort)
-    if: ${{ github.event.pull_request.draft == false }}
     runs-on: ubuntu-latest
     steps:
       - name: Ensure type labels exist (idempotent)

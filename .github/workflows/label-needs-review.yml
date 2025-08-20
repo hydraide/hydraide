@@ -2,14 +2,12 @@ name: Label Needs Review PR
 
 on:
   pull_request_target:
-    types: [opened, ready_for_review, reopened] # edited opcionális, ha kell, tedd vissza
+    types: [opened, ready_for_review, reopened]
 
-# Legszűkebb jogosultságok
 permissions:
   contents: read
   issues: write
 
-# Versenyhelyzetek elkerülése
 concurrency:
   group: label-needs-review-${{ github.event.pull_request.number }}
   cancel-in-progress: false
