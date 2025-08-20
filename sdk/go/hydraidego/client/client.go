@@ -2,7 +2,10 @@ package client
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net"
 	"os"
@@ -46,79 +49,82 @@ type client struct {
 	maxMessageSize int
 	servers        []*Server
 	mu             sync.RWMutex
-	certFile       string
 }
 
-// Server represents a HydrAIDE server instance that handles one or more Islands.
+// Server represents a HydrAIDE server instance that is responsible for
+// one or more Islands within the system.
 //
-// Each HydrAIDE server is responsible for a specific, non-overlapping range of Islands —
-// these are deterministic hash slots assigned based on Swamp names.
-// The client uses the IslandID to route requests to the appropriate server.
+// Each HydrAIDE server is assigned a non-overlapping range of Islands,
+// which are deterministic hash slots derived from Swamp names. The client
+// uses the IslandID to route requests to the correct server.
 //
 // Fields:
-//   - Host: The gRPC endpoint of the HydrAIDE server (e.g. "hydra01:4444")
-//   - FromIsland: The first Island (inclusive) that this server is responsible for
-//   - ToIsland: The last Island (inclusive) this server handles
-//   - CertFilePath: Optional TLS certificate path for secure connections
+//   - Host:          The gRPC endpoint of the HydrAIDE server (e.g. "hydra01:4444")
+//   - FromIsland:    The first Island (inclusive) that this server is responsible for
+//   - ToIsland:      The last Island (inclusive) that this server handles
+//   - CACrtPath:     Path to the server’s CA certificate (ca.crt), used to verify the server
+//   - ClientCrtPath: Path to the client certificate (client.crt), issued by this server
+//   - ClientKeyPath: Path to the client private key (client.key), used for mTLS authentication
 //
 // 🏝️ Why Islands?
-// An Island is a routing and storage unit — a top-level hash partition where Swamps reside.
-// Moving an Island means migrating its folder and updating this struct on the client side.
-// Servers themselves are stateless and don’t compute hash assignments — they only serve.
+// An Island is a physical-logical routing unit: a hash-based partition that
+// stores one or more Swamps. Migrating an Island only requires copying its
+// folder and updating the client’s routing table — no rehashing or server restart.
+// This provides deterministic routing and simple horizontal scaling.
 //
 // 💡 Best practices:
-// - Island ranges must not overlap between servers.
-// - The Island range must be consistent with the total `allIslands` space (e.g. 1–1000).
-// - The client is responsible for ensuring deterministic routing via Swamp name hashing.
-//
-// Example:
-//
-//	client.New([]*Server{
-//	    {Host: "hydra01:4444", FromIsland: 1, ToIsland: 500, CertFilePath: "certs/01.pem"},
-//	    {Host: "hydra02:4444", FromIsland: 501, ToIsland: 1000, CertFilePath: "certs/02.pem"},
-//	}, 1000, ...)
+// - Island ranges must not overlap between servers
+// - Ranges should fully cover the configured `allIslands` space (e.g. 1–1000)
+// - Each server has its own client certificate/key pair for secure mutual TLS authentication
 type Server struct {
-	Host         string
-	FromIsland   uint64
-	ToIsland     uint64
-	CertFilePath string
+	Host          string
+	FromIsland    uint64
+	ToIsland      uint64
+	CACrtPath     string // server’s CA certificate
+	ClientCrtPath string // client certificate issued for this server
+	ClientKeyPath string // client private key for mTLS
 }
 
 // New creates a new HydrAIDE client instance that connects to one or more servers,
-// and distributes Swamp requests based on Island-based routing logic.
+// distributing Swamp requests based on deterministic Island-based routing.
 //
-// In HydrAIDE, every Swamp is deterministically assigned to an Island — a hash-based,
-// migratable storage zone — based on its full name (Sanctuary / Realm / Swamp).
-// The client is responsible for computing the IslandID and routing the request
-// to the correct server instance, based on the configured Island ranges.
+// In HydrAIDE, every Swamp name maps to a specific Island (via hashing).
+// The client computes the IslandID and resolves the target server by comparing
+// it to the configured Island ranges.
 //
 // Parameters:
-//   - servers: list of HydrAIDE servers to connect to
-//     Each server is responsible for a specific Island range (From → To).
-//   - allIslands: total number of hash buckets (Islands) in the system — must be fixed (e.g. 1000)
-//   - maxMessageSize: maximum allowed message size for gRPC communication (in bytes)
+//   - servers: list of HydrAIDE servers with their Island ranges and TLS certificates
+//   - allIslands: total number of Islands in the system (fixed, e.g. 1000)
+//   - maxMessageSize: maximum allowed gRPC message size in bytes
 //
-// The returned Client instance handles:
-//   - Stateless and deterministic Swamp → Island → server resolution
-//   - Thread-safe management of gRPC connections using internal routing maps
-//   - Lazy connection establishment via `Connect()`
-//   - Island-based partitioning for horizontal scalability and orchestrator-free migration
-//
-// 🏝️ What's an Island?
-// An Island is a physical-logical routing unit. It corresponds to a top-level folder
-// (e.g. `/data/234/`) that hosts one or more Swamps. Migrating an Island means copying
-// the folder and updating the client’s routing map — no server restart or rehashing required.
-//
-// 📦 Why is this useful?
-// - Enables fully decentralized scaling
-// - Makes server responsibilities transparent and adjustable
-// - Keeps Swamp names stable even during server topology changes
+// The returned Client instance provides:
+//   - Stateless, deterministic Swamp → Island → server resolution
+//   - Thread-safe management of gRPC connections
+//   - Lazy connection establishment with `Connect()`
+//   - Transparent horizontal scaling by Island ranges
+//   - Per-server mTLS authentication: the client uses the
+//     `ClientCrtPath` + `ClientKeyPath` pair for identity proof,
+//     while verifying the server’s certificate via `CACrtPath`
 //
 // Example:
 //
 //	client := client.New([]*client.Server{
-//	    {Host: "hydra01:4444", FromIsland: 1, ToIsland: 500, CertFilePath: "certs/01.pem"},
-//	    {Host: "hydra02:4444", FromIsland: 501, ToIsland: 1000, CertFilePath: "certs/02.pem"},
+//	    {
+//	        Host:          "hydra01:4444",
+//	        FromIsland:    1,
+//	        ToIsland:      500,
+//	        CACrtPath:     "certs/hydra01/ca.crt",
+//	        ClientCrtPath: "certs/hydra01/client.crt",
+//	        ClientKeyPath: "certs/hydra01/client.key",
+//	    },
+//	    {
+//	        Host:          "hydra02:4444",
+//	        FromIsland:    501,
+//	        ToIsland:      1000,
+//	        CACrtPath:     "certs/hydra02/ca.crt",
+//	        ClientCrtPath: "certs/hydra02/client.crt",
+//	        ClientKeyPath: "certs/hydra02/client.key",
+//	    },
 //	}, 1000, 1024*1024*1024) // 1 GB max message size
 //
 //	err := client.Connect(true)
@@ -129,7 +135,7 @@ type Server struct {
 //	swamp := name.New().Sanctuary("users").Realm("profiles").Swamp("alex123")
 //	service := client.GetServiceClient(swamp)
 //	if service != nil {
-//	    res, err := service.Read(...) // raw gRPC call to the correct Island-hosting server
+//	    res, err := service.Read(...)
 //	}
 func New(servers []*Server, allIslands uint64, maxMessageSize int) Client {
 	return &client{
@@ -207,32 +213,51 @@ func (c *client) Connect(connectionLog bool) error {
 			}`
 
 			hostOnly := strings.Split(server.Host, ":")[0]
-			creds, certErr := credentials.NewClientTLSFromFile(server.CertFilePath, hostOnly)
+
+			// load the client key pair (mTLS)
+			cliPair, certErr := tls.LoadX509KeyPair(server.ClientCrtPath, server.ClientKeyPath)
 			if certErr != nil {
-
-				slog.Error("error while loading TLS credentials: ", "error", certErr, "server", server.Host, "fromIsland", server.FromIsland, "toIsland", server.ToIsland)
-
+				slog.Error("failed to load client keypair", "error", certErr)
 				errorMessages = append(errorMessages, certErr)
-
+				return
 			}
 
-			var opts []grpc.DialOption
+			// load CA cert from file (used for server verification)
+			caPEM, readErr := os.ReadFile(server.CACrtPath)
+			if readErr != nil {
+				slog.Error("failed to read CA file", "error", readErr, "path", server.CACrtPath)
+				errorMessages = append(errorMessages, readErr)
+				return
+			}
+			roots := x509.NewCertPool()
+			if !roots.AppendCertsFromPEM(caPEM) {
+				err := fmt.Errorf("failed to append CA to pool: %s", server.CACrtPath)
+				slog.Error(err.Error())
+				errorMessages = append(errorMessages, err)
+				return
+			}
 
-			opts = append(opts, grpc.WithTransportCredentials(creds))
-			opts = append(opts, grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(c.maxMessageSize)))
-			opts = append(opts, grpc.WithDefaultCallOptions(grpc.MaxCallSendMsgSize(c.maxMessageSize)))
-			opts = append(opts, grpc.WithDefaultServiceConfig(serviceConfigJSON))
+			// Create TLS config with client cert, CA cert, and SNI
+			tlsCfg := &tls.Config{
+				Certificates: []tls.Certificate{cliPair}, // client cert + key (mTLS)
+				RootCAs:      roots,                      // check the server cert against the CA
+				ServerName:   hostOnly,                   // SNI + hostname verification
+				MinVersion:   tls.VersionTLS13,
+			}
 
-			// Add keepalive settings to prevent idle connections from being closed.
-			//
-			// Time: how often to send a ping when there's no ongoing data traffic.
-			// Timeout: how long to wait for a response before considering the connection dead.
-			// PermitWithoutStream: whether to allow keepalive pings even when there are no active RPC streams.
-			opts = append(opts, grpc.WithKeepaliveParams(keepalive.ClientParameters{
-				Time:                60 * time.Second,
-				Timeout:             10 * time.Second,
-				PermitWithoutStream: false,
-			}))
+			creds := credentials.NewTLS(tlsCfg)
+
+			opts := []grpc.DialOption{
+				grpc.WithTransportCredentials(creds),
+				grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(c.maxMessageSize)),
+				grpc.WithDefaultCallOptions(grpc.MaxCallSendMsgSize(c.maxMessageSize)),
+				grpc.WithDefaultServiceConfig(serviceConfigJSON),
+				grpc.WithKeepaliveParams(keepalive.ClientParameters{
+					Time:                60 * time.Second,
+					Timeout:             10 * time.Second,
+					PermitWithoutStream: false,
+				}),
+			}
 
 			var conn *grpc.ClientConn
 			var err error
@@ -390,7 +415,12 @@ func (c *client) GetAllIslands() uint64 {
 //
 // Example:
 //
-//	swamp := name.New().Sanctuary("users").Realm("logs").Swamp("user123") \n client := hydraClient.GetServiceClientAndHost(swamp) \n if client != nil {\n    res, _ := client.GrpcClient.Read(...)\n    fmt.Println(\"Resolved Host:\", client.Host)\n}
+//		swamp := name.New().Sanctuary("users").Realm("logs").Swamp("user123")
+//		client := hydraClient.GetServiceClientAndHost(swamp)
+//	 if client != nil {
+//	   res, _ := client.GrpcClient.Read(...)
+//	  fmt.Println("Resolved Host:", client.Host)
+//	 }
 //
 // This is especially useful when:
 // - Grouping Swamps by target server

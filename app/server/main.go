@@ -2,10 +2,6 @@ package main
 
 import (
 	"fmt"
-	"github.com/hydraide/hydraide/app/server/loghandlers/fallback"
-	"github.com/hydraide/hydraide/app/server/loghandlers/graylog"
-	"github.com/hydraide/hydraide/app/server/loghandlers/slogmulti"
-	"github.com/hydraide/hydraide/app/server/server"
 	"log/slog"
 	"net"
 	"net/http"
@@ -16,6 +12,11 @@ import (
 	"strconv"
 	"syscall"
 	"time"
+
+	"github.com/hydraide/hydraide/app/server/loghandlers/fallback"
+	"github.com/hydraide/hydraide/app/server/loghandlers/graylog"
+	"github.com/hydraide/hydraide/app/server/loghandlers/slogmulti"
+	"github.com/hydraide/hydraide/app/server/server"
 
 	"github.com/joho/godotenv"
 )
@@ -33,6 +34,7 @@ var (
 	systemResourceLogging = false
 	serverCrtPath         = ""
 	serverKeyPath         = ""
+	clientCaCrtPath       = ""
 	hydraServerPort       = 4444
 	healthCheckPort       = 4445
 )
@@ -70,6 +72,7 @@ func init() {
 	// should be handled these for linux and windows
 	serverCrtPath = filepath.Join(os.Getenv("HYDRAIDE_ROOT_PATH"), "certificate", "server.crt")
 	serverKeyPath = filepath.Join(os.Getenv("HYDRAIDE_ROOT_PATH"), "certificate", "server.key")
+	clientCaCrtPath = filepath.Join(os.Getenv("HYDRAIDE_ROOT_PATH"), "certificate", "ca.crt")
 
 	if _, err := os.Stat(serverCrtPath); os.IsNotExist(err) {
 		slog.Error("server certificate file server.crt are not found", "error", err.Error())
@@ -215,6 +218,7 @@ func main() {
 	serverInterface = server.New(&server.Configuration{
 		CertificateCrtFile:    serverCrtPath,
 		CertificateKeyFile:    serverKeyPath,
+		ClientCAFile:          clientCaCrtPath,
 		HydraServerPort:       hydraServerPort,
 		HydraMaxMessageSize:   hydraMaxMessageSize,
 		DefaultCloseAfterIdle: defaultCloseAfterIdle,

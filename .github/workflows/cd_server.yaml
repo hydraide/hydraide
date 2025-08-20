@@ -5,6 +5,12 @@ on:
     tags:
       - "server/v*" # Triggers on tags like server/v1.2.3, etc.
 
+env:
+  # Use docker.io for Docker Hub if empty
+  REGISTRY: ghcr.io
+  # github.repository as <account>/<repo>
+  IMAGE_NAME: ${{ github.repository }} # hydraide/hydraide
+
 jobs:
   release:
     runs-on: ${{ matrix.os }}
@@ -14,48 +20,130 @@ jobs:
     strategy:
       matrix:
         include:
+          # --- existing linux targets ---
           - os: ubuntu-latest
             goos: linux
             goarch: amd64
             binary_name: hydraide-linux-amd64
             asset_name: hydraide-linux-amd64
+            archive: tar.gz
+            ext: ""
 
           - os: ubuntu-latest
             goos: linux
             goarch: arm64
             binary_name: hydraide-linux-arm64
             asset_name: hydraide-linux-arm64
+            archive: tar.gz
+            ext: ""
+
+          # --- edge (RPi / armv7) ---
+          - os: ubuntu-latest
+            goos: linux
+            goarch: arm
+            goarm: "7"
+            binary_name: hydraide-linux-armv7
+            asset_name: hydraide-linux-armv7
+            archive: tar.gz
+            ext: ""
+
+          # --- macOS dev/build agents ---
+          - os: macos-latest
+            goos: darwin
+            goarch: arm64
+            binary_name: hydraide-darwin-arm64
+            asset_name: hydraide-darwin-arm64
+            archive: tar.gz
+            ext: ""
+
+          - os: macos-latest
+            goos: darwin
+            goarch: amd64
+            binary_name: hydraide-darwin-amd64
+            asset_name: hydraide-darwin-amd64
+            archive: tar.gz
+            ext: ""
+
+          # --- FreeBSD niche server ---
+          - os: ubuntu-latest
+            goos: freebsd
+            goarch: amd64
+            binary_name: hydraide-freebsd-amd64
+            asset_name: hydraide-freebsd-amd64
+            archive: tar.gz
+            ext: ""
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Extract version
-        id: extract_version
+      - name: Extract version & build info
+        id: buildinfo
         shell: bash
         run: |
           VERSION=${GITHUB_REF#refs/tags/}
+          COMMIT_SHA=$(git rev-parse --short HEAD)
+          BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Extracted version: $VERSION"
+          echo "commit=$COMMIT_SHA" >> $GITHUB_OUTPUT
+          echo "date=$BUILD_DATE" >> $GITHUB_OUTPUT
+          echo "Extracted: version=$VERSION commit=$COMMIT_SHA date=$BUILD_DATE"
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version: "1.23"
+          cache: true
 
-      - name: Build binary
+      - name: Build binary (with version embed)
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
+          VERSION: ${{ steps.buildinfo.outputs.version }}
+          COMMIT_SHA: ${{ steps.buildinfo.outputs.commit }}
+          BUILD_DATE: ${{ steps.buildinfo.outputs.date }}
+        shell: bash
         run: |
-          go build -a -installsuffix cgo -o ${{ matrix.binary_name }} ./app/server
+          # Conditionally set GOARM if defined in matrix
+          if [ -n "${{ matrix.goarm }}" ]; then
+            export GOARM="${{ matrix.goarm }}"
+            echo "Building for $GOOS/$GOARCH (GOARM=$GOARM)"
+          else
+            echo "Building for $GOOS/$GOARCH"
+          fi
+
+          LDFLAGS="-s -w \
+            -X main.version=${VERSION} \
+            -X main.commit=${COMMIT_SHA} \
+            -X main.date=${BUILD_DATE} \
+            -X main.builtBy=GitHubActions \
+            -X main.goos=${GOOS} \
+            -X main.goarch=${GOARCH}"
+
+          # IMPORTANT: -trimpath kint, nem az -ldflags-ben
+          go build -trimpath -tags netgo -ldflags "$LDFLAGS" -o "${{ matrix.binary_name }}${{ matrix.ext }}" ./app/server
+          chmod +x "${{ matrix.binary_name }}${{ matrix.ext }}"
+      
+
+      - name: Package artifact (+checksums)
+        shell: bash
+        run: |
+          mkdir -p dist
+          if [ "${{ matrix.archive }}" = "tar.gz" ]; then
+            tar -czf "dist/${{ matrix.asset_name }}.tar.gz" "${{ matrix.binary_name }}${{ matrix.ext }}"
+            (cd dist && shasum -a 256 "${{ matrix.asset_name }}.tar.gz" > "${{ matrix.asset_name }}.tar.gz.sha256")
+          else
+            zip -j "dist/${{ matrix.asset_name }}.zip" "${{ matrix.binary_name }}${{ matrix.ext }}"
+            (cd dist && shasum -a 256 "${{ matrix.asset_name }}.zip" > "${{ matrix.asset_name }}.zip.sha256")
+          fi
+          ls -l dist
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: hydraide-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: ${{ matrix.binary_name }}
+          name: ${{ matrix.asset_name }}
+          path: dist/*
 
   create_release:
     needs: release
@@ -69,27 +157,122 @@ jobs:
 
       - name: Extract version
         id: extract_version
+        shell: bash
         run: |
           VERSION=${GITHUB_REF#refs/tags/}
           echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Creating release for version: $VERSION"
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
+          pattern: hydraide-*
           path: ./artifacts
-
-      - name: Move downloaded binaries to root for release
-        run: |
-          mv ./artifacts/hydraide-linux-amd64/hydraide-linux-amd64 .
-          mv ./artifacts/hydraide-linux-arm64/hydraide-linux-arm64 .
+          # merge-multiple true: all dist files go into one folder
+          merge-multiple: true
 
       - name: Create GitHub release with assets
         uses: ncipollo/release-action@v1
         with:
           tag: ${{ steps.extract_version.outputs.version }}
           name: Release ${{ steps.extract_version.outputs.version }}
-          artifacts: "hydraide-linux-amd64,hydraide-linux-arm64"
+          artifacts: "artifacts/*"
+          artifactErrorsFailBuild: true
           generateReleaseNotes: true
           draft: false
           prerelease: false
           token: ${{ secrets.GITHUB_TOKEN }}
+
+  docker-publish:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Only need linux/amd64 and linux/arm64 artifacts for Docker image
+      - name: Download amd64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: hydraide-linux-amd64
+          path: docker-context/
+
+      - name: Download arm64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: hydraide-linux-arm64
+          path: docker-context/
+
+      - name: Unpack binaries for Docker build
+        shell: bash
+        run: |
+          tar -xzf docker-context/hydraide-linux-amd64.tar.gz -C docker-context/
+          tar -xzf docker-context/hydraide-linux-arm64.tar.gz -C docker-context/
+          mv docker-context/hydraide-linux-amd64 docker-context/hydraide-amd64
+          mv docker-context/hydraide-linux-arm64 docker-context/hydraide-arm64
+          ls -l docker-context/
+
+      - name: Copy entrypoint script
+        shell: bash
+        run: |
+          mkdir -p docker-context/scripts
+          cp entrypoint.sh docker-context/scripts/
+
+      - name: Copy Dockerfile
+        shell: bash
+        run: cp Dockerfile docker-context/
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3.9.2
+        with:
+          cosign-release: "v2.5.3"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3.6.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3.9.0
+
+      - name: Log into registry ${{ env.REGISTRY }}
+        uses: docker/login-action@v3.4.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.HYDRAIDE_DOCKER_USERNAME }}
+          password: ${{ secrets.HYDRAIDE_DOCKER_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5.7.0
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=match,pattern=.*/v(.*),group=1
+            type=raw,value=latest
+
+      - name: Build and push multi-arch Docker image
+        id: build-and-push
+        uses: docker/build-push-action@v4
+        with:
+          context: ./docker-context
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Sign the published Docker image
+        if: steps.build-and-push.outputs.digest != ''
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+          DIGEST: ${{ steps.build-and-push.outputs.digest }}
+        shell: bash
+        run: |
+          echo "$TAGS" | tr ',' '\n' | while read tag; do
+            [ -n "$tag" ] || continue
+            echo "→ Signing $tag@$DIGEST"
+            cosign sign --yes "$tag@$DIGEST"
+          done

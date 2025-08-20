@@ -8,67 +8,193 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/locker"
 )
 
+// CommandRunner defines an abstraction for running external system commands.
+//
+// ✅ Purpose:
+//   - Decouples execution logic from concrete implementations
+//   - Makes it easier to test components by mocking command execution
+//
+// Typical implementations:
+//   - RealRunner → executes real OS commands via `exec.Command`
+//   - MockRunner → test double for unit testing, avoids running real binaries
+type CommandRunner interface {
+	// Run executes an external command with arguments.
+	//
+	// 📤 Returns:
+	// - Combined stdout + stderr output (as []byte)
+	// - Error if execution failed or exit code != 0
+	//
+	// ⚠️ Note: The caller is responsible for handling and interpreting the output.
+	Run(name string, args ...string) ([]byte, error)
+}
+
+// RealRunner is the default implementation of CommandRunner.
+//
+// ✅ Behavior:
+// - Uses Go's `exec.Command` to run the requested binary
+// - Captures combined stdout and stderr output
+// - Returns raw results to the caller
+//
+// ❗ It does not log, retry, or sanitize output — responsibility is on the caller.
+type RealRunner struct{}
+
+// Run executes an external command with given arguments and
+// returns its combined stdout/stderr output.
+func (RealRunner) Run(name string, args ...string) ([]byte, error) {
+	cmd := exec.Command(name, args...)
+	// The caller decides whether to log or print the output.
+	return cmd.CombinedOutput()
+}
+
+// FSPaths defines filesystem locations relevant for service management.
+//
+// 🗂️ Fields:
+// - SystemdDir → where Linux systemd service files are stored (e.g. /etc/systemd/system)
+// - LaunchDaemonsDir → where macOS launchd plist files are stored (e.g. /Library/LaunchDaemons)
+// - Extendable: WindowsStartupDir, custom folders, etc.
+//
+// ✅ Purpose:
+// - Centralizes platform-specific service file paths
+// - Makes testing easier by overriding with temporary folders
+type FSPaths struct {
+	SystemdDir       string // e.g. /etc/systemd/system
+	LaunchDaemonsDir string // e.g. /Library/LaunchDaemons
+}
+
+// deps groups together dependencies required for service management.
+//
+// Contains:
+// - runner → command execution abstraction
+// - paths  → platform-specific file paths
+//
+// ✅ Benefit:
+// - Provides easy injection for testing
+// - Enables swapping between real and mock dependencies
+type deps struct {
+	runner CommandRunner
+	paths  FSPaths
+}
+
+// defaultDeps initializes production-grade defaults.
+//
+// - RealRunner for executing commands
+// - Standard system paths (/etc/systemd/system, /Library/LaunchDaemons)
+//
+// ✅ Used when no explicit dependency injection is provided.
+func defaultDeps() deps {
+	return deps{
+		runner: RealRunner{},
+		paths: FSPaths{
+			SystemdDir:       "/etc/systemd/system",
+			LaunchDaemonsDir: "/Library/LaunchDaemons",
+		},
+	}
+}
+
 // ServiceManager defines the interface for managing platform-specific services.
+//
+// Each implementation should support:
+// - Linux (systemd)
+// - macOS (launchd)
+// - Windows (planned / WSL)
+//
+// ✅ Methods:
+// - GenerateServiceFile → writes service definition (unit/plist/etc.)
+// - ServiceExists       → checks if the service is already installed
+// - EnableAndStartService → enables auto-start and runs the service
+// - RemoveService       → disables and deletes the service
 type ServiceManager interface {
-	// GenerateServiceFile creates a platform-specific service configuration.
 	GenerateServiceFile(instanceName, basePath string) error
-
-	// ServiceExists checks if a service with the given name exists.
 	ServiceExists(instanceName string) (bool, error)
-
-	// EnableAndStartService enables and starts the service.
 	EnableAndStartService(instanceName, basePath string) error
-
-	// RemoveService removes a service configuration.
 	RemoveService(instanceName string) error
 }
 
+// Common constants used across platforms for service and binary naming.
 const (
-	BASE_SERVICE_NAME     = "hydraserver"
-	LINUX_OS              = "linux"
-	WINDOWS_OS            = "windows"
-	MAC_OS                = "darwin"
-	WINDOWS_BINARY_NAME   = "hydraide-windows-amd64.exe"
-	LINUX_MAC_BINARY_NAME = "hydraide-linux-amd64"
-	HTTP_TIMEOUT          = 10
+	BASE_SERVICE_NAME     = "hydraserver"  // logical service name prefix
+	LINUX_OS              = "linux"        // runtime.GOOS value for Linux
+	WINDOWS_OS            = "windows"      // runtime.GOOS value for Windows
+	MAC_OS                = "darwin"       // runtime.GOOS value for macOS
+	WINDOWS_BINARY_NAME   = "hydraide.exe" // default binary name for Windows
+	LINUX_MAC_BINARY_NAME = "hydraide"     // default binary name for Linux/macOS
 )
 
-// serviceManagerImpl implements the ServiceManager interface for different platforms.
-type serviceManagerImpl struct{}
-
-// New creates a new instance of ServiceManager.
-func New() ServiceManager {
-	return &serviceManagerImpl{}
+// serviceManagerImpl is the default implementation of ServiceManager.
+//
+// ✅ Responsibilities:
+// - Encapsulates platform-specific service management (systemd, launchd, NSSM)
+// - Uses injected dependencies (runner, paths) for testability
+//
+// 🔧 Created via:
+// - New() → production-ready instance with defaultDeps()
+// - newWithDeps() → test helper for injecting mocks/fakes
+type serviceManagerImpl struct {
+	d deps
 }
 
-// ensureLogDirectory creates the logs directory if it doesn't exist
+// New returns a ServiceManager with default dependencies.
+//
+// ✅ Usage in production:
+//
+//	sm := New()
+//	sm.GenerateServiceFile("hydraide-prod", "/opt/hydraide")
+//
+// Injects:
+// - RealRunner for executing system commands
+// - Standard FS paths (/etc/systemd/system, /Library/LaunchDaemons)
+func New() ServiceManager {
+	return &serviceManagerImpl{d: defaultDeps()}
+}
+
+// newWithDeps creates a ServiceManager with custom dependencies.
+//
+// ⚠️ Only intended for testing.
+//
+//	Example: pass a MockRunner or temporary folder paths.
+func newWithDeps(d deps) *serviceManagerImpl {
+	return &serviceManagerImpl{d: d}
+}
+
+// ensureLogDirectory creates the `logs/` subdirectory under basePath.
+//
+// ✅ Behavior:
+// - Ensures `<basePath>/logs` exists (creates if missing)
+// - Returns the absolute path to `app.log` inside that folder
+// - Logs actions for observability
+//
+// ⚠️ Permissions: created with 0755 (owner read/write/exec, group+others read/exec)
 func ensureLogDirectory(basePath string) (string, error) {
 	logDir := filepath.Join(basePath, "logs")
-	if err := os.MkdirAll(logDir, 0755); err != nil {
+	if err := os.MkdirAll(logDir, 0o755); err != nil {
 		return "", fmt.Errorf("failed to create logs directory: %v", err)
 	}
-
 	logFile := filepath.Join(logDir, "app.log")
 	slog.Info("Log directory ensured", "path", logDir)
 	slog.Info("Log file path", "path", logFile)
-
 	return logFile, nil
 }
 
-// GenerateServiceFile generates a platform-specific service file for hydraserver.
-// It delegates to platform-specific implementations based on the operating system.
+// GenerateServiceFile writes the service definition for the current OS.
 //
-// Parameters:
-//   - instanceName: The name of the service instance
-//   - basePath: The base path where the service executable is located
+// ✅ Behavior by platform:
+// - Linux   → generates a systemd unit in /etc/systemd/system
+// - macOS   → generates a launchd plist in /Library/LaunchDaemons
+// - Windows → registers service via NSSM
 //
-// Returns:
-//   - error: Any error encountered during service file generation
+// ⚠️ Unsupported OS returns an error.
+//
+// 📘 Example:
+//
+//	sm.GenerateServiceFile("hydraide-test", "/opt/hydraide")
+//
+// This creates the necessary service descriptor for automatic startup.
 func (s *serviceManagerImpl) GenerateServiceFile(instanceName, basePath string) error {
 	slog.Info("Generating service file", "instance", instanceName, "os", runtime.GOOS)
-
 	switch runtime.GOOS {
 	case LINUX_OS:
 		return s.generateSystemdService(instanceName, basePath)
@@ -81,79 +207,103 @@ func (s *serviceManagerImpl) GenerateServiceFile(instanceName, basePath string) 
 	}
 }
 
-// generateSystemdService creates a systemd service file for Linux systems.
+// generateSystemdService creates and installs a systemd unit file for HydrAIDE on Linux.
 //
-// Parameters:
-//   - instanceName: The name of the service instance
-//   - basePath: The base path where the service executable is located
+// ✅ Responsibilities:
+// - Generates a fully functional `.service` unit file under /etc/systemd/system
+// - Ensures logs are written to `<basePath>/logs/app.log`
+// - Reloads systemd, enables, and starts the service automatically
 //
-// Returns:
-//   - error: Any error encountered during service file creation
+// 📂 Service file location:
+//
+//	/etc/systemd/system/hydraserver-<instance>.service
+//
+// 📝 Unit file content includes:
+// - ExecStart → HydrAIDE binary path (`basePath/hydraide`)
+// - WorkingDirectory → `basePath`
+// - Restart policy (always, with 5s delay)
+// - Logs redirected to `logs/app.log`
+//
+// ⚠️ Safety checks:
+// - If a service file with the same name already exists → returns error
+// - Ensures parent directories exist before writing
+//
+// 🔁 Commands executed via runner:
+// - `systemctl daemon-reload` → refresh systemd units
+// - `systemctl enable <service>` → enable auto-start at boot
+// - `systemctl start <service>` → start immediately
+//
+// 📘 Example usage:
+//
+//	sm.generateSystemdService("prod", "/opt/hydraide")
+//
+// This will create and start `/etc/systemd/system/hydraserver-prod.service`
+// with logs in `/opt/hydraide/logs/app.log`.
 func (s *serviceManagerImpl) generateSystemdService(instanceName, basePath string) error {
 	slog.Info("Creating systemd service for Linux")
-
 	serviceName := fmt.Sprintf("%s-%s", BASE_SERVICE_NAME, instanceName)
 
-	runCommand := func(name string, args ...string) error {
-		cmd := exec.Command(name, args...)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		return cmd.Run()
+	// Wrapper around runner.Run → streams output to stdout for transparency.
+	run := func(name string, args ...string) error {
+		out, err := s.d.runner.Run(name, args...)
+		if len(out) > 0 {
+			if _, werr := fmt.Fprint(os.Stdout, string(out)); werr != nil {
+				return werr
+			}
+		}
+		return err
 	}
 
-	serviceFilePath := filepath.Join("/etc", "systemd", "system", fmt.Sprintf("%s.service", serviceName))
+	serviceFilePath := filepath.Join(s.d.paths.SystemdDir, serviceName+".service")
 	executablePath := filepath.Join(basePath, LINUX_MAC_BINARY_NAME)
 
-	// Ensure log directory exists
+	// Ensure log directory exists before writing unit file.
 	logFile, err := ensureLogDirectory(basePath)
 	if err != nil {
 		return err
 	}
 
+	// Systemd unit file content.
 	serviceContent := fmt.Sprintf(`[Unit]
-			Description=HydrAIDE Service - %s
-			After=network.target
+Description=HydrAIDE Service - %s
+After=network.target
 
-			[Service]
-			ExecStart=%s
-			WorkingDirectory=%s
-			Restart=always
-			RestartSec=5
-			StandardOutput=append:%s
-			StandardError=append:%s
+[Service]
+ExecStart=%s
+WorkingDirectory=%s
+Restart=always
+RestartSec=5
+StandardOutput=append:%s
+StandardError=append:%s
 
-			[Install]
-			WantedBy=multi-user.target
+[Install]
+WantedBy=multi-user.target
 `, instanceName, executablePath, basePath, logFile, logFile)
 
-	// Create parent directories if they don't exist
-	if err := os.MkdirAll(filepath.Dir(serviceFilePath), 0755); err != nil {
+	// Ensure target directory exists
+	if err := os.MkdirAll(filepath.Dir(serviceFilePath), 0o755); err != nil {
 		return fmt.Errorf("failed to create directories for service file: %v", err)
 	}
 
-	// Check if the service file already exists
+	// Prevent overwriting an existing service definition.
 	if _, err := os.Stat(serviceFilePath); err == nil {
 		slog.Warn("Service file already exists", "path", serviceFilePath)
 		return fmt.Errorf("service file '%s' already exists", serviceFilePath)
 	}
 
-	// Write the service file
-	if err := os.WriteFile(serviceFilePath, []byte(serviceContent), 0644); err != nil {
+	// Write the systemd unit file.
+	if err := os.WriteFile(serviceFilePath, []byte(serviceContent), 0o644); err != nil {
 		return fmt.Errorf("failed to write service file: %v", err)
 	}
 
-	// Reload systemd daemon (system-level, not user-level)
-	if err := runCommand("systemctl", "daemon-reload"); err != nil {
+	// Reload and enable service.
+	if err := run("systemctl", "daemon-reload"); err != nil {
 		return fmt.Errorf("failed to reload systemd daemon: %v", err)
 	}
-
-	// Enable the service (system-level, not user-level)
-	if err := runCommand("systemctl", "enable", serviceName+".service"); err != nil {
+	if err := run("systemctl", "enable", serviceName+".service"); err != nil {
 		return fmt.Errorf("failed to enable service: %v", err)
 	}
-
-	// Start the service (system-level, not user-level)
-	if err := runCommand("systemctl", "start", serviceName+".service"); err != nil {
+	if err := run("systemctl", "start", serviceName+".service"); err != nil {
 		return fmt.Errorf("failed to start service: %v", err)
 	}
 
@@ -162,59 +312,55 @@ func (s *serviceManagerImpl) generateSystemdService(instanceName, basePath strin
 	return nil
 }
 
-// generateLaunchdService creates a launchd service file for macOS systems.
+// generateLaunchdService creates and installs a launchd service for HydrAIDE on macOS.
 //
-// Parameters:
-//   - instanceName: The name of the service instance
-//   - basePath: The base path where the service executable is located
+// ✅ Responsibilities:
+// - Generates a `.plist` file under /Library/LaunchDaemons
+// - Ensures the HydrAIDE binary exists and is executable
+// - Redirects logs to `<basePath>/logs/app.log`
+// - Boots, enables, and kickstarts the service via launchctl
 //
-// Returns:
-//   - error: Any error encountered during service file creation
+// 📂 Service file location:
+//
+//	/Library/LaunchDaemons/com.hydraide.hydraserver-<instance>.plist
+//
+// 📝 Plist includes:
+// - Label → com.hydraide.hydraserver-<instance>
+// - ProgramArguments → full path to HydrAIDE binary
+// - WorkingDirectory → `basePath`
+// - RunAtLoad → true (auto-start on boot)
+// - KeepAlive → restarts unless exit was successful
+// - Logs → redirected to `<basePath>/logs/app.log`
+//
+// ⚠️ Notes & Safety:
+// - Root privileges are required to write to /Library/LaunchDaemons
+// - Existing service is refreshed by `bootout + bootstrap` if bootstrap fails
+// - Ensures binary has execute permission (chmod 0755)
+// - Sets plist ownership to root:wheel and permission 0644
+//
+// 🔁 Commands executed via runner:
+// - `chown root:wheel <plist>`
+// - `chmod 644 <plist>`
+// - `launchctl bootstrap system <plist>`
+// - `launchctl enable system/<label>`
+// - `launchctl kickstart -k system/<label>`
+//
+// 📘 Example usage:
+//
+//	sm.generateLaunchdService("prod", "/opt/hydraide")
+//
+// This will create and activate:
+//
+//	/Library/LaunchDaemons/com.hydraide.hydraserver-prod.plist
+//
+// Logs will be written to `/opt/hydraide/logs/app.log`.
 func (s *serviceManagerImpl) generateLaunchdService(instanceName, basePath string) error {
 	slog.Info("Creating launchd service for macOS")
-	// TODO: Implement launchd service file generation logic
-	return fmt.Errorf("launchd service generation not implemented")
-}
 
-// checkAndInstallNSSM checks if NSSM (Non-Sucking Service Manager) is installed on the system.
-// If NSSM is not found in the system PATH, it attempts to install it using winget.
-// Logs all actions and returns an error if installation fails.
-func (s *serviceManagerImpl) checkAndInstallNSSM() error {
-	slog.Info("Checking if NSSM is installed")
-
-	// Try to run `nssm version` to verify it's available
-	cmd := exec.Command("nssm", "version")
-	if err := cmd.Run(); err == nil {
-		slog.Info("NSSM is already installed and available in PATH")
-		return nil
-	}
-
-	slog.Warn("NSSM not found. Attempting installation using winget")
-
-	// Construct winget install command
-	installCmd := exec.Command("winget", "install", "--id=nssm.nssm", "--source=winget", "--accept-package-agreements", "--accept-source-agreements")
-
-	output, err := installCmd.CombinedOutput()
-	if err != nil {
-		slog.Error("Failed to install NSSM via winget", "error", err, "output", string(output))
-		return fmt.Errorf("failed to install NSSM via winget: %w", err)
-	}
-
-	slog.Info("NSSM installed successfully using winget", "output", string(output))
-	return nil
-}
-
-// generateWindowsNSSMService creates a Windows service using NSSM
-func (s *serviceManagerImpl) generateWindowsNSSMService(instanceName, basePath string) error {
-	slog.Info("Creating Windows service using NSSM")
-
-	// Check and install NSSM if needed
-	if err := s.checkAndInstallNSSM(); err != nil {
-		return fmt.Errorf("NSSM installation failed: %v", err)
-	}
-
-	serviceName := fmt.Sprintf("%s-%s", BASE_SERVICE_NAME, instanceName)
-	executablePath := filepath.Join(basePath, WINDOWS_BINARY_NAME)
+	// Root required for system-wide daemon
+	label := fmt.Sprintf("com.hydraide.%s-%s", BASE_SERVICE_NAME, instanceName)
+	plistPath := filepath.Join(s.d.paths.LaunchDaemonsDir, label+".plist")
+	executablePath := filepath.Join(basePath, LINUX_MAC_BINARY_NAME)
 
 	// Ensure log directory exists
 	logFile, err := ensureLogDirectory(basePath)
@@ -222,64 +368,111 @@ func (s *serviceManagerImpl) generateWindowsNSSMService(instanceName, basePath s
 		return err
 	}
 
-	// Check if executable exists
-	if _, err := os.Stat(executablePath); os.IsNotExist(err) {
+	// Verify binary exists and is executable
+	if fi, err := os.Stat(executablePath); err != nil || fi.IsDir() {
 		return fmt.Errorf("executable not found at: %s", executablePath)
+	} else {
+		_ = os.Chmod(executablePath, 0o755)
 	}
 
-	slog.Info("Installing NSSM service", "service", serviceName)
+	// Launchd plist content
+	plistContent := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key><string>%s</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>%s</string>
+	</array>
+	<key>WorkingDirectory</key><string>%s</string>
+	<key>RunAtLoad</key><true/>
+	<key>KeepAlive</key>
+	<dict>
+		<key>SuccessfulExit</key><false/>
+	</dict>
+	<key>StandardOutPath</key><string>%s</string>
+	<key>StandardErrorPath</key><string>%s</string>
+	<key>ProcessType</key><string>Background</string>
+</dict>
+</plist>
+`, label, executablePath, basePath, logFile, logFile)
 
-	// Install the service using NSSM
-	cmd := exec.Command("nssm", "install", serviceName, executablePath)
-	cmd.Dir = basePath
-	if output, err := cmd.CombinedOutput(); err != nil {
-		slog.Error("Failed to install NSSM service", "output", string(output), "error", err)
-		return fmt.Errorf("failed to install NSSM service: %v", err)
+	// Write plist file
+	if err := os.WriteFile(plistPath, []byte(plistContent), 0o644); err != nil {
+		return fmt.Errorf("failed to write plist: %v", err)
 	}
+	// Ownership and permissions (root:wheel, 0644)
+	_, _ = s.d.runner.Run("chown", "root:wheel", plistPath)
+	_, _ = s.d.runner.Run("chmod", "644", plistPath)
 
-	// Configure service parameters
-	configs := [][]string{
-		{"set", serviceName, "DisplayName", fmt.Sprintf("HydrAIDE Service - %s", instanceName)},
-		{"set", serviceName, "Description", fmt.Sprintf("HydrAIDE Service Instance: %s", instanceName)},
-		{"set", serviceName, "Start", "SERVICE_AUTO_START"},
-		{"set", serviceName, "AppDirectory", basePath},
-		{"set", serviceName, "AppStdout", logFile},
-		{"set", serviceName, "AppStderr", logFile},
-		{"set", serviceName, "AppRotateFiles", "1"},
-		{"set", serviceName, "AppRotateSeconds", "86400"},  // Rotate daily
-		{"set", serviceName, "AppRotateBytes", "10485760"}, // 10MB
-	}
-
-	for _, config := range configs {
-		cmd := exec.Command("nssm", config...)
-		if output, err := cmd.CombinedOutput(); err != nil {
-			slog.Warn("Failed to set NSSM config", "config", config[2], "error", err, "output", string(output))
-		} else {
-			slog.Info("Set NSSM config successfully", "config", config[2])
+	// Load service via launchctl
+	if out, err := s.d.runner.Run("launchctl", "bootstrap", "system", plistPath); err != nil {
+		// If already loaded, refresh with bootout + bootstrap
+		slog.Warn("bootstrap failed, trying bootout+bootstrap", "error", err, "output", string(out))
+		_, _ = s.d.runner.Run("launchctl", "bootout", "system", label)
+		if out2, err2 := s.d.runner.Run("launchctl", "bootstrap", "system", plistPath); err2 != nil {
+			return fmt.Errorf("launchctl bootstrap failed: %v; output: %s", err2, string(out2))
 		}
 	}
 
-	slog.Info("NSSM service configured successfully", "service", serviceName)
-	slog.Info("Logs will be written to", "path", logFile)
+	// Enable + start service
+	_, _ = s.d.runner.Run("launchctl", "enable", "system/"+label)
+	if out, err := s.d.runner.Run("launchctl", "kickstart", "-k", "system/"+label); err != nil {
+		slog.Warn("kickstart failed", "error", err, "output", string(out))
+	}
+
+	slog.Info("launchd service created", "label", label, "plist", plistPath, "log", logFile)
 	return nil
 }
 
-// ServiceExists checks if a service with the given name exists on the system.
+// ServiceExists checks whether a HydrAIDE service for the given instance exists
+// on the current operating system.
 //
-// Parameters:
-//   - instanceName: The name of the service instance to check
+// ✅ Responsibilities:
+// - Detects presence of a service definition or active registration
+// - Implements platform-specific checks for Linux, macOS, and Windows
 //
-// Returns:
-//   - bool: True if the service exists, false otherwise
-//   - error: Any error encountered during the check
+// 📘 Behavior by platform:
+//
+// 🔹 Linux (systemd):
+// - Looks for `/etc/systemd/system/hydraserver-<instance>.service`
+// - Returns true if the service file exists
+// - Distinguishes between "not found" and "stat error"
+//
+// 🔹 macOS (launchd):
+//   - Looks for `/Library/LaunchDaemons/com.hydraide.hydraserver-<instance>.plist`
+//   - If present, attempts `launchctl print system/<label>`
+//     → If successful → service is present and enabled
+//     → If fails → plist exists, but service may be disabled
+//
+// 🔹 Windows:
+// - Checks in multiple layers, in order of preference:
+//  1. **NSSM**: `nssm status <service>`
+//  2. **Task Scheduler**: `schtasks /query /tn <service>`
+//  3. **Registry startup key**: HKCU:\Software\Microsoft\Windows\CurrentVersion\Run
+//  4. **Startup folder shortcut**: `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\<service>.lnk`
+//
+// - Returns true if any method finds a match
+//
+// ⚠️ Notes:
+//   - This method checks for **existence only** (file/entry present).
+//     It does not guarantee that the service is currently running.
+//   - Errors other than "not found" are returned as failures.
+//   - On unsupported OS, returns an error.
+//
+// 📘 Example usage:
+//
+//	exists, err := sm.ServiceExists("prod")
+//	if err != nil { log.Fatal(err) }
+//	if exists { fmt.Println("Service already installed") }
 func (s *serviceManagerImpl) ServiceExists(instanceName string) (bool, error) {
 	serviceName := fmt.Sprintf("%s-%s", BASE_SERVICE_NAME, instanceName)
 	slog.Info("Checking if service exists", "service", serviceName, "os", runtime.GOOS)
 
 	switch runtime.GOOS {
 	case LINUX_OS:
-		// Check system-level service file (consistent with creation)
-		serviceFilePath := filepath.Join("/etc", "systemd", "system", fmt.Sprintf("%s.service", serviceName))
+		serviceFilePath := filepath.Join(s.d.paths.SystemdDir, serviceName+".service")
 		_, err := os.Stat(serviceFilePath)
 		if err == nil {
 			slog.Info("Service file found", "path", serviceFilePath)
@@ -292,42 +485,50 @@ func (s *serviceManagerImpl) ServiceExists(instanceName string) (bool, error) {
 		return false, fmt.Errorf("failed to check service existence: %v", err)
 
 	case MAC_OS:
-		// TODO: Implement launchctl service existence check
-		return false, fmt.Errorf("launchd service existence check not implemented")
+		label := "com.hydraide." + serviceName
+		plistPath := filepath.Join(s.d.paths.LaunchDaemonsDir, label+".plist")
+
+		_, err := os.Stat(plistPath)
+		if err == nil {
+			// try to read the service status
+			if out, err := s.d.runner.Run("launchctl", "print", "system/"+label); err == nil {
+				slog.Info("launchd service present", "label", label, "status_len", len(out))
+				return true, nil
+			}
+			slog.Info("launchd plist present (service may be disabled)", "label", label)
+			return true, nil
+		}
+
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to stat plist: %v", err)
 
 	case WINDOWS_OS:
-		// Check NSSM service first
-		cmd := exec.Command("nssm", "status", serviceName)
-		if output, err := cmd.CombinedOutput(); err == nil {
+		// NSSM
+		if output, err := s.d.runner.Run("nssm", "status", serviceName); err == nil {
 			status := strings.TrimSpace(string(output))
 			slog.Info("NSSM service found", "service", serviceName, "status", status)
 			return true, nil
 		}
-
-		// Check Task Scheduler (fallback)
-		cmd = exec.Command("schtasks", "/query", "/tn", serviceName)
-		if err := cmd.Run(); err == nil {
+		// Task Scheduler
+		if _, err := s.d.runner.Run("schtasks", "/query", "/tn", serviceName); err == nil {
 			slog.Info("Scheduled task found", "task", serviceName)
 			return true, nil
 		}
-
-		// Check Registry startup (fallback)
+		// Registry
 		regCmd := fmt.Sprintf(`Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "%s" -ErrorAction SilentlyContinue`, serviceName)
-		cmd = exec.Command("powershell", "-Command", regCmd)
-		if err := cmd.Run(); err == nil {
+		if _, err := s.d.runner.Run("powershell", "-Command", regCmd); err == nil {
 			slog.Info("Registry startup entry found", "entry", serviceName)
 			return true, nil
 		}
-
-		// Check Startup folder (fallback)
+		// Startup folder
 		startupFolder := filepath.Join(os.Getenv("APPDATA"), "Microsoft", "Windows", "Start Menu", "Programs", "Startup")
-		shortcutPath := filepath.Join(startupFolder, fmt.Sprintf("%s.lnk", serviceName))
+		shortcutPath := filepath.Join(startupFolder, serviceName+".lnk")
 		if _, err := os.Stat(shortcutPath); err == nil {
-			slog.Info("Startup folder shortcut found", "path", shortcutPath)
+			slog.Info("Startup shortcut found", "path", shortcutPath)
 			return true, nil
 		}
-
-		slog.Info("No service found", "service", serviceName)
 		return false, nil
 
 	default:
@@ -335,221 +536,318 @@ func (s *serviceManagerImpl) ServiceExists(instanceName string) (bool, error) {
 	}
 }
 
-// EnableAndStartService enables and starts a service on the system.
+// EnableAndStartService enables and starts the HydrAIDE service for the given instance.
 //
-// Parameters:
-//   - instanceName: The name of the service instance to enable and start
-//   - basePath: The base path where the service executable is located
+// ✅ Responsibilities:
+// - Ensures the service is enabled for auto-start
+// - Starts (or kickstarts) the service immediately
+// - Uses platform-specific tooling (systemd / launchd / NSSM, Task Scheduler)
 //
-// Returns:
-//   - error: Any error encountered during the operation
+// 📘 Behavior by platform:
+//
+// 🔹 Linux (systemd)
+// - daemon-reload → enable → start → status (logged if available)
+//
+// 🔹 macOS (launchd)
+// - If not bootstrapped: bootstrap with the system plist
+// - enable → kickstart (-k) to restart if already running
+//
+// 🔹 Windows
+// - Prefer NSSM: nssm start + status log
+// - Else Task Scheduler: schtasks /run
+// - Else fallback: start the executable directly in background (best-effort)
+//
+// ⚠️ Notes:
+// - This method assumes the service definition already exists (e.g., unit/plist created).
+// - Returns detailed error with captured tool output on failure.
+// - `basePath` is used on Windows fallback to locate the binary.
+//
+// 📌 Example:
+//
+//	if err := sm.EnableAndStartService("prod", "/opt/hydraide"); err != nil { log.Fatal(err) }
 func (s *serviceManagerImpl) EnableAndStartService(instanceName, basePath string) error {
 	serviceName := fmt.Sprintf("%s-%s", BASE_SERVICE_NAME, instanceName)
 	slog.Info("Starting service", "service", serviceName, "os", runtime.GOOS)
 
 	switch runtime.GOOS {
 	case LINUX_OS:
-		// Use system-level systemd commands (consistent with creation)
-
-		// Reload systemd daemon first
-		slog.Info("Reloading systemd daemon")
-		cmd := exec.Command("systemctl", "daemon-reload")
-		if err := cmd.Run(); err != nil {
-			slog.Warn("Failed to reload systemd daemon", "error", err)
+		_, _ = s.d.runner.Run("systemctl", "daemon-reload")
+		if out, err := s.d.runner.Run("systemctl", "enable", serviceName+".service"); err != nil {
+			return fmt.Errorf("failed to enable service: %v; output: %s", err, string(out))
 		}
-
-		// Enable the service
-		slog.Info("Enabling service", "service", serviceName)
-		cmd = exec.Command("systemctl", "enable", fmt.Sprintf("%s.service", serviceName))
-		if output, err := cmd.CombinedOutput(); err != nil {
-			slog.Error("Failed to enable service", "error", err, "output", string(output))
-			return fmt.Errorf("failed to enable service: %v", err)
+		if out, err := s.d.runner.Run("systemctl", "start", serviceName+".service"); err != nil {
+			return fmt.Errorf("failed to start service: %v; output: %s", err, string(out))
 		}
-
-		// Start the service
-		slog.Info("Starting service", "service", serviceName)
-		cmd = exec.Command("systemctl", "start", fmt.Sprintf("%s.service", serviceName))
-		if output, err := cmd.CombinedOutput(); err != nil {
-			slog.Error("Failed to start service", "error", err, "output", string(output))
-			return fmt.Errorf("failed to start service: %v", err)
+		if out, err := s.d.runner.Run("systemctl", "status", serviceName+".service", "--no-pager"); err == nil {
+			slog.Info("Service status", "output", string(out))
 		}
-
-		// Check service status
-		slog.Info("Checking service status", "service", serviceName)
-		cmd = exec.Command("systemctl", "status", fmt.Sprintf("%s.service", serviceName), "--no-pager")
-		if output, err := cmd.CombinedOutput(); err == nil {
-			slog.Info("Service status", "output", string(output))
-		} else {
-			slog.Warn("Failed to check service status", "error", err, "output", string(output))
-		}
-
-		slog.Info("Service enabled and started successfully", "service", serviceName)
+		return nil
 
 	case MAC_OS:
-		// TODO: Implement launchctl load and start logic
-		return fmt.Errorf("launchd service enabling not implemented")
+		label := "com.hydraide." + serviceName
+		plistPath := filepath.Join(s.d.paths.LaunchDaemonsDir, label+".plist")
+		// If not bootstrapped yet, bootstrap it now.
+		if _, err := s.d.runner.Run("launchctl", "print", "system/"+label); err != nil {
+			if out2, err2 := s.d.runner.Run("launchctl", "bootstrap", "system", plistPath); err2 != nil {
+				return fmt.Errorf("launchctl bootstrap failed: %v; output: %s", err2, string(out2))
+			}
+		}
+		_, _ = s.d.runner.Run("launchctl", "enable", "system/"+label)
+		if out, err := s.d.runner.Run("launchctl", "kickstart", "-k", "system/"+label); err != nil {
+			return fmt.Errorf("launchctl kickstart failed: %v; output: %s", err, string(out))
+		}
+		return nil
 
 	case WINDOWS_OS:
-		// Try NSSM service first
-		slog.Info("Attempting to start NSSM service", "service", serviceName)
-		cmd := exec.Command("nssm", "start", serviceName)
-		if output, err := cmd.CombinedOutput(); err == nil {
-			slog.Info("NSSM service started successfully", "service", serviceName, "output", string(output))
-
-			// Check service status
-			statusCmd := exec.Command("nssm", "status", serviceName)
-			if statusOutput, err := statusCmd.CombinedOutput(); err == nil {
-				status := strings.TrimSpace(string(statusOutput))
-				slog.Info("Service status", "service", serviceName, "status", status)
+		// Prefer NSSM if installed.
+		if out, err := s.d.runner.Run("nssm", "start", serviceName); err == nil {
+			slog.Info("NSSM service started", "service", serviceName, "output", string(out))
+			if st, err := s.d.runner.Run("nssm", "status", serviceName); err == nil {
+				slog.Info("Service status", "status", strings.TrimSpace(string(st)))
 			}
 			return nil
-		} else {
-			slog.Warn("NSSM start failed", "error", err, "output", string(output))
 		}
-
-		// Fallback to other methods
-		servicePath := filepath.Join(basePath, WINDOWS_BINARY_NAME)
-
-		// Check if it's a scheduled task
-		slog.Info("Attempting to start scheduled task", "task", serviceName)
-		cmd = exec.Command("schtasks", "/query", "/tn", serviceName)
-		if err := cmd.Run(); err == nil {
-			// Run the scheduled task
-			runCmd := exec.Command("schtasks", "/run", "/tn", serviceName)
-			if err := runCmd.Run(); err != nil {
-				slog.Error("Failed to start scheduled task", "error", err)
+		// Otherwise, try Task Scheduler.
+		if _, err := s.d.runner.Run("schtasks", "/query", "/tn", serviceName); err == nil {
+			if _, err := s.d.runner.Run("schtasks", "/run", "/tn", serviceName); err != nil {
 				return fmt.Errorf("failed to start scheduled task: %v", err)
 			}
-			slog.Info("Scheduled task started successfully", "task", serviceName)
 			return nil
 		}
-
-		// If not a scheduled task, try to start the executable directly
-		slog.Info("Attempting to start executable directly", "path", servicePath)
-		cmd = exec.Command(servicePath)
+		// Last resort: start the binary directly (best-effort).
+		servicePath := filepath.Join(basePath, WINDOWS_BINARY_NAME)
+		cmd := exec.Command(servicePath)
 		cmd.Dir = basePath
 		if err := cmd.Start(); err != nil {
-			slog.Error("Failed to start service executable", "error", err)
 			return fmt.Errorf("failed to start service executable: %v", err)
 		}
-
-		slog.Info("Service started successfully", "service", serviceName)
 		return nil
 
 	default:
 		return fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
 	}
-	return nil
 }
 
-// RemoveService removes a service configuration from the system.
+// RemoveService stops and removes the HydrAIDE service definition for the given instance.
 //
-// Parameters:
-//   - instanceName: The name of the service instance to remove
+// ✅ Responsibilities:
+// - Gracefully stops the service (best-effort)
+// - Removes platform-specific service artifacts (unit/plist/NSSM, scheduled task, registry entries, shortcuts)
+// - Cleans up HydrAIDE instance lock file (best-effort)
 //
-// Returns:
-//   - error: Any error encountered during service removal
+// 📘 Behavior by platform:
+//
+// 🔹 Linux (systemd)
+// - systemctl stop → disable → remove unit file → daemon-reload
+// - Deletes instance lock file via locker.DeleteLockFile()
+//
+// 🔹 macOS (launchd)
+// - launchctl bootout (ignore if not loaded) → remove plist
+// - Deletes instance lock file via locker.DeleteLockFile()
+//
+// 🔹 Windows
+// - NSSM stop → NSSM remove
+// - Delete Scheduled Task (schtasks /delete /f)
+// - Remove HKCU Run entry (PowerShell Remove-ItemProperty)
+// - Remove Startup shortcut (.lnk) from %APPDATA%\...\Startup
+// - Deletes instance lock file via locker.DeleteLockFile()
+//
+// ⚠️ Notes:
+// - Non-fatal cleanup steps are logged and ignored when safe (best-effort philosophy).
+// - Returns an error only when a hard removal step fails (e.g., deleting unit/plist file).
+// - On unsupported OS, returns an error.
+//
+// 📌 Example:
+//
+//	if err := sm.RemoveService("prod"); err != nil { log.Fatal(err) }
 func (s *serviceManagerImpl) RemoveService(instanceName string) error {
 	serviceName := fmt.Sprintf("%s-%s", BASE_SERVICE_NAME, instanceName)
 	slog.Info("Removing service", "service", serviceName, "os", runtime.GOOS)
 
 	switch runtime.GOOS {
 	case LINUX_OS:
-		// Use system-level systemd commands (consistent with creation)
-		serviceFilePath := filepath.Join("/etc", "systemd", "system", fmt.Sprintf("%s.service", serviceName))
+		serviceFilePath := filepath.Join(s.d.paths.SystemdDir, serviceName+".service")
+		_, _ = s.d.runner.Run("systemctl", "stop", serviceName+".service")
 
-		// Stop the service if running
-		slog.Info("Stopping service", "service", serviceName)
-		cmd := exec.Command("systemctl", "stop", fmt.Sprintf("%s.service", serviceName))
-		if output, err := cmd.CombinedOutput(); err != nil {
-			slog.Warn("Failed to stop service", "error", err, "output", string(output))
-		} else {
-			slog.Info("Service stopped successfully", "service", serviceName)
+		if err := locker.DeleteLockFile(instanceName); err != nil {
+			slog.Error("Failed to delete lock file for instance", "instanceName", instanceName)
 		}
 
-		// Disable the service
-		slog.Info("Disabling service", "service", serviceName)
-		cmd = exec.Command("systemctl", "disable", fmt.Sprintf("%s.service", serviceName))
-		if output, err := cmd.CombinedOutput(); err != nil {
-			slog.Warn("Failed to disable service", "error", err, "output", string(output))
-		} else {
-			slog.Info("Service disabled successfully", "service", serviceName)
-		}
-
-		// Remove the service file
-		slog.Info("Removing service file", "path", serviceFilePath)
+		_, _ = s.d.runner.Run("systemctl", "disable", serviceName+".service")
 		if err := os.Remove(serviceFilePath); err != nil && !os.IsNotExist(err) {
-			slog.Error("Failed to remove service file", "error", err)
 			return fmt.Errorf("failed to remove service file: %v", err)
 		}
-
-		// Reload systemd daemon
-		slog.Info("Reloading systemd daemon")
-		cmd = exec.Command("systemctl", "daemon-reload")
-		if err := cmd.Run(); err != nil {
-			slog.Warn("Failed to reload systemd daemon", "error", err)
-		}
-
-		slog.Info("Service removed successfully", "service", serviceName)
+		_, _ = s.d.runner.Run("systemctl", "daemon-reload")
+		return nil
 
 	case MAC_OS:
-		// TODO: Implement launchctl service removal
-		return fmt.Errorf("launchd service removal not implemented")
+		label := "com.hydraide." + serviceName
+		plistPath := filepath.Join(s.d.paths.LaunchDaemonsDir, label+".plist")
+
+		// Stop/unload (ignore if not loaded)
+		if out, err := s.d.runner.Run("launchctl", "bootout", "system", label); err != nil {
+			slog.Warn("bootout failed (maybe not loaded)", "error", err, "output", string(out))
+		}
+
+		if err := locker.DeleteLockFile(instanceName); err != nil {
+			slog.Error("Failed to delete lock file for instance", "instanceName", instanceName)
+		}
+
+		// Remove plist
+		if err := os.Remove(plistPath); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("failed to remove plist: %v", err)
+		}
+		return nil
 
 	case WINDOWS_OS:
-		// Try to remove NSSM service first
-		slog.Info("Attempting to remove NSSM service", "service", serviceName)
+		// NSSM stop + remove (best-effort)
+		_, _ = s.d.runner.Run("nssm", "stop", serviceName)
 
-		// Stop the service first
-		stopCmd := exec.Command("nssm", "stop", serviceName)
-		if output, err := stopCmd.CombinedOutput(); err != nil {
-			slog.Warn("Failed to stop NSSM service", "error", err, "output", string(output))
-		} else {
-			slog.Info("NSSM service stopped successfully", "service", serviceName)
+		if err := locker.DeleteLockFile(instanceName); err != nil {
+			slog.Error("Failed to delete lock file for instance", "instanceName", instanceName)
 		}
 
-		// Remove the service
-		removeCmd := exec.Command("nssm", "remove", serviceName, "confirm")
-		if output, err := removeCmd.CombinedOutput(); err != nil {
-			slog.Warn("Failed to remove NSSM service", "error", err, "output", string(output))
-		} else {
-			slog.Info("NSSM service removed successfully", "service", serviceName)
-		}
-
-		// Try to remove from Task Scheduler (fallback)
-		slog.Info("Removing scheduled task (if exists)", "task", serviceName)
-		cmd := exec.Command("schtasks", "/delete", "/tn", serviceName, "/f")
-		if output, err := cmd.CombinedOutput(); err != nil {
-			slog.Warn("Scheduled task removal failed", "error", err, "output", string(output))
-		} else {
-			slog.Info("Scheduled task removed", "task", serviceName)
-		}
-
-		// Try to remove from Registry (fallback)
-		slog.Info("Removing registry entry (if exists)", "entry", serviceName)
+		_, _ = s.d.runner.Run("nssm", "remove", serviceName, "confirm")
+		// Task Scheduler
+		_, _ = s.d.runner.Run("schtasks", "/delete", "/tn", serviceName, "/f")
+		// Registry Run entry
 		regCmd := fmt.Sprintf(`Remove-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "%s" -ErrorAction SilentlyContinue`, serviceName)
-		cmd = exec.Command("powershell", "-Command", regCmd)
-		if output, err := cmd.CombinedOutput(); err != nil {
-			slog.Warn("Registry removal failed", "error", err, "output", string(output))
-		} else {
-			slog.Info("Registry entry removed", "entry", serviceName)
-		}
-
-		// Try to remove from Startup folder (fallback)
-		slog.Info("Removing startup shortcut (if exists)", "shortcut", serviceName)
+		_, _ = s.d.runner.Run("powershell", "-Command", regCmd)
+		// Startup shortcut
 		startupFolder := filepath.Join(os.Getenv("APPDATA"), "Microsoft", "Windows", "Start Menu", "Programs", "Startup")
-		shortcutPath := filepath.Join(startupFolder, fmt.Sprintf("%s.lnk", serviceName))
-		if err := os.Remove(shortcutPath); err != nil && !os.IsNotExist(err) {
-			slog.Warn("Failed to remove startup shortcut", "error", err)
-		} else {
-			slog.Info("Startup shortcut removed", "shortcut", serviceName)
-		}
-
-		slog.Info("Service removal completed", "service", serviceName)
+		_ = os.Remove(filepath.Join(startupFolder, serviceName+".lnk"))
 		return nil
 
 	default:
 		return fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
 	}
+}
+
+// checkAndInstallNSSM verifies that NSSM is available, and installs it via winget if missing.
+//
+// ✅ Responsibilities:
+// - Check whether `nssm` is present in PATH (`nssm version`)
+// - If not found, attempt a non-interactive install via `winget`
+// - Provide clear logs for both success and failure cases
+//
+// 🔹 Behavior:
+// - Returns nil immediately when NSSM is already installed
+// - Invokes: winget install --id nssm.nssm --source winget
+// - Uses `--accept-package-agreements` and `--accept-source-agreements` for unattended install
+//
+// ⚠️ Requirements & Notes (Windows only):
+//   - Requires Windows 10/11 with **winget** available and configured
+//   - May require **administrator** privileges depending on environment/policies
+//   - Corporate environments with restricted winget access may block the install
+//   - If winget is unavailable, this method will return an error — caller should
+//     handle fallback (manual download or bundled installer)
+//
+// 📌 Example:
+//
+//	if err := sm.checkAndInstallNSSM(); err != nil {
+//	    return fmt.Errorf("NSSM unavailable: %w", err)
+//	}
+func (s *serviceManagerImpl) checkAndInstallNSSM() error {
+	slog.Info("Checking if NSSM is installed")
+	if _, err := s.d.runner.Run("nssm", "version"); err == nil {
+		slog.Info("NSSM is already installed and available in PATH")
+		return nil
+	}
+
+	slog.Warn("NSSM not found. Attempting installation using winget")
+
+	if output, err := s.d.runner.Run(
+		"winget", "install",
+		"--id=nssm.nssm",
+		"--source=winget",
+		"--accept-package-agreements",
+		"--accept-source-agreements",
+	); err != nil {
+		slog.Error("Failed to install NSSM via winget", "error", err, "output", string(output))
+		return fmt.Errorf("failed to install NSSM via winget: %w", err)
+	}
+
+	slog.Info("NSSM installed successfully using winget")
+	return nil
+}
+
+// generateWindowsNSSMService creates and configures a Windows service for HydrAIDE using NSSM.
+//
+// ✅ Responsibilities:
+// - Verifies/installs NSSM (via winget) if not present
+// - Installs a Windows service: hydraserver-<instance>
+// - Redirects stdout/stderr to `<basePath>/logs/app.log`
+// - Enables log rotation (size and time based) to prevent unbounded growth
+//
+// 🗂️ Artifacts:
+// - Binary: <basePath>\hydraide.exe
+// - Logs:   <basePath>\logs\app.log
+//
+// 🔧 NSSM settings applied:
+// - DisplayName:  "HydrAIDE Service - <instance>"
+// - Description:  "HydrAIDE Service Instance: <instance>"
+// - Start:        SERVICE_AUTO_START (start at boot)
+// - AppDirectory: <basePath>
+// - AppStdout / AppStderr: <basePath>\logs\app.log
+// - AppRotateFiles: 1 (enabled)
+// - AppRotateSeconds: 86400 (daily)
+// - AppRotateBytes: 10485760 (10 MB)
+//
+// ⚠️ Requirements & Notes:
+//   - Requires Windows with winget available for automatic NSSM install,
+//     or NSSM already on PATH.
+//   - If the executable is missing, returns a descriptive error.
+//   - NSSM configuration steps are best-effort: failures are logged as warnings,
+//     but do not abort the whole setup once the service is installed.
+//
+// 📌 Example:
+//
+//	err := sm.generateWindowsNSSMService("prod", `C:\HydrAIDE`)
+//	if err != nil { log.Fatal(err) }
+func (s *serviceManagerImpl) generateWindowsNSSMService(instanceName, basePath string) error {
+	slog.Info("Creating Windows service using NSSM")
+
+	if err := s.checkAndInstallNSSM(); err != nil {
+		return fmt.Errorf("NSSM installation failed: %v", err)
+	}
+
+	serviceName := fmt.Sprintf("%s-%s", BASE_SERVICE_NAME, instanceName)
+	executablePath := filepath.Join(basePath, WINDOWS_BINARY_NAME)
+
+	logFile, err := ensureLogDirectory(basePath)
+	if err != nil {
+		return err
+	}
+
+	if _, err := os.Stat(executablePath); os.IsNotExist(err) {
+		return fmt.Errorf("executable not found at: %s", executablePath)
+	}
+
+	slog.Info("Installing NSSM service", "service", serviceName)
+	if output, err := s.d.runner.Run("nssm", "install", serviceName, executablePath); err != nil {
+		slog.Error("Failed to install NSSM service", "output", string(output), "error", err)
+		return fmt.Errorf("failed to install NSSM service: %v", err)
+	}
+
+	configs := [][]string{
+		{"set", serviceName, "DisplayName", fmt.Sprintf("HydrAIDE Service - %s", instanceName)},
+		{"set", serviceName, "Description", fmt.Sprintf("HydrAIDE Service Instance: %s", instanceName)},
+		{"set", serviceName, "Start", "SERVICE_AUTO_START"},
+		{"set", serviceName, "AppDirectory", basePath},
+		{"set", serviceName, "AppStdout", logFile},
+		{"set", serviceName, "AppStderr", logFile},
+		{"set", serviceName, "AppRotateFiles", "1"},
+		{"set", serviceName, "AppRotateSeconds", "86400"},
+		{"set", serviceName, "AppRotateBytes", "10485760"},
+	}
+	for _, cfg := range configs {
+		if output, err := s.d.runner.Run("nssm", cfg...); err != nil {
+			slog.Warn("Failed to set NSSM config", "config", cfg, "error", err, "output", string(output))
+		} else {
+			slog.Info("Set NSSM config successfully", "config", cfg)
+		}
+	}
+
+	slog.Info("NSSM service configured successfully", "service", serviceName, "log", logFile)
 	return nil
 }

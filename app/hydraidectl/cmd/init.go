@@ -503,36 +503,33 @@ This command guides you through the process of creating a new HydrAIDE instance,
 			return
 		}
 		fmt.Println("✅ TLS certificate generated successfully.")
-		clientCRT, serverCRT, serverKEY := certGen.Files()
-		fmt.Println("  • Client CRT: ", clientCRT)
+
+		var certFiles []string
+		caCRT, caKEY, serverCRT, serverKEY, clientCRT, clientKEY := certGen.Files()
+		certFiles = []string{caCRT, caKEY, serverCRT, serverKEY, clientCRT, clientKEY}
+
+		fmt.Println("\n📄 TLS Certificate Files:")
+		fmt.Println("  • CA CRT:     ", caCRT)
+		fmt.Println("  • CA KEY:     ", caKEY)
 		fmt.Println("  • Server CRT: ", serverCRT)
 		fmt.Println("  • Server KEY: ", serverKEY)
+		fmt.Println("  • Client CRT: ", clientCRT)
+		fmt.Println("  • Client KEY: ", clientKEY)
 
 		// Copy the server and client TLS certificates to the certificate directory
 		fmt.Println("\n📂 Copying TLS certificates to the certificate directory...")
-		// Move client certificate
-		destClientCRT := filepath.Join(envCfg.HydraideBasePath, "certificate", filepath.Base(clientCRT))
-		fmt.Printf("  • Client CRT: From %s to %s\n", clientCRT, destClientCRT)
-		if err := fs.MoveFile(ctx, clientCRT, destClientCRT); err != nil {
-			fmt.Println("❌ Error moving client certificate:", err)
-			return
+
+		// move all certFiles to the certificate directory
+		for _, file := range certFiles {
+			destPath := filepath.Join(envCfg.HydraideBasePath, "certificate", filepath.Base(file))
+			fmt.Printf("  • Moving %s to %s\n", file, destPath)
+			if err := fs.MoveFile(ctx, file, destPath); err != nil {
+				fmt.Println("❌ Error moving certificate file:", err)
+				return
+			}
+			fmt.Printf("✅ Moved %s to %s\n", file, destPath)
 		}
 
-		// Move server certificate
-		destServerCRT := filepath.Join(envCfg.HydraideBasePath, "certificate", filepath.Base(serverCRT))
-		fmt.Printf("  • Server CRT: From %s to %s\n", serverCRT, destServerCRT)
-		if err := fs.MoveFile(ctx, serverCRT, destServerCRT); err != nil {
-			fmt.Println("❌ Error moving server certificate:", err)
-			return
-		}
-
-		// Move server key
-		destServerKEY := filepath.Join(envCfg.HydraideBasePath, "certificate", filepath.Base(serverKEY))
-		fmt.Printf("  • Server KEY: From %s to %s\n", serverKEY, destServerKEY)
-		if err := fs.MoveFile(ctx, serverKEY, destServerKEY); err != nil {
-			fmt.Println("❌ Error moving server key:", err)
-			return
-		}
 		fmt.Println("✅ TLS certificates copied successfully.")
 
 		// Create the .env file
@@ -630,7 +627,7 @@ This command guides you through the process of creating a new HydrAIDE instance,
 		fmt.Printf("\n✅ Metadata for instance '%s' saved to %s\n", instanceName, configPath)
 		fmt.Println("✅ Installation complete!")
 		fmt.Printf("👉 You can now register this instance as a system service by running:\n")
-		fmt.Printf("   hydraidectl service --instance %s\n", instanceName)
+		fmt.Printf("   sudo hydraidectl service --instance %s\n", instanceName)
 	},
 }
 
