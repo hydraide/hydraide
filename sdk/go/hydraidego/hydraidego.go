@@ -2186,27 +2186,7 @@ func (h *hydraidego) CatalogShiftExpired(ctx context.Context, swampName name.Nam
 
 	// Handle gRPC or internal errors with detailed messages
 	if err != nil {
-
-		if s, ok := status.FromError(err); ok {
-			switch s.Code() {
-			case codes.Aborted:
-				// HydrAIDE server is shutting down
-				return NewError(ErrorShuttingDown, errorMessageShuttingDown)
-			case codes.Unavailable:
-				return NewError(ErrCodeConnectionError, errorMessageConnectionError)
-			case codes.DeadlineExceeded:
-				return NewError(ErrCodeCtxTimeout, errorMessageCtxTimeout)
-			case codes.Canceled:
-				return NewError(ErrCodeCtxClosedByClient, errorMessageCtxClosedByClient)
-			case codes.Internal:
-				return NewError(ErrCodeInternalDatabaseError, fmt.Sprintf("%s: %v", errorMessageInternalError, s.Message()))
-			default:
-				return NewError(ErrCodeUnknown, fmt.Sprintf("%s: %v", errorMessageUnknown, err))
-			}
-		}
-
-		// Non-gRPC error
-		return NewError(ErrCodeUnknown, fmt.Sprintf("%s: %v", errorMessageUnknown, err))
+		return errorHandler(err)
 	}
 
 	// Process response and trigger iterator if defined
