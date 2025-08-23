@@ -21,12 +21,14 @@ Usage:
   hydraidectl <command>
 
 Try:
-  hydraidectl init
+  hydraidectl init 
+  hydraidectl update
   hydraidectl start
   hydraidectl restart
   hydraidectl stop
   hydraidectl destroy
   hydraidectl list
+  hydraidectl cert
 `,
 	Run: func(cmd *cobra.Command, args []string) {
 		_ = cmd.Help()

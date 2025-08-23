@@ -59,10 +59,14 @@ var logger = slog.New(slog.NewTextHandler(os.Stdout, nil))
 type BinaryDownloader interface {
 	// DownloadHydraServer downloads the hydraserver binary for the specified version
 	// If version is empty or "latest", it downloads the latest release
-	DownloadHydraServer(version string, basePath string) error
+	// returns the downloaded version tag (e.g., "v1.2.3") or an error
+	DownloadHydraServer(version string, basePath string) (string, error)
 
 	// GetLatestVersion returns the latest available version tag
 	GetLatestVersion() (string, error)
+
+	// GetLatestVersionWithoutServerPrefix returns the latest version tag without the "server/" prefix
+	GetLatestVersionWithoutServerPrefix() string
 
 	// SetCacheDir sets the cache directory
 	SetCacheDir(dir string)
@@ -218,6 +222,21 @@ func (d *DefaultDownloader) GetLatestVersion() (string, error) {
 	return d.GetLatestVersionByPrefix("server/")
 }
 
+func (d *DefaultDownloader) GetLatestVersionWithoutServerPrefix() string {
+	// This method is not part of the BinaryDownloader interface,
+	// but it can be useful for internal purposes.
+	// It simply calls GetLatestVersionByPrefix with an empty prefix.
+	version, err := d.GetLatestVersionByPrefix("server/")
+	if err != nil {
+		return "unknown"
+	}
+	// remove server prefix from the version tag
+	if strings.HasPrefix(version, "server/") {
+		version = strings.TrimPrefix(version, "server/")
+	}
+	return version
+}
+
 // GetLatestVersionByPrefix fetches the latest release tag that
 // starts with the given prefix.
 //
@@ -258,7 +277,6 @@ func (d *DefaultDownloader) GetLatestVersionByPrefix(prefix string) (string, err
 			continue
 		}
 		if strings.HasPrefix(r.TagName, prefix) {
-			logger.Info("Fetched latest version by prefix", "prefix", prefix, "version", r.TagName)
 			return r.TagName, nil
 		}
 	}
@@ -314,7 +332,7 @@ func (d *DefaultDownloader) GetLatestVersionByPrefix(prefix string) (string, err
 // - On Windows, .zip archives are preferred if available.
 // - If no checksum is found, a warning is logged and installation proceeds.
 // - If cross-device rename fails, a copy + delete fallback is used.
-func (d *DefaultDownloader) DownloadHydraServer(version string, basePath string) error {
+func (d *DefaultDownloader) DownloadHydraServer(version string, basePath string) (string, error) {
 	// Prepare cache dir
 	cacheDir := filepath.Join(os.TempDir(), TEMP_FILENAME)
 	d.SetCacheDir(cacheDir)
@@ -324,14 +342,14 @@ func (d *DefaultDownloader) DownloadHydraServer(version string, basePath string)
 	}
 	if err := os.MkdirAll(d.cacheDir, perm); err != nil {
 		logger.Error("Failed to create cache directory", "dir", d.cacheDir, "error", err)
-		return fmt.Errorf("failed to create cache directory: %w", err)
+		return "", fmt.Errorf("failed to create cache directory: %w", err)
 	}
 
 	// Resolve version
 	if version == "" || strings.EqualFold(version, "latest") {
 		v, err := d.GetLatestVersion()
 		if err != nil {
-			return fmt.Errorf("failed to get latest version: %w", err)
+			return "", fmt.Errorf("failed to get latest version: %w", err)
 		}
 		version = v
 	}
@@ -340,7 +358,7 @@ func (d *DefaultDownloader) DownloadHydraServer(version string, basePath string)
 	// Fetch release
 	release, err := d.getReleaseByTag(version)
 	if err != nil {
-		return fmt.Errorf("failed to get release information: %w", err)
+		return "", fmt.Errorf("failed to get release information: %w", err)
 	}
 
 	// Determine desired archive names
@@ -364,7 +382,7 @@ func (d *DefaultDownloader) DownloadHydraServer(version string, basePath string)
 
 	binAsset, shaAsset, err := selectAssetsByName(release.Assets, wantArchive, wantChecksum)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	// Cache file path (include version to avoid collisions)
@@ -375,7 +393,7 @@ func (d *DefaultDownloader) DownloadHydraServer(version string, basePath string)
 	if !d.isCacheValid(cacheArchive, binAsset.Size) {
 		logger.Info("Downloading hydraserver archive", "url", binAsset.BrowserDownloadURL, "destination", cacheArchive)
 		if err := d.downloadFile(binAsset.BrowserDownloadURL, cacheArchive, binAsset.Size); err != nil {
-			return fmt.Errorf("failed to download archive: %w", err)
+			return "", fmt.Errorf("failed to download archive: %w", err)
 		}
 	}
 
@@ -384,11 +402,11 @@ func (d *DefaultDownloader) DownloadHydraServer(version string, basePath string)
 		sum, err := d.fetchChecksum(shaAsset.BrowserDownloadURL)
 		if err != nil {
 			_ = os.Remove(cacheArchive)
-			return fmt.Errorf("failed to fetch checksum: %w", err)
+			return "", fmt.Errorf("failed to fetch checksum: %w", err)
 		}
 		if err := d.verifyChecksum(cacheArchive, sum); err != nil {
 			_ = os.Remove(cacheArchive)
-			return fmt.Errorf("checksum verification failed: %w", err)
+			return "", fmt.Errorf("checksum verification failed: %w", err)
 		}
 		logger.Info("Checksum verified successfully")
 	} else {
@@ -397,7 +415,7 @@ func (d *DefaultDownloader) DownloadHydraServer(version string, basePath string)
 
 	// Ensure target directory exists
 	if err := os.MkdirAll(basePath, 0o755); err != nil {
-		return fmt.Errorf("failed to create target directory: %w", err)
+		return "", fmt.Errorf("failed to create target directory: %w", err)
 	}
 
 	// Extract to basePath
@@ -408,7 +426,7 @@ func (d *DefaultDownloader) DownloadHydraServer(version string, basePath string)
 		extractedPath, err = d.extractTarGz(cacheArchive, basePath)
 	}
 	if err != nil {
-		return fmt.Errorf("failed to extract archive: %w", err)
+		return "", fmt.Errorf("failed to extract archive: %w", err)
 	}
 
 	// Determine final binary name and path
@@ -423,7 +441,7 @@ func (d *DefaultDownloader) DownloadHydraServer(version string, basePath string)
 		if err := os.Rename(extractedPath, targetPath); err != nil {
 			// possibly cross-device; fallback to copy
 			if err2 := copyFile(extractedPath, targetPath); err2 != nil {
-				return fmt.Errorf("install move failed: %v / copy fallback: %v", err, err2)
+				return "", fmt.Errorf("install move failed: %v / copy fallback: %v", err, err2)
 			}
 			_ = os.Remove(extractedPath)
 		}
@@ -435,7 +453,8 @@ func (d *DefaultDownloader) DownloadHydraServer(version string, basePath string)
 	}
 
 	logger.Info("Hydraserver installed", "path", targetPath)
-	return nil
+	return versionClean, nil
+
 }
 
 // -----------------------

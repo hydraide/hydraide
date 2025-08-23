@@ -23,6 +23,7 @@ const (
 // This struct can be expanded in the future to store more instance-specific data.
 type InstanceMetadata struct {
 	BasePath string `json:"base_path"`
+	Version  string `json:"version,omitempty"`
 }
 
 // MetadataStore defines the public interface for all metadata operations.
@@ -74,6 +75,7 @@ func getHomeDir() (string, error) {
 // New creates and initializes a new MetadataStore. It ensures the configuration
 // directory and metadata file exist, creating them if necessary.
 func New(fs filesystem.FileSystem) (MetadataStore, error) {
+
 	ctx := context.Background()
 
 	home, err := getHomeDir()
@@ -82,27 +84,33 @@ func New(fs filesystem.FileSystem) (MetadataStore, error) {
 	}
 
 	configDir := filepath.Join(home, CONFIG_DIR)
-	if err := fs.CreateDir(ctx, configDir, 0750); err != nil {
-		return nil, fmt.Errorf("failed to create config directory at %s: %w", configDir, err)
+	// check if the dir exists, if not create it
+	info, err := fs.Stat(ctx, configDir)
+	if err != nil {
+		// there was an error but we don't know what
+		if !os.IsNotExist(err) {
+			return nil, fmt.Errorf("failed to check config directory at %s: %w", configDir, err)
+		}
+		// there was an error, but this was a "not found" error, so we can create the directory
+		if err := fs.CreateDir(ctx, configDir, 0750); err != nil {
+			return nil, fmt.Errorf("failed to create config directory at %s: %w", configDir, err)
+		}
 	}
 
 	configFilePath := filepath.Join(configDir, META_FILENAME)
-
-	// Use the new fs.Stat method to check the file's status.
-	info, err := fs.Stat(ctx, configFilePath)
-
-	// Initialize the file if it does not exist OR if it is empty.
-	if os.IsNotExist(err) || (err == nil && info.Size() == 0) {
+	// the config dir exists, but the size was 0, meaning the file does not exist in it
+	if info.Size() == 0 {
 		// Write an empty JSON object to ensure the file is valid for parsing later.
 		if err := fs.WriteFile(ctx, configFilePath, []byte("{}"), 0640); err != nil {
 			return nil, fmt.Errorf("failed to create or initialize metadata file: %w", err)
 		}
-	} else if err != nil {
-		// If Stat returned a different error (e.g., permission denied), fail hard.
-		return nil, fmt.Errorf("error checking metadata file: %w", err)
 	}
 
-	return &storeImpl{fs: fs, configFilePath: configFilePath}, nil
+	return &storeImpl{
+		fs:             fs,
+		configFilePath: configFilePath,
+	}, nil
+
 }
 
 // load reads and unmarshals the entire metadata file into a map.

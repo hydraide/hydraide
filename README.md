@@ -102,6 +102,12 @@ No config files. No docker. No complexity.
 
 ---
 
+> 🐳 **Prefer Docker?**  
+> **You can also install and run HydrAIDE using Docker.**  
+> 👉  [Docker Installation Guide](docs/install/docker-install.md)
+
+--- 
+
 
 ### 💡 Proven in the Real World
 

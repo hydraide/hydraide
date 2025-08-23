@@ -11,10 +11,15 @@ import (
 
 	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/elevation"
 	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/instancerunner"
+	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/validator"
 	"github.com/spf13/cobra"
 )
 
-var stopInstance string
+var (
+	stopInstance        string
+	stopCmdTimeout      time.Duration
+	stopGracefulTimeout time.Duration
+)
 
 var stopCmd = &cobra.Command{
 	Use:   "stop",
@@ -33,9 +38,37 @@ If the instance is not running, the command does nothing.`,
 		outputFormat, _ := cmd.Flags().GetString("output")
 		printJson := jsonOutput || outputFormat == "json"
 
+		// Validate timeouts
+		v := validator.New()
+		if err := v.ValidateTimeout(context.Background(), "cmd-timeout", stopCmdTimeout); err != nil {
+			if printJson {
+				printJsonStop(err)
+				return
+			}
+			fmt.Printf("❌ %v\n", err)
+			os.Exit(3)
+		}
+
+		if err := v.ValidateTimeout(context.Background(), "graceful-timeout", stopGracefulTimeout); err != nil {
+			if printJson {
+				printJsonStop(err)
+				return
+			}
+			fmt.Printf("❌ %v\n", err)
+			os.Exit(3)
+		}
+
+		// Warn if timeouts are very small
+		if stopCmdTimeout < 2*time.Second && !printJson {
+			fmt.Printf("⚠️  Warning: cmd-timeout of %v is very small and may cause issues\n", stopCmdTimeout)
+		}
+		if stopGracefulTimeout < 2*time.Second && !printJson {
+			fmt.Printf("⚠️  Warning: graceful-timeout of %v is very small and may cause issues\n", stopGracefulTimeout)
+		}
+
 		instanceController := instancerunner.NewInstanceController(
-			instancerunner.WithTimeout(20*time.Second),
-			instancerunner.WithGracefulStartStopTimeout(10*time.Second),
+			instancerunner.WithTimeout(stopCmdTimeout),
+			instancerunner.WithGracefulStartStopTimeout(stopGracefulTimeout),
 		)
 
 		if instanceController == nil {
@@ -109,6 +142,8 @@ func init() {
 	rootCmd.AddCommand(stopCmd)
 
 	stopCmd.Flags().StringVarP(&stopInstance, "instance", "i", "", "Name of the service instance")
+	stopCmd.Flags().DurationVar(&stopCmdTimeout, "cmd-timeout", 20*time.Second, "Timeout for the command execution (min: 1s, max: 15m)")
+	stopCmd.Flags().DurationVar(&stopGracefulTimeout, "graceful-timeout", 60*time.Second, "Timeout for graceful start/stop operations (min: 1s, max: 15m)")
 	if err := stopCmd.MarkFlagRequired("instance"); err != nil {
 		fmt.Println("Error marking 'instance' flag as required:", err)
 		os.Exit(1)
