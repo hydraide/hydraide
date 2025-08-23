@@ -31,10 +31,12 @@ func TestMain(m *testing.M) {
 func setup() {
 
 	server := &client.Server{
-		Host:         os.Getenv("HYDRA_HOST"),
-		FromIsland:   0,
-		ToIsland:     1000,
-		CertFilePath: os.Getenv("HYDRA_CERT"),
+		Host:          os.Getenv("HYDRAIDE_TEST_SERVER"),
+		FromIsland:    0,
+		ToIsland:      1000,
+		CACrtPath:     os.Getenv("HYDRAIDE_CA_CRT"),
+		ClientCrtPath: os.Getenv("HYDRAIDE_CLIENT_CRT"),
+		ClientKeyPath: os.Getenv("HYDRAIDE_CLIENT_KEY"),
 	}
 
 	servers := []*client.Server{server}
@@ -86,6 +88,43 @@ func within(d time.Duration, want time.Time, got time.Time) bool {
 }
 
 // --- Tests ---
+
+func TestHydraidego_IsSwampExist(t *testing.T) {
+
+	swampName := name.New().Sanctuary("test").Realm("in").Swamp("isSwampExist")
+	defer func() {
+		if err := hydraidegoInterface.Destroy(context.Background(), swampName); err != nil {
+			t.Logf("Cleanup failed: could not destroy swamp %s: %v", swampName.Get(), err)
+		}
+	}()
+
+	// Bounded context for the test call
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	isExist, err := hydraidegoInterface.IsSwampExist(ctx, swampName)
+	assert.NoError(t, err, "IsSwampExist should not return an error")
+	assert.False(t, isExist, "Swamp should not exist")
+
+	type ExampleSwamp struct {
+		Key   string `hydraide:"key"`
+		Value string `hydraide:"value"`
+	}
+
+	treasure := &ExampleSwamp{
+		Key:   "key1",
+		Value: "value1",
+	}
+
+	// add a treasure to create the swamp
+	_, err = hydraidegoInterface.CatalogSave(ctx, swampName, treasure)
+
+	assert.NoError(t, err, "CatalogSave should not return an error")
+	isExist, err = hydraidegoInterface.IsSwampExist(ctx, swampName)
+	assert.NoError(t, err, "IsSwampExist should not return an error")
+	assert.True(t, isExist, "Swamp should exist after adding a treasure")
+
+}
 
 // Verifies: creation path (setIfNotExist), update path (setIfExist), ExpiredAt handling.
 func TestIncrementInt8_WithMetadata_CreateThenUpdate(t *testing.T) {
