@@ -3,6 +3,10 @@
 The `hydraidectl` CLI is the **recommended way** to install, launch, and manage HydrAIDE. It enables fully isolated 
 environments for testing, staging, or production — without containers, and without complex configuration.
 
+> 🐳 **Prefer Docker?**  
+> **You can also install and run HydrAIDE using Docker.**  
+> 👉  [Docker Installation Guide](docker-install.md)  
+
 ---
 
 ### 🖥️ Minimal System Requirements
@@ -17,7 +21,7 @@ HydrAIDE is designed to be **extremely lightweight** and **zero-impact** when id
 **Minimum Hardware:**
 
 * 🧠 **CPU**: 1-core (x86\_64 or ARM64)
-* 🧮 **RAM**: 512 KB free memory (idle)
+* 🧮 **RAM**: 15MB free memory (idle)
 * 📀 **Disk**: Any POSIX-compatible filesystem (ZFS recommended for production)
 
 > ⚠️ HydrAIDE has **no background processes**, **no idle threads**, and **zero CPU usage** when not actively processing Swamps. It is only active on demand.

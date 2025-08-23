@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestNew ensures that New() returns a non-nil Validator instance.
@@ -713,6 +714,113 @@ func TestContextCancellation(t *testing.T) {
 			err := tt.fn(ctx)
 			if err != nil {
 				t.Errorf("%s with cancelled context returned error: %v", tt.name, err)
+			}
+		})
+	}
+}
+
+// TestValidateTimeout tests the ValidateTimeout method for various timeout inputs.
+func TestValidateTimeout(t *testing.T) {
+	validator := New()
+	ctx := context.Background()
+
+	tests := []struct {
+		name    string
+		param   string
+		timeout time.Duration
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name:    "valid timeout - 5 seconds",
+			param:   "cmd-timeout",
+			timeout: 5 * time.Second,
+			wantErr: false,
+		},
+		{
+			name:    "valid timeout - 1 second (minimum)",
+			param:   "cmd-timeout",
+			timeout: 1 * time.Second,
+			wantErr: false,
+		},
+		{
+			name:    "valid timeout - 15 minutes (maximum)",
+			param:   "cmd-timeout",
+			timeout: 15 * time.Minute,
+			wantErr: false,
+		},
+		{
+			name:    "invalid timeout - less than 1 second",
+			param:   "cmd-timeout",
+			timeout: 500 * time.Millisecond,
+			wantErr: true,
+			errMsg:  "cmd-timeout must be at least 1s",
+		},
+		{
+			name:    "invalid timeout - 0 seconds",
+			param:   "cmd-timeout",
+			timeout: 0,
+			wantErr: true,
+			errMsg:  "cmd-timeout must be at least 1s",
+		},
+		{
+			name:    "invalid timeout - negative value",
+			param:   "cmd-timeout",
+			timeout: -5 * time.Second,
+			wantErr: true,
+			errMsg:  "cmd-timeout must be at least 1s",
+		},
+		{
+			name:    "invalid timeout - more than 15 minutes",
+			param:   "cmd-timeout",
+			timeout: 16 * time.Minute,
+			wantErr: true,
+			errMsg:  "cmd-timeout must not exceed 15m0s",
+		},
+		{
+			name:    "invalid timeout - 1 hour",
+			param:   "cmd-timeout",
+			timeout: 1 * time.Hour,
+			wantErr: true,
+			errMsg:  "cmd-timeout must not exceed 15m0s",
+		},
+		{
+			name:    "valid graceful-timeout - 60 seconds",
+			param:   "graceful-timeout",
+			timeout: 60 * time.Second,
+			wantErr: false,
+		},
+		{
+			name:    "valid graceful-timeout - 10 seconds",
+			param:   "graceful-timeout",
+			timeout: 10 * time.Second,
+			wantErr: false,
+		},
+		{
+			name:    "invalid graceful-timeout - less than minimum",
+			param:   "graceful-timeout",
+			timeout: 100 * time.Millisecond,
+			wantErr: true,
+			errMsg:  "graceful-timeout must be at least 1s",
+		},
+		{
+			name:    "invalid graceful-timeout - exceeds maximum",
+			param:   "graceful-timeout",
+			timeout: 20 * time.Minute,
+			wantErr: true,
+			errMsg:  "graceful-timeout must not exceed 15m0s",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validator.ValidateTimeout(ctx, tt.param, tt.timeout)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ValidateTimeout() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if err != nil && tt.errMsg != "" && err.Error() != tt.errMsg {
+				t.Errorf("ValidateTimeout() error message = %v, want %v", err.Error(), tt.errMsg)
 			}
 		})
 	}

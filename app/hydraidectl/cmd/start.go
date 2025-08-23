@@ -11,6 +11,7 @@ import (
 
 	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/elevation"
 	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/instancerunner"
+	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/validator"
 	"github.com/spf13/cobra"
 )
 
@@ -23,7 +24,10 @@ type JsonLifecycleInfo struct {
 	Timestamp string `json:"timestamp"`
 }
 
-var startInstance string
+var (
+	startInstance string
+	cmdTimeout    time.Duration
+)
 
 var startCmd = &cobra.Command{
 	Use:   "start",
@@ -42,9 +46,25 @@ If the instance is already running, the command does nothing.`,
 		outputFormat, _ := cmd.Flags().GetString("output")
 		printJson := jsonOutput || outputFormat == "json"
 
+		// Validate timeout
+		v := validator.New()
+		if err := v.ValidateTimeout(context.Background(), "cmd-timeout", cmdTimeout); err != nil {
+			if printJson {
+				printJsonStart(err)
+				return
+			}
+			fmt.Printf("❌ %v\n", err)
+			os.Exit(3)
+		}
+
+		// Warn if timeout is very small
+		if cmdTimeout < 2*time.Second && !printJson {
+			fmt.Printf("⚠️  Warning: cmd-timeout of %v is very small and may cause issues\n", cmdTimeout)
+		}
+
 		instanceController := instancerunner.NewInstanceController(
-			instancerunner.WithTimeout(20*time.Second),
-			instancerunner.WithGracefulStartStopTimeout(10*time.Second),
+			instancerunner.WithTimeout(cmdTimeout),
+			instancerunner.WithGracefulStartStopTimeout(60*time.Second), // Default 60s for graceful operations
 		)
 
 		if instanceController == nil {
@@ -109,6 +129,7 @@ func init() {
 	startCmd.Flags().StringVarP(&startInstance, "instance", "i", "", "Name of the service instance")
 	startCmd.Flags().BoolP("json", "j", false, "Return structured output in JSON format")
 	startCmd.Flags().StringP("output", "o", "", "Output format")
+	startCmd.Flags().DurationVar(&cmdTimeout, "cmd-timeout", 20*time.Second, "Timeout for the command execution (min: 1s, max: 15m)")
 	if err := startCmd.MarkFlagRequired("instance"); err != nil {
 		fmt.Printf("Error marking 'instance' flag as required: %v\n", err)
 		os.Exit(1)

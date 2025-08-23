@@ -1,23 +1,55 @@
 name: PR Title Labeler
 
-permissions:
-  issues: write
-  pull-requests: write
-
 on:
-  pull_request:
-    types: [opened, edited, reopened, synchronize]
+  pull_request_target:
+    types: [opened, edited, reopened, synchronize, ready_for_review]
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: pr-title-labeler-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
 
 jobs:
   label-by-title:
     runs-on: ubuntu-latest
     steps:
-      - name: Label PR based on title prefix
+      - name: Ensure type labels exist (idempotent)
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const wanted = [
+              { name: 'type:bug',        color: 'd73a4a', description: 'Bug fix' },
+              { name: 'type:enhancement', color: 'a2eeef', description: 'New feature / enhancement' },
+              { name: 'type:docs',       color: '0075ca', description: 'Documentation' },
+              { name: 'type:refactor',   color: 'c5def5', description: 'Refactor' },
+              { name: 'type:chore',      color: 'ededed', description: 'Chore / maintenance' },
+            ];
+            for (const lbl of wanted) {
+              try {
+                await github.rest.issues.getLabel({
+                  owner: context.repo.owner, repo: context.repo.repo, name: lbl.name
+                });
+              } catch (e) {
+                if (e.status === 404) {
+                  await github.rest.issues.createLabel({
+                    owner: context.repo.owner, repo: context.repo.repo,
+                    name: lbl.name, color: lbl.color, description: lbl.description
+                  });
+                } else {
+                  throw e;
+                }
+              }
+            }
+
+      - name: Label or warn based on PR title
         uses: actions/github-script@v7
         with:
           script: |
             const pr = context.payload.pull_request;
-            const title = pr.title.toLowerCase();
+            const title = (pr.title || '').toLowerCase().trim();
             const labelsToAdd = [];
 
             if (title.startsWith('fix:')) {
@@ -33,41 +65,46 @@ jobs:
             }
 
             if (labelsToAdd.length > 0) {
+              // addLabels idempotens, nem duplikál
               await github.rest.issues.addLabels({
-                issue_number: context.issue.number,
                 owner: context.repo.owner,
                 repo: context.repo.repo,
+                issue_number: pr.number,
                 labels: labelsToAdd
               });
             } else {
-              // Check if warning comment already exists
+              // Ne kommenteljünk többször ugyanazzal a figyelmeztetéssel
               const { data: comments } = await github.rest.issues.listComments({
-                issue_number: context.issue.number,
                 owner: context.repo.owner,
-                repo: context.repo.repo
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                per_page: 100
               });
-
-              const alreadyCommented = comments.some(comment =>
-                comment.body && comment.body.includes("🚨 **PR Title Lacks Prefix**")
+              const alreadyCommented = comments.some(c =>
+                c.user?.type === 'Bot' &&
+                typeof c.body === 'string' &&
+                c.body.includes('🚨 **PR Title Lacks Prefix**')
               );
-
               if (!alreadyCommented) {
-                const warningComment =
-                  "🚨 **PR Title Lacks Prefix**\n\n" +
-                  "Please use a [semantic prefix](https://www.conventionalcommits.org/en/v1.0.0/) in your PR title such as:\n\n" +
-                  "- `fix:` for bugs\n" +
-                  "- `feat:` for features\n" +
-                  "- `docs:` for documentation\n" +
-                  "- `refactor:` for code improvements\n" +
-                  "- `chore:` for maintenance tasks\n\n" +
-                  "_Example: `fix: handle nil pointer panic`_\n\n" +
-                  "This helps us automatically classify your pull request. Thanks! 🙌";
-
+                const warning = [
+                  "🚨 **PR Title Lacks Prefix**",
+                  "",
+                  "Please use a [conventional commit](https://www.conventionalcommits.org/en/v1.0.0/) style prefix in your PR title:",
+                  "- `fix:` for bug fixes",
+                  "- `feat:` for features",
+                  "- `docs:` for documentation",
+                  "- `refactor:` for code improvements",
+                  "- `chore:` for maintenance tasks",
+                  "",
+                  "_Example: `fix: handle nil pointer panic`_",
+                  "",
+                  "This helps us automatically classify your PR. Thanks! 🙌"
+                ].join("\n");
                 await github.rest.issues.createComment({
-                  issue_number: context.issue.number,
                   owner: context.repo.owner,
                   repo: context.repo.repo,
-                  body: warningComment
+                  issue_number: pr.number,
+                  body: warning
                 });
               }
             }
