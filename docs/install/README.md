@@ -15,8 +15,11 @@ HydrAIDE is designed to be **extremely lightweight** and **zero-impact** when id
 
 **Supported Platforms:**
 
-* ✅ Linux (x86\_64 / ARM64) — recommended for production
-* ⚠️ Windows (x86\_64) — only via WSL2 with Ubuntu distribution (no native Windows support)
+* ✅ Linux (**x86\_64 / ARM64**) — recommended for production
+* ⚠️ Windows (**x86\_64**) — only via WSL2 with Ubuntu distribution (no native Windows support)
+
+> ⚠️ **HydrAIDE supports only 64-bit systems.**
+> 32-bit support has been explicitly discussed and declined. For more details, see: [Issue #151](https://github.com/hydraide/hydraide/issues/151)
 
 **Minimum Hardware:**
 
