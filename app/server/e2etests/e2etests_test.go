@@ -104,10 +104,12 @@ func createGrpcClient() {
 	// create a new gRPC client object
 	servers := []*client.Server{
 		{
-			Host:         os.Getenv("HYDRA_TEST_SERVER"),
-			FromIsland:   0,
-			ToIsland:     100,
-			CertFilePath: os.Getenv("HYDRA_CERT"),
+			Host:          os.Getenv("HYDRAIDE_TEST_SERVER"),
+			FromIsland:    0,
+			ToIsland:      100,
+			CACrtPath:     os.Getenv("HYDRAIDE_CA_CRT"),
+			ClientCrtPath: os.Getenv("HYDRAIDE_CLIENT_CRT"),
+			ClientKeyPath: os.Getenv("HYDRAIDE_CLIENT_KEY"),
 		},
 	}
 

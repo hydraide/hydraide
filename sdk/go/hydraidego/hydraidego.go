@@ -32,6 +32,7 @@ const (
 	errorMessageKeyAlreadyExists    = "key already exists"
 	errorMessageKeyNotFound         = "key not found"
 	errorMessageConditionNotMet     = "condition not met - the value is"
+	errorMessageShuttingDown        = "HydrAIDE server is shutting down"
 )
 
 const (
@@ -663,6 +664,7 @@ func (h *hydraidego) Unlock(ctx context.Context, key string, lockID string) erro
 // ⚙️ Behavior:
 // - If the Swamp exists → returns (true, nil)
 // - If it never existed or was auto-deleted → returns (false, nil)
+// - If the swamp name was nil, the server returns InvalidArgument and the SDK returns (false, ErrCodeNotFound)
 // - If a server error occurs → returns (false, error)
 //
 // 🚀 This check is extremely fast: O(1) routing + metadata lookup.
@@ -682,6 +684,9 @@ func (h *hydraidego) IsSwampExist(ctx context.Context, swampName name.Name) (boo
 	if err != nil {
 		if s, ok := status.FromError(err); ok {
 			switch s.Code() {
+			case codes.Aborted:
+				// HydrAIDE server is shutting down
+				return false, NewError(ErrorShuttingDown, errorMessageShuttingDown)
 			case codes.Unavailable:
 				return false, NewError(ErrCodeConnectionError, errorMessageConnectionError)
 			case codes.DeadlineExceeded:
@@ -691,7 +696,8 @@ func (h *hydraidego) IsSwampExist(ctx context.Context, swampName name.Name) (boo
 			case codes.InvalidArgument:
 				return false, NewError(ErrCodeNotFound, fmt.Sprintf("%s: %v", errorMessageSwampNameNotCorrect, s.Message()))
 			case codes.FailedPrecondition:
-				return false, NewError(ErrCodeSwampNotFound, fmt.Sprintf("%s: %v", errorMessageSwampNotFound, s.Message()))
+				// this is not an error, just means swamp does not exist
+				return false, nil
 			default:
 				return false, NewError(ErrCodeUnknown, fmt.Sprintf("%s: %v", errorMessageUnknown, err))
 			}
@@ -748,6 +754,9 @@ func (h *hydraidego) IsKeyExists(ctx context.Context, swampName name.Name, key s
 	if err != nil {
 		if s, ok := status.FromError(err); ok {
 			switch s.Code() {
+			case codes.Aborted:
+				// HydrAIDE server is shutting down
+				return false, NewError(ErrorShuttingDown, errorMessageShuttingDown)
 			case codes.Unavailable:
 				return false, NewError(ErrCodeConnectionError, errorMessageConnectionError)
 			case codes.DeadlineExceeded:
@@ -868,6 +877,9 @@ func (h *hydraidego) CatalogCreate(ctx context.Context, swampName name.Name, mod
 	if err != nil {
 		if s, ok := status.FromError(err); ok {
 			switch s.Code() {
+			case codes.Aborted:
+				// HydrAIDE server is shutting down
+				return NewError(ErrorShuttingDown, errorMessageShuttingDown)
 			case codes.Unavailable:
 				return NewError(ErrCodeConnectionError, errorMessageConnectionError)
 			case codes.DeadlineExceeded:
@@ -981,6 +993,9 @@ func (h *hydraidego) CatalogCreateMany(ctx context.Context, swampName name.Name,
 	if err != nil {
 		if s, ok := status.FromError(err); ok {
 			switch s.Code() {
+			case codes.Aborted:
+				// HydrAIDE server is shutting down
+				return NewError(ErrorShuttingDown, errorMessageShuttingDown)
 			case codes.Unavailable:
 				return NewError(ErrCodeConnectionError, errorMessageConnectionError)
 			case codes.DeadlineExceeded:
@@ -1134,6 +1149,9 @@ func (h *hydraidego) CatalogCreateManyToMany(ctx context.Context, request []*Cat
 		if err != nil {
 			if s, ok := status.FromError(err); ok {
 				switch s.Code() {
+				case codes.Aborted:
+					// HydrAIDE server is shutting down
+					return NewError(ErrorShuttingDown, errorMessageShuttingDown)
 				case codes.Unavailable:
 					return NewError(ErrCodeConnectionError, errorMessageConnectionError)
 				case codes.DeadlineExceeded:
@@ -1391,6 +1409,9 @@ func (h *hydraidego) CatalogUpdate(ctx context.Context, swampName name.Name, mod
 	if err != nil {
 		if s, ok := status.FromError(err); ok {
 			switch s.Code() {
+			case codes.Aborted:
+				// HydrAIDE server is shutting down
+				return NewError(ErrorShuttingDown, errorMessageShuttingDown)
 			case codes.Unavailable:
 				return NewError(ErrCodeConnectionError, errorMessageConnectionError)
 			case codes.DeadlineExceeded:
@@ -1488,6 +1509,9 @@ func (h *hydraidego) CatalogUpdateMany(ctx context.Context, swampName name.Name,
 	if err != nil {
 		if s, ok := status.FromError(err); ok {
 			switch s.Code() {
+			case codes.Aborted:
+				// HydrAIDE server is shutting down
+				return NewError(ErrorShuttingDown, errorMessageShuttingDown)
 			case codes.Unavailable:
 				return NewError(ErrCodeConnectionError, errorMessageConnectionError)
 			case codes.DeadlineExceeded:
@@ -1823,6 +1847,9 @@ func (h *hydraidego) CatalogSave(ctx context.Context, swampName name.Name, model
 		// Translate gRPC or Hydra-specific error into user-friendly error
 		if s, ok := status.FromError(err); ok {
 			switch s.Code() {
+			case codes.Aborted:
+				// HydrAIDE server is shutting down
+				return StatusUnknown, NewError(ErrorShuttingDown, errorMessageShuttingDown)
 			case codes.Unavailable:
 				return StatusUnknown, NewError(ErrCodeConnectionError, errorMessageConnectionError)
 			case codes.DeadlineExceeded:
@@ -1914,6 +1941,9 @@ func (h *hydraidego) CatalogSaveMany(ctx context.Context, swampName name.Name, m
 	if err != nil {
 		if s, ok := status.FromError(err); ok {
 			switch s.Code() {
+			case codes.Aborted:
+				// HydrAIDE server is shutting down
+				return NewError(ErrorShuttingDown, errorMessageShuttingDown)
 			case codes.Unavailable:
 				return NewError(ErrCodeConnectionError, errorMessageConnectionError)
 			case codes.DeadlineExceeded:
@@ -2052,6 +2082,9 @@ func (h *hydraidego) CatalogSaveManyToMany(ctx context.Context, request []*Catal
 			// Map gRPC-level errors to internal codes
 			if s, ok := status.FromError(err); ok {
 				switch s.Code() {
+				case codes.Aborted:
+					// HydrAIDE server is shutting down
+					return NewError(ErrorShuttingDown, errorMessageShuttingDown)
 				case codes.Unavailable:
 					return NewError(ErrCodeConnectionError, errorMessageConnectionError)
 				case codes.DeadlineExceeded:
@@ -2156,6 +2189,9 @@ func (h *hydraidego) CatalogShiftExpired(ctx context.Context, swampName name.Nam
 
 		if s, ok := status.FromError(err); ok {
 			switch s.Code() {
+			case codes.Aborted:
+				// HydrAIDE server is shutting down
+				return NewError(ErrorShuttingDown, errorMessageShuttingDown)
 			case codes.Unavailable:
 				return NewError(ErrCodeConnectionError, errorMessageConnectionError)
 			case codes.DeadlineExceeded:
@@ -2248,6 +2284,9 @@ func (h *hydraidego) ProfileSave(ctx context.Context, swampName name.Name, model
 	if err != nil {
 		if s, ok := status.FromError(err); ok {
 			switch s.Code() {
+			case codes.Aborted:
+				// HydrAIDE server is shutting down
+				return NewError(ErrorShuttingDown, errorMessageShuttingDown)
 			case codes.Unavailable:
 				return NewError(ErrCodeConnectionError, errorMessageConnectionError)
 			case codes.DeadlineExceeded:
@@ -2311,6 +2350,9 @@ func (h *hydraidego) ProfileRead(ctx context.Context, swampName name.Name, model
 		// Translate server-side or network error to client-side semantics
 		if s, ok := status.FromError(err); ok {
 			switch s.Code() {
+			case codes.Aborted:
+				// HydrAIDE server is shutting down
+				return NewError(ErrorShuttingDown, errorMessageShuttingDown)
 			case codes.Unavailable:
 				return NewError(ErrCodeConnectionError, errorMessageConnectionError)
 			case codes.DeadlineExceeded:
@@ -2383,6 +2425,9 @@ func (h *hydraidego) Count(ctx context.Context, swampName name.Name) (int32, err
 	if err != nil {
 		if s, ok := status.FromError(err); ok {
 			switch s.Code() {
+			case codes.Aborted:
+				// HydrAIDE server is shutting down
+				return 0, NewError(ErrorShuttingDown, errorMessageShuttingDown)
 			case codes.Unavailable:
 				return 0, NewError(ErrCodeConnectionError, errorMessageConnectionError)
 			case codes.DeadlineExceeded:
@@ -2509,6 +2554,9 @@ func (h *hydraidego) Subscribe(ctx context.Context, swampName name.Name, getExis
 		if err != nil {
 			if s, ok := status.FromError(err); ok {
 				switch s.Code() {
+				case codes.Aborted:
+					// HydrAIDE server is shutting down
+					return NewError(ErrorShuttingDown, errorMessageShuttingDown)
 				case codes.Unavailable:
 					return NewError(ErrCodeConnectionError, errorMessageConnectionError)
 				case codes.DeadlineExceeded:
@@ -2559,6 +2607,9 @@ func (h *hydraidego) Subscribe(ctx context.Context, swampName name.Name, getExis
 	if err != nil {
 		if s, ok := status.FromError(err); ok {
 			switch s.Code() {
+			case codes.Aborted:
+				// HydrAIDE server is shutting down
+				return NewError(ErrorShuttingDown, errorMessageShuttingDown)
 			case codes.Unavailable:
 				return NewError(ErrCodeConnectionError, errorMessageConnectionError)
 			case codes.DeadlineExceeded:
@@ -5369,6 +5420,9 @@ func errorHandler(err error) error {
 
 	if s, ok := status.FromError(err); ok {
 		switch s.Code() {
+		case codes.Aborted:
+			// HydrAIDE server is shutting down
+			return NewError(ErrorShuttingDown, errorMessageShuttingDown)
 		case codes.Unavailable:
 			return NewError(ErrCodeConnectionError, errorMessageConnectionError)
 		case codes.DeadlineExceeded:
@@ -5425,6 +5479,7 @@ const (
 	ErrCodeInvalidModel
 	ErrConditionNotMet
 	ErrCodeUnknown
+	ErrorShuttingDown ErrorCode = 1001
 )
 
 // Error represents a structured error used across HydrAIDE operations.
