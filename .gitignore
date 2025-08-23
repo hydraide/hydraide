@@ -42,5 +42,4 @@ vendor/
 # ---- Environment files ----
 .env
 
-db/
 fallback.log
