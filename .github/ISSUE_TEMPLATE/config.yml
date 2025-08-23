@@ -6,3 +6,6 @@ contact_links:
   - name: "🛠 Active Contributor Guidelines"
     url: https://github.com/hydraide/hydraide/blob/main/CONTRIBUTING.md
     about: Already part of the team? Learn how we work triage, labels, review cycles and code expectations.
+  - name: "💬 Discussion / RFC / Idea"
+    url: https://github.com/hydraide/hydraide/discussions/new/choose
+    about: Start an open discussion, propose a direction, or ask for feedback on architecture, design, or strategy.
