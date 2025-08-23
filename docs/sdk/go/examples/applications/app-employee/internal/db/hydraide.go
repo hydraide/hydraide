@@ -36,10 +36,12 @@ func Init() {
 	// Define the Hydraide server(s) to connect to.
 	servers := []*client.Server{
 		{
-			Host:         host,
-			FromIsland:   1,
-			ToIsland:     1000,
-			CertFilePath: certPath,
+			Host:          host,
+			FromIsland:    1,
+			ToIsland:      1000,
+			CACrtPath:     `C:\mnt\hydraide\certificate\ca.crt`,     // CA certificate
+			ClientCrtPath: `C:\mnt\hydraide\certificate\client.crt`, // Client certificate
+			ClientKeyPath: `C:\mnt\hydraide\certificate\client.key`, // Client private key
 		},
 	}
 
