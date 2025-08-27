@@ -2532,24 +2532,16 @@ func (h *hydraidego) Subscribe(ctx context.Context, swampName name.Name, getExis
 		})
 
 		if err != nil {
+			// only server-side errors are handled here
 			if s, ok := status.FromError(err); ok {
 				switch s.Code() {
-				case codes.Aborted:
-					// HydrAIDE server is shutting down
-					return NewError(ErrorShuttingDown, errorMessageShuttingDown)
 				case codes.Unavailable:
 					return NewError(ErrCodeConnectionError, errorMessageConnectionError)
 				case codes.DeadlineExceeded:
 					return NewError(ErrCodeCtxTimeout, errorMessageCtxTimeout)
-				case codes.InvalidArgument:
-					return NewError(ErrCodeInvalidArgument, errorMessageInvalidArgument)
 				case codes.Internal:
 					return NewError(ErrCodeInternalDatabaseError, fmt.Sprintf("%s: %v", errorMessageInternalError, s.Message()))
-				default:
-					return NewError(ErrCodeUnknown, fmt.Sprintf("%s: %v", errorMessageUnknown, err))
 				}
-			} else {
-				return NewError(ErrCodeUnknown, fmt.Sprintf("%s: %v", errorMessageUnknown, err))
 			}
 		}
 
