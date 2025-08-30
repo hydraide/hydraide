@@ -42,6 +42,18 @@ var updateCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
+		// Check if any instances exist
+		instances, err := metaInterface.GetAllInstances()
+		if err != nil {
+			fmt.Printf("Error while retrieving instances: %v\n", err)
+			os.Exit(1)
+		}
+		if len(instances) == 0 {
+			fmt.Println("No HydrAIDE instances found.")
+			fmt.Println("Use 'hydraidectl init' to create and initialize an instance before running update.")
+			return
+		}
+
 		// Load instance metadata
 		instanceMeta, err := metaInterface.GetInstance(updateInstance)
 		if err != nil {
