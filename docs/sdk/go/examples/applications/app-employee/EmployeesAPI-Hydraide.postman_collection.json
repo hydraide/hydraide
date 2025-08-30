@@ -1,0 +1,219 @@
+{
+	"info": {
+		"_postman_id": "4b03aff2-2623-4217-8963-3fa3851c0de4",
+		"name": "EmployeesAPI-Hydraide",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "47299412"
+	},
+	"item": [
+		{
+			"name": "CREATE",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"firstName\": \"mock\",\r\n    \"lastName\": \"arch\",\r\n    \"email\": \"mockarch@example.com\",\r\n    \"position\": \"Software Developer\"\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:8080/employees/",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"employees",
+						""
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "READ",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "GET",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"firstName\": \"mock\",\r\n    \"lastName\": \"arch\",\r\n    \"email\": \"mockarch@example.com\",\r\n    \"position\": \"Software Developer\"\r\n}"
+				},
+				"url": {
+					"raw": "http://localhost:8080/employees/emp-6d9bc1e5-5d55-43ee-af74-454dd45a6f46",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"employees",
+						"emp-6d9bc1e5-5d55-43ee-af74-454dd45a6f46"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "UPDATE",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "PUT",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n \r\n    \"email\": \"mockarch@example.net\"\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:8080/employees/emp-f218c859-a27e-46e3-8ee9-99f4f1d3bffc",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"employees",
+						"emp-f218c859-a27e-46e3-8ee9-99f4f1d3bffc"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "DELETE",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "DELETE",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n \r\n    \"email\": \"mockarch@example.net\"\r\n}"
+				},
+				"url": {
+					"raw": "http://localhost:8080/employees/emp-863d6cb8-ed6a-4d09-a2ac-aa9152121358",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"employees",
+						"emp-863d6cb8-ed6a-4d09-a2ac-aa9152121358"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Bulk Create",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "[\r\n    {\r\n        \"firstName\": \"Jane\",\r\n        \"lastName\": \"Doe\",\r\n        \"email\": \"jane.doe@example.com\",\r\n        \"position\": \"Software Developer\"\r\n    },\r\n    {\r\n        \"firstName\": \"John\",\r\n        \"lastName\": \"Smith\",\r\n        \"email\": \"john.smith@example.com\",\r\n        \"position\": \"QA Engineer\"\r\n    }\r\n]",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:8080/employees/bulk",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"employees",
+						"bulk"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Bulk Update ",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "PUT",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "[\r\n    {\r\n        \"id\": \"emp-175c6c58-495c-47ea-a939-26de883fba0e\",\r\n        \"position\": \"Senior--------------------------------------------- Project Manager\"\r\n    },\r\n    {\r\n        \"id\": \"emp-fda362d6-64ae-42c4-9fa9-5b67de1e02ca\",\r\n        \"isActive\": false\r\n    }\r\n]",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:8080/employees/bulk",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"employees",
+						"bulk"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "KUDOS",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "POST",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8080/employees/emp-d6a7ba1e-0493-4b9e-afee-ec574931a758/kudos",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"employees",
+						"emp-d6a7ba1e-0493-4b9e-afee-ec574931a758",
+						"kudos"
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}
