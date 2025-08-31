@@ -29,6 +29,8 @@ Try:
   hydraidectl destroy
   hydraidectl list
   hydraidectl cert
+  hydraidectl service
+  hydraidectl health
 `,
 	Run: func(cmd *cobra.Command, args []string) {
 		_ = cmd.Help()
@@ -40,4 +42,9 @@ func Execute() {
 		fmt.Println("❌ Error:", err)
 		os.Exit(1)
 	}
+}
+
+func init() {
+	// Disable Cobra's automatic "completion" command
+	rootCmd.CompletionOptions.DisableDefaultCmd = true
 }
