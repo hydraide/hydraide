@@ -88,7 +88,7 @@ If the instance is already running, the command does nothing.`,
 				printJsonStart(fmt.Errorf("instance '%s' not found", startInstance))
 				return
 			}
-			fmt.Printf("❌ Instance \"%s\" not found.\nUse `hydraidectl list-instances` to see available instances.\n", startInstance)
+			fmt.Printf("❌ Instance \"%s\" not found.\nUse `hydraidectl list` to see available instances.\n", startInstance)
 			os.Exit(1)
 		}
 
@@ -102,7 +102,7 @@ If the instance is already running, the command does nothing.`,
 		if err != nil {
 			switch {
 			case errors.Is(err, instancerunner.ErrServiceNotFound):
-				fmt.Printf("❌ Instance \"%s\" not found.\nUse `hydraidectl list-instances` to see available instances.\n", startInstance)
+				fmt.Printf("❌ Instance \"%s\" not found.\nUse `hydraidectl list` to see available instances.\n", startInstance)
 				os.Exit(1)
 
 			case errors.Is(err, instancerunner.ErrServiceAlreadyRunning):
