@@ -10,6 +10,22 @@ import "time"
 // This struct demonstrates how to define a model for CatalogCreate.
 // Each field uses `hydraide` tags to indicate its role within the KeyValuePair.
 // All values will be transformed into HydrAIDE-compatible binary format at runtime.
+//
+// !!! Important Note about `omitempty`:
+// In Catalog models, just like in Profile models, **all fields except the key** may include
+// the `hydraide:"...,omitempty"` decorator.
+// - If `omitempty` is present and the field has a zero/empty value, HydrAIDE will completely ignore it.
+// - This means:
+//   - It won’t be uploaded or stored at all,
+//   - It won’t be validated,
+//   - It won’t consume space in memory or on disk.
+// - Typical use: metadata fields like `updatedAt`, `updatedBy` should be omitted when creating a new record
+//   (since at that point only `createdAt` / `createdBy` make sense).
+// - Later updates can fill them when relevant.
+//
+// Example:
+//   UpdatedAt time.Time `hydraide:"updatedAt,omitempty"`
+//   → if zero, it is not stored in HydrAIDE until explicitly set.
 
 type CatalogCreditLog struct {
 	// 🔑 REQUIRED
@@ -68,13 +84,13 @@ type CatalogCreditLog struct {
 	//   ExpireAt: time.Now().UTC().Add(10 * time.Minute)
 	//
 	// If omitted or zero, this Treasure is considered non-expirable.
-	ExpireAt time.Time `hydraide:"expireAt"`
+	ExpireAt time.Time `hydraide:"expireAt,omitempty"`
 
 	// 🧾 OPTIONAL METADATA — useful for tracking/audit purposes
 	// If omitted, these fields will not be included in the stored record.
 
-	CreatedBy string    `hydraide:"createdBy"` // Who created the record
-	CreatedAt time.Time `hydraide:"createdAt"` // When it was created
-	UpdatedBy string    `hydraide:"updatedBy"` // Who last updated it
-	UpdatedAt time.Time `hydraide:"updatedAt"` // When it was last updated
+	CreatedBy string    `hydraide:"createdBy,omitempty"` // Who created the record
+	CreatedAt time.Time `hydraide:"createdAt,omitempty"` // When it was created
+	UpdatedBy string    `hydraide:"updatedBy,omitempty"` // Who last updated it
+	UpdatedAt time.Time `hydraide:"updatedAt,omitempty"` // When it was last updated
 }
