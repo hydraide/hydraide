@@ -5,7 +5,7 @@ minimum_pre_commit_version: "4.0.0"
 repos:
   # general pre-commit hooks, valid for the whole repository
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: v6.0.0
     hooks:
       - id: check-added-large-files
       - id: check-json
@@ -26,7 +26,7 @@ repos:
 
   # pre-commit hooks for the Python SDK
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.12.4
+    rev: v0.12.10
     hooks:
       - id: ruff-check
         files: ^sdk/python/hydraidepy
@@ -35,7 +35,7 @@ repos:
         files: ^sdk/python/hydraidepy
         args: [--config, sdk/python/hydraidepy/pyproject.toml]
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.17.0
+    rev: v1.17.1
     hooks:
       - id: mypy
         pass_filenames: false

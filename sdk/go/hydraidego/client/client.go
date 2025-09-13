@@ -255,7 +255,7 @@ func (c *client) Connect(connectionLog bool) error {
 				grpc.WithKeepaliveParams(keepalive.ClientParameters{
 					Time:                60 * time.Second,
 					Timeout:             10 * time.Second,
-					PermitWithoutStream: false,
+					PermitWithoutStream: true,
 				}),
 			}
 

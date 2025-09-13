@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Size constants for message and fragment sizes
@@ -84,6 +85,15 @@ type Validator interface {
 	// Returns:
 	//   - string: The formatted size (e.g., "10.0MB", "1.5GB")
 	FormatSize(ctx context.Context, bytes int64) string
+
+	// ValidateTimeout validates that a timeout duration is within acceptable bounds.
+	// Parameters:
+	//   - ctx: Context for cancellation and logging
+	//   - name: The name of the timeout parameter (for error messages)
+	//   - timeout: The timeout duration to validate
+	// Returns:
+	//   - error: Any error encountered during validation
+	ValidateTimeout(ctx context.Context, name string, timeout time.Duration) error
 }
 
 // validatorImpl implements the Validator interface.
@@ -301,4 +311,19 @@ func (v *validatorImpl) FormatSize(ctx context.Context, bytes int64) string {
 		return fmt.Sprintf("%.1fKB", float64(bytes)/float64(KB))
 	}
 	return fmt.Sprintf("%dB", bytes)
+}
+
+// ValidateTimeout implements the ValidateTimeout method of the Validator interface.
+// It validates that a timeout duration is within acceptable bounds (1 second to 15 minutes).
+func (v *validatorImpl) ValidateTimeout(ctx context.Context, name string, timeout time.Duration) error {
+	const minTimeout = 1 * time.Second
+	const maxTimeout = 15 * time.Minute
+
+	if timeout < minTimeout {
+		return fmt.Errorf("%s must be at least %v", name, minTimeout)
+	}
+	if timeout > maxTimeout {
+		return fmt.Errorf("%s must not exceed %v", name, maxTimeout)
+	}
+	return nil
 }

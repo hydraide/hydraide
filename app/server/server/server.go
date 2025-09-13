@@ -237,6 +237,12 @@ func (s *server) Start() error {
 			MaxConnectionIdle: 5 * time.Minute,
 		}
 
+		// enforcement policy to prevent clients from sending pings too frequently
+		ep := keepalive.EnforcementPolicy{
+			MinTime:             30 * time.Second, // the minimum time a client should wait before sending a keepalive ping
+			PermitWithoutStream: true,             // allow keepalive pings when there are no active streams
+		}
+
 		// Construct the gRPC server with:
 		// - TLS creds (mTLS)
 		// - Message size limits (protects memory / abuse)
@@ -248,6 +254,7 @@ func (s *server) Start() error {
 			grpc.MaxRecvMsgSize(s.configuration.HydraMaxMessageSize),
 			grpc.UnaryInterceptor(unaryInterceptor), // add the interceptor
 			grpc.KeepaliveParams(kaParams),          // keepalive parameters
+			grpc.KeepaliveEnforcementPolicy(ep),     // enforcement policy
 		)
 
 		// Register the Hydraide gRPC service implementation.

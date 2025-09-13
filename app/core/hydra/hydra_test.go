@@ -3,6 +3,11 @@ package hydra
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"sync"
+	"testing"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/hydraide/hydraide/app/core/filesystem"
 	"github.com/hydraide/hydraide/app/core/hydra/lock"
@@ -11,10 +16,6 @@ import (
 	"github.com/hydraide/hydraide/app/core/settings"
 	"github.com/hydraide/hydraide/app/name"
 	"github.com/stretchr/testify/assert"
-	"log/slog"
-	"sync"
-	"testing"
-	"time"
 )
 
 const (

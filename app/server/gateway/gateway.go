@@ -745,6 +745,17 @@ func (g Gateway) IsSwampExist(_ context.Context, in *hydrapb.IsSwampExistRequest
 
 	_, err := checkSwampName(g.ZeusInterface, in.GetIslandID(), in.SwampName, true)
 	if err != nil {
+		if s, ok := status.FromError(err); ok {
+			switch s.Code() {
+			// The swamp does not exist, but this is not an error in this case
+			case codes.FailedPrecondition:
+				return &hydrapb.IsSwampExistResponse{
+					IsExist: false,
+				}, nil
+			}
+		}
+
+		// there is an error with the swamp name
 		return &hydrapb.IsSwampExistResponse{
 			IsExist: false,
 		}, err

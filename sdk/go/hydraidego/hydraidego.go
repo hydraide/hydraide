@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"strings"
 	"sync"
 	"time"
 
@@ -32,6 +33,7 @@ const (
 	errorMessageKeyAlreadyExists    = "key already exists"
 	errorMessageKeyNotFound         = "key not found"
 	errorMessageConditionNotMet     = "condition not met - the value is"
+	errorMessageShuttingDown        = "HydrAIDE server is shutting down"
 )
 
 const (
@@ -663,6 +665,7 @@ func (h *hydraidego) Unlock(ctx context.Context, key string, lockID string) erro
 // ⚙️ Behavior:
 // - If the Swamp exists → returns (true, nil)
 // - If it never existed or was auto-deleted → returns (false, nil)
+// - If the swamp name was nil, the server returns InvalidArgument and the SDK returns (false, ErrCodeNotFound)
 // - If a server error occurs → returns (false, error)
 //
 // 🚀 This check is extremely fast: O(1) routing + metadata lookup.
@@ -682,6 +685,9 @@ func (h *hydraidego) IsSwampExist(ctx context.Context, swampName name.Name) (boo
 	if err != nil {
 		if s, ok := status.FromError(err); ok {
 			switch s.Code() {
+			case codes.Aborted:
+				// HydrAIDE server is shutting down
+				return false, NewError(ErrorShuttingDown, errorMessageShuttingDown)
 			case codes.Unavailable:
 				return false, NewError(ErrCodeConnectionError, errorMessageConnectionError)
 			case codes.DeadlineExceeded:
@@ -691,7 +697,8 @@ func (h *hydraidego) IsSwampExist(ctx context.Context, swampName name.Name) (boo
 			case codes.InvalidArgument:
 				return false, NewError(ErrCodeNotFound, fmt.Sprintf("%s: %v", errorMessageSwampNameNotCorrect, s.Message()))
 			case codes.FailedPrecondition:
-				return false, NewError(ErrCodeSwampNotFound, fmt.Sprintf("%s: %v", errorMessageSwampNotFound, s.Message()))
+				// this is not an error, just means swamp does not exist
+				return false, nil
 			default:
 				return false, NewError(ErrCodeUnknown, fmt.Sprintf("%s: %v", errorMessageUnknown, err))
 			}
@@ -748,6 +755,9 @@ func (h *hydraidego) IsKeyExists(ctx context.Context, swampName name.Name, key s
 	if err != nil {
 		if s, ok := status.FromError(err); ok {
 			switch s.Code() {
+			case codes.Aborted:
+				// HydrAIDE server is shutting down
+				return false, NewError(ErrorShuttingDown, errorMessageShuttingDown)
 			case codes.Unavailable:
 				return false, NewError(ErrCodeConnectionError, errorMessageConnectionError)
 			case codes.DeadlineExceeded:
@@ -868,6 +878,9 @@ func (h *hydraidego) CatalogCreate(ctx context.Context, swampName name.Name, mod
 	if err != nil {
 		if s, ok := status.FromError(err); ok {
 			switch s.Code() {
+			case codes.Aborted:
+				// HydrAIDE server is shutting down
+				return NewError(ErrorShuttingDown, errorMessageShuttingDown)
 			case codes.Unavailable:
 				return NewError(ErrCodeConnectionError, errorMessageConnectionError)
 			case codes.DeadlineExceeded:
@@ -981,6 +994,9 @@ func (h *hydraidego) CatalogCreateMany(ctx context.Context, swampName name.Name,
 	if err != nil {
 		if s, ok := status.FromError(err); ok {
 			switch s.Code() {
+			case codes.Aborted:
+				// HydrAIDE server is shutting down
+				return NewError(ErrorShuttingDown, errorMessageShuttingDown)
 			case codes.Unavailable:
 				return NewError(ErrCodeConnectionError, errorMessageConnectionError)
 			case codes.DeadlineExceeded:
@@ -1134,6 +1150,9 @@ func (h *hydraidego) CatalogCreateManyToMany(ctx context.Context, request []*Cat
 		if err != nil {
 			if s, ok := status.FromError(err); ok {
 				switch s.Code() {
+				case codes.Aborted:
+					// HydrAIDE server is shutting down
+					return NewError(ErrorShuttingDown, errorMessageShuttingDown)
 				case codes.Unavailable:
 					return NewError(ErrCodeConnectionError, errorMessageConnectionError)
 				case codes.DeadlineExceeded:
@@ -1391,6 +1410,9 @@ func (h *hydraidego) CatalogUpdate(ctx context.Context, swampName name.Name, mod
 	if err != nil {
 		if s, ok := status.FromError(err); ok {
 			switch s.Code() {
+			case codes.Aborted:
+				// HydrAIDE server is shutting down
+				return NewError(ErrorShuttingDown, errorMessageShuttingDown)
 			case codes.Unavailable:
 				return NewError(ErrCodeConnectionError, errorMessageConnectionError)
 			case codes.DeadlineExceeded:
@@ -1488,6 +1510,9 @@ func (h *hydraidego) CatalogUpdateMany(ctx context.Context, swampName name.Name,
 	if err != nil {
 		if s, ok := status.FromError(err); ok {
 			switch s.Code() {
+			case codes.Aborted:
+				// HydrAIDE server is shutting down
+				return NewError(ErrorShuttingDown, errorMessageShuttingDown)
 			case codes.Unavailable:
 				return NewError(ErrCodeConnectionError, errorMessageConnectionError)
 			case codes.DeadlineExceeded:
@@ -1823,6 +1848,9 @@ func (h *hydraidego) CatalogSave(ctx context.Context, swampName name.Name, model
 		// Translate gRPC or Hydra-specific error into user-friendly error
 		if s, ok := status.FromError(err); ok {
 			switch s.Code() {
+			case codes.Aborted:
+				// HydrAIDE server is shutting down
+				return StatusUnknown, NewError(ErrorShuttingDown, errorMessageShuttingDown)
 			case codes.Unavailable:
 				return StatusUnknown, NewError(ErrCodeConnectionError, errorMessageConnectionError)
 			case codes.DeadlineExceeded:
@@ -1914,6 +1942,9 @@ func (h *hydraidego) CatalogSaveMany(ctx context.Context, swampName name.Name, m
 	if err != nil {
 		if s, ok := status.FromError(err); ok {
 			switch s.Code() {
+			case codes.Aborted:
+				// HydrAIDE server is shutting down
+				return NewError(ErrorShuttingDown, errorMessageShuttingDown)
 			case codes.Unavailable:
 				return NewError(ErrCodeConnectionError, errorMessageConnectionError)
 			case codes.DeadlineExceeded:
@@ -2052,6 +2083,9 @@ func (h *hydraidego) CatalogSaveManyToMany(ctx context.Context, request []*Catal
 			// Map gRPC-level errors to internal codes
 			if s, ok := status.FromError(err); ok {
 				switch s.Code() {
+				case codes.Aborted:
+					// HydrAIDE server is shutting down
+					return NewError(ErrorShuttingDown, errorMessageShuttingDown)
 				case codes.Unavailable:
 					return NewError(ErrCodeConnectionError, errorMessageConnectionError)
 				case codes.DeadlineExceeded:
@@ -2153,24 +2187,7 @@ func (h *hydraidego) CatalogShiftExpired(ctx context.Context, swampName name.Nam
 
 	// Handle gRPC or internal errors with detailed messages
 	if err != nil {
-
-		if s, ok := status.FromError(err); ok {
-			switch s.Code() {
-			case codes.Unavailable:
-				return NewError(ErrCodeConnectionError, errorMessageConnectionError)
-			case codes.DeadlineExceeded:
-				return NewError(ErrCodeCtxTimeout, errorMessageCtxTimeout)
-			case codes.Canceled:
-				return NewError(ErrCodeCtxClosedByClient, errorMessageCtxClosedByClient)
-			case codes.Internal:
-				return NewError(ErrCodeInternalDatabaseError, fmt.Sprintf("%s: %v", errorMessageInternalError, s.Message()))
-			default:
-				return NewError(ErrCodeUnknown, fmt.Sprintf("%s: %v", errorMessageUnknown, err))
-			}
-		}
-
-		// Non-gRPC error
-		return NewError(ErrCodeUnknown, fmt.Sprintf("%s: %v", errorMessageUnknown, err))
+		return errorHandler(err)
 	}
 
 	// Process response and trigger iterator if defined
@@ -2248,6 +2265,9 @@ func (h *hydraidego) ProfileSave(ctx context.Context, swampName name.Name, model
 	if err != nil {
 		if s, ok := status.FromError(err); ok {
 			switch s.Code() {
+			case codes.Aborted:
+				// HydrAIDE server is shutting down
+				return NewError(ErrorShuttingDown, errorMessageShuttingDown)
 			case codes.Unavailable:
 				return NewError(ErrCodeConnectionError, errorMessageConnectionError)
 			case codes.DeadlineExceeded:
@@ -2311,6 +2331,9 @@ func (h *hydraidego) ProfileRead(ctx context.Context, swampName name.Name, model
 		// Translate server-side or network error to client-side semantics
 		if s, ok := status.FromError(err); ok {
 			switch s.Code() {
+			case codes.Aborted:
+				// HydrAIDE server is shutting down
+				return NewError(ErrorShuttingDown, errorMessageShuttingDown)
 			case codes.Unavailable:
 				return NewError(ErrCodeConnectionError, errorMessageConnectionError)
 			case codes.DeadlineExceeded:
@@ -2383,6 +2406,9 @@ func (h *hydraidego) Count(ctx context.Context, swampName name.Name) (int32, err
 	if err != nil {
 		if s, ok := status.FromError(err); ok {
 			switch s.Code() {
+			case codes.Aborted:
+				// HydrAIDE server is shutting down
+				return 0, NewError(ErrorShuttingDown, errorMessageShuttingDown)
 			case codes.Unavailable:
 				return 0, NewError(ErrCodeConnectionError, errorMessageConnectionError)
 			case codes.DeadlineExceeded:
@@ -2507,21 +2533,16 @@ func (h *hydraidego) Subscribe(ctx context.Context, swampName name.Name, getExis
 		})
 
 		if err != nil {
+			// only server-side errors are handled here
 			if s, ok := status.FromError(err); ok {
 				switch s.Code() {
 				case codes.Unavailable:
 					return NewError(ErrCodeConnectionError, errorMessageConnectionError)
 				case codes.DeadlineExceeded:
 					return NewError(ErrCodeCtxTimeout, errorMessageCtxTimeout)
-				case codes.InvalidArgument:
-					return NewError(ErrCodeInvalidArgument, errorMessageInvalidArgument)
 				case codes.Internal:
 					return NewError(ErrCodeInternalDatabaseError, fmt.Sprintf("%s: %v", errorMessageInternalError, s.Message()))
-				default:
-					return NewError(ErrCodeUnknown, fmt.Sprintf("%s: %v", errorMessageUnknown, err))
 				}
-			} else {
-				return NewError(ErrCodeUnknown, fmt.Sprintf("%s: %v", errorMessageUnknown, err))
 			}
 		}
 
@@ -2559,6 +2580,9 @@ func (h *hydraidego) Subscribe(ctx context.Context, swampName name.Name, getExis
 	if err != nil {
 		if s, ok := status.FromError(err); ok {
 			switch s.Code() {
+			case codes.Aborted:
+				// HydrAIDE server is shutting down
+				return NewError(ErrorShuttingDown, errorMessageShuttingDown)
 			case codes.Unavailable:
 				return NewError(ErrCodeConnectionError, errorMessageConnectionError)
 			case codes.DeadlineExceeded:
@@ -4674,10 +4698,6 @@ func convertCatalogModelToKeyValuePair(model any) (*hydraidepbgo.KeyValuePair, e
 		return nil, errors.New("input must be a pointer to a struct")
 	}
 
-	// This flag tracks whether any value has been set.
-	// If no value is provided (only key or metadata), we'll later set VoidVal = true.
-	valueVoid := true
-
 	// Initialize the KeyValuePair that will hold the final encoded output
 	kvPair := &hydraidepbgo.KeyValuePair{}
 
@@ -4689,17 +4709,6 @@ func convertCatalogModelToKeyValuePair(model any) (*hydraidepbgo.KeyValuePair, e
 
 		field := t.Field(i)
 
-		// Check if the field has a `hydraide:"omitempty"` tag,
-		// and skip it if the value is considered "empty" (zero, nil, blank, etc.)
-		if tag, ok := field.Tag.Lookup(tagHydrAIDE); ok && tag == tagOmitempty {
-
-			value := v.Field(i)
-			if isFieldEmpty(value) {
-				continue
-			}
-
-		}
-
 		// Check if the current field is marked as the `key` field (via `hydraide:"key"` tag)
 		if key, ok := field.Tag.Lookup(tagHydrAIDE); ok && key == tagKey {
 
@@ -4710,7 +4719,6 @@ func convertCatalogModelToKeyValuePair(model any) (*hydraidepbgo.KeyValuePair, e
 			if value.Kind() == reflect.String && value.String() != "" {
 				// Found the key — assign it to the KeyValuePair
 				kvPair.Key = value.String()
-				valueVoid = false
 				continue
 			}
 
@@ -4721,9 +4729,20 @@ func convertCatalogModelToKeyValuePair(model any) (*hydraidepbgo.KeyValuePair, e
 		// Check if the current field is tagged as the `value` field (via `hydraide:"value"`)
 		// This field holds the actual value of the Treasure.
 		// We detect its type using reflection and populate the corresponding proto field in KeyValuePair.
-		if key, ok := field.Tag.Lookup(tagHydrAIDE); ok && key == tagValue {
+		if key, ok := field.Tag.Lookup(tagHydrAIDE); ok && strings.Contains(key, tagValue) {
 
 			value := v.Field(i)
+			isEmpty := isFieldEmpty(value)
+			if isEmpty {
+				// This flag tracks whether any value has been set.
+				// If no value is provided (only key or metadata), we'll later set VoidVal = true.
+				valueVoid := true
+				kvPair.VoidVal = &valueVoid
+			}
+			if strings.Contains(key, tagOmitempty) && isEmpty {
+				// If omitempty is set and the field is empty, skip setting the value
+				continue
+			}
 
 			// convert the value to KeyValuePair
 			if err := convertFieldToKvPair(value, kvPair); err != nil {
@@ -4738,34 +4757,52 @@ func convertCatalogModelToKeyValuePair(model any) (*hydraidepbgo.KeyValuePair, e
 		// - Must be of type `time.Time`
 		// - Must not be the zero time
 		// - Automatically converted to a `timestamppb.Timestamp` for protobuf
-		if key, ok := field.Tag.Lookup(tagHydrAIDE); ok && key == tagExpireAt {
+		if key, ok := field.Tag.Lookup(tagHydrAIDE); ok && strings.Contains(key, tagExpireAt) {
+
+			expireAt := time.Time{}
 			value := v.Field(i)
+
+			if strings.Contains(key, tagOmitempty) && isFieldEmpty(value) {
+				// If omitempty is set and the field is empty, skip setting expireAt
+				continue
+			}
+
 			if value.Kind() != reflect.Struct || value.Type() != reflect.TypeOf(time.Time{}) {
 				return nil, errors.New("expireAt field must be a time.Time")
 			}
-			expireAt := value.Interface().(time.Time).UTC()
+			expireAt = value.Interface().(time.Time).UTC()
 			if expireAt.IsZero() {
 				return nil, errors.New("expireAt field must be a non-zero time.Time")
 			}
+			expireAt = value.Interface().(time.Time).UTC()
+
 			kvPair.ExpiredAt = timestamppb.New(expireAt)
-			valueVoid = false
 			continue
+
 		}
 
 		// Process the `createdBy` field (tagged with `hydraide:"createdBy"`).
 		// Optional metadata indicating who or what created the Treasure.
 		// - Must be of type `string`
 		// - Empty values are ignored
-		if key, ok := field.Tag.Lookup(tagHydrAIDE); ok && key == tagCreatedBy {
+		if key, ok := field.Tag.Lookup(tagHydrAIDE); ok && strings.Contains(key, tagCreatedBy) {
+
 			value := v.Field(i)
+
+			if strings.Contains(key, tagOmitempty) && isFieldEmpty(value) {
+				// If omitempty is set and the field is empty, skip setting createdBy
+				continue
+			}
+
 			if value.Kind() != reflect.String {
 				return nil, errors.New("createdBy field must be a string")
 			}
+
 			if value.String() != "" {
 				createdBy := value.String()
 				kvPair.CreatedBy = &createdBy
-				valueVoid = false
 			}
+
 			continue
 		}
 
@@ -4774,8 +4811,14 @@ func convertCatalogModelToKeyValuePair(model any) (*hydraidepbgo.KeyValuePair, e
 		// - Must be of type `time.Time`
 		// - Must not be zero
 		// - Converted to protobuf-compatible timestamp
-		if key, ok := field.Tag.Lookup(tagHydrAIDE); ok && key == tagCreatedAt {
+		if key, ok := field.Tag.Lookup(tagHydrAIDE); ok && strings.Contains(key, tagCreatedAt) {
+
 			value := v.Field(i)
+
+			if strings.Contains(key, tagOmitempty) && isFieldEmpty(value) {
+				continue
+			}
+
 			if value.Kind() != reflect.Struct || value.Type() != reflect.TypeOf(time.Time{}) {
 				return nil, errors.New("createdAt field must be a time.Time")
 			}
@@ -4784,7 +4827,6 @@ func convertCatalogModelToKeyValuePair(model any) (*hydraidepbgo.KeyValuePair, e
 				return nil, errors.New("createdAt field must be a non-zero time.Time")
 			}
 			kvPair.CreatedAt = timestamppb.New(createdAt)
-			valueVoid = false
 			continue
 		}
 
@@ -4792,15 +4834,21 @@ func convertCatalogModelToKeyValuePair(model any) (*hydraidepbgo.KeyValuePair, e
 		// Optional metadata indicating who or what last updated the Treasure.
 		// - Must be of type `string`
 		// - Ignored if empty
-		if key, ok := field.Tag.Lookup(tagHydrAIDE); ok && key == tagUpdatedBy {
+		if key, ok := field.Tag.Lookup(tagHydrAIDE); ok && strings.Contains(key, tagUpdatedBy) {
+
 			value := v.Field(i)
+
+			if strings.Contains(key, tagOmitempty) && isFieldEmpty(value) {
+				// If omitempty is set and the field is empty, skip setting updatedBy
+				continue
+			}
+
 			if value.Kind() != reflect.String {
 				return nil, errors.New("updatedBy field must be a string")
 			}
 			if value.String() != "" {
 				updatedBy := value.String()
 				kvPair.UpdatedBy = &updatedBy
-				valueVoid = false
 			}
 			continue
 		}
@@ -4810,8 +4858,15 @@ func convertCatalogModelToKeyValuePair(model any) (*hydraidepbgo.KeyValuePair, e
 		// - Must be of type `time.Time`
 		// - Must be non-zero
 		// - Automatically converted to a `timestamppb.Timestamp` for protobuf transmission
-		if key, ok := field.Tag.Lookup(tagHydrAIDE); ok && key == tagUpdatedAt {
+		if key, ok := field.Tag.Lookup(tagHydrAIDE); ok && strings.Contains(key, tagUpdatedAt) {
+
 			value := v.Field(i)
+
+			if strings.Contains(key, tagOmitempty) && isFieldEmpty(value) {
+				// If omitempty is set and the field is empty, skip setting updatedAt
+				continue
+			}
+
 			if value.Kind() != reflect.Struct || value.Type() != reflect.TypeOf(time.Time{}) {
 				return nil, errors.New("updatedAt field must be a time.Time")
 			}
@@ -4820,7 +4875,6 @@ func convertCatalogModelToKeyValuePair(model any) (*hydraidepbgo.KeyValuePair, e
 				return nil, errors.New("updatedAt field must be a non-zero time.Time")
 			}
 			kvPair.UpdatedAt = timestamppb.New(updatedAt)
-			valueVoid = false
 			continue
 		}
 
@@ -4830,12 +4884,6 @@ func convertCatalogModelToKeyValuePair(model any) (*hydraidepbgo.KeyValuePair, e
 	// This is a hard requirement — all Treasures in HydrAIDE must have a key.
 	if kvPair.Key == "" {
 		return nil, errors.New("key field not found")
-	}
-
-	// If no value was set during processing, mark the KeyValuePair as void.
-	// This tells HydrAIDE that the record has no explicit value (e.g. it's a flag, or purely metadata).
-	if valueVoid {
-		kvPair.VoidVal = &valueVoid
 	}
 
 	// Return the fully constructed KeyValuePair for insertion into the system.
@@ -5114,7 +5162,7 @@ func convertProfileModelToKeyValuePair(model any) ([]*hydraidepbgo.KeyValuePair,
 	// check if the model is not a pointer
 	v := reflect.ValueOf(model)
 
-	// ellenőrizzük, hogy a model egy pointer-e és egy struct-e
+	// check if the model is a pointer and a struct
 	if v.Kind() != reflect.Ptr || v.Elem().Kind() != reflect.Struct {
 		return nil, errors.New("input must be a pointer to a struct")
 	}
@@ -5124,7 +5172,7 @@ func convertProfileModelToKeyValuePair(model any) ([]*hydraidepbgo.KeyValuePair,
 	v = v.Elem()
 	t := v.Type()
 
-	// ellenőrizzük és kiszedjük a szükséges mezőket és azok értékeit
+	// check and extract the required fields and their values
 	for i := 0; i < t.NumField(); i++ {
 
 		field := t.Field(i)
@@ -5369,6 +5417,9 @@ func errorHandler(err error) error {
 
 	if s, ok := status.FromError(err); ok {
 		switch s.Code() {
+		case codes.Aborted:
+			// HydrAIDE server is shutting down
+			return NewError(ErrorShuttingDown, errorMessageShuttingDown)
 		case codes.Unavailable:
 			return NewError(ErrCodeConnectionError, errorMessageConnectionError)
 		case codes.DeadlineExceeded:
@@ -5425,6 +5476,7 @@ const (
 	ErrCodeInvalidModel
 	ErrConditionNotMet
 	ErrCodeUnknown
+	ErrorShuttingDown ErrorCode = 1001
 )
 
 // Error represents a structured error used across HydrAIDE operations.

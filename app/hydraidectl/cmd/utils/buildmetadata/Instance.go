@@ -106,6 +106,13 @@ func New(fs filesystem.FileSystem) (MetadataStore, error) {
 		}
 	}
 
+	// if the metadata file does not exist, create it
+	if _, err := fs.Stat(ctx, configFilePath); os.IsNotExist(err) {
+		if err := fs.WriteFile(ctx, configFilePath, []byte("{}"), 0640); err != nil {
+			return nil, fmt.Errorf("failed to create metadata file: %w", err)
+		}
+	}
+
 	return &storeImpl{
 		fs:             fs,
 		configFilePath: configFilePath,

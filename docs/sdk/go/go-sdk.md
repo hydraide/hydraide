@@ -285,11 +285,28 @@ This model fits best when you need to:
 * 🧩 Can use metadata decorators: `createdBy`, `createdAt`, `updatedBy`, `updatedAt`
 * 🧪 Index-based read operations with configurable order & limit
 * 🧠 Ideal for structured slices, trees, or versioned record lists
-  🔄 Fully reactive: supports real-time streaming via Subscribe()
+* 🔄 Fully reactive: supports real-time streaming via Subscribe()
+* 🆕 Supports `omitempty` decorator for all fields except the `key`
 
-> 💡 Catalog Swamps are the most reactive data structures in HydrAIDE.
-> They are the primary targets for Subscribe() operations, making it easy to listen to individual keys (Treasure-level events), filtered value changes, or full Swamp activity.
-> This makes Catalogs ideal for building live dashboards, notification systems, audit pipelines, and streaming analytics.
+#### 🆕 About `omitempty`
+
+In Catalog Swamps, every field **except the key** can use the `omitempty` decorator in its `hydraide` tag.  
+
+* If a field is tagged with `omitempty` and its value is empty/zero/nil:
+  * It will **not** be uploaded to HydrAIDE,
+  * It will **not** be validated,
+  * It will **not** be stored in memory or on disk.  
+* This is especially useful for metadata fields like `updatedAt` and `updatedBy`, which should remain absent when creating a new record.  
+* Later, when updates occur, these fields can be set and will then be stored normally.
+
+👉 Example:
+
+```go
+UpdatedBy string    `hydraide:"updatedBy,omitempty"`
+UpdatedAt time.Time `hydraide:"updatedAt,omitempty"`
+````
+
+If these fields are empty during initial creation, they will simply not exist in HydrAIDE.
 
 #### 📌 Common Use Cases
 
@@ -310,6 +327,8 @@ user := &CatalogModelUser{
 	},
 	CreatedBy: "auth-service",
 	CreatedAt: time.Now(),
+	UpdatedBy: "",                 // will be ignored, due to omitempty
+	UpdatedAt: time.Time{},        // will be ignored, due to omitempty
 }
 
 _ = user.Save(repo) // Upserts the record
@@ -322,6 +341,9 @@ This stores a Treasure in:
 ```
 
 HydrAIDE will track when and who wrote the data, and can later stream or react to changes over time.
+Because of `omitempty`, `UpdatedBy` and `UpdatedAt` are not stored until they actually hold values.
+
+--- 
 
 #### 🔎 Indexed Reads
 

@@ -127,6 +127,7 @@ Starts a registered HydrAIDE instance by name. Requires `sudo`.
 * `--instance` / `-i` (required) — instance name.  
 * `--json` / `-j` — produce structured JSON output.  
 * `--output` / `-o` — output format (e.g. `json`).
+* `--cmd-timeout` — command execution timeout (e.g., 20s).
 
 **CLI examples**
 ```bash
@@ -181,6 +182,8 @@ Stops a specific instance cleanly. Also requires `sudo`.
 * `--instance` / `-i` (required) — instance name.  
 * `--json` / `-j` — produce structured JSON output.  
 * `--output` / `-o` — output format.
+* `--cmd-timeout` — command execution timeout (e.g., 20s). This value must never be shorter than the graceful timeout.
+* `--graceful-timeout` — perform a graceful shutdown (default 60s if not specified). It is important to always allow enough time for HydrAIDE to shut down so it can flush the last data from memory to disk. If this timeout is too short, it may lead to data loss. It should never be set below 60 seconds.
 
 **CLI examples**
 ```bash
@@ -232,6 +235,8 @@ Combines `stop` then `start`. Requires `sudo`.
 * `--instance` / `-i` (required) — instance name.  
 * `--json` / `-j` — produce structured JSON output.  
 * `--output` / `-o` — output format.
+* `--cmd-timeout` — command execution timeout (e.g., 20s). This value must never be shorter than the graceful timeout.
+* `--graceful-timeout` — perform a graceful shutdown (default 60s if not specified). It is important to always allow enough time for HydrAIDE to shut down so it can flush the last data from memory to disk. If this timeout is too short, it may lead to data loss. It should never be set below 60 seconds.
 
 **CLI examples**
 ```bash

@@ -239,6 +239,7 @@ func (s *settings) GetBySwampName(swampName name.Name) setting.Setting {
 		CloseAfterIdleSec: time.Duration(5) * time.Second,
 		WriteIntervalSec:  time.Duration(1) * time.Second,
 		MaxFileSizeByte:   65536, // 64KB
+		InMemory:          false,
 	})
 
 }
@@ -312,6 +313,7 @@ func (s *settings) loadSettingsFromFilesystem() error {
 					CloseAfterIdleSec: time.Duration(pattern.CloseAfterIdleSec) * time.Second,
 					WriteIntervalSec:  time.Duration(pattern.WriteIntervalSec) * time.Second,
 					MaxFileSizeByte:   pattern.MaxFileSizeByte,
+					InMemory:          pattern.InMemory,
 				})
 
 			}
