@@ -20,6 +20,7 @@ require (
 )
 
 require (
+	github.com/Masterminds/semver/v3 v3.4.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/frankban/quicktest v1.14.6 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
