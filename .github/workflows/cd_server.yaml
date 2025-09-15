@@ -228,7 +228,7 @@ jobs:
         run: cp Dockerfile docker-context/
 
       - name: Install cosign
-        uses: sigstore/cosign-installer@v3.9.2
+        uses: sigstore/cosign-installer@v3.10.0
         with:
           cosign-release: "v2.5.3"
 
