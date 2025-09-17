@@ -1,6 +1,3 @@
-//go:build ignore
-// +build ignore
-
 // This file provides an example of a complex Profile-style model used with ProfileSave(), ProfileLoad(), etc.
 //
 // In Profile mode, each field in the struct is stored as an independent Treasure
@@ -23,8 +20,7 @@ import "time"
 //
 // ✅ All supported types are allowed:
 //   - Primitives: string, bool, int8–64, uint8–64, float32, float64
-//   - Structs (encoded with GOB)
-//   - Pointers to struct
+//   - Pointers to struct (encoded with GOB)
 //
 // ✅ If a field is tagged with `hydraide:"omitempty"`, it will be skipped during save if it's empty.
 //
@@ -48,10 +44,22 @@ type ProfileUser struct {
 	Email string
 
 	// Optional fields — stored only if non-empty
-	Phone string `hydraide:"omitempty"`
-	Age   uint8  `hydraide:"omitempty"` // Use the smallest integer types possible
+	Phone    string   `hydraide:"omitempty"`
+	Age      uint8    `hydraide:"omitempty"` // Use the smallest integer types possible
+	Services []string `hydraide:"omitempty"`
+
+	// Struct pointer
+	Address *Address `hydraide:"omitempty"` // Pointer to struct, encoded with GOB
 
 	// Metadata for tracking lifecycle of the entire profile
 	CreatedAt time.Time
 	UpdatedAt time.Time
+}
+
+type Address struct {
+	Street  string
+	City    string
+	State   string
+	ZipCode string
+	Country string
 }

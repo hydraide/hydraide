@@ -10,22 +10,6 @@ import "time"
 // This struct demonstrates how to define a model for CatalogCreate.
 // Each field uses `hydraide` tags to indicate its role within the KeyValuePair.
 // All values will be transformed into HydrAIDE-compatible binary format at runtime.
-//
-// !!! Important Note about `omitempty`:
-// In Catalog models, just like in Profile models, **all fields except the key** may include
-// the `hydraide:"...,omitempty"` decorator.
-// - If `omitempty` is present and the field has a zero/empty value, HydrAIDE will completely ignore it.
-// - This means:
-//   - It won’t be uploaded or stored at all,
-//   - It won’t be validated,
-//   - It won’t consume space in memory or on disk.
-// - Typical use: metadata fields like `updatedAt`, `updatedBy` should be omitted when creating a new record
-//   (since at that point only `createdAt` / `createdBy` make sense).
-// - Later updates can fill them when relevant.
-//
-// Example:
-//   UpdatedAt time.Time `hydraide:"updatedAt,omitempty"`
-//   → if zero, it is not stored in HydrAIDE until explicitly set.
 
 type CatalogCreditLog struct {
 	// 🔑 REQUIRED
@@ -36,7 +20,6 @@ type CatalogCreditLog struct {
 	// 📦 OPTIONAL — The value of the Treasure.
 	// Can be:
 	// - Primitive types: string, bool, int8–64, uint8–64, float32, float64
-	// - Structs (encoded via GOB)
 	// - Pointer to struct (also GOB-encoded)
 	//
 	// ⚠️ Use the SMALLEST type possible for space efficiency.
@@ -48,10 +31,10 @@ type CatalogCreditLog struct {
 	//
 	// ❌ This will NOT work:
 	//     Value any `hydraide:"value"`               // ❌ rejected: type unknown at runtime
+	//	   Value MyStruct  `hydraide:"value"`         // ❌ rejected: simple struct value without pointer type
 	//
 	// ✅ This will work:
 	//     Value *MyStruct `hydraide:"value"`         // ✅ pointer to struct
-	//     Value MyStruct  `hydraide:"value"`         // ✅ struct value
 	//     Value string     `hydraide:"value"`        // ✅ primitive
 	//
 	// 💡 If you need to store dynamic or unknown structure data:
@@ -61,11 +44,7 @@ type CatalogCreditLog struct {
 	//         Value []byte `hydraide:"value"`  // custom binary blob
 	//
 	// ❗ HydrAIDE does not support raw interface{} storage — values must always be strongly typed.
-	Log struct {
-		Amount   int16  // ✅ Small integer: better memory & disk usage than int
-		Reason   string // Reason for the credit log (e.g. "bonus")
-		Currency string // Currency ISO code (e.g. "HUF", "EUR")
-	} `hydraide:"value"`
+	Log *Log `hydraide:"value"`
 
 	// ⏳ OPTIONAL
 	// The logical expiration timestamp of this Treasure.
@@ -93,4 +72,10 @@ type CatalogCreditLog struct {
 	CreatedAt time.Time `hydraide:"createdAt,omitempty"` // When it was created
 	UpdatedBy string    `hydraide:"updatedBy,omitempty"` // Who last updated it
 	UpdatedAt time.Time `hydraide:"updatedAt,omitempty"` // When it was last updated
+}
+
+type Log struct {
+	Amount   int16  // ✅ Small integer: better memory & disk usage than int
+	Reason   string // Reason for the credit log (e.g. "bonus")
+	Currency string // Currency ISO code (e.g. "HUF", "EUR")
 }
