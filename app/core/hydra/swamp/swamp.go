@@ -1945,6 +1945,7 @@ func (s *swamp) SaveFunction(t treasure.Treasure, guardID guard.ID) treasure.Tre
 
 		// add treasure to the beaconKey index
 		s.beaconKey.Add(t)
+
 		// add treasure to all other beacons if needed
 		s.addTreasureToBeacons(t)
 		s.sendEventToHydra(t, nil, treasure.StatusNew)
@@ -1964,6 +1965,7 @@ func (s *swamp) SaveFunction(t treasure.Treasure, guardID guard.ID) treasure.Tre
 
 		// beállítjuk az utolsó módosítás dátumát a metában
 		s.metadataInterface.SetUpdatedAt()
+
 		// return with statusNew
 		return treasure.StatusNew
 
