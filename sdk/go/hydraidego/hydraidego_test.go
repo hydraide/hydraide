@@ -582,6 +582,61 @@ func TestCreatedByUpdatedBy(t *testing.T) {
 
 }
 
+func TestIsDeletable(t *testing.T) {
+
+	type IsDeletableProfileTest struct {
+		Name           string
+		DeletableField string `hydraide:"omitempty,deletable"`
+	}
+
+	// elmentünk egy swampba
+	swampName := name.New().Sanctuary("test").Realm("in").Swamp("IsDeletable")
+	defer func() {
+		if err := hydraidegoInterface.Destroy(context.Background(), swampName); err != nil {
+			t.Logf("Cleanup failed: could not destroy swamp %s: %v", swampName.Get(), err)
+		}
+	}()
+
+	// Bounded context for the test call
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// first add a deletable field
+	treasure := &IsDeletableProfileTest{
+		Name:           "test-name",
+		DeletableField: "to-be-deleted",
+	}
+
+	if err := hydraidegoInterface.ProfileSave(ctx, swampName, treasure); err != nil {
+		t.Fatalf("ProfileSave failed: %v", err)
+	}
+
+	// try to get the treasure bac after adding it
+	retrieved := &IsDeletableProfileTest{}
+	if err := hydraidegoInterface.ProfileRead(ctx, swampName, retrieved); err != nil {
+		t.Fatalf("ProfileRead failed: %v", err)
+	}
+
+	assert.Equal(t, treasure.Name, retrieved.Name, "Name should match")
+	assert.Equal(t, treasure.DeletableField, retrieved.DeletableField, "DeletableField should match")
+
+	// try to save again, but without the deletable field
+	treasure.DeletableField = ""
+	if err := hydraidegoInterface.ProfileSave(ctx, swampName, treasure); err != nil {
+		t.Fatalf("ProfileSave (2nd) failed: %v", err)
+	}
+
+	// read back and verify the deletable field is removed
+	retrieved2 := &IsDeletableProfileTest{}
+	if err := hydraidegoInterface.ProfileRead(ctx, swampName, retrieved2); err != nil {
+		t.Fatalf("ProfileRead (2nd) failed: %v", err)
+	}
+
+	assert.Equal(t, treasure.Name, retrieved2.Name, "Name should match after 2nd save")
+	assert.Equal(t, "", retrieved2.DeletableField, "DeletableField should be deleted after 2nd save")
+
+}
+
 type conversionTestCase struct {
 	name     string
 	input    any
