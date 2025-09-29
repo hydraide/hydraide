@@ -546,6 +546,42 @@ func TestIncrementInt8_MetadataOnlyCreate(t *testing.T) {
 	}
 }
 
+func TestCreatedByUpdatedBy(t *testing.T) {
+
+	swamp := newTestSwamp("meta-createdby-updatedby")
+	key := "user-4"
+	userID := "user-42"
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	type CatalogItem struct {
+		Key       string `hydraide:"key"`
+		Value     int    `hydraide:"value"`
+		CreatedBy string `hydraide:"createdBy"`
+		UpdatedBy string `hydraide:"updatedBy"`
+	}
+
+	// Save with CreatedBy and UpdatedBy
+	item := &CatalogItem{
+		Key:       key,
+		Value:     123,
+		CreatedBy: userID,
+		UpdatedBy: userID,
+	}
+
+	_, err := hydraidegoInterface.CatalogSave(ctx, swamp, item)
+	assert.NoError(t, err)
+
+	// Read back and verify fields
+	var out CatalogItem
+	err = hydraidegoInterface.CatalogRead(ctx, swamp, key, &out)
+	assert.NoError(t, err)
+	assert.Equal(t, userID, out.CreatedBy)
+	assert.Equal(t, userID, out.UpdatedBy)
+
+}
+
 type conversionTestCase struct {
 	name     string
 	input    any

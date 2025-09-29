@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -41,6 +42,7 @@ const (
 	tagKey       = "key"
 	tagValue     = "value"
 	tagOmitempty = "omitempty"
+	tagDeletable = "deletable"
 	tagCreatedAt = "createdAt"
 	tagCreatedBy = "createdBy"
 	tagUpdatedAt = "updatedAt"
@@ -1250,6 +1252,8 @@ func (h *hydraidego) CatalogRead(ctx context.Context, swampName name.Name, key s
 			if treasure.IsExist == false {
 				return NewError(ErrCodeNotFound, "key not found")
 			}
+
+			fmt.Printf("Debug: Retrieved treasure %+v", treasure)
 			if convErr := convertProtoTreasureToCatalogModel(treasure, model); convErr != nil {
 				return NewError(ErrCodeInvalidModel, convErr.Error())
 			}
@@ -2244,10 +2248,50 @@ func (h *hydraidego) CatalogShiftExpired(ctx context.Context, swampName name.Nam
 // 💡 Best used for profiles, preferences, system snapshots, or grouped state representations.
 func (h *hydraidego) ProfileSave(ctx context.Context, swampName name.Name, model any) (err error) {
 
-	kvPairs, err := convertProfileModelToKeyValuePair(model)
+	kvPairs, deletableKeys, err := convertProfileModelToKeyValuePair(model)
 
 	if err != nil {
 		return NewError(ErrCodeInvalidModel, err.Error())
+	}
+
+	// if there is at least one deletable key, we need to delete them first
+	// this is to avoid having stale keys in the swamp
+	// e.g. if the model has a field that was previously set, but is now empty and marked as deletable,
+	// we need to delete that key from the swamp to reflect the current state of the model
+	// otherwise, the key would remain in the swamp with its old value, which is not what we want
+	// this ensures that the swamp always reflects the current state of the model accurately
+	if len(deletableKeys) > 0 {
+
+		// Clean up any keys that were marked for deletion (deletable fields)
+		_, err = h.client.GetServiceClient(swampName).Delete(ctx, &hydraidepbgo.DeleteRequest{
+			Swamps: []*hydraidepbgo.DeleteRequest_SwampKeys{
+				{
+					IslandID:  swampName.GetIslandID(h.client.GetAllIslands()),
+					SwampName: swampName.Get(),
+					Keys:      deletableKeys,
+				},
+			},
+		})
+
+		if err != nil {
+			if s, ok := status.FromError(err); ok {
+				switch s.Code() {
+				case codes.Aborted:
+					// HydrAIDE server is shutting down
+					return NewError(ErrorShuttingDown, errorMessageShuttingDown)
+				case codes.Unavailable:
+					return NewError(ErrCodeConnectionError, errorMessageConnectionError)
+				case codes.DeadlineExceeded:
+					return NewError(ErrCodeCtxTimeout, errorMessageCtxTimeout)
+				case codes.Canceled:
+					return NewError(ErrCodeCtxClosedByClient, errorMessageCtxClosedByClient)
+				default:
+					return nil
+				}
+			} else {
+				return nil
+			}
+		}
 	}
 
 	_, err = h.client.GetServiceClient(swampName).Set(ctx, &hydraidepbgo.SetRequest{
@@ -4330,7 +4374,7 @@ type KeyValuesPair struct {
 //	// - domain:openai.com slice will now include 789
 func (h *hydraidego) Uint32SlicePush(ctx context.Context, swampName name.Name, KeyValuesPair []*KeyValuesPair) error {
 
-	keySlices := make([]*hydraidepbgo.KeySlicePair, len(KeyValuesPair))
+	keySlices := make([]*hydraidepbgo.KeySlicePair, 0, len(KeyValuesPair))
 
 	for _, value := range KeyValuesPair {
 		keySlices = append(keySlices, &hydraidepbgo.KeySlicePair{
@@ -4393,7 +4437,7 @@ func (h *hydraidego) Uint32SlicePush(ctx context.Context, swampName name.Name, K
 //	// - Empty Treasures/Swamps are automatically garbage collected
 func (h *hydraidego) Uint32SliceDelete(ctx context.Context, swampName name.Name, KeyValuesPair []*KeyValuesPair) error {
 
-	keySlices := make([]*hydraidepbgo.KeySlicePair, len(KeyValuesPair))
+	keySlices := make([]*hydraidepbgo.KeySlicePair, 0, len(KeyValuesPair))
 
 	for _, value := range KeyValuesPair {
 		keySlices = append(keySlices, &hydraidepbgo.KeySlicePair{
@@ -5156,54 +5200,74 @@ func setProtoTreasureToModel(treasure *hydraidepbgo.Treasure, field reflect.Valu
 
 }
 
-// convertComplexModelToKeyValuePair convert a complex model to a key value pair
-func convertProfileModelToKeyValuePair(model any) ([]*hydraidepbgo.KeyValuePair, error) {
-
-	// check if the model is not a pointer
+// convertProfileModelToKeyValuePair converts a complex model to key-value pairs
+// and collects deletable keys (if tagged with hydraide:"deletable" and empty).
+//
+// This function is used to serialize a Go struct (passed as a pointer) into a slice of HydrAIDE-compatible KeyValuePair messages.
+// It also collects the names of fields that are empty and marked as deletable, so they can be removed from the database.
+//
+// Rules:
+// - The input must be a pointer to a struct, otherwise an error is returned.
+// - For each struct field:
+//   - If the field is empty and tagged with hydraide:"deletable", its name is added to the deleteKeys slice.
+//   - If the field is empty and tagged with hydraide:"omitempty", it is skipped (not saved).
+//   - Otherwise, a KeyValuePair is created for the field and added to the kvPairs slice.
+//
+// - Returns the list of KeyValuePair objects, the list of deletable keys, and an error if any.
+func convertProfileModelToKeyValuePair(model any) ([]*hydraidepbgo.KeyValuePair, []string, error) {
+	// Check if the model is a pointer to a struct
 	v := reflect.ValueOf(model)
-
-	// check if the model is a pointer and a struct
 	if v.Kind() != reflect.Ptr || v.Elem().Kind() != reflect.Struct {
-		return nil, errors.New("input must be a pointer to a struct")
+		return nil, nil, errors.New("input must be a pointer to a struct")
 	}
 
 	var kvPairs []*hydraidepbgo.KeyValuePair
+	var deleteKeys []string
 
 	v = v.Elem()
 	t := v.Type()
 
-	// check and extract the required fields and their values
+	// Iterate over struct fields
 	for i := 0; i < t.NumField(); i++ {
 
 		field := t.Field(i)
+		value := v.Field(i)
 
-		// Skip fields with "omitempty" if they are empty or nil
-		if tag, ok := field.Tag.Lookup(tagHydrAIDE); ok && tag == tagOmitempty {
-			value := v.Field(i)
+		// Parse hydraide tags
+		if tag, ok := field.Tag.Lookup(tagHydrAIDE); ok {
+
+			tags := strings.Split(tag, ",")
+			isOmitempty := slices.Contains(tags, tagOmitempty)
+			isDeletable := slices.Contains(tags, tagDeletable)
+
 			if isFieldEmpty(value) {
-				continue
+				if isDeletable {
+					// If empty and deletable, add to deleteKeys
+					deleteKeys = append(deleteKeys, field.Name)
+					continue
+				}
+				if isOmitempty {
+					// If empty and omitempty, skip saving
+					continue
+				}
 			}
+
 		}
 
+		// Normal KeyValuePair creation
 		kvPair := &hydraidepbgo.KeyValuePair{
 			Key: field.Name,
 		}
 
-		// ellenőrizzük, hogy mi a mező típusa és annak megfelelően beállítjuk a value-t
-		value := v.Field(i)
-
-		// convert to KeyValuePair the value
 		if err := convertFieldToKvPair(value, kvPair); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		kvPairs = append(kvPairs, kvPair)
 
 	}
 
-	// process the value field
-	return kvPairs, nil
-
+	return kvPairs, deleteKeys, nil
 }
 
 func isFieldEmpty(value reflect.Value) bool {
