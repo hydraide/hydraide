@@ -28,10 +28,12 @@ func TestMain(m *testing.M) {
 func setup() {
 
 	server := &client.Server{
-		Host:         os.Getenv("HYDRA_HOST"),
-		FromIsland:   0,
-		ToIsland:     1000,
-		CertFilePath: os.Getenv("HYDRA_CERT"),
+		Host:          os.Getenv("HYDRAIDE_TEST_SERVER"),
+		FromIsland:    0,
+		ToIsland:      1000,
+		CACrtPath:     os.Getenv("HYDRAIDE_CA_CRT"),
+		ClientCrtPath: os.Getenv("HYDRAIDE_CLIENT_CRT"),
+		ClientKeyPath: os.Getenv("HYDRAIDE_CLIENT_KEY"),
 	}
 
 	servers := []*client.Server{server}
@@ -56,12 +58,15 @@ func teardown() {
 	os.Exit(0)
 }
 
+// TestIndex tests the indexing functionality of the Hydrex interface.
+// It saves initial test data, verifies core data and index data retrieval,
+// modifies the data to test index updates, and checks the results accordingly.
 func TestIndex(t *testing.T) {
 
 	testIndexName := "categoryTestIndex"
 	testDomain := "trendizz.com"
 
-	// data to hydrex
+	// Initial test data to save in Hydrex
 	testData := map[string]*CoreData{
 		"category1": {
 			Key:   "category1",
@@ -79,10 +84,10 @@ func TestIndex(t *testing.T) {
 
 	hydrexInterface := New(hydraidegoInterface)
 	hydrexInterface.Save(context.Background(), testIndexName, testDomain, testData)
-	// destroy core data after the test
+	// Destroy core data after the test
 	defer hydrexInterface.Destroy(context.Background(), testIndexName, testDomain)
 
-	// try to get the Core Data
+	// Retrieve and verify the core data
 	coreData := hydrexInterface.GetCoreData(context.Background(), testIndexName, testDomain)
 	assert.Equal(t, len(coreData), 3)
 
@@ -90,7 +95,7 @@ func TestIndex(t *testing.T) {
 		fmt.Println(key, value.Key, value.Value, value.CreatedAt)
 	}
 
-	// get the index data for the category keys
+	// Retrieve and verify the index data for each category key
 	for i := 1; i <= 3; i++ {
 
 		categoryName := fmt.Sprintf("category%d", i)
@@ -103,14 +108,14 @@ func TestIndex(t *testing.T) {
 
 	}
 
-	// módosítunk az adatokon, hogy tezsteljük az indexeket
-	// data to hydrex
+	// Modify the data to test index updates
+	// New test data: category1 and category3 remain, category2 is removed, category4 is added
 	modifiedTestData := map[string]*CoreData{
 		"category1": { // still exists
 			Key:   "category1",
 			Value: "test value",
 		},
-		"category4": { // category 4 newly added category 2 is removed
+		"category4": { // newly added, category2 is removed
 			Key:   "category2",
 			Value: "test value",
 		},
@@ -122,32 +127,32 @@ func TestIndex(t *testing.T) {
 
 	hydrexInterface.Save(context.Background(), testIndexName, testDomain, modifiedTestData)
 
-	// get the core data
+	// Retrieve and verify the updated core data
 	coreData = hydrexInterface.GetCoreData(context.Background(), testIndexName, testDomain)
 	assert.Equal(t, len(coreData), 3)
 	for key, value := range coreData {
 		fmt.Println(key, value.Key, value.Value, value.CreatedAt)
 	}
 
-	// get the index data for the category keys
+	// Verify index data for category1
 	elements := hydrexInterface.GetIndexData(context.Background(), testIndexName, "category1")
 	assert.Equal(t, 1, len(elements), "Element count is not equal")
 	if len(elements) > 0 {
 		assert.Equal(t, testDomain, elements[0].Domain, "Domain is not equal")
 	}
 
-	// category2 not exists anymore
+	// Verify that category2 no longer exists
 	elements = hydrexInterface.GetIndexData(context.Background(), testIndexName, "category2")
 	assert.Equal(t, 0, len(elements), "Element count is not equal")
 
-	// category3 exists
+	// Verify index data for category3
 	elements = hydrexInterface.GetIndexData(context.Background(), testIndexName, "category3")
 	assert.Equal(t, 1, len(elements), "Element count is not equal")
 	if len(elements) > 0 {
 		assert.Equal(t, testDomain, elements[0].Domain, "Domain is not equal")
 	}
 
-	// category4 newly added
+	// Verify index data for newly added category4
 	elements = hydrexInterface.GetIndexData(context.Background(), testIndexName, "category4")
 	assert.Equal(t, 1, len(elements), "Element count is not equal")
 	if len(elements) > 0 {
