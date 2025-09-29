@@ -1,10 +1,11 @@
 package treasure
 
 import (
-	"github.com/hydraide/hydraide/app/core/hydra/swamp/treasure/guard"
-	"github.com/stretchr/testify/assert"
 	"testing"
 	"time"
+
+	"github.com/hydraide/hydraide/app/core/hydra/swamp/treasure/guard"
+	"github.com/stretchr/testify/assert"
 )
 
 func MySaveMethod(_ Treasure, _ guard.ID) TreasureStatus {
@@ -553,5 +554,38 @@ func TestGetContentType(t *testing.T) {
 		assert.Equal(t, true, executed)
 
 	})
+
+}
+
+func TestCreatedAndModifiedFields(t *testing.T) {
+
+	treasureInterface := New(MySaveMethod)
+	guardID := treasureInterface.StartTreasureGuard(true)
+
+	createdBy := "creatorUser"
+	createdAt := time.Now().UTC()
+	treasureInterface.SetCreatedBy(guardID, createdBy)
+	treasureInterface.SetCreatedAt(guardID, createdAt)
+
+	if treasureInterface.GetCreatedBy() != createdBy {
+		t.Errorf("expected CreatedBy to be %s, got %s", createdBy, treasureInterface.GetCreatedBy())
+	}
+	if treasureInterface.GetCreatedAt() != createdAt.UnixNano() {
+		t.Errorf("expected CreatedAt to be %d, got %d", createdAt.UnixNano(), treasureInterface.GetCreatedAt())
+	}
+
+	modifiedBy := "modifierUser"
+	modifiedAt := time.Now().UTC().Add(time.Minute)
+	treasureInterface.SetModifiedBy(guardID, modifiedBy)
+	treasureInterface.SetModifiedAt(guardID, modifiedAt)
+
+	if treasureInterface.GetModifiedBy() != modifiedBy {
+		t.Errorf("expected ModifiedBy to be %s, got %s", modifiedBy, treasureInterface.GetModifiedBy())
+	}
+	if treasureInterface.GetModifiedAt() != modifiedAt.UnixNano() {
+		t.Errorf("expected ModifiedAt to be %d, got %d", modifiedAt.UnixNano(), treasureInterface.GetModifiedAt())
+	}
+
+	treasureInterface.ReleaseTreasureGuard(guardID)
 
 }
