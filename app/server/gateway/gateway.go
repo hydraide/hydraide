@@ -2054,15 +2054,15 @@ func treasureToKeyValuePair(treasureInterface treasure.Treasure, t *hydrapb.Trea
 		t.CreatedAt = timestamppb.New(time.Unix(0, treasureInterface.GetCreatedAt()))
 	}
 	if treasureInterface.GetCreatedBy() != "" {
-		createdBy := t.GetCreatedBy()
+		createdBy := treasureInterface.GetCreatedBy()
 		t.CreatedBy = &createdBy
 	}
 	if treasureInterface.GetModifiedAt() > 0 {
 		t.UpdatedAt = timestamppb.New(time.Unix(0, treasureInterface.GetModifiedAt()))
 	}
-	if t.GetUpdatedBy() != "" {
-		updatedBy := t.GetUpdatedBy()
-		t.UpdatedBy = &updatedBy
+	if treasureInterface.GetModifiedBy() != "" {
+		modifiedBy := treasureInterface.GetModifiedBy()
+		t.UpdatedBy = &modifiedBy
 	}
 	if treasureInterface.GetExpirationTime() > 0 {
 		t.ExpiredAt = timestamppb.New(time.Unix(0, treasureInterface.GetExpirationTime()))
