@@ -39,17 +39,27 @@ func setup() {
 
 	slog.SetLogLoggerLevel(slog.LevelDebug)
 
-	if os.Getenv("HYDRA_SERVER_CRT") == "" {
-		slog.Error("HYDRA_SERVER_CRT environment variable is not set")
-		panic("HYDRA_SERVER_CRT environment variable is not set")
+	if os.Getenv("E2E_HYDRA_SERVER_CRT") == "" {
+		slog.Error("E2E_HYDRA_SERVER_CRT environment variable is not set")
+		panic("E2E_HYDRA_SERVER_CRT environment variable is not set")
 	}
-	if os.Getenv("HYDRA_SERVER_KEY") == "" {
+	if os.Getenv("E2E_HYDRA_SERVER_KEY") == "" {
 		slog.Error("HYDRA_SERVER_KEY environment variable is not set")
 		panic("HYDRA_SERVER_KEY environment variable is not set")
 	}
-	if os.Getenv("HYDRA_CERT") == "" {
-		slog.Error("HYDRA_CERT environment variable is not set")
-		panic("HYDRA_CERT environment variable is not set")
+	if os.Getenv("E2E_HYDRA_CA_CRT") == "" {
+		slog.Error("E2E_HYDRA_CA_CRT environment variable is not set")
+		panic("E2E_HYDRA_CA_CRT environment variable is not set")
+	}
+
+	if os.Getenv("E2E_HYDRA_CLIENT_CRT") == "" {
+		slog.Error("E2E_HYDRA_CLIENT_CRT environment variable is not set")
+		panic("E2E_HYDRA_CLIENT_CRT environment variable is not set")
+	}
+
+	if os.Getenv("E2E_HYDRA_CLIENT_KEY") == "" {
+		slog.Error("E2E_HYDRA_CLIENT_KEY environment variable is not set")
+		panic("E2E_HYDRA_CLIENT_KEY environment variable is not set")
 	}
 
 	if os.Getenv("HYDRA_E2E_GRPC_CONN_ANALYSIS") == "" {
@@ -60,22 +70,23 @@ func setup() {
 		}
 	}
 
-	port := strings.Split(os.Getenv("HYDRA_TEST_SERVER"), ":")
+	port := strings.Split(os.Getenv("E2E_HYDRA_TEST_SERVER"), ":")
 	if len(port) != 2 {
-		slog.Error("HYDRA_TEST_SERVER environment variable is not set or invalid")
-		panic("HYDRA_TEST_SERVER environment variable is not set or invalid")
+		slog.Error("E2E_HYDRA_TEST_SERVER environment variable is not set or invalid")
+		panic("E2E_HYDRA_TEST_SERVER environment variable is not set or invalid")
 	}
 
 	portAsNUmber, err := strconv.Atoi(port[1])
 	if err != nil {
-		slog.Error("HYDRA_TEST_SERVER port is not a valid number", "error", err)
-		panic(fmt.Sprintf("HYDRA_TEST_SERVER port is not a valid number: %v", err))
+		slog.Error("E2E_HYDRA_TEST_SERVER port is not a valid number", "error", err)
+		panic(fmt.Sprintf("E2E_HYDRA_TEST_SERVER port is not a valid number: %v", err))
 	}
 
 	// start the new Hydra server
 	serverInterface = server.New(&server.Configuration{
-		CertificateCrtFile:  os.Getenv("HYDRA_SERVER_CRT"),
-		CertificateKeyFile:  os.Getenv("HYDRA_SERVER_KEY"),
+		CertificateCrtFile:  os.Getenv("E2E_HYDRA_SERVER_CRT"),
+		CertificateKeyFile:  os.Getenv("E2E_HYDRA_SERVER_KEY"),
+		ClientCAFile:        os.Getenv("E2E_HYDRA_CA_CRT"), // this is the CA that signed the client certificates
 		HydraServerPort:     portAsNUmber,
 		HydraMaxMessageSize: 1024 * 1024 * 1024, // 1 GB
 	})
@@ -104,12 +115,12 @@ func createGrpcClient() {
 	// create a new gRPC client object
 	servers := []*client.Server{
 		{
-			Host:          os.Getenv("HYDRAIDE_TEST_SERVER"),
+			Host:          os.Getenv("E2E_HYDRA_TEST_SERVER"),
 			FromIsland:    0,
 			ToIsland:      100,
-			CACrtPath:     os.Getenv("HYDRAIDE_CA_CRT"),
-			ClientCrtPath: os.Getenv("HYDRAIDE_CLIENT_CRT"),
-			ClientKeyPath: os.Getenv("HYDRAIDE_CLIENT_KEY"),
+			CACrtPath:     os.Getenv("E2E_HYDRA_CA_CRT"),
+			ClientCrtPath: os.Getenv("E2E_HYDRA_CLIENT_CRT"),
+			ClientKeyPath: os.Getenv("E2E_HYDRA_CLIENT_KEY"),
 		},
 	}
 
@@ -279,11 +290,8 @@ func TestGateway_Set(t *testing.T) {
 		slog.Debug("swamp found", "swamp", getResponseValue.GetSwampName())
 		for _, treasure := range getResponseValue.GetTreasures() {
 			if treasure.IsExist {
-				fmt.Printf("Key: %s, Value: %s\n", treasure.GetKey(), treasure.GetStringVal())
-				slog.Debug("treasure found", "key", treasure.GetKey(), "value", treasure.GetStringVal())
 				treasureExistCounter++
 			} else {
-				slog.Debug("treasure not found")
 				treasureNotExistCounter++
 			}
 		}
@@ -291,6 +299,9 @@ func TestGateway_Set(t *testing.T) {
 
 	assert.Equal(t, 10, treasureExistCounter)
 	assert.Equal(t, 1, treasureNotExistCounter)
+
+	// destroy test swamps
+	destroySwamp(clientInterface.GetServiceClient(swampName), swampName)
 
 }
 

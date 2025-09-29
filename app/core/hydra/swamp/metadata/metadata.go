@@ -12,12 +12,13 @@ package metadata
 
 import (
 	"encoding/gob"
-	"github.com/hydraide/hydraide/app/name"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/hydraide/hydraide/app/name"
 )
 
 const MetaFile = "meta"

@@ -78,7 +78,7 @@ type UserProfile struct {
 	Age        uint8 `hydraide:"omitempty"`
 	IsVerified bool
 	LoginCount int32
-	Rating     float64 `hydraide:"omitempty"`
+	Rating     float64 `hydraide:"omitempty,deletable"`
 
 	// Nested pointer structs
 	Avatar      *UserImage        `hydraide:"omitempty"`
@@ -95,13 +95,13 @@ type UserImage struct {
 type SecuritySettings struct {
 	TwoFactorEnabled   bool
 	LastPasswordChange time.Time
-	BackupCodesUsed    int32      `hydraide:"omitempty"`
-	BlockedUntil       *time.Time `hydraide:"omitempty"`
+	BackupCodesUsed    int32
+	BlockedUntil       *time.Time
 }
 
 type Preferences struct {
-	Language             string `hydraide:"omitempty"`
-	Timezone             string `hydraide:"omitempty"`
+	Language             string
+	Timezone             string
 	DarkMode             bool
 	NotificationsEnabled bool
 }
