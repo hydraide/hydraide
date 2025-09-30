@@ -1253,7 +1253,6 @@ func (h *hydraidego) CatalogRead(ctx context.Context, swampName name.Name, key s
 				return NewError(ErrCodeNotFound, "key not found")
 			}
 
-			fmt.Printf("Debug: Retrieved treasure %+v", treasure)
 			if convErr := convertProtoTreasureToCatalogModel(treasure, model); convErr != nil {
 				return NewError(ErrCodeInvalidModel, convErr.Error())
 			}
@@ -5193,6 +5192,19 @@ func setProtoTreasureToModel(treasure *hydraidepbgo.Treasure, field reflect.Valu
 
 		default:
 			return nil
+		}
+	}
+
+	if treasure.Uint32Slice != nil {
+		switch field.Kind() {
+		case reflect.Slice:
+			if field.Type().Elem().Kind() == reflect.Uint32 {
+				field.Set(reflect.ValueOf(treasure.GetUint32Slice()))
+			} else {
+				return fmt.Errorf("failed to set uint32 slice to field: field is not []uint32 but %s", field.Type().String())
+			}
+		default:
+			return fmt.Errorf("failed to set uint32 slice to field: field is not a slice but %s", field.Type().String())
 		}
 	}
 

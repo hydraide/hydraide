@@ -666,6 +666,18 @@ func TestUint32SlicePush(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, int64(3), size, "Slice size should be 3")
 
+	// try to get back the slice
+	type MyTest struct {
+		Key   string   `hydraide:"key"`
+		Slice []uint32 `hydraide:"value"`
+	}
+
+	response := &MyTest{}
+	err = hydraidegoInterface.CatalogRead(context.Background(), swampName, "test-key", response)
+	assert.NoError(t, err)
+
+	fmt.Println("response:", response)
+
 }
 
 type conversionTestCase struct {
