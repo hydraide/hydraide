@@ -675,8 +675,7 @@ func TestUint32SlicePush(t *testing.T) {
 	response := &MyTest{}
 	err = hydraidegoInterface.CatalogRead(context.Background(), swampName, "test-key", response)
 	assert.NoError(t, err)
-
-	fmt.Println("response:", response)
+	assert.Equal(t, []uint32{1, 2, 3}, response.Slice, "Slice content should match")
 
 }
 
