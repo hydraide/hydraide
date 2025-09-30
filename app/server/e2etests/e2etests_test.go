@@ -456,6 +456,176 @@ func TestGateway_Increase(t *testing.T) {
 
 }
 
+func TestUint32Slice(t *testing.T) {
+
+	writeInterval := int64(1)
+	maxFileSize := int64(65536)
+	testKey := "my-uint32-slice"
+
+	swampName := name.New().Sanctuary("uint32slice").Realm("test").Swamp("all")
+	selectedClient := clientInterface.GetServiceClient(swampName)
+	_, err := selectedClient.RegisterSwamp(context.Background(), &hydraidepbgo.RegisterSwampRequest{
+		SwampPattern:   swampName.Get(),
+		CloseAfterIdle: int64(3600),
+		WriteInterval:  &writeInterval,
+		MaxFileSize:    &maxFileSize,
+	})
+	assert.NoError(t, err)
+
+	swampClient := clientInterface.GetServiceClient(swampName)
+	defer func() {
+		_, err = swampClient.Destroy(context.Background(), &hydraidepbgo.DestroyRequest{
+			SwampName: swampName.Get(),
+		})
+		assert.NoError(t, err)
+	}()
+
+	ksp := &hydraidepbgo.KeySlicePair{
+		Key:    testKey,
+		Values: []uint32{1, 2, 3, 4, 5},
+	}
+
+	request := &hydraidepbgo.AddToUint32SlicePushRequest{
+		SwampName: swampName.Get(),
+		KeySlicePairs: []*hydraidepbgo.KeySlicePair{
+			ksp,
+		},
+	}
+
+	response, err := swampClient.Uint32SlicePush(context.Background(), request)
+	assert.NoError(t, err, "error should be nil")
+	assert.NotNil(t, response, "response should not be nil")
+
+	// check if there is a key in the swamp
+	getResponse, err := swampClient.Get(context.Background(), &hydraidepbgo.GetRequest{
+		Swamps: []*hydraidepbgo.GetSwamp{
+			{
+				SwampName: swampName.Get(),
+				Keys:      []string{ksp.GetKey()},
+			},
+		},
+	})
+
+	assert.NoError(t, err, "error should be nil")
+	assert.NotNil(t, getResponse, "response should not be nil")
+	assert.Equal(t, 1, len(getResponse.GetSwamps()), "response should contain one swamp")
+	// check the treasure in the getResponse
+	assert.Equal(t, 1, len(getResponse.GetSwamps()[0].GetTreasures()), "the swamp should contain one treasure")
+
+	for _, treasure := range getResponse.GetSwamps()[0].GetTreasures() {
+		assert.Equal(t, ksp.GetKey(), treasure.GetKey(), "the key should be the same")
+		assert.Equal(t, ksp.GetValues(), treasure.GetUint32Slice(), "the values should be the same")
+		fmt.Println("Key: ", treasure.GetKey())
+		fmt.Println("Slice: ", treasure.GetUint32Slice())
+	}
+
+	// try to add new values to the slice
+	kspNewValues := &hydraidepbgo.KeySlicePair{
+		Key:    testKey,
+		Values: []uint32{1, 2, 6, 7, 8, 9, 10},
+	}
+
+	request = &hydraidepbgo.AddToUint32SlicePushRequest{
+		SwampName: swampName.Get(),
+		KeySlicePairs: []*hydraidepbgo.KeySlicePair{
+			kspNewValues,
+		},
+	}
+
+	response, err = swampClient.Uint32SlicePush(context.Background(), request)
+	assert.NoError(t, err, "error should be nil")
+	assert.NotNil(t, response, "response should not be nil")
+
+	// check if there is a key in the swamp
+	getResponse, err = swampClient.Get(context.Background(), &hydraidepbgo.GetRequest{
+		Swamps: []*hydraidepbgo.GetSwamp{
+			{
+				SwampName: swampName.Get(),
+				Keys:      []string{kspNewValues.GetKey()},
+			},
+		},
+	})
+
+	assert.NoError(t, err, "error should be nil")
+	assert.NotNil(t, getResponse, "response should not be nil")
+	assert.Equal(t, 1, len(getResponse.GetSwamps()), "response should contain one swamp")
+
+	// check the treasure in the getResponse
+	assert.Equal(t, 1, len(getResponse.GetSwamps()[0].GetTreasures()), "the swamp should contain one treasure")
+	for _, treasure := range getResponse.GetSwamps()[0].GetTreasures() {
+		assert.Equal(t, kspNewValues.GetKey(), treasure.GetKey(), "the key should be the same")
+		assert.Equal(t, []uint32{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, treasure.GetUint32Slice(), "the values should be the same")
+		fmt.Println("Key: ", treasure.GetKey())
+		fmt.Println("Slice: ", treasure.GetUint32Slice())
+	}
+
+	// try top delete some values from the slice
+	kspValuesToDelete := &hydraidepbgo.KeySlicePair{
+		Key:    testKey,
+		Values: []uint32{1, 2, 3},
+	}
+
+	requestDelete := &hydraidepbgo.Uint32SliceDeleteRequest{
+		SwampName: swampName.Get(),
+		KeySlicePairs: []*hydraidepbgo.KeySlicePair{
+			kspValuesToDelete,
+		},
+	}
+
+	_, err = swampClient.Uint32SliceDelete(context.Background(), requestDelete)
+	assert.NoError(t, err, "error should be nil")
+
+	// try to get the key again
+	getResponse, err = swampClient.Get(context.Background(), &hydraidepbgo.GetRequest{
+		Swamps: []*hydraidepbgo.GetSwamp{
+			{
+				SwampName: swampName.Get(),
+				Keys:      []string{kspValuesToDelete.GetKey()},
+			},
+		},
+	})
+
+	assert.NoError(t, err, "error should be nil")
+	assert.NotNil(t, getResponse, "response should not be nil")
+	assert.Equal(t, 1, len(getResponse.GetSwamps()), "response should contain one swamp")
+
+	// check the treasure in the getResponse
+	assert.Equal(t, 1, len(getResponse.GetSwamps()[0].GetTreasures()), "the swamp should contain one treasure")
+	for _, treasure := range getResponse.GetSwamps()[0].GetTreasures() {
+		assert.Equal(t, kspValuesToDelete.GetKey(), treasure.GetKey(), "the key should be the same")
+		assert.Equal(t, []uint32{4, 5, 6, 7, 8, 9, 10}, treasure.GetUint32Slice(), "the values should be the same")
+		fmt.Println("Key: ", treasure.GetKey())
+		fmt.Println("Slice: ", treasure.GetUint32Slice())
+	}
+
+	// check if the value is exist in the slice
+	isValueExistResponse, err := swampClient.Uint32SliceIsValueExist(context.Background(), &hydraidepbgo.Uint32SliceIsValueExistRequest{
+		SwampName: swampName.Get(),
+		Key:       testKey,
+		Value:     10,
+	})
+	assert.NoError(t, err, "error should be nil")
+	assert.True(t, isValueExistResponse.IsExist, "value 10 should exist in the slice")
+
+	// check if the value is not exist in the slice
+	isValueExistResponse, err = swampClient.Uint32SliceIsValueExist(context.Background(), &hydraidepbgo.Uint32SliceIsValueExistRequest{
+		SwampName: swampName.Get(),
+		Key:       testKey,
+		Value:     3,
+	})
+	assert.NoError(t, err, "error should be nil")
+	assert.False(t, isValueExistResponse.IsExist, "value 3 should not exist in the slice")
+
+	// check the length of the slice
+	sliceLengthResponse, err := swampClient.Uint32SliceSize(context.Background(), &hydraidepbgo.Uint32SliceSizeRequest{
+		SwampName: swampName.Get(),
+		Key:       testKey,
+	})
+	assert.NoError(t, err, "error should be nil")
+	assert.Equal(t, 7, int(sliceLengthResponse.Size), "the length of the slice should be 7")
+
+}
+
 func destroySwamp(selectedClient hydraidepbgo.HydraideServiceClient, swampName name.Name) {
 
 	_, err := selectedClient.Destroy(context.Background(), &hydraidepbgo.DestroyRequest{

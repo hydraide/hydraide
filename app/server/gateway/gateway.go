@@ -1037,6 +1037,8 @@ func (g Gateway) Uint32SlicePush(ctx context.Context, in *hydrapb.AddToUint32Sli
 				errorsWhilePush = append(errorsWhilePush, err.Error())
 			}
 
+			treasureObj.Save(guardID)
+
 		}()
 
 	}
@@ -1099,6 +1101,8 @@ func (g Gateway) Uint32SliceDelete(ctx context.Context, in *hydrapb.Uint32SliceD
 			if err := treasureObj.Uint32SliceDelete(pair.GetValues()); err != nil {
 				errorsWhileDelete = append(errorsWhileDelete, err.Error())
 			}
+
+			treasureObj.Save(guardID)
 
 			// check the length of the slice in the treasure
 			// if the length is 0, we can delete the treasure

@@ -637,6 +637,37 @@ func TestIsDeletable(t *testing.T) {
 
 }
 
+func TestUint32SlicePush(t *testing.T) {
+
+	swampName := name.New().Sanctuary("test").Realm("in").Swamp("TestUint32SlicePush")
+	defer func() {
+		if err := hydraidegoInterface.Destroy(context.Background(), swampName); err != nil {
+			t.Logf("Cleanup failed: could not destroy swamp %s: %v", swampName.Get(), err)
+		}
+	}()
+
+	// Bounded context for the test call
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	testData := make([]*KeyValuesPair, 1)
+	testData[0] = &KeyValuesPair{
+		Key:    "test-key",
+		Values: []uint32{1, 2, 3},
+	}
+
+	err := hydraidegoInterface.Uint32SlicePush(ctx, swampName, testData)
+	if err != nil {
+		t.Fatalf("Uint32SlicePush failed: %v", err)
+	}
+
+	// try to get the treasure back after adding it
+	size, err := hydraidegoInterface.Uint32SliceSize(ctx, swampName, "test-key")
+	assert.NoError(t, err)
+	assert.Equal(t, int64(3), size, "Slice size should be 3")
+
+}
+
 type conversionTestCase struct {
 	name     string
 	input    any
