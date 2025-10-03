@@ -2333,8 +2333,10 @@ func (s *swamp) fileWriterHandler(isCloseWrite bool) {
 
 	var treasuresToWrite []treasure.Treasure
 	s.treasuresWaitingForWriter.Iterate(func(t treasure.Treasure) bool {
+
 		treasuresToWrite = append(treasuresToWrite, t)
 		return true
+
 	}, beacon.IterationTypeKey)
 
 	// delete the treasures from the swamp and from the chroniclerInterface too
@@ -2388,7 +2390,7 @@ func (s *swamp) deleteHandler(key string, shadowDelete bool) (deletedTreasure tr
 	} else {
 		// set the treasure for deletion
 		// todo: itt meg kell oldani, hogy a törlésnél legyen kérhető a shadow delete is.
-		treasureObj.BodySetForDeletion(guardID, "", shadowDelete)
+		treasureObj.BodySetForDeletion(guardID, "system", shadowDelete)
 		s.treasuresWaitingForWriter.Add(treasureObj)
 		// beállítjuk az utolsó módosítás dátumát a metában
 		s.metadataInterface.SetUpdatedAt()

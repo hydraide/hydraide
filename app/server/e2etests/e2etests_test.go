@@ -626,6 +626,107 @@ func TestUint32Slice(t *testing.T) {
 
 }
 
+func TestDeleteFromCatalog(t *testing.T) {
+
+	writeInterval := int64(1)
+	closeAfterIdle := int64(1)
+	maxFileSize := int64(65536)
+
+	swampName := name.New().Sanctuary("testDelete").Realm("test").Swamp("delete")
+	selectedClient := clientInterface.GetServiceClient(swampName)
+	_, err := selectedClient.RegisterSwamp(context.Background(), &hydraidepbgo.RegisterSwampRequest{
+		SwampPattern:   swampName.Get(),
+		CloseAfterIdle: closeAfterIdle,
+		WriteInterval:  &writeInterval,
+		MaxFileSize:    &maxFileSize,
+	})
+
+	assert.NoError(t, err, "there should be no error while registering the swamp")
+
+	defer func() {
+		_, err = selectedClient.Destroy(context.Background(), &hydraidepbgo.DestroyRequest{
+			SwampName: swampName.Get(),
+		})
+		assert.NoError(t, err)
+	}()
+
+	stringVal := "myValue"
+
+	// try to add 2 keys to the swamp
+	keyValues := []*hydraidepbgo.KeyValuePair{
+		{
+			Key:       "key1",
+			StringVal: &stringVal,
+		},
+		{
+			Key:       "key2",
+			StringVal: &stringVal,
+		},
+		{
+			Key:       "key3",
+			StringVal: &stringVal,
+		},
+	}
+
+	_, err = selectedClient.Set(context.Background(), &hydraidepbgo.SetRequest{
+		Swamps: []*hydraidepbgo.SwampRequest{
+			{
+				SwampName:        swampName.Get(),
+				KeyValues:        keyValues,
+				CreateIfNotExist: true,
+				Overwrite:        true,
+			},
+		},
+	})
+	assert.NoError(t, err)
+
+	// wait a short time to let the swamp be closed due to idle time
+	time.Sleep(3 * time.Second)
+
+	// check how many keys are in the swamp with count
+	countResponse, err := selectedClient.Count(context.Background(), &hydraidepbgo.CountRequest{
+		Swamps: []*hydraidepbgo.CountRequest_SwampIdentifier{
+			{
+				SwampName: swampName.Get(),
+			},
+		},
+	})
+
+	assert.NoError(t, err)
+	assert.Equal(t, int32(len(keyValues)), countResponse.Swamps[0].Count, "the swamp should contain 2 keys")
+
+	// wait a short time to let the swamp be closed due to idle time
+	time.Sleep(3 * time.Second)
+
+	// try to delete 1 key from the swamp
+	_, err = selectedClient.Delete(context.Background(), &hydraidepbgo.DeleteRequest{
+		Swamps: []*hydraidepbgo.DeleteRequest_SwampKeys{
+			{
+				SwampName: swampName.Get(),
+				Keys:      []string{"key1"},
+			},
+		},
+	})
+
+	assert.NoError(t, err, "there should be no error while deleting a key")
+
+	// wait a short time to let the delete operation be processed and written to the catalog
+	time.Sleep(3 * time.Second)
+
+	// check if the delete operation was successful
+	countResponse2, err2 := selectedClient.Count(context.Background(), &hydraidepbgo.CountRequest{
+		Swamps: []*hydraidepbgo.CountRequest_SwampIdentifier{
+			{
+				SwampName: swampName.Get(),
+			},
+		},
+	})
+
+	assert.NoError(t, err2, "there should be no error while counting keys after deletion")
+	assert.Equal(t, int32(2), countResponse2.Swamps[0].Count, "the swamp should contain 1 key after deletion")
+
+}
+
 func destroySwamp(selectedClient hydraidepbgo.HydraideServiceClient, swampName name.Name) {
 
 	_, err := selectedClient.Destroy(context.Background(), &hydraidepbgo.DestroyRequest{
