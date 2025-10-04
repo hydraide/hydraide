@@ -319,11 +319,12 @@ func TestVersionOutputJSON(t *testing.T) {
 			BuildDate: "2024-01-01",
 		},
 		Update: &UpdateInfo{
-			Latest:      ptr.To("v2.0.0"),
-			IsAvailable: true,
-			URL:         ptr.To("https://github.com/hydraide/hydraide/releases"),
-			Checked:     time.Now(),
-			Channel:     "stable",
+			Latest:         ptr.To("v2.0.0"),
+			IsAvailable:    true,
+			URL:            ptr.To("https://github.com/hydraide/hydraide/releases"),
+			Checked:        time.Now(),
+			Channel:        "stable",
+			InstallCommand: ptr.To(hydraidectlInstallCommand),
 		},
 	}
 
@@ -341,4 +342,37 @@ func TestVersionOutputJSON(t *testing.T) {
 	assert.Equal(t, output.CLI.Version, parsed.CLI.Version)
 	assert.Equal(t, output.Instance.Name, parsed.Instance.Name)
 	assert.Equal(t, *output.Update.Latest, *parsed.Update.Latest)
+	assert.Equal(t, *output.Update.InstallCommand, *parsed.Update.InstallCommand)
+}
+
+func TestOutputHumanReadableUpdateCommand(t *testing.T) {
+	origStdout := os.Stdout
+	defer func() { os.Stdout = origStdout }()
+
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stdout = w
+
+	output := VersionOutput{
+		CLI: VersionInfo{
+			Version:   "v1.0.0",
+			Commit:    "abc123",
+			BuildDate: "2024-01-01",
+			Platform:  "linux/amd64",
+		},
+		Update: &UpdateInfo{
+			Latest:         ptr.To("v2.0.0"),
+			IsAvailable:    true,
+			InstallCommand: ptr.To(hydraidectlInstallCommand),
+		},
+	}
+
+	outputHumanReadable(output)
+	require.NoError(t, w.Close())
+	var buf bytes.Buffer
+	_, err = io.Copy(&buf, r)
+	require.NoError(t, err)
+
+	assert.Contains(t, buf.String(), hydraidectlInstallCommand)
+	assert.Contains(t, buf.String(), "Update: v2.0.0 available")
 }

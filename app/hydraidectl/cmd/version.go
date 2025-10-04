@@ -14,6 +14,8 @@ import (
 	buildmeta "github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/buildmetadata"
 	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/filesystem"
 	"github.com/spf13/cobra"
+
+	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/ptr"
 )
 
 // Build-time variables (set via ldflags)
@@ -31,6 +33,8 @@ var (
 	versionPre      bool
 	versionTimeout  int
 )
+
+const hydraidectlInstallCommand = "curl -sSfL https://raw.githubusercontent.com/hydraide/hydraide/main/scripts/install-hydraidectl.sh | bash"
 
 // VersionInfo represents CLI version information
 type VersionInfo struct {
@@ -50,12 +54,13 @@ type InstanceVersionInfo struct {
 
 // UpdateInfo represents update check information
 type UpdateInfo struct {
-	Latest      *string   `json:"latest"`
-	IsAvailable bool      `json:"isAvailable"`
-	URL         *string   `json:"url"`
-	Checked     time.Time `json:"checked"`
-	Channel     string    `json:"channel"`
-	Error       string    `json:"error,omitempty"` // Error message if update check failed
+	Latest         *string   `json:"latest"`
+	IsAvailable    bool      `json:"isAvailable"`
+	URL            *string   `json:"url"`
+	Checked        time.Time `json:"checked"`
+	Channel        string    `json:"channel"`
+	Error          string    `json:"error,omitempty"` // Error message if update check failed
+	InstallCommand *string   `json:"installCommand,omitempty"`
 }
 
 // VersionOutput represents the complete version command output
@@ -78,8 +83,8 @@ type GitHubRelease struct {
 var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Display version information",
-	Long: `Display version information for hydraidectl CLI and optionally for a HydrAIDE instance.
-Also checks for available updates on GitHub by default.
+	Long: `Display version information for the hydraidectl CLI.
+Optionally include a single HydrAIDE instance's metadata version and check GitHub for CLI updates.
 
 Exit codes:
   0 - Success
@@ -232,6 +237,7 @@ func checkForUpdates(ctx context.Context, currentVersion string, includePre bool
 			info.Latest = &latestVersion
 			info.IsAvailable = true
 			info.URL = &release.HTMLURL
+			info.InstallCommand = ptr.To(hydraidectlInstallCommand)
 			break
 		}
 	}
@@ -313,7 +319,11 @@ func outputHumanReadable(output VersionOutput) {
 		if output.Update.Error != "" {
 			fmt.Fprintf(os.Stderr, "Update check failed: %s\n", output.Update.Error)
 		} else if output.Update.IsAvailable && output.Update.Latest != nil {
-			fmt.Printf("Update: %s available → run: hydraidectl self-update\n", *output.Update.Latest)
+			installCmd := hydraidectlInstallCommand
+			if output.Update.InstallCommand != nil {
+				installCmd = *output.Update.InstallCommand
+			}
+			fmt.Printf("Update: %s available → run:\n  %s\n", *output.Update.Latest, installCmd)
 		} else if !versionNoRemote {
 			fmt.Println("Up to date.")
 		}

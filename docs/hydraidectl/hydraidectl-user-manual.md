@@ -26,6 +26,7 @@ Although `hydraidectl` is stable and production-tested, new features are under d
 * [`destroy` – Fully delete an instance, optionally including all its data](#restart--restart-instance)
 * [`cert` – Generate TLS Certificates (without modifying instances)](#cert--generate-tls-certificates-without-modifying-instances)
 * [`update` – Update an Instance In‑Place](#update--update-an-instance-inplace-allinone)
+* [`version` – Display CLI and optional instance metadata](#version--display-cli-and-optional-instance-metadata)
 
 ---
 
@@ -593,3 +594,43 @@ hydraidectl update --instance prod
 
 * `0` — success **or** no‑op (already up to date)
 * `1` — error (metadata access, stop/start failure, download error, health timeout, etc.)
+
+## `version` – Display CLI and Optional Instance Metadata
+
+Prints the current `hydraidectl` build information and, optionally, the version recorded in a single instance’s `metadata.json`. This command never queries running services—use [`list`](#list--show-all-instances) for fleet status.
+
+**Behavior**
+- Default output shows CLI version, commit, build date, platform, and whether a newer release exists.
+- `--instance <name>` reads only the local metadata for that instance and appends its recorded version (no health checks, no remote lookups).
+- When an update is found, the CLI suggests reinstalling via the official installer script instead of `self-update`.
+- Pass `--no-remote` to skip the GitHub release check (useful for air-gapped hosts) and `--pre` to compare against pre-release builds.
+
+**Flags**
+- `--instance`, `-i` — instance name whose metadata version should be shown.
+- `--json`, `-j` — emit structured JSON containing `cli`, optional `instance`, and optional `update` objects.
+- `--no-remote` — disable the GitHub release check.
+- `--pre` — include pre-releases when checking for newer builds.
+- `--timeout` — network timeout in seconds for the release check (default `3`).
+
+**Examples**
+```bash
+# CLI build only
+hydraidectl version
+
+# CLI + instance metadata (no service status)
+hydraidectl version --instance prod
+
+# JSON output suitable for automation
+hydraidectl version --json --no-remote
+```
+
+**Update message**
+
+When a newer release is available you will see:
+
+```
+Update: vX.Y.Z available → run:
+  curl -sSfL https://raw.githubusercontent.com/hydraide/hydraide/main/scripts/install-hydraidectl.sh | bash
+```
+
+Use that command to reinstall the CLI with the latest stable binary.
