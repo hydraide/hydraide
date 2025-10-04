@@ -6,6 +6,13 @@
 package chronicler
 
 import (
+	"fmt"
+	"log/slog"
+	"math"
+	"os"
+	"path/filepath"
+	"sync"
+
 	"github.com/google/uuid"
 	"github.com/hydraide/hydraide/app/core/compressor"
 	"github.com/hydraide/hydraide/app/core/filesystem"
@@ -14,11 +21,6 @@ import (
 	"github.com/hydraide/hydraide/app/core/hydra/swamp/treasure"
 	"github.com/hydraide/hydraide/app/core/hydra/swamp/treasure/guard"
 	"github.com/hydraide/hydraide/app/name"
-	"log/slog"
-	"math"
-	"os"
-	"path/filepath"
-	"sync"
 )
 
 type Chronicler interface {
@@ -217,6 +219,7 @@ func (c *chronicler) Write(treasures []treasure.Treasure) {
 			c.newTreasuresForWrite = append(c.newTreasuresForWrite, selectedTreasure)
 			newTreasuresWaitingForWriter = true
 		}
+
 	}
 
 	// process the modified treasures in the filesystem FIRST
@@ -332,11 +335,14 @@ func (c *chronicler) writeModifiedTreasures(fileName string, treasures map[strin
 		return
 	}
 
-	modifiedTreasures := make([][]byte, 0)
+	fmt.Println("FilePath for modify treasure:", fp)
+
+	var modifiedTreasures [][]byte
 
 	for _, treasureData := range byteTreasures {
 
 		treasureObject := treasure.New(c.swampSaveFunction)
+
 		lockerID := treasureObject.StartTreasureGuard(true, guard.BodyAuthID)
 		loadErr := treasureObject.LoadFromByte(lockerID, treasureData, fileName)
 		treasureObject.ReleaseTreasureGuard(lockerID)
@@ -353,6 +359,9 @@ func (c *chronicler) writeModifiedTreasures(fileName string, treasures map[strin
 			treasureGuardID := modifiedTreasure.StartTreasureGuard(true, guard.BodyAuthID)
 			modifiedBytes, convertErr := modifiedTreasure.ConvertToByte(treasureGuardID)
 			modifiedTreasure.ReleaseTreasureGuard(treasureGuardID)
+
+			fmt.Println(modifiedTreasure.GetDeletedAt(), modifiedTreasure.GetDeletedBy(), modifiedTreasure.GetShadowDelete())
+
 			if convertErr != nil {
 				slog.Error("can not convert the modified treasure to byte", "error", convertErr)
 				continue
@@ -361,7 +370,7 @@ func (c *chronicler) writeModifiedTreasures(fileName string, treasures map[strin
 			// The treasure was permanently deleted, not just shadowDeleted,
 			// so we also need to remove it from the filesystem.
 			// Therefore, we do NOT write this treasure back to the file.
-			if modifiedTreasure.GetDeletedAt() != 0 && modifiedTreasure.GetDeletedBy() != "" && !modifiedTreasure.GetShadowDelete() {
+			if modifiedTreasure.GetDeletedAt() != 0 && !modifiedTreasure.GetShadowDelete() {
 				continue
 			}
 

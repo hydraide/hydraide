@@ -230,6 +230,7 @@ Unlike Catalogs (which store many entries via keys), Profiles represent **one en
 
 - 🔹 Accessed by **Swamp name**, not key or filter
 - 🧠 Efficient binary format with `hydraide:"omitempty"` support
+- ❌ Automatic per-field delete method support using the `hydraide:deletable` tag
 - 📦 Supports nested pointer structs and typed primitives
 - 🔄 Used for full hydration (ProfileRead) and overwrite (ProfileSave)
 - 🔐 Can be locked at the Swamp level if needed

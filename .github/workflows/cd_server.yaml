@@ -90,9 +90,9 @@ jobs:
           echo "Extracted: version=$VERSION commit=$COMMIT_SHA date=$BUILD_DATE"
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
-          go-version: "1.23"
+          go-version-file: 'go.mod'
           cache: true
 
       - name: Build binary (with version embed)
@@ -228,7 +228,7 @@ jobs:
         run: cp Dockerfile docker-context/
 
       - name: Install cosign
-        uses: sigstore/cosign-installer@v3.9.2
+        uses: sigstore/cosign-installer@v3.10.0
         with:
           cosign-release: "v2.5.3"
 

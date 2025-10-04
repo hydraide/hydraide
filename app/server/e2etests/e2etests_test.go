@@ -39,17 +39,27 @@ func setup() {
 
 	slog.SetLogLoggerLevel(slog.LevelDebug)
 
-	if os.Getenv("HYDRA_SERVER_CRT") == "" {
-		slog.Error("HYDRA_SERVER_CRT environment variable is not set")
-		panic("HYDRA_SERVER_CRT environment variable is not set")
+	if os.Getenv("E2E_HYDRA_SERVER_CRT") == "" {
+		slog.Error("E2E_HYDRA_SERVER_CRT environment variable is not set")
+		panic("E2E_HYDRA_SERVER_CRT environment variable is not set")
 	}
-	if os.Getenv("HYDRA_SERVER_KEY") == "" {
+	if os.Getenv("E2E_HYDRA_SERVER_KEY") == "" {
 		slog.Error("HYDRA_SERVER_KEY environment variable is not set")
 		panic("HYDRA_SERVER_KEY environment variable is not set")
 	}
-	if os.Getenv("HYDRA_CERT") == "" {
-		slog.Error("HYDRA_CERT environment variable is not set")
-		panic("HYDRA_CERT environment variable is not set")
+	if os.Getenv("E2E_HYDRA_CA_CRT") == "" {
+		slog.Error("E2E_HYDRA_CA_CRT environment variable is not set")
+		panic("E2E_HYDRA_CA_CRT environment variable is not set")
+	}
+
+	if os.Getenv("E2E_HYDRA_CLIENT_CRT") == "" {
+		slog.Error("E2E_HYDRA_CLIENT_CRT environment variable is not set")
+		panic("E2E_HYDRA_CLIENT_CRT environment variable is not set")
+	}
+
+	if os.Getenv("E2E_HYDRA_CLIENT_KEY") == "" {
+		slog.Error("E2E_HYDRA_CLIENT_KEY environment variable is not set")
+		panic("E2E_HYDRA_CLIENT_KEY environment variable is not set")
 	}
 
 	if os.Getenv("HYDRA_E2E_GRPC_CONN_ANALYSIS") == "" {
@@ -60,22 +70,23 @@ func setup() {
 		}
 	}
 
-	port := strings.Split(os.Getenv("HYDRA_TEST_SERVER"), ":")
+	port := strings.Split(os.Getenv("E2E_HYDRA_TEST_SERVER"), ":")
 	if len(port) != 2 {
-		slog.Error("HYDRA_TEST_SERVER environment variable is not set or invalid")
-		panic("HYDRA_TEST_SERVER environment variable is not set or invalid")
+		slog.Error("E2E_HYDRA_TEST_SERVER environment variable is not set or invalid")
+		panic("E2E_HYDRA_TEST_SERVER environment variable is not set or invalid")
 	}
 
 	portAsNUmber, err := strconv.Atoi(port[1])
 	if err != nil {
-		slog.Error("HYDRA_TEST_SERVER port is not a valid number", "error", err)
-		panic(fmt.Sprintf("HYDRA_TEST_SERVER port is not a valid number: %v", err))
+		slog.Error("E2E_HYDRA_TEST_SERVER port is not a valid number", "error", err)
+		panic(fmt.Sprintf("E2E_HYDRA_TEST_SERVER port is not a valid number: %v", err))
 	}
 
 	// start the new Hydra server
 	serverInterface = server.New(&server.Configuration{
-		CertificateCrtFile:  os.Getenv("HYDRA_SERVER_CRT"),
-		CertificateKeyFile:  os.Getenv("HYDRA_SERVER_KEY"),
+		CertificateCrtFile:  os.Getenv("E2E_HYDRA_SERVER_CRT"),
+		CertificateKeyFile:  os.Getenv("E2E_HYDRA_SERVER_KEY"),
+		ClientCAFile:        os.Getenv("E2E_HYDRA_CA_CRT"), // this is the CA that signed the client certificates
 		HydraServerPort:     portAsNUmber,
 		HydraMaxMessageSize: 1024 * 1024 * 1024, // 1 GB
 	})
@@ -104,12 +115,12 @@ func createGrpcClient() {
 	// create a new gRPC client object
 	servers := []*client.Server{
 		{
-			Host:          os.Getenv("HYDRAIDE_TEST_SERVER"),
+			Host:          os.Getenv("E2E_HYDRA_TEST_SERVER"),
 			FromIsland:    0,
 			ToIsland:      100,
-			CACrtPath:     os.Getenv("HYDRAIDE_CA_CRT"),
-			ClientCrtPath: os.Getenv("HYDRAIDE_CLIENT_CRT"),
-			ClientKeyPath: os.Getenv("HYDRAIDE_CLIENT_KEY"),
+			CACrtPath:     os.Getenv("E2E_HYDRA_CA_CRT"),
+			ClientCrtPath: os.Getenv("E2E_HYDRA_CLIENT_CRT"),
+			ClientKeyPath: os.Getenv("E2E_HYDRA_CLIENT_KEY"),
 		},
 	}
 
@@ -279,11 +290,8 @@ func TestGateway_Set(t *testing.T) {
 		slog.Debug("swamp found", "swamp", getResponseValue.GetSwampName())
 		for _, treasure := range getResponseValue.GetTreasures() {
 			if treasure.IsExist {
-				fmt.Printf("Key: %s, Value: %s\n", treasure.GetKey(), treasure.GetStringVal())
-				slog.Debug("treasure found", "key", treasure.GetKey(), "value", treasure.GetStringVal())
 				treasureExistCounter++
 			} else {
-				slog.Debug("treasure not found")
 				treasureNotExistCounter++
 			}
 		}
@@ -291,6 +299,9 @@ func TestGateway_Set(t *testing.T) {
 
 	assert.Equal(t, 10, treasureExistCounter)
 	assert.Equal(t, 1, treasureNotExistCounter)
+
+	// destroy test swamps
+	destroySwamp(clientInterface.GetServiceClient(swampName), swampName)
 
 }
 
@@ -442,6 +453,277 @@ func TestGateway_Increase(t *testing.T) {
 
 	assert.Equal(t, int32(1), response.GetValue(), "the value should be 1")
 	assert.Greater(t, response.GetMetadata().GetExpiredAt().AsTime().Unix(), time.Now().UTC().Add(30*time.Minute).Unix(), "the expiration time should be in the future")
+
+}
+
+func TestUint32Slice(t *testing.T) {
+
+	writeInterval := int64(1)
+	maxFileSize := int64(65536)
+	testKey := "my-uint32-slice"
+
+	swampName := name.New().Sanctuary("uint32slice").Realm("test").Swamp("all")
+	selectedClient := clientInterface.GetServiceClient(swampName)
+	_, err := selectedClient.RegisterSwamp(context.Background(), &hydraidepbgo.RegisterSwampRequest{
+		SwampPattern:   swampName.Get(),
+		CloseAfterIdle: int64(3600),
+		WriteInterval:  &writeInterval,
+		MaxFileSize:    &maxFileSize,
+	})
+	assert.NoError(t, err)
+
+	swampClient := clientInterface.GetServiceClient(swampName)
+	defer func() {
+		_, err = swampClient.Destroy(context.Background(), &hydraidepbgo.DestroyRequest{
+			SwampName: swampName.Get(),
+		})
+		assert.NoError(t, err)
+	}()
+
+	ksp := &hydraidepbgo.KeySlicePair{
+		Key:    testKey,
+		Values: []uint32{1, 2, 3, 4, 5},
+	}
+
+	request := &hydraidepbgo.AddToUint32SlicePushRequest{
+		SwampName: swampName.Get(),
+		KeySlicePairs: []*hydraidepbgo.KeySlicePair{
+			ksp,
+		},
+	}
+
+	response, err := swampClient.Uint32SlicePush(context.Background(), request)
+	assert.NoError(t, err, "error should be nil")
+	assert.NotNil(t, response, "response should not be nil")
+
+	// check if there is a key in the swamp
+	getResponse, err := swampClient.Get(context.Background(), &hydraidepbgo.GetRequest{
+		Swamps: []*hydraidepbgo.GetSwamp{
+			{
+				SwampName: swampName.Get(),
+				Keys:      []string{ksp.GetKey()},
+			},
+		},
+	})
+
+	assert.NoError(t, err, "error should be nil")
+	assert.NotNil(t, getResponse, "response should not be nil")
+	assert.Equal(t, 1, len(getResponse.GetSwamps()), "response should contain one swamp")
+	// check the treasure in the getResponse
+	assert.Equal(t, 1, len(getResponse.GetSwamps()[0].GetTreasures()), "the swamp should contain one treasure")
+
+	for _, treasure := range getResponse.GetSwamps()[0].GetTreasures() {
+		assert.Equal(t, ksp.GetKey(), treasure.GetKey(), "the key should be the same")
+		assert.Equal(t, ksp.GetValues(), treasure.GetUint32Slice(), "the values should be the same")
+		fmt.Println("Key: ", treasure.GetKey())
+		fmt.Println("Slice: ", treasure.GetUint32Slice())
+	}
+
+	// try to add new values to the slice
+	kspNewValues := &hydraidepbgo.KeySlicePair{
+		Key:    testKey,
+		Values: []uint32{1, 2, 6, 7, 8, 9, 10},
+	}
+
+	request = &hydraidepbgo.AddToUint32SlicePushRequest{
+		SwampName: swampName.Get(),
+		KeySlicePairs: []*hydraidepbgo.KeySlicePair{
+			kspNewValues,
+		},
+	}
+
+	response, err = swampClient.Uint32SlicePush(context.Background(), request)
+	assert.NoError(t, err, "error should be nil")
+	assert.NotNil(t, response, "response should not be nil")
+
+	// check if there is a key in the swamp
+	getResponse, err = swampClient.Get(context.Background(), &hydraidepbgo.GetRequest{
+		Swamps: []*hydraidepbgo.GetSwamp{
+			{
+				SwampName: swampName.Get(),
+				Keys:      []string{kspNewValues.GetKey()},
+			},
+		},
+	})
+
+	assert.NoError(t, err, "error should be nil")
+	assert.NotNil(t, getResponse, "response should not be nil")
+	assert.Equal(t, 1, len(getResponse.GetSwamps()), "response should contain one swamp")
+
+	// check the treasure in the getResponse
+	assert.Equal(t, 1, len(getResponse.GetSwamps()[0].GetTreasures()), "the swamp should contain one treasure")
+	for _, treasure := range getResponse.GetSwamps()[0].GetTreasures() {
+		assert.Equal(t, kspNewValues.GetKey(), treasure.GetKey(), "the key should be the same")
+		assert.Equal(t, []uint32{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, treasure.GetUint32Slice(), "the values should be the same")
+		fmt.Println("Key: ", treasure.GetKey())
+		fmt.Println("Slice: ", treasure.GetUint32Slice())
+	}
+
+	// try top delete some values from the slice
+	kspValuesToDelete := &hydraidepbgo.KeySlicePair{
+		Key:    testKey,
+		Values: []uint32{1, 2, 3},
+	}
+
+	requestDelete := &hydraidepbgo.Uint32SliceDeleteRequest{
+		SwampName: swampName.Get(),
+		KeySlicePairs: []*hydraidepbgo.KeySlicePair{
+			kspValuesToDelete,
+		},
+	}
+
+	_, err = swampClient.Uint32SliceDelete(context.Background(), requestDelete)
+	assert.NoError(t, err, "error should be nil")
+
+	// try to get the key again
+	getResponse, err = swampClient.Get(context.Background(), &hydraidepbgo.GetRequest{
+		Swamps: []*hydraidepbgo.GetSwamp{
+			{
+				SwampName: swampName.Get(),
+				Keys:      []string{kspValuesToDelete.GetKey()},
+			},
+		},
+	})
+
+	assert.NoError(t, err, "error should be nil")
+	assert.NotNil(t, getResponse, "response should not be nil")
+	assert.Equal(t, 1, len(getResponse.GetSwamps()), "response should contain one swamp")
+
+	// check the treasure in the getResponse
+	assert.Equal(t, 1, len(getResponse.GetSwamps()[0].GetTreasures()), "the swamp should contain one treasure")
+	for _, treasure := range getResponse.GetSwamps()[0].GetTreasures() {
+		assert.Equal(t, kspValuesToDelete.GetKey(), treasure.GetKey(), "the key should be the same")
+		assert.Equal(t, []uint32{4, 5, 6, 7, 8, 9, 10}, treasure.GetUint32Slice(), "the values should be the same")
+		fmt.Println("Key: ", treasure.GetKey())
+		fmt.Println("Slice: ", treasure.GetUint32Slice())
+	}
+
+	// check if the value is exist in the slice
+	isValueExistResponse, err := swampClient.Uint32SliceIsValueExist(context.Background(), &hydraidepbgo.Uint32SliceIsValueExistRequest{
+		SwampName: swampName.Get(),
+		Key:       testKey,
+		Value:     10,
+	})
+	assert.NoError(t, err, "error should be nil")
+	assert.True(t, isValueExistResponse.IsExist, "value 10 should exist in the slice")
+
+	// check if the value is not exist in the slice
+	isValueExistResponse, err = swampClient.Uint32SliceIsValueExist(context.Background(), &hydraidepbgo.Uint32SliceIsValueExistRequest{
+		SwampName: swampName.Get(),
+		Key:       testKey,
+		Value:     3,
+	})
+	assert.NoError(t, err, "error should be nil")
+	assert.False(t, isValueExistResponse.IsExist, "value 3 should not exist in the slice")
+
+	// check the length of the slice
+	sliceLengthResponse, err := swampClient.Uint32SliceSize(context.Background(), &hydraidepbgo.Uint32SliceSizeRequest{
+		SwampName: swampName.Get(),
+		Key:       testKey,
+	})
+	assert.NoError(t, err, "error should be nil")
+	assert.Equal(t, 7, int(sliceLengthResponse.Size), "the length of the slice should be 7")
+
+}
+
+func TestDeleteFromCatalog(t *testing.T) {
+
+	writeInterval := int64(1)
+	closeAfterIdle := int64(1)
+	maxFileSize := int64(65536)
+
+	swampName := name.New().Sanctuary("testDelete").Realm("test").Swamp("delete")
+	selectedClient := clientInterface.GetServiceClient(swampName)
+	_, err := selectedClient.RegisterSwamp(context.Background(), &hydraidepbgo.RegisterSwampRequest{
+		SwampPattern:   swampName.Get(),
+		CloseAfterIdle: closeAfterIdle,
+		WriteInterval:  &writeInterval,
+		MaxFileSize:    &maxFileSize,
+	})
+
+	assert.NoError(t, err, "there should be no error while registering the swamp")
+
+	defer func() {
+		_, err = selectedClient.Destroy(context.Background(), &hydraidepbgo.DestroyRequest{
+			SwampName: swampName.Get(),
+		})
+		assert.NoError(t, err)
+	}()
+
+	stringVal := "myValue"
+
+	// try to add 2 keys to the swamp
+	keyValues := []*hydraidepbgo.KeyValuePair{
+		{
+			Key:       "key1",
+			StringVal: &stringVal,
+		},
+		{
+			Key:       "key2",
+			StringVal: &stringVal,
+		},
+		{
+			Key:       "key3",
+			StringVal: &stringVal,
+		},
+	}
+
+	_, err = selectedClient.Set(context.Background(), &hydraidepbgo.SetRequest{
+		Swamps: []*hydraidepbgo.SwampRequest{
+			{
+				SwampName:        swampName.Get(),
+				KeyValues:        keyValues,
+				CreateIfNotExist: true,
+				Overwrite:        true,
+			},
+		},
+	})
+	assert.NoError(t, err)
+
+	// wait a short time to let the swamp be closed due to idle time
+	time.Sleep(3 * time.Second)
+
+	// check how many keys are in the swamp with count
+	countResponse, err := selectedClient.Count(context.Background(), &hydraidepbgo.CountRequest{
+		Swamps: []*hydraidepbgo.CountRequest_SwampIdentifier{
+			{
+				SwampName: swampName.Get(),
+			},
+		},
+	})
+
+	assert.NoError(t, err)
+	assert.Equal(t, int32(len(keyValues)), countResponse.Swamps[0].Count, "the swamp should contain 2 keys")
+
+	// wait a short time to let the swamp be closed due to idle time
+	time.Sleep(3 * time.Second)
+
+	// try to delete 1 key from the swamp
+	_, err = selectedClient.Delete(context.Background(), &hydraidepbgo.DeleteRequest{
+		Swamps: []*hydraidepbgo.DeleteRequest_SwampKeys{
+			{
+				SwampName: swampName.Get(),
+				Keys:      []string{"key1"},
+			},
+		},
+	})
+
+	assert.NoError(t, err, "there should be no error while deleting a key")
+
+	// wait a short time to let the delete operation be processed and written to the catalog
+	time.Sleep(3 * time.Second)
+
+	// check if the delete operation was successful
+	countResponse2, err2 := selectedClient.Count(context.Background(), &hydraidepbgo.CountRequest{
+		Swamps: []*hydraidepbgo.CountRequest_SwampIdentifier{
+			{
+				SwampName: swampName.Get(),
+			},
+		},
+	})
+
+	assert.NoError(t, err2, "there should be no error while counting keys after deletion")
+	assert.Equal(t, int32(2), countResponse2.Swamps[0].Count, "the swamp should contain 1 key after deletion")
 
 }
 

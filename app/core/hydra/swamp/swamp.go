@@ -1945,6 +1945,7 @@ func (s *swamp) SaveFunction(t treasure.Treasure, guardID guard.ID) treasure.Tre
 
 		// add treasure to the beaconKey index
 		s.beaconKey.Add(t)
+
 		// add treasure to all other beacons if needed
 		s.addTreasureToBeacons(t)
 		s.sendEventToHydra(t, nil, treasure.StatusNew)
@@ -1964,6 +1965,7 @@ func (s *swamp) SaveFunction(t treasure.Treasure, guardID guard.ID) treasure.Tre
 
 		// beállítjuk az utolsó módosítás dátumát a metában
 		s.metadataInterface.SetUpdatedAt()
+
 		// return with statusNew
 		return treasure.StatusNew
 
@@ -2331,8 +2333,10 @@ func (s *swamp) fileWriterHandler(isCloseWrite bool) {
 
 	var treasuresToWrite []treasure.Treasure
 	s.treasuresWaitingForWriter.Iterate(func(t treasure.Treasure) bool {
+
 		treasuresToWrite = append(treasuresToWrite, t)
 		return true
+
 	}, beacon.IterationTypeKey)
 
 	// delete the treasures from the swamp and from the chroniclerInterface too
@@ -2386,7 +2390,7 @@ func (s *swamp) deleteHandler(key string, shadowDelete bool) (deletedTreasure tr
 	} else {
 		// set the treasure for deletion
 		// todo: itt meg kell oldani, hogy a törlésnél legyen kérhető a shadow delete is.
-		treasureObj.BodySetForDeletion(guardID, "", shadowDelete)
+		treasureObj.BodySetForDeletion(guardID, "system", shadowDelete)
 		s.treasuresWaitingForWriter.Add(treasureObj)
 		// beállítjuk az utolsó módosítás dátumát a metában
 		s.metadataInterface.SetUpdatedAt()

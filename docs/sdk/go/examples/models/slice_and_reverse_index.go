@@ -87,8 +87,8 @@ import (
 // 🧠 In essence:
 // You interact declaratively with HydrAIDE — describe what should change, and it handles the rest.
 type ModelTagProductViewers struct {
-	ProductID string   `hydraide:"key"` // e.g. "product-123"
-	UserIDs   []uint32 // e.g. []uint32{101, 102, 103}
+	ProductID string   `hydraide:"key"`   // e.g. "product-123"
+	UserIDs   []uint32 `hydraide:"value"` // e.g. []uint32{101, 102, 103}
 }
 
 // PushViewersToTag appends user IDs to the uint32 slice assigned to a given product inside a tag-specific Swamp.
@@ -147,6 +147,80 @@ func (m *ModelTagProductViewers) PushViewersToTag(r repo.Repo, tagName string) e
 			Values: m.UserIDs,
 		},
 	})
+
+}
+
+// Load fetches the ModelTagProductViewers record for a specific product ID from a tag-specific Swamp.
+// It loads the slice of user IDs associated with the given product under the specified tag.
+// Returns an error if the record cannot be loaded.
+func (m *ModelTagProductViewers) Load(r repo.Repo, tagName string) error {
+
+	// Create a context with a default timeout to ensure timely cancellation.
+	ctx, cancelFunc := hydraidehelper.CreateHydraContext()
+	defer cancelFunc()
+
+	// Retrieve the HydrAIDE SDK instance from the repository.
+	h := r.GetHydraidego()
+
+	// Attempt to read the record from the Swamp using the product ID as the key.
+	err := h.CatalogRead(ctx, m.createSwampName(tagName), m.ProductID, m)
+	if err != nil {
+		// Return a wrapped error if loading fails.
+		return fmt.Errorf("failed to load ModelTagProductViewers: %w", err)
+	}
+
+	// Return nil if loading was successful.
+	return nil
+
+}
+
+// LoadAll retrieves all ModelTagProductViewers records for a specific tag Swamp.
+// It loads every product's viewer slice under the given tag, ordered by creation time (descending).
+//
+// Parameters:
+//   - r: the repository instance to use for data access
+//   - tagName: the tag whose Swamp should be queried
+//
+// Returns:
+//   - []*ModelTagProductViewers: a slice of all loaded records
+//   - error: non-nil if the operation fails
+func (m *ModelTagProductViewers) LoadAll(r repo.Repo, tagName string) ([]*ModelTagProductViewers, error) {
+
+	// Create a context with a default timeout to ensure timely cancellation.
+	ctx, cancelFunc := hydraidehelper.CreateHydraContext()
+	defer cancelFunc()
+
+	// Retrieve the HydrAIDE SDK instance from the repository.
+	h := r.GetHydraidego()
+
+	// Prepare a slice to collect all loaded records.
+	var results []*ModelTagProductViewers
+
+	// Read all records from the Swamp, ordered by creation time (descending).
+	err := h.CatalogReadMany(ctx, m.createSwampName(tagName), &hydraidego.Index{
+		IndexType:  hydraidego.IndexKey,
+		IndexOrder: hydraidego.IndexOrderDesc,
+		From:       0,
+		Limit:      0,
+	}, ModelTagProductViewers{}, func(model any) error {
+		// Attempt to cast the loaded model to the correct type.
+		casted, ok := model.(*ModelTagProductViewers)
+		if !ok {
+			slog.Error("failed to cast model to ModelTagProductViewers", slog.Any("model", model))
+			return nil
+		}
+
+		// Append the successfully casted record to the results slice.
+		results = append(results, casted)
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to load all ModelTagProductViewers: %w", err)
+	}
+
+	return results, nil
 }
 
 // DeleteViewersFromTags removes one or more user IDs from uint32 slice-type Treasures inside a tag-specific Swamp.
@@ -205,6 +279,7 @@ func (m *ModelTagProductViewers) DeleteViewersFromTags(r repo.Repo, tagName stri
 
 	// Perform delete operation
 	return h.Uint32SliceDelete(ctx, m.createSwampName(tagName), pairs)
+
 }
 
 // GetSliceSize returns the number of user IDs stored in the uint32 slice for a specific product ID,

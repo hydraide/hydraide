@@ -5,10 +5,11 @@ import (
 	"encoding/binary"
 	"encoding/gob"
 	"fmt"
-	"github.com/hydraide/hydraide/app/core/hydra/swamp/treasure/guard"
 	"reflect"
 	"sync"
 	"time"
+
+	"github.com/hydraide/hydraide/app/core/hydra/swamp/treasure/guard"
 )
 
 // Treasure represents a single piece of data in a swamp, along with a set of
@@ -1216,13 +1217,11 @@ func (t *treasure) SetCreatedBy(guardID guard.ID, createdBy string) {
 	_ = t.Guard.CanExecute(guardID)
 	t.createdByChanged = true
 	t.treasure.CreatedBy = createdBy
-	t.treasure.CreatedAt = time.Now().UTC().UnixNano()
 }
 func (t *treasure) SetModifiedBy(guardID guard.ID, modifiedBy string) {
 	_ = t.Guard.CanExecute(guardID)
 	t.modifiedByChanged = true
 	t.treasure.ModifiedBy = modifiedBy
-	t.treasure.ModifiedAt = time.Now().UTC().UnixNano()
 }
 
 func (t *treasure) Clone(guardID guard.ID) Treasure {

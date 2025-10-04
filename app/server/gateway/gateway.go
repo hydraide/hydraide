@@ -1037,6 +1037,8 @@ func (g Gateway) Uint32SlicePush(ctx context.Context, in *hydrapb.AddToUint32Sli
 				errorsWhilePush = append(errorsWhilePush, err.Error())
 			}
 
+			treasureObj.Save(guardID)
+
 		}()
 
 	}
@@ -1099,6 +1101,8 @@ func (g Gateway) Uint32SliceDelete(ctx context.Context, in *hydrapb.Uint32SliceD
 			if err := treasureObj.Uint32SliceDelete(pair.GetValues()); err != nil {
 				errorsWhileDelete = append(errorsWhileDelete, err.Error())
 			}
+
+			treasureObj.Save(guardID)
 
 			// check the length of the slice in the treasure
 			// if the length is 0, we can delete the treasure
@@ -2054,15 +2058,15 @@ func treasureToKeyValuePair(treasureInterface treasure.Treasure, t *hydrapb.Trea
 		t.CreatedAt = timestamppb.New(time.Unix(0, treasureInterface.GetCreatedAt()))
 	}
 	if treasureInterface.GetCreatedBy() != "" {
-		createdBy := t.GetCreatedBy()
+		createdBy := treasureInterface.GetCreatedBy()
 		t.CreatedBy = &createdBy
 	}
 	if treasureInterface.GetModifiedAt() > 0 {
 		t.UpdatedAt = timestamppb.New(time.Unix(0, treasureInterface.GetModifiedAt()))
 	}
-	if t.GetUpdatedBy() != "" {
-		updatedBy := t.GetUpdatedBy()
-		t.UpdatedBy = &updatedBy
+	if treasureInterface.GetModifiedBy() != "" {
+		modifiedBy := treasureInterface.GetModifiedBy()
+		t.UpdatedBy = &modifiedBy
 	}
 	if treasureInterface.GetExpirationTime() > 0 {
 		t.ExpiredAt = timestamppb.New(time.Unix(0, treasureInterface.GetExpirationTime()))
