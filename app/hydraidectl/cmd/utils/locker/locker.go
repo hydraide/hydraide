@@ -50,7 +50,7 @@ func NewLocker(instanceName string) (Locker, error) {
 	switch runtime.GOOS {
 	case "windows":
 		return newWindowsLocker(instanceName)
-	case "linux":
+	case "linux", "darwin":
 		return newPosixLocker(instanceName)
 	default:
 		return nil, fmt.Errorf("locker: unsupported platform")

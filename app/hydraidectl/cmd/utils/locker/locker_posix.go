@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"syscall"
 )
 
@@ -42,10 +43,21 @@ func (l *posixLocker) Unlock() error {
 	return nil
 }
 
-// getLockDirectory returns the path to the directory where lock files are stored.
+// getLockDir returns the path to the directory where lock files are stored.
 // It creates the directory if it does not exist.
 func getLockDir() (string, error) {
-	dir := "/var/lock/hydraide"
+	var dir string
+	switch runtime.GOOS {
+	case "darwin":
+		// On macOS, use /tmp/hydraide for lock files
+		dir = "/tmp/hydraide"
+	case "linux":
+		// On Linux, use /var/lock/hydraide
+		dir = "/var/lock/hydraide"
+	default:
+		// Fallback for other POSIX systems
+		dir = "/tmp/hydraide"
+	}
 
 	if err := os.MkdirAll(dir, 0o777); err != nil {
 		return "", fmt.Errorf("failed to create system lock directory '%s': %w", dir, err)
@@ -54,7 +66,7 @@ func getLockDir() (string, error) {
 	return dir, nil
 }
 
-// Stub function for linux: Used when compiled/compiling in linux
+// Stub function for non-Windows: Used when compiled on POSIX systems
 func newWindowsLocker(_ string) (Locker, error) {
-	return nil, fmt.Errorf("not compiled in linux")
+	return nil, fmt.Errorf("Windows locker not available on POSIX systems")
 }
