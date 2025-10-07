@@ -28,27 +28,6 @@ With HydrAIDE, you don’t adapt to the database — **the database adapts to yo
 
 ---
 
-## ⭐ 100+ Stars and Growing! (Star History)
-
-[![Star History Chart](https://api.star-history.com/svg?repos=hydraide/hydraide&type=Date&theme=dark)](https://www.star-history.com/#hydraide/hydraide)
-
-### 💖 Thank You, Community!
-
-When we envisioned HydrAIDE, our goal was to give developers a whole new way of thinking... A tool that doesn’t set limits, but unlocks possibilities.
-
-Over the past weeks, it’s been truly incredible to see so many of you discover, understand, and embrace this philosophy. 
-Every single star represents your trust, curiosity, and a shared desire to build something new and better.
-
-This chart is not just numbers. Every point is someone’s decision to give HydrAIDE a chance. 
-And to us, that’s the greatest recognition we could receive.
-
-Thank you for being part of this journey!   
-The best is yet to come…
-
-— Peter & the HydRAIDER Team
-
----
-
 ### ⚙️ What HydrAIDE Does – In One Stack
 
 | Feature                                         | Description                                                                                                                                                                                                                                                                         |
@@ -209,20 +188,6 @@ We’re building a full series of deep comparisons, mindset-first, not config-fi
 * [HydrAIDE vs Neo4j](docs/comparisons/hydraide-vs-neo4j.md)
 * [HydrAIDE vs TimescaleDB](docs/comparisons/hydraide-vs-timescaledb.md)
 * [HydrAIDE vs Apache Kafka](docs/comparisons/hydraide-vs-apachekafka.md)
-
-
----
-
-## 🔧 Maintainers & 💡 Contributors
-
-HydrAIDE wouldn’t be where it is today without the brilliance, dedication, and vision of its early builders.
-A heartfelt thank you to everyone who’s shaping this new paradigm of reactive, intention-driven data systems.
-
-### 👑 Maintainers
-
-* **Péter Gebri** – creator & lead architect – [peter.gebri@hydraide.io](mailto:peter.gebri@hydraide.io)
-* **Ganesh Pawar** – [arch.gp@protonmail.com](mailto:arch.gp@protonmail.com)
-* **Vinayak Mulgund** – [mulgundvinay@gmail.com](mailto:mulgundvinay@gmail.com)
 
 ---
 
