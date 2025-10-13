@@ -357,7 +357,7 @@ func TestHydra_SummonSwamp(t *testing.T) {
 		wg.Wait()
 
 		// try to get all items back from the creationType beacon
-		beacon, err := swampInterface.GetTreasuresByBeacon(swamp.BeaconTypeCreationTime, swamp.IndexOrderDesc, 0, 100000)
+		beacon, err := swampInterface.GetTreasuresByBeacon(swamp.BeaconTypeCreationTime, swamp.IndexOrderDesc, 0, 100000, nil, nil)
 		assert.Nil(t, err, "should be nil")
 		assert.Equal(t, allTests, len(beacon), "should be equal")
 
@@ -366,7 +366,7 @@ func TestHydra_SummonSwamp(t *testing.T) {
 		assert.Nil(t, err, "should be nil")
 
 		// try to get all items back from the creationType beacon
-		allTreasures, err := swampInterface.GetTreasuresByBeacon(swamp.BeaconTypeCreationTime, swamp.IndexOrderDesc, 0, 100000)
+		allTreasures, err := swampInterface.GetTreasuresByBeacon(swamp.BeaconTypeCreationTime, swamp.IndexOrderDesc, 0, 100000, nil, nil)
 		assert.Nil(t, err, "should be nil")
 		assert.Equal(t, allTests-1, len(allTreasures), "should be equal")
 
@@ -414,7 +414,7 @@ func TestHydra_SummonSwamp(t *testing.T) {
 		wg.Wait()
 
 		// try to get all items back from the creationType beacon
-		beacon, err := swampInterface.GetTreasuresByBeacon(swamp.BeaconTypeCreationTime, swamp.IndexOrderDesc, 0, 100000)
+		beacon, err := swampInterface.GetTreasuresByBeacon(swamp.BeaconTypeCreationTime, swamp.IndexOrderDesc, 0, 100000, nil, nil)
 		assert.Nil(t, err, "should be nil")
 		assert.Equal(t, allTests, len(beacon), "should be equal")
 		// let the swamp to be closed
@@ -434,7 +434,7 @@ func TestHydra_SummonSwamp(t *testing.T) {
 		assert.Nil(t, err, "should be nil")
 
 		// try to get all items back from the creationType beacon after deleted the treasure
-		allTreasures, err := swampInterface.GetTreasuresByBeacon(swamp.BeaconTypeCreationTime, swamp.IndexOrderDesc, 0, 100000)
+		allTreasures, err := swampInterface.GetTreasuresByBeacon(swamp.BeaconTypeCreationTime, swamp.IndexOrderDesc, 0, 100000, nil, nil)
 		assert.Nil(t, err, "should be nil")
 		assert.Equal(t, allTests-1, len(allTreasures), "should be equal")
 

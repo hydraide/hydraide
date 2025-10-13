@@ -382,6 +382,7 @@ func TestSwamp_SendingEvent(t *testing.T) {
 	})
 
 }
+
 func TestSwamp_GetTreasuresByBeacon(t *testing.T) {
 
 	fsInterface := filesystem.New()
@@ -439,7 +440,7 @@ func TestSwamp_GetTreasuresByBeacon(t *testing.T) {
 			time.Sleep(time.Millisecond * 10)
 		}
 
-		receivedTreasures, err := swampInterface.GetTreasuresByBeacon(BeaconTypeCreationTime, IndexOrderAsc, 0, 10)
+		receivedTreasures, err := swampInterface.GetTreasuresByBeacon(BeaconTypeCreationTime, IndexOrderAsc, 0, 10, nil, nil)
 		assert.Nil(t, err, "error should be nil")
 		assert.Equal(t, allTests, len(receivedTreasures), "treasures should be 10")
 
@@ -451,7 +452,7 @@ func TestSwamp_GetTreasuresByBeacon(t *testing.T) {
 			lastID++
 		}
 
-		receivedTreasures, err = swampInterface.GetTreasuresByBeacon(BeaconTypeCreationTime, IndexOrderDesc, 0, 10)
+		receivedTreasures, err = swampInterface.GetTreasuresByBeacon(BeaconTypeCreationTime, IndexOrderDesc, 0, 10, nil, nil)
 		assert.Nil(t, err, "error should be nil")
 		assert.Equal(t, allTests, len(receivedTreasures), "treasures should be 10")
 
@@ -463,7 +464,7 @@ func TestSwamp_GetTreasuresByBeacon(t *testing.T) {
 			lastID--
 		}
 
-		receivedTreasures, err = swampInterface.GetTreasuresByBeacon(BeaconTypeUpdateTime, IndexOrderAsc, 0, 5)
+		receivedTreasures, err = swampInterface.GetTreasuresByBeacon(BeaconTypeUpdateTime, IndexOrderAsc, 0, 5, nil, nil)
 		assert.Nil(t, err, "error should be nil")
 		assert.Equal(t, 5, len(receivedTreasures), "treasures should be 5")
 
@@ -475,7 +476,7 @@ func TestSwamp_GetTreasuresByBeacon(t *testing.T) {
 			lastID++
 		}
 
-		receivedTreasures, err = swampInterface.GetTreasuresByBeacon(BeaconTypeUpdateTime, IndexOrderDesc, 0, 5)
+		receivedTreasures, err = swampInterface.GetTreasuresByBeacon(BeaconTypeUpdateTime, IndexOrderDesc, 0, 5, nil, nil)
 		assert.Nil(t, err, "error should be nil")
 		assert.Equal(t, 5, len(receivedTreasures), "treasures should be 5")
 
@@ -487,7 +488,7 @@ func TestSwamp_GetTreasuresByBeacon(t *testing.T) {
 			lastID--
 		}
 
-		receivedTreasures, err = swampInterface.GetTreasuresByBeacon(BeaconTypeValueString, IndexOrderAsc, 0, 10)
+		receivedTreasures, err = swampInterface.GetTreasuresByBeacon(BeaconTypeValueString, IndexOrderAsc, 0, 10, nil, nil)
 		assert.Nil(t, err, "error should be nil")
 		assert.Equal(t, 10, len(receivedTreasures), "treasures should be 10")
 
@@ -499,7 +500,7 @@ func TestSwamp_GetTreasuresByBeacon(t *testing.T) {
 			lastID++
 		}
 
-		receivedTreasures, err = swampInterface.GetTreasuresByBeacon(BeaconTypeValueString, IndexOrderDesc, 0, 10)
+		receivedTreasures, err = swampInterface.GetTreasuresByBeacon(BeaconTypeValueString, IndexOrderDesc, 0, 10, nil, nil)
 		assert.Nil(t, err, "error should be nil")
 		assert.Equal(t, 10, len(receivedTreasures), "treasures should be 10")
 
@@ -556,7 +557,7 @@ func TestSwamp_GetTreasuresByBeacon(t *testing.T) {
 
 		}
 
-		receivedTreasures, err := swampInterface.GetTreasuresByBeacon(BeaconTypeValueInt64, IndexOrderAsc, 0, 10)
+		receivedTreasures, err := swampInterface.GetTreasuresByBeacon(BeaconTypeValueInt64, IndexOrderAsc, 0, 10, nil, nil)
 		assert.Nil(t, err, "error should be nil")
 		assert.Equal(t, allTests, len(receivedTreasures), "treasures should be 10")
 
@@ -568,7 +569,7 @@ func TestSwamp_GetTreasuresByBeacon(t *testing.T) {
 			lastID++
 		}
 
-		receivedTreasures, err = swampInterface.GetTreasuresByBeacon(BeaconTypeValueInt64, IndexOrderDesc, 0, 10)
+		receivedTreasures, err = swampInterface.GetTreasuresByBeacon(BeaconTypeValueInt64, IndexOrderDesc, 0, 10, nil, nil)
 		assert.Nil(t, err, "error should be nil")
 		assert.Equal(t, allTests, len(receivedTreasures), "treasures should be 10")
 
@@ -625,7 +626,7 @@ func TestSwamp_GetTreasuresByBeacon(t *testing.T) {
 
 		}
 
-		receivedTreasures, err := swampInterface.GetTreasuresByBeacon(BeaconTypeValueFloat64, IndexOrderAsc, 0, 10)
+		receivedTreasures, err := swampInterface.GetTreasuresByBeacon(BeaconTypeValueFloat64, IndexOrderAsc, 0, 10, nil, nil)
 		assert.Nil(t, err, "error should be nil")
 		assert.Equal(t, allTests, len(receivedTreasures), "treasures should be 10")
 
@@ -637,7 +638,7 @@ func TestSwamp_GetTreasuresByBeacon(t *testing.T) {
 			lastID++
 		}
 
-		receivedTreasures, err = swampInterface.GetTreasuresByBeacon(BeaconTypeValueFloat64, IndexOrderDesc, 0, 10)
+		receivedTreasures, err = swampInterface.GetTreasuresByBeacon(BeaconTypeValueFloat64, IndexOrderDesc, 0, 10, nil, nil)
 		assert.Nil(t, err, "error should be nil")
 		assert.Equal(t, allTests, len(receivedTreasures), "treasures should be 10")
 
@@ -696,7 +697,7 @@ func TestSwamp_GetTreasuresByBeacon(t *testing.T) {
 			time.Sleep(time.Millisecond * 10)
 		}
 
-		receivedTreasures, err := swampInterface.GetTreasuresByBeacon(BeaconTypeExpirationTime, IndexOrderAsc, 0, 10)
+		receivedTreasures, err := swampInterface.GetTreasuresByBeacon(BeaconTypeExpirationTime, IndexOrderAsc, 0, 10, nil, nil)
 		assert.Nil(t, err, "error should be nil")
 		assert.Equal(t, allTests, len(receivedTreasures), "treasures should be 10")
 
@@ -708,7 +709,7 @@ func TestSwamp_GetTreasuresByBeacon(t *testing.T) {
 			lastID--
 		}
 
-		receivedTreasures, err = swampInterface.GetTreasuresByBeacon(BeaconTypeExpirationTime, IndexOrderDesc, 0, 10)
+		receivedTreasures, err = swampInterface.GetTreasuresByBeacon(BeaconTypeExpirationTime, IndexOrderDesc, 0, 10, nil, nil)
 		assert.Nil(t, err, "error should be nil")
 		assert.Equal(t, allTests, len(receivedTreasures), "treasures should be 10")
 
@@ -775,7 +776,7 @@ func TestSwamp_GetTreasuresByBeacon(t *testing.T) {
 		}
 
 		// try to get all treasures back from the creation time beacon
-		allTreasures, err := swampInterface.GetTreasuresByBeacon(BeaconTypeCreationTime, IndexOrderAsc, 0, 100000)
+		allTreasures, err := swampInterface.GetTreasuresByBeacon(BeaconTypeCreationTime, IndexOrderAsc, 0, 100000, nil, nil)
 		assert.NoError(t, err, "error should be nil")
 		assert.Equal(t, allTests, len(allTreasures), "treasures should be 10")
 
@@ -783,7 +784,7 @@ func TestSwamp_GetTreasuresByBeacon(t *testing.T) {
 		_ = swampInterface.DeleteTreasure("3", false)
 
 		// try to get all treasures back from the creation time beacon
-		allTreasures, err = swampInterface.GetTreasuresByBeacon(BeaconTypeCreationTime, IndexOrderAsc, 0, 100000)
+		allTreasures, err = swampInterface.GetTreasuresByBeacon(BeaconTypeCreationTime, IndexOrderAsc, 0, 100000, nil, nil)
 		assert.NoError(t, err, "error should be nil")
 		assert.Equal(t, allTests-1, len(allTreasures), "treasures should be 8")
 
@@ -856,7 +857,7 @@ func TestSwamp_GetTreasuresByBeacon(t *testing.T) {
 		_ = swampInterface.DeleteTreasure("3", false)
 
 		// try to get all treasures back from the creation time beacon
-		allTreasures, err := swampInterface.GetTreasuresByBeacon(BeaconTypeCreationTime, IndexOrderAsc, 0, 100000)
+		allTreasures, err := swampInterface.GetTreasuresByBeacon(BeaconTypeCreationTime, IndexOrderAsc, 0, 100000, nil, nil)
 		assert.NoError(t, err, "error should be nil")
 		assert.Equal(t, allTests-1, len(allTreasures), "treasures should be 9")
 
@@ -1097,7 +1098,6 @@ func TestIncrementUint8_OverflowWraps(t *testing.T) {
 		t.Fatalf("expected wrap to 4, got %d", newVal)
 	}
 }
-
 func TestIncrementUint16_NewKey_NoMetadata(t *testing.T) {
 	s := newSwampForTest(t, "Uint16", "NewKey_NoMetadata")
 
@@ -1319,7 +1319,6 @@ func TestIncrementUint16_OverflowWraps(t *testing.T) {
 		t.Fatalf("expected wrap to 4, got %d", newVal)
 	}
 }
-
 func TestIncrementUint32_NewKey_NoMetadata(t *testing.T) {
 	s := newSwampForTest(t, "Uint32", "NewKey_NoMetadata")
 
@@ -1542,7 +1541,6 @@ func TestIncrementUint32_OverflowWraps(t *testing.T) {
 	}
 
 }
-
 func TestIncrementUint64_NewKey_NoMetadata(t *testing.T) {
 	s := newSwampForTest(t, "Uint64", "NewKey_NoMetadata")
 
@@ -1769,7 +1767,6 @@ func TestIncrementUint64_OverflowWraps(t *testing.T) {
 		t.Fatalf("expected wrap to %d, got %d", expected, newVal)
 	}
 }
-
 func TestIncrementInt8_NewKey_NoMetadata(t *testing.T) {
 	s := newSwampForTest(t, "Int8", "NewKey_NoMetadata")
 
@@ -1991,7 +1988,6 @@ func TestIncrementInt8_OverflowWraps(t *testing.T) {
 		t.Fatalf("expected wrap to %d, got %d", expected, newVal)
 	}
 }
-
 func TestIncrementInt16_NewKey_NoMetadata(t *testing.T) {
 	s := newSwampForTest(t, "Int16", "NewKey_NoMetadata")
 
@@ -2213,7 +2209,6 @@ func TestIncrementInt16_OverflowWraps(t *testing.T) {
 		t.Fatalf("expected wrap to %d, got %d", expected, newVal)
 	}
 }
-
 func TestIncrementInt32_NewKey_NoMetadata(t *testing.T) {
 	s := newSwampForTest(t, "Int32", "NewKey_NoMetadata")
 
@@ -2440,7 +2435,6 @@ func TestIncrementInt32_OverflowWraps(t *testing.T) {
 		t.Fatalf("expected wrap to %d, got %d", expected, newVal)
 	}
 }
-
 func TestIncrementInt64_NewKey_NoMetadata(t *testing.T) {
 	s := newSwampForTest(t, "Int64", "NewKey_NoMetadata")
 
@@ -2670,7 +2664,6 @@ func TestIncrementInt64_OverflowWraps(t *testing.T) {
 		t.Fatalf("expected wrap to %d, got %d", expected, newVal)
 	}
 }
-
 func TestIncrementFloat32_NewKey_NoMetadata(t *testing.T) {
 	s := newSwampForTest(t, "Float32", "NewKey_NoMetadata")
 
@@ -2897,7 +2890,6 @@ func TestIncrementFloat32_OverflowToInf(t *testing.T) {
 		t.Fatalf("expected %v, got %v", expected, newVal)
 	}
 }
-
 func TestIncrementFloat64_NewKey_NoMetadata(t *testing.T) {
 	s := newSwampForTest(t, "Float64", "NewKey_NoMetadata")
 

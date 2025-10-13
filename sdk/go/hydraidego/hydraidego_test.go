@@ -5,9 +5,12 @@ import (
 	"log/slog"
 	"os"
 	"reflect"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/hydraide/hydraide/app/server/server"
 	"github.com/hydraide/hydraide/generated/hydraidepbgo"
 	"github.com/hydraide/hydraide/sdk/go/hydraidego/client"
 	"github.com/hydraide/hydraide/sdk/go/hydraidego/name"
@@ -18,6 +21,7 @@ import (
 
 var hydraidegoInterface Hydraidego
 var clientInterface client.Client
+var serverInterface server.Server
 
 func TestMain(m *testing.M) {
 	fmt.Println("Setting up test environment...")
@@ -30,24 +34,89 @@ func TestMain(m *testing.M) {
 
 func setup() {
 
-	server := &client.Server{
-		Host:          os.Getenv("HYDRAIDE_TEST_SERVER"),
-		FromIsland:    0,
-		ToIsland:      1000,
-		CACrtPath:     os.Getenv("HYDRAIDE_CA_CRT"),
-		ClientCrtPath: os.Getenv("HYDRAIDE_CLIENT_CRT"),
-		ClientKeyPath: os.Getenv("HYDRAIDE_CLIENT_KEY"),
+	if os.Getenv("E2E_HYDRA_SERVER_CRT") == "" {
+		slog.Error("E2E_HYDRA_SERVER_CRT environment variable is not set")
+		panic("E2E_HYDRA_SERVER_CRT environment variable is not set")
+	}
+	if os.Getenv("E2E_HYDRA_SERVER_KEY") == "" {
+		slog.Error("HYDRA_SERVER_KEY environment variable is not set")
+		panic("HYDRA_SERVER_KEY environment variable is not set")
+	}
+	if os.Getenv("E2E_HYDRA_CA_CRT") == "" {
+		slog.Error("E2E_HYDRA_CA_CRT environment variable is not set")
+		panic("E2E_HYDRA_CA_CRT environment variable is not set")
 	}
 
-	servers := []*client.Server{server}
-	clientInterface = client.New(servers, 1000, 104857600)
-	if err := clientInterface.Connect(false); err != nil {
-		slog.Error("Failed to connect to Hydraide server", "error", err)
-		os.Exit(1) // exit if the connection fails
-	} else {
-		slog.Info("Connected to Hydraide server successfully")
+	if os.Getenv("E2E_HYDRA_CLIENT_CRT") == "" {
+		slog.Error("E2E_HYDRA_CLIENT_CRT environment variable is not set")
+		panic("E2E_HYDRA_CLIENT_CRT environment variable is not set")
 	}
-	hydraidegoInterface = New(clientInterface) // creates a new hydraidego instance
+
+	if os.Getenv("E2E_HYDRA_CLIENT_KEY") == "" {
+		slog.Error("E2E_HYDRA_CLIENT_KEY environment variable is not set")
+		panic("E2E_HYDRA_CLIENT_KEY environment variable is not set")
+	}
+
+	if os.Getenv("HYDRA_E2E_GRPC_CONN_ANALYSIS") == "" {
+		slog.Warn("HYDRA_E2E_GRPC_CONN_ANALYSIS environment variable is not set, using default value: false")
+		if err := os.Setenv("HYDRA_E2E_GRPC_CONN_ANALYSIS", "false"); err != nil {
+			slog.Error("error while setting HYDRA_E2E_GRPC_CONN_ANALYSIS environment variable", "error", err)
+			panic(fmt.Sprintf("error while setting HYDRA_E2E_GRPC_CONN_ANALYSIS environment variable: %v", err))
+		}
+	}
+
+	port := strings.Split(os.Getenv("E2E_HYDRA_TEST_SERVER"), ":")
+	if len(port) != 2 {
+		slog.Error("E2E_HYDRA_TEST_SERVER environment variable is not set or invalid")
+		panic("E2E_HYDRA_TEST_SERVER environment variable is not set or invalid")
+	}
+
+	portAsNUmber, err := strconv.Atoi(port[1])
+	if err != nil {
+		slog.Error("E2E_HYDRA_TEST_SERVER port is not a valid number", "error", err)
+		panic(fmt.Sprintf("E2E_HYDRA_TEST_SERVER port is not a valid number: %v", err))
+	}
+
+	// start the new Hydra server
+	serverInterface = server.New(&server.Configuration{
+		CertificateCrtFile:  os.Getenv("E2E_HYDRA_SERVER_CRT"),
+		CertificateKeyFile:  os.Getenv("E2E_HYDRA_SERVER_KEY"),
+		ClientCAFile:        os.Getenv("E2E_HYDRA_CA_CRT"), // this is the CA that signed the client certificates
+		HydraServerPort:     portAsNUmber,
+		HydraMaxMessageSize: 1024 * 1024 * 1024, // 1 GB
+	})
+
+	if err := serverInterface.Start(); err != nil {
+		slog.Error("error while starting the server", "error", err)
+		panic(fmt.Sprintf("error while starting the server: %v", err))
+	}
+
+	// create a new Hydraidego interface
+	createGrpcClient()
+
+}
+
+func createGrpcClient() {
+
+	// create a new gRPC client object
+	servers := []*client.Server{
+		{
+			Host:          os.Getenv("E2E_HYDRA_TEST_SERVER"),
+			FromIsland:    0,
+			ToIsland:      100,
+			CACrtPath:     os.Getenv("E2E_HYDRA_CA_CRT"),
+			ClientCrtPath: os.Getenv("E2E_HYDRA_CLIENT_CRT"),
+			ClientKeyPath: os.Getenv("E2E_HYDRA_CLIENT_KEY"),
+		},
+	}
+
+	// 100 folders and 2 gig message size
+	clientInterface = client.New(servers, 100, 2147483648)
+	if err := clientInterface.Connect(false); err != nil {
+		slog.Error("error while connecting to the server", "error", err)
+	}
+
+	hydraidegoInterface = New(clientInterface)
 
 }
 
@@ -677,6 +746,248 @@ func TestUint32SlicePush(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, []uint32{1, 2, 3}, response.Slice, "Slice content should match")
 
+}
+
+// TestCatalogReadMany_TimeFiltering tests the CatalogReadMany function with various time-based filtering scenarios.
+// It verifies that the FromTime (inclusive) and ToTime (exclusive) boundaries work correctly,
+// and ensures that the half-open interval [FromTime, ToTime) is properly respected.
+func TestCatalogReadMany_TimeFiltering(t *testing.T) {
+
+	// Setup: Create a unique Swamp for this test
+	swampName := name.New().Sanctuary("test").Realm("catalog").Swamp("time-filtering")
+	defer func() {
+		if err := hydraidegoInterface.Destroy(context.Background(), swampName); err != nil {
+			t.Logf("cleanup warning: %v", err)
+		}
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Define the test model
+	type TimeFilteredTreasure struct {
+		Key       string    `hydraide:"key"`
+		Value     string    `hydraide:"value"`
+		CreatedAt time.Time `hydraide:"createdAt"`
+	}
+
+	// Create 10 treasures with CreatedAt timestamps from 1 to 10 hours ago
+	baseTime := time.Now().UTC()
+	treasures := make([]*TimeFilteredTreasure, 10)
+
+	for i := 0; i < 10; i++ {
+		treasures[i] = &TimeFilteredTreasure{
+			Key:       fmt.Sprintf("k%d", i+1),
+			Value:     fmt.Sprintf("value-%d", i+1),
+			CreatedAt: baseTime.Add(-time.Duration(i+1) * time.Hour),
+		}
+	}
+
+	// Insert all treasures
+	for _, treasure := range treasures {
+		_, err := hydraidegoInterface.CatalogSave(ctx, swampName, treasure)
+		require.NoError(t, err, "failed to save treasure: %s", treasure.Key)
+	}
+
+	// Wait a bit to ensure all writes are completed
+	time.Sleep(100 * time.Millisecond)
+
+	// Test cases
+	testCases := []struct {
+		name         string
+		fromTime     *time.Time
+		toTime       *time.Time
+		expectedKeys []string
+	}{
+		{
+			name:         "No time filter - all treasures",
+			fromTime:     nil,
+			toTime:       nil,
+			expectedKeys: []string{"k1", "k2", "k3", "k4", "k5", "k6", "k7", "k8", "k9", "k10"},
+		},
+		{
+			name:         "FromTime only - last 5 hours (inclusive)",
+			fromTime:     &[]time.Time{baseTime.Add(-5 * time.Hour)}[0],
+			toTime:       nil,
+			expectedKeys: []string{"k1", "k2", "k3", "k4", "k5"},
+		},
+		{
+			name:         "ToTime only - older than 5 hours (exclusive)",
+			fromTime:     nil,
+			toTime:       &[]time.Time{baseTime.Add(-5 * time.Hour)}[0],
+			expectedKeys: []string{"k6", "k7", "k8", "k9", "k10"},
+		},
+		{
+			name:         "Both FromTime and ToTime - 3 to 7 hours ago",
+			fromTime:     &[]time.Time{baseTime.Add(-7 * time.Hour)}[0],
+			toTime:       &[]time.Time{baseTime.Add(-3 * time.Hour)}[0],
+			expectedKeys: []string{"k4", "k5", "k6", "k7"},
+		},
+		{
+			name:         "Exact boundary test - FromTime inclusive",
+			fromTime:     &[]time.Time{baseTime.Add(-5 * time.Hour)}[0],
+			toTime:       &[]time.Time{baseTime.Add(-4 * time.Hour)}[0],
+			expectedKeys: []string{"k5"},
+		},
+		{
+			name:         "Empty result - FromTime after all treasures",
+			fromTime:     &[]time.Time{baseTime.Add(1 * time.Hour)}[0],
+			toTime:       nil,
+			expectedKeys: []string{},
+		},
+		{
+			name:         "Empty result - ToTime before all treasures",
+			fromTime:     nil,
+			toTime:       &[]time.Time{baseTime.Add(-11 * time.Hour)}[0],
+			expectedKeys: []string{},
+		},
+		{
+			name:         "Half-open interval test - ToTime excludes boundary",
+			fromTime:     &[]time.Time{baseTime.Add(-8 * time.Hour)}[0],
+			toTime:       &[]time.Time{baseTime.Add(-6 * time.Hour)}[0],
+			expectedKeys: []string{"k7", "k8"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create index with time filtering
+			index := &Index{
+				IndexType:  IndexCreationTime,
+				IndexOrder: IndexOrderAsc,
+				From:       0,
+				Limit:      0, // Get all
+				FromTime:   tc.fromTime,
+				ToTime:     tc.toTime,
+			}
+
+			// Collect results using the iterator
+			var collectedKeys []string
+			err := hydraidegoInterface.CatalogReadMany(
+				ctx,
+				swampName,
+				index,
+				TimeFilteredTreasure{},
+				func(model any) error {
+					treasure, ok := model.(*TimeFilteredTreasure)
+					if !ok {
+						return fmt.Errorf("unexpected model type")
+					}
+					collectedKeys = append(collectedKeys, treasure.Key)
+					return nil
+				},
+			)
+
+			assert.NoError(t, err, "CatalogReadMany should not return an error")
+			assert.Equal(t, len(tc.expectedKeys), len(collectedKeys), "Number of results should match")
+			assert.ElementsMatch(t, tc.expectedKeys, collectedKeys, "Keys should match expected set")
+		})
+	}
+}
+
+// TestCatalogReadMany_OrderAndPagination tests ordering (ASC/DESC) and pagination (From/Limit).
+func TestCatalogReadMany_OrderAndPagination(t *testing.T) {
+
+	swampName := name.New().Sanctuary("test").Realm("catalog").Swamp("order-pagination")
+	defer func() {
+		if err := hydraidegoInterface.Destroy(context.Background(), swampName); err != nil {
+			t.Logf("cleanup warning: %v", err)
+		}
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	type OrderedTreasure struct {
+		Key       string    `hydraide:"key"`
+		Value     int       `hydraide:"value"`
+		CreatedAt time.Time `hydraide:"createdAt"`
+	}
+
+	baseTime := time.Now().UTC()
+	for i := 0; i < 5; i++ {
+		treasure := &OrderedTreasure{
+			Key:       fmt.Sprintf("item-%d", i+1),
+			Value:     i + 1,
+			CreatedAt: baseTime.Add(-time.Duration(i+1) * time.Hour),
+		}
+		_, err := hydraidegoInterface.CatalogSave(ctx, swampName, treasure)
+		require.NoError(t, err)
+	}
+
+	time.Sleep(100 * time.Millisecond)
+
+	testCases := []struct {
+		name         string
+		order        IndexOrder
+		from         int32
+		limit        int32
+		expectedKeys []string
+	}{
+		{
+			name:         "Ascending order - all",
+			order:        IndexOrderDesc,
+			from:         0,
+			limit:        0,
+			expectedKeys: []string{"item-1", "item-2", "item-3", "item-4", "item-5"},
+		},
+		{
+			name:         "Descending order - all",
+			order:        IndexOrderAsc,
+			from:         0,
+			limit:        0,
+			expectedKeys: []string{"item-5", "item-4", "item-3", "item-2", "item-1"},
+		},
+		{
+			name:         "Ascending with offset",
+			order:        IndexOrderDesc,
+			from:         2,
+			limit:        0,
+			expectedKeys: []string{"item-3", "item-4", "item-5"},
+		},
+		{
+			name:         "Ascending with limit",
+			order:        IndexOrderDesc,
+			from:         0,
+			limit:        3,
+			expectedKeys: []string{"item-1", "item-2", "item-3"},
+		},
+		{
+			name:         "Ascending with offset and limit",
+			order:        IndexOrderDesc,
+			from:         1,
+			limit:        2,
+			expectedKeys: []string{"item-2", "item-3"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+
+			index := &Index{
+				IndexType:  IndexCreationTime,
+				IndexOrder: tc.order,
+				From:       tc.from,
+				Limit:      tc.limit,
+			}
+
+			var collectedKeys []string
+			err := hydraidegoInterface.CatalogReadMany(
+				ctx,
+				swampName,
+				index,
+				OrderedTreasure{},
+				func(model any) error {
+					treasure := model.(*OrderedTreasure)
+					collectedKeys = append(collectedKeys, treasure.Key)
+					return nil
+				},
+			)
+
+			assert.NoError(t, err)
+			assert.Equal(t, tc.expectedKeys, collectedKeys, "Order should match expected")
+		})
+	}
 }
 
 type conversionTestCase struct {

@@ -48,6 +48,8 @@ func (c *CatalogModelUserSessionLog) ReadLastSessions(r repo.Repo, userID string
 	//   IndexOrder:    IndexOrderDesc    → newest sessions first
 	//   From:          0                 → start from the top
 	//   Limit:         N                 → number of sessions to return
+	//   FromTime:      Optional          → filter results starting from this time (inclusive)
+	//   ToTime:        Optional          → filter results up to this time (exclusive)
 	//
 	// This pattern is ideal for time-based logs like user sessions.
 	//
@@ -86,11 +88,31 @@ func (c *CatalogModelUserSessionLog) ReadLastSessions(r repo.Repo, userID string
 	//
 	// ⚠️ If you need to sort huge data across all users or all time,
 	//    consider distributing it across multiple Swamps (e.g., per user, per day).
+	//
+	// 🆕 FromTime and ToTime:
+	//
+	// - Both fields are optional and can be nil.
+	// - If `FromTime` is provided, results are filtered starting from `FromTime` (inclusive),
+	//   considering `From` and `Limit`.
+	// - If `ToTime` is provided (and `FromTime` is nil), results are filtered up to `ToTime`
+	//   (exclusive), considering `From` and `Limit`.
+	// - If both `FromTime` and `ToTime` are provided, results are filtered using a half-open
+	//   range logic: from `FromTime` (inclusive) to `ToTime` (exclusive), considering `From`
+	//   and `Limit`.
+	// - If neither `FromTime` nor `ToTime` is provided, only `From` and `Limit` are applied.
+	//
+	// This filtering logic is part of HydrAIDE's design, enabling efficient O(log n) filtering
+	// even on large datasets.
+	fromTime := time.Now().Add(-90 * 24 * time.Hour)
+	toTime := time.Now().Add(-20 * 24 * time.Hour)
+
 	index := &hydraidego.Index{
 		IndexType:  hydraidego.IndexCreationTime, // Use `createdAt` metadata for sorting
 		IndexOrder: hydraidego.IndexOrderDesc,    // Descending = newest first
 		From:       0,                            // No offset (start from latest)
 		Limit:      int32(limit),                 // Limit the number of results
+		FromTime:   &fromTime,                    // Optional: From last 90 days
+		ToTime:     &toTime,                      // Optional: To 20 days ago
 	}
 
 	// Generate the Swamp name for this user's session data

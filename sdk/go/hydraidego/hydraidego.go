@@ -107,22 +107,35 @@ type Hydraidego interface {
 //   - IndexOrder:    ascending or descending result order
 //   - From:          offset for pagination (0 = from start)
 //   - Limit:         max number of results to return (0 = no limit)
+//   - FromTime:      inclusive lower bound (records with time >= FromTime are included)
+//   - ToTime:        exclusive upper bound (records with time < ToTime are included)
 //
 // Example:
 //
 //	Read the latest 10 entries by creation time:
-//
 //	&Index{
 //	    IndexType:  IndexCreationTime,
 //	    IndexOrder: IndexOrderDesc,
 //	    From:       0,
 //	    Limit:      10,
 //	}
+//
+//	Read all entries created between two timestamps:
+//	&Index{
+//	    IndexType:  IndexCreationTime,
+//	    IndexOrder: IndexOrderAsc,
+//	    From:       0,
+//	    Limit:      0,
+//	    FromTime:   time.Date(2024, 6, 1, 0, 0, 0, 0, time.UTC),
+//	    ToTime:     time.Date(2024, 6, 30, 23, 59, 59, 0, time.UTC),
+//	}
 type Index struct {
-	IndexType        // What field to use for sorting/filtering
-	IndexOrder       // Ascending or Descending order
-	From       int32 // Offset: how many records to skip (0 = start from first)
-	Limit      int32 // Max results to return (0 = return all)
+	IndexType             // What field to use for sorting/filtering
+	IndexOrder            // Ascending or Descending order
+	From       int32      // Offset: how many records to skip (0 = start from first)
+	Limit      int32      // Max results to return (0 = return all)
+	FromTime   *time.Time // Inclusive lower bound for time-based filtering - optional. It can be nil
+	ToTime     *time.Time // Exclusive upper bound for time-based filtering - optional. It can be nil
 }
 
 // IndexType specifies which field to use as the index during a read.
@@ -1318,15 +1331,27 @@ func (h *hydraidego) CatalogReadMany(ctx context.Context, swampName name.Name, i
 	indexTypeProtoFormat := convertIndexTypeToProtoIndexType(index.IndexType)
 	orderTypeProtoFormat := convertOrderTypeToProtoOrderType(index.IndexOrder)
 
-	// Fetch all matching Treasures from the Hydra engine based on the Index parameters
-	response, err := h.client.GetServiceClient(swampName).GetByIndex(ctx, &hydraidepbgo.GetByIndexRequest{
+	indexRequest := &hydraidepbgo.GetByIndexRequest{
 		IslandID:  swampName.GetIslandID(h.client.GetAllIslands()),
 		SwampName: swampName.Get(),
 		IndexType: indexTypeProtoFormat,
 		OrderType: orderTypeProtoFormat,
 		From:      index.From,
 		Limit:     index.Limit,
-	})
+	}
+
+	// check if FromTime and ToTime are set, and if so, convert them to protobuf Timestamp
+	if index.FromTime != nil && !index.FromTime.IsZero() {
+		indexRequest.FromTime = timestamppb.New(*index.FromTime)
+	}
+
+	// check if ToTime is set, and if so, convert it to protobuf Timestamp
+	if index.ToTime != nil && !index.ToTime.IsZero() {
+		indexRequest.ToTime = timestamppb.New(*index.ToTime)
+	}
+
+	// Fetch all matching Treasures from the Hydra engine based on the Index parameters
+	response, err := h.client.GetServiceClient(swampName).GetByIndex(ctx, indexRequest)
 
 	if err != nil {
 		return errorHandler(err)
