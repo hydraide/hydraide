@@ -2,13 +2,14 @@ package beacon
 
 import (
 	"fmt"
-	"github.com/hydraide/hydraide/app/core/hydra/swamp/treasure"
-	"github.com/hydraide/hydraide/app/core/hydra/swamp/treasure/guard"
-	"github.com/stretchr/testify/assert"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/hydraide/hydraide/app/core/hydra/swamp/treasure"
+	"github.com/hydraide/hydraide/app/core/hydra/swamp/treasure/guard"
+	"github.com/stretchr/testify/assert"
 )
 
 func MySaveFunction(_ treasure.Treasure, _ guard.ID) treasure.TreasureStatus {
@@ -166,7 +167,10 @@ func TestBeacon(t *testing.T) {
 		err := b.SortByCreationTimeAsc()
 		assert.Nil(t, err, "should not return error")
 
-		treasures, err := b.GetManyFromOrderPosition(0, 10)
+		treasures, err := b.GetManyFromOrderPosition(&OrderPosition{
+			From:  0,
+			Limit: 10,
+		})
 		assert.Nil(t, err, "should not return error")
 
 		lastID := 0
@@ -180,7 +184,10 @@ func TestBeacon(t *testing.T) {
 		err = b.SortByCreationTimeDesc()
 		assert.Nil(t, err, "should not return error")
 
-		treasures, err = b.GetManyFromOrderPosition(0, 10)
+		treasures, err = b.GetManyFromOrderPosition(&OrderPosition{
+			From:  0,
+			Limit: 10,
+		})
 		assert.Nil(t, err, "should not return error")
 
 		lastID = 9
@@ -216,7 +223,10 @@ func TestBeacon(t *testing.T) {
 		err := b.SortByKeyAsc()
 		assert.Nil(t, err, "should not return error")
 
-		treasures, err := b.GetManyFromOrderPosition(0, 10)
+		treasures, err := b.GetManyFromOrderPosition(&OrderPosition{
+			From:  0,
+			Limit: 10,
+		})
 		assert.Nil(t, err, "should not return error")
 
 		lastID := 0
@@ -230,7 +240,10 @@ func TestBeacon(t *testing.T) {
 		err = b.SortByKeyDesc()
 		assert.Nil(t, err, "should not return error")
 
-		treasures, err = b.GetManyFromOrderPosition(0, 10)
+		treasures, err = b.GetManyFromOrderPosition(&OrderPosition{
+			From:  0,
+			Limit: 10,
+		})
 		assert.Nil(t, err, "should not return error")
 
 		lastID = 9
@@ -266,7 +279,10 @@ func TestBeacon(t *testing.T) {
 		err := b.SortByUpdateTimeAsc()
 		assert.Nil(t, err, "should not return error")
 
-		treasures, err := b.GetManyFromOrderPosition(0, 10)
+		treasures, err := b.GetManyFromOrderPosition(&OrderPosition{
+			From:  0,
+			Limit: 10,
+		})
 		assert.Nil(t, err, "should not return error")
 
 		lastID := 0
@@ -280,7 +296,10 @@ func TestBeacon(t *testing.T) {
 		err = b.SortByUpdateTimeDesc()
 		assert.Nil(t, err, "should not return error")
 
-		treasures, err = b.GetManyFromOrderPosition(0, 10)
+		treasures, err = b.GetManyFromOrderPosition(&OrderPosition{
+			From:  0,
+			Limit: 10,
+		})
 		assert.Nil(t, err, "should not return error")
 
 		lastID = 9
@@ -314,7 +333,10 @@ func TestBeacon(t *testing.T) {
 		err := b.SortByValueInt8ASC()
 		assert.Nil(t, err, "should not return error")
 
-		treasures, err := b.GetManyFromOrderPosition(0, 10)
+		treasures, err := b.GetManyFromOrderPosition(&OrderPosition{
+			From:  0,
+			Limit: 10,
+		})
 		assert.Nil(t, err, "should not return error")
 
 		lastID := 0
@@ -328,7 +350,10 @@ func TestBeacon(t *testing.T) {
 		err = b.SortByValueInt8DESC()
 		assert.Nil(t, err, "should not return error")
 
-		treasures, err = b.GetManyFromOrderPosition(0, 10)
+		treasures, err = b.GetManyFromOrderPosition(&OrderPosition{
+			From:  0,
+			Limit: 10,
+		})
 		assert.Nil(t, err, "should not return error")
 
 		lastID = 9
@@ -362,7 +387,10 @@ func TestBeacon(t *testing.T) {
 		err := b.SortByValueInt16ASC()
 		assert.Nil(t, err, "should not return error")
 
-		treasures, err := b.GetManyFromOrderPosition(0, 10)
+		treasures, err := b.GetManyFromOrderPosition(&OrderPosition{
+			From:  0,
+			Limit: 10,
+		})
 		assert.Nil(t, err, "should not return error")
 
 		lastID := 0
@@ -376,7 +404,10 @@ func TestBeacon(t *testing.T) {
 		err = b.SortByValueInt16DESC()
 		assert.Nil(t, err, "should not return error")
 
-		treasures, err = b.GetManyFromOrderPosition(0, 10)
+		treasures, err = b.GetManyFromOrderPosition(&OrderPosition{
+			From:  0,
+			Limit: 10,
+		})
 		assert.Nil(t, err, "should not return error")
 
 		lastID = 9
@@ -410,7 +441,10 @@ func TestBeacon(t *testing.T) {
 		err := b.SortByValueInt32ASC()
 		assert.Nil(t, err, "should not return error")
 
-		treasures, err := b.GetManyFromOrderPosition(0, 10)
+		treasures, err := b.GetManyFromOrderPosition(&OrderPosition{
+			From:  0,
+			Limit: 10,
+		})
 		assert.Nil(t, err, "should not return error")
 
 		lastID := 0
@@ -424,7 +458,10 @@ func TestBeacon(t *testing.T) {
 		err = b.SortByValueInt32DESC()
 		assert.Nil(t, err, "should not return error")
 
-		treasures, err = b.GetManyFromOrderPosition(0, 10)
+		treasures, err = b.GetManyFromOrderPosition(&OrderPosition{
+			From:  0,
+			Limit: 10,
+		})
 		assert.Nil(t, err, "should not return error")
 
 		lastID = 9
@@ -458,7 +495,10 @@ func TestBeacon(t *testing.T) {
 		err := b.SortByValueInt64ASC()
 		assert.Nil(t, err, "should not return error")
 
-		treasures, err := b.GetManyFromOrderPosition(0, 10)
+		treasures, err := b.GetManyFromOrderPosition(&OrderPosition{
+			From:  0,
+			Limit: 10,
+		})
 		assert.Nil(t, err, "should not return error")
 
 		lastID := 0
@@ -472,7 +512,10 @@ func TestBeacon(t *testing.T) {
 		err = b.SortByValueInt64DESC()
 		assert.Nil(t, err, "should not return error")
 
-		treasures, err = b.GetManyFromOrderPosition(0, 10)
+		treasures, err = b.GetManyFromOrderPosition(&OrderPosition{
+			From:  0,
+			Limit: 10,
+		})
 		assert.Nil(t, err, "should not return error")
 
 		lastID = 9
@@ -506,7 +549,10 @@ func TestBeacon(t *testing.T) {
 		err := b.SortByValueUint8ASC()
 		assert.Nil(t, err, "should not return error")
 
-		treasures, err := b.GetManyFromOrderPosition(0, 10)
+		treasures, err := b.GetManyFromOrderPosition(&OrderPosition{
+			From:  0,
+			Limit: 10,
+		})
 		assert.Nil(t, err, "should not return error")
 
 		lastID := 0
@@ -520,7 +566,10 @@ func TestBeacon(t *testing.T) {
 		err = b.SortByValueUint8DESC()
 		assert.Nil(t, err, "should not return error")
 
-		treasures, err = b.GetManyFromOrderPosition(0, 10)
+		treasures, err = b.GetManyFromOrderPosition(&OrderPosition{
+			From:  0,
+			Limit: 10,
+		})
 		assert.Nil(t, err, "should not return error")
 
 		lastID = 9
@@ -554,7 +603,10 @@ func TestBeacon(t *testing.T) {
 		err := b.SortByValueUint16ASC()
 		assert.Nil(t, err, "should not return error")
 
-		treasures, err := b.GetManyFromOrderPosition(0, 10)
+		treasures, err := b.GetManyFromOrderPosition(&OrderPosition{
+			From:  0,
+			Limit: 10,
+		})
 		assert.Nil(t, err, "should not return error")
 
 		lastID := 0
@@ -568,7 +620,10 @@ func TestBeacon(t *testing.T) {
 		err = b.SortByValueUint16DESC()
 		assert.Nil(t, err, "should not return error")
 
-		treasures, err = b.GetManyFromOrderPosition(0, 10)
+		treasures, err = b.GetManyFromOrderPosition(&OrderPosition{
+			From:  0,
+			Limit: 10,
+		})
 		assert.Nil(t, err, "should not return error")
 
 		lastID = 9
@@ -602,7 +657,10 @@ func TestBeacon(t *testing.T) {
 		err := b.SortByValueUint32ASC()
 		assert.Nil(t, err, "should not return error")
 
-		treasures, err := b.GetManyFromOrderPosition(0, 10)
+		treasures, err := b.GetManyFromOrderPosition(&OrderPosition{
+			From:  0,
+			Limit: 10,
+		})
 		assert.Nil(t, err, "should not return error")
 
 		lastID := 0
@@ -616,7 +674,10 @@ func TestBeacon(t *testing.T) {
 		err = b.SortByValueUint32DESC()
 		assert.Nil(t, err, "should not return error")
 
-		treasures, err = b.GetManyFromOrderPosition(0, 10)
+		treasures, err = b.GetManyFromOrderPosition(&OrderPosition{
+			From:  0,
+			Limit: 10,
+		})
 		assert.Nil(t, err, "should not return error")
 
 		lastID = 9
@@ -650,7 +711,10 @@ func TestBeacon(t *testing.T) {
 		err := b.SortByValueUint64ASC()
 		assert.Nil(t, err, "should not return error")
 
-		treasures, err := b.GetManyFromOrderPosition(0, 10)
+		treasures, err := b.GetManyFromOrderPosition(&OrderPosition{
+			From:  0,
+			Limit: 10,
+		})
 		assert.Nil(t, err, "should not return error")
 
 		lastID := 0
@@ -664,7 +728,10 @@ func TestBeacon(t *testing.T) {
 		err = b.SortByValueUint64DESC()
 		assert.Nil(t, err, "should not return error")
 
-		treasures, err = b.GetManyFromOrderPosition(0, 10)
+		treasures, err = b.GetManyFromOrderPosition(&OrderPosition{
+			From:  0,
+			Limit: 10,
+		})
 		assert.Nil(t, err, "should not return error")
 
 		lastID = 9
@@ -698,7 +765,10 @@ func TestBeacon(t *testing.T) {
 		err := b.SortByValueFloat64ASC()
 		assert.Nil(t, err, "should not return error")
 
-		treasures, err := b.GetManyFromOrderPosition(0, 10)
+		treasures, err := b.GetManyFromOrderPosition(&OrderPosition{
+			From:  0,
+			Limit: 10,
+		})
 		assert.Nil(t, err, "should not return error")
 
 		lastID := 0
@@ -712,7 +782,10 @@ func TestBeacon(t *testing.T) {
 		err = b.SortByValueFloat64DESC()
 		assert.Nil(t, err, "should not return error")
 
-		treasures, err = b.GetManyFromOrderPosition(0, 10)
+		treasures, err = b.GetManyFromOrderPosition(&OrderPosition{
+			From:  0,
+			Limit: 10,
+		})
 		assert.Nil(t, err, "should not return error")
 
 		lastID = 9
@@ -746,7 +819,10 @@ func TestBeacon(t *testing.T) {
 		err := b.SortByValueFloat32ASC()
 		assert.Nil(t, err, "should not return error")
 
-		treasures, err := b.GetManyFromOrderPosition(0, 10)
+		treasures, err := b.GetManyFromOrderPosition(&OrderPosition{
+			From:  0,
+			Limit: 10,
+		})
 		assert.Nil(t, err, "should not return error")
 
 		lastID := 0
@@ -760,7 +836,10 @@ func TestBeacon(t *testing.T) {
 		err = b.SortByValueFloat32DESC()
 		assert.Nil(t, err, "should not return error")
 
-		treasures, err = b.GetManyFromOrderPosition(0, 10)
+		treasures, err = b.GetManyFromOrderPosition(&OrderPosition{
+			From:  0,
+			Limit: 10,
+		})
 		assert.Nil(t, err, "should not return error")
 
 		lastID = 9
@@ -794,7 +873,10 @@ func TestBeacon(t *testing.T) {
 		err := b.SortByValueStringASC()
 		assert.Nil(t, err, "should not return error")
 
-		treasures, err := b.GetManyFromOrderPosition(0, 10)
+		treasures, err := b.GetManyFromOrderPosition(&OrderPosition{
+			From:  0,
+			Limit: 10,
+		})
 		assert.Nil(t, err, "should not return error")
 
 		lastID := 0
@@ -808,7 +890,10 @@ func TestBeacon(t *testing.T) {
 		err = b.SortByValueStringDESC()
 		assert.Nil(t, err, "should not return error")
 
-		treasures, err = b.GetManyFromOrderPosition(0, 10)
+		treasures, err = b.GetManyFromOrderPosition(&OrderPosition{
+			From:  0,
+			Limit: 10,
+		})
 		assert.Nil(t, err, "should not return error")
 
 		lastID = 9
@@ -845,7 +930,10 @@ func TestBeacon(t *testing.T) {
 
 		assert.Equal(t, 10, b.Count(), "all treasures count should be equal to 10")
 
-		receivedTreasures, err := b.GetManyFromOrderPosition(0, 5)
+		receivedTreasures, err := b.GetManyFromOrderPosition(&OrderPosition{
+			From:  0,
+			Limit: 5,
+		})
 		assert.Nil(t, err, "should not return error")
 
 		assert.Equal(t, 5, len(receivedTreasures), "received treasures count should be equal to 10")
@@ -916,4 +1004,233 @@ func TestBeacon(t *testing.T) {
 
 	})
 
+}
+
+func TestBeacon_GetManyFromOrderPosition_TimeFiltering(t *testing.T) {
+
+	// Create a beacon and enable ordering
+	b := New()
+	b.SetIsOrdered(true)
+
+	// Create base time for testing
+	baseTime := time.Now().UTC()
+
+	// Create test treasures with different timestamps
+	treasures := []struct {
+		key        string
+		createdAt  time.Time
+		expiresAt  time.Time
+		modifiedAt time.Time
+	}{
+		{"t1", baseTime.Add(-10 * time.Hour), baseTime.Add(10 * time.Hour), baseTime.Add(-5 * time.Hour)},
+		{"t2", baseTime.Add(-8 * time.Hour), baseTime.Add(12 * time.Hour), baseTime.Add(-4 * time.Hour)},
+		{"t3", baseTime.Add(-6 * time.Hour), baseTime.Add(14 * time.Hour), baseTime.Add(-3 * time.Hour)},
+		{"t4", baseTime.Add(-4 * time.Hour), baseTime.Add(16 * time.Hour), baseTime.Add(-2 * time.Hour)},
+		{"t5", baseTime.Add(-2 * time.Hour), baseTime.Add(18 * time.Hour), baseTime.Add(-1 * time.Hour)},
+		{"t6", baseTime.Add(-1 * time.Hour), baseTime.Add(20 * time.Hour), baseTime},
+	}
+
+	// Add treasures to beacon
+	for _, tr := range treasures {
+		treasureInterface := treasure.New(MySaveFunction)
+		guardID := treasureInterface.StartTreasureGuard(true, guard.BodyAuthID)
+		treasureInterface.BodySetKey(guardID, tr.key)
+		treasureInterface.SetCreatedAt(guardID, tr.createdAt)
+		treasureInterface.SetExpirationTime(guardID, tr.expiresAt)
+		treasureInterface.SetModifiedAt(guardID, tr.modifiedAt)
+		b.Add(treasureInterface)
+	}
+
+	// Test cases for different time filter scenarios
+	testCases := []struct {
+		name         string
+		sortOrder    SortOrder
+		fromTime     *time.Time
+		toTime       *time.Time
+		from         int
+		limit        int
+		expectedKeys []string
+		expectError  bool
+	}{
+		{
+			name:         "No time filter - all treasures",
+			sortOrder:    SortByCreatedAtAsc,
+			fromTime:     nil,
+			toTime:       nil,
+			from:         0,
+			limit:        0,
+			expectedKeys: []string{"t1", "t2", "t3", "t4", "t5", "t6"},
+		},
+		{
+			name:         "Filter by fromTime only (CreatedAt ASC)",
+			sortOrder:    SortByCreatedAtAsc,
+			fromTime:     &[]time.Time{baseTime.Add(-4 * time.Hour)}[0],
+			toTime:       nil,
+			from:         0,
+			limit:        0,
+			expectedKeys: []string{"t4", "t5", "t6"},
+		},
+		{
+			name:         "Filter by toTime only (CreatedAt ASC)",
+			sortOrder:    SortByCreatedAtAsc,
+			fromTime:     nil,
+			toTime:       &[]time.Time{baseTime.Add(-4 * time.Hour)}[0],
+			from:         0,
+			limit:        0,
+			expectedKeys: []string{"t1", "t2", "t3"},
+		},
+		{
+			name:         "Filter by both fromTime and toTime (CreatedAt ASC)",
+			sortOrder:    SortByCreatedAtAsc,
+			fromTime:     &[]time.Time{baseTime.Add(-6 * time.Hour)}[0],
+			toTime:       &[]time.Time{baseTime.Add(-3 * time.Hour)}[0],
+			from:         0,
+			limit:        0,
+			expectedKeys: []string{"t3", "t4"},
+		},
+		{
+			name:         "Time filter with offset (From)",
+			sortOrder:    SortByCreatedAtAsc,
+			fromTime:     &[]time.Time{baseTime.Add(-6 * time.Hour)}[0],
+			toTime:       &[]time.Time{baseTime.Add(-3 * time.Hour)}[0],
+			from:         1,
+			limit:        0,
+			expectedKeys: []string{"t4"},
+		},
+		{
+			name:         "Time filter with limit",
+			sortOrder:    SortByCreatedAtAsc,
+			fromTime:     &[]time.Time{baseTime.Add(-6 * time.Hour)}[0],
+			toTime:       &[]time.Time{baseTime.Add(-3 * time.Hour)}[0],
+			from:         0,
+			limit:        2,
+			expectedKeys: []string{"t3", "t4"},
+		},
+		{
+			name:         "Time filter with both offset and limit",
+			sortOrder:    SortByCreatedAtAsc,
+			fromTime:     &[]time.Time{baseTime.Add(-10 * time.Hour)}[0],
+			toTime:       &[]time.Time{baseTime.Add(-2 * time.Hour)}[0],
+			from:         1,
+			limit:        2,
+			expectedKeys: []string{"t2", "t3"},
+		},
+		{
+			name:         "Descending order with time filter",
+			sortOrder:    SortByCreatedAtDesc,
+			fromTime:     &[]time.Time{baseTime.Add(-7 * time.Hour)}[0],
+			toTime:       &[]time.Time{baseTime.Add(-3 * time.Hour)}[0],
+			from:         0,
+			limit:        0,
+			expectedKeys: []string{"t4", "t3"},
+		},
+		{
+			name:         "ExpirationTime filter (ASC)",
+			sortOrder:    SortByExpirationTimeAsc,
+			fromTime:     &[]time.Time{baseTime.Add(11 * time.Hour)}[0],
+			toTime:       &[]time.Time{baseTime.Add(17 * time.Hour)}[0],
+			from:         0,
+			limit:        0,
+			expectedKeys: []string{"t2", "t3", "t4"},
+		},
+		{
+			name:         "ModifiedAt filter (ASC)",
+			sortOrder:    SortByModifiedAtAsc,
+			fromTime:     &[]time.Time{baseTime.Add(-4 * time.Hour)}[0],
+			toTime:       &[]time.Time{baseTime.Add(-1 * time.Hour)}[0],
+			from:         0,
+			limit:        0,
+			expectedKeys: []string{"t2", "t3", "t4"},
+		},
+		{
+			name:         "Empty result - fromTime after all treasures",
+			sortOrder:    SortByCreatedAtAsc,
+			fromTime:     &[]time.Time{baseTime.Add(1 * time.Hour)}[0],
+			toTime:       nil,
+			from:         0,
+			limit:        0,
+			expectedKeys: []string{},
+		},
+		{
+			name:         "Empty result - toTime before all treasures",
+			sortOrder:    SortByCreatedAtAsc,
+			fromTime:     nil,
+			toTime:       &[]time.Time{baseTime.Add(-15 * time.Hour)}[0],
+			from:         0,
+			limit:        0,
+			expectedKeys: []string{},
+		},
+		{
+			name:         "Empty result - from exceeds filtered range",
+			sortOrder:    SortByCreatedAtAsc,
+			fromTime:     &[]time.Time{baseTime.Add(-7 * time.Hour)}[0],
+			toTime:       &[]time.Time{baseTime.Add(-3 * time.Hour)}[0],
+			from:         10,
+			limit:        0,
+			expectedKeys: []string{},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Sort beacon according to test case
+			var err error
+			switch tc.sortOrder {
+			case SortByCreatedAtAsc:
+				err = b.SortByCreationTimeAsc()
+			case SortByCreatedAtDesc:
+				err = b.SortByCreationTimeDesc()
+			case SortByExpirationTimeAsc:
+				err = b.SortByExpirationTimeAsc()
+			case SortByExpirationTimeDesc:
+				err = b.SortByExpirationTimeDesc()
+			case SortByModifiedAtAsc:
+				err = b.SortByUpdateTimeAsc()
+			case SortByModifiedAtDesc:
+				err = b.SortByUpdateTimeDesc()
+			}
+
+			if err != nil {
+				t.Fatalf("Failed to sort beacon: %v", err)
+			}
+
+			// Execute GetManyFromOrderPosition
+			orderPos := &OrderPosition{
+				From:     tc.from,
+				Limit:    tc.limit,
+				FromTime: tc.fromTime,
+				ToTime:   tc.toTime,
+			}
+
+			result, err := b.GetManyFromOrderPosition(orderPos)
+
+			// Check for expected error
+			if tc.expectError {
+				if err == nil {
+					t.Errorf("Expected error but got none")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+
+			// Verify result count
+			if len(result) != len(tc.expectedKeys) {
+				t.Errorf("Expected %d results, got %d", len(tc.expectedKeys), len(result))
+			}
+
+			// Verify result keys match expected order
+			for i, expectedKey := range tc.expectedKeys {
+				if i >= len(result) {
+					t.Errorf("Missing treasure at index %d, expected key: %s", i, expectedKey)
+					continue
+				}
+				if result[i].GetKey() != expectedKey {
+					t.Errorf("At index %d: expected key %s, got %s", i, expectedKey, result[i].GetKey())
+				}
+			}
+		})
+	}
 }

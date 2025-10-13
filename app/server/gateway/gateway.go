@@ -474,8 +474,24 @@ func (g Gateway) GetByIndex(ctx context.Context, in *hydrapb.GetByIndexRequest) 
 	swampInterface.BeginVigil()
 	defer swampInterface.CeaseVigil()
 
+	// convert timestamppb.Timestamp to time.Time
+	fromTime := &time.Time{}
+	toTime := &time.Time{}
+	if in.GetFromTime() != nil {
+		t := in.GetFromTime().AsTime()
+		fromTime = &t
+	} else {
+		fromTime = nil
+	}
+	if in.GetToTime() != nil {
+		t := in.GetToTime().AsTime()
+		toTime = &t
+	} else {
+		toTime = nil
+	}
+
 	treasures, err := swampInterface.GetTreasuresByBeacon(inputIndexTypeToBeaconType(in.GetIndexType()),
-		inputOrderTypeToBeaconOrderType(in.GetOrderType()), in.GetFrom(), in.GetLimit())
+		inputOrderTypeToBeaconOrderType(in.GetOrderType()), in.GetFrom(), in.GetLimit(), fromTime, toTime)
 
 	if err != nil {
 		// return with grpc error message

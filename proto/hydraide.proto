@@ -865,6 +865,14 @@ message GetByIndexRequest {
   //
   // Set to 0 to return all results (⚠️ caution on large datasets).
   int32 Limit = 6;
+
+  // FromTime and ToTime are optional fields for time-based index filtering (e.g. EXPIRATION_TIME, CREATION_TIME, UPDATE_TIME).
+  // Use these to return only results between the specified start (FromTime) and end (ToTime) timestamps.
+  // Each field can be set independently; neither is required.
+  // This enables the engine to filter results server-side, avoiding full client-side iteration over all treasures.
+  optional google.protobuf.Timestamp FromTime = 7;
+  optional google.protobuf.Timestamp ToTime = 8;
+
 }
 
 message IndexType {

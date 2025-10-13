@@ -194,7 +194,7 @@ type Swamp interface {
 	// Use-cases:
 	// 1. Efficient retrieval of treasures based on specific criteria using Beacons.
 	// 2. Real-time data querying and processing for applications with dynamic data.
-	GetTreasuresByBeacon(beaconType BeaconType, beaconOrderType BeaconOrder, from int32, limit int32) ([]treasure.Treasure, error)
+	GetTreasuresByBeacon(beaconType BeaconType, beaconOrderType BeaconOrder, from int32, limit int32, fromTime *time.Time, toTime *time.Time) ([]treasure.Treasure, error)
 
 	// CloneAndDeleteExpiredTreasures retrieves one or more expired Treasures from the Swamp based on their expiration
 	// time and removes them. , Use this function carefully as it deletes the Treasures from the Swamp.
@@ -2150,7 +2150,7 @@ func (s *swamp) StopSendingEvents() {
 }
 
 // GetTreasuresByBeacon can get and delete treasures from indexes
-func (s *swamp) GetTreasuresByBeacon(beaconType BeaconType, beaconOrderType BeaconOrder, from int32, limit int32) ([]treasure.Treasure, error) {
+func (s *swamp) GetTreasuresByBeacon(beaconType BeaconType, beaconOrderType BeaconOrder, from int32, limit int32, fromTime *time.Time, toTime *time.Time) ([]treasure.Treasure, error) {
 
 	// set the last interaction time to the current time
 	atomic.StoreInt64(&s.lastInteractionTime, time.Now().UnixNano())
@@ -2167,11 +2167,11 @@ func (s *swamp) GetTreasuresByBeacon(beaconType BeaconType, beaconOrderType Beac
 	case BeaconTypeKey:
 		selectedTreasures, err = s.findInKeyBeacon(beaconOrderType, from, limit)
 	case BeaconTypeExpirationTime:
-		selectedTreasures, err = s.findInExpirationTimeBeacon(beaconOrderType, from, limit)
+		selectedTreasures, err = s.findInExpirationTimeBeacon(beaconOrderType, from, limit, fromTime, toTime)
 	case BeaconTypeCreationTime:
-		selectedTreasures, err = s.findInCreationTimeBeacon(beaconOrderType, from, limit)
+		selectedTreasures, err = s.findInCreationTimeBeacon(beaconOrderType, from, limit, fromTime, toTime)
 	case BeaconTypeUpdateTime:
-		selectedTreasures, err = s.findInUpdateTimeBeacon(beaconOrderType, from, limit)
+		selectedTreasures, err = s.findInUpdateTimeBeacon(beaconOrderType, from, limit, fromTime, toTime)
 	default:
 		// find in value-based beacons
 		selectedTreasures, err = s.findInValueBeacon(beaconOrderType, beaconType, from, limit)
@@ -2474,13 +2474,23 @@ func (s *swamp) deleteTreasureIfBeaconInitialized(b beacon.Beacon, key string) {
 
 // findInCreationTimeBeacon - find the treasures in the creationTimeBeaconASC or creationTimeBeaconDESC slice
 // Build the two indexes if they are not exists or the indexes are empty
-func (s *swamp) findInCreationTimeBeacon(order BeaconOrder, from int32, limit int32) ([]treasure.Treasure, error) {
+func (s *swamp) findInCreationTimeBeacon(order BeaconOrder, from int32, limit int32, fromTime *time.Time, toTime *time.Time) ([]treasure.Treasure, error) {
 	s.buildBeacon(s.creationTimeBeaconASC, s.creationTimeBeaconDESC, BeaconTypeCreationTime)
 	switch order {
 	case IndexOrderAsc:
-		return s.creationTimeBeaconASC.GetManyFromOrderPosition(int(from), int(limit))
+		return s.creationTimeBeaconASC.GetManyFromOrderPosition(&beacon.OrderPosition{
+			From:     int(from),
+			Limit:    int(limit),
+			FromTime: fromTime,
+			ToTime:   toTime,
+		})
 	case IndexOrderDesc:
-		return s.creationTimeBeaconDESC.GetManyFromOrderPosition(int(from), int(limit))
+		return s.creationTimeBeaconDESC.GetManyFromOrderPosition(&beacon.OrderPosition{
+			From:     int(from),
+			Limit:    int(limit),
+			FromTime: fromTime,
+			ToTime:   toTime,
+		})
 	default:
 		return nil, errors.New("invalid order")
 	}
@@ -2488,13 +2498,23 @@ func (s *swamp) findInCreationTimeBeacon(order BeaconOrder, from int32, limit in
 
 // findInUpdateTimeBeacon - find the treasures in the updateTimeBeaconASC or updateTimeBeaconDESC slice
 // Build the two indexes if they are not exists or the indexes are empty
-func (s *swamp) findInUpdateTimeBeacon(order BeaconOrder, from int32, limit int32) ([]treasure.Treasure, error) {
+func (s *swamp) findInUpdateTimeBeacon(order BeaconOrder, from int32, limit int32, fromTime *time.Time, toTime *time.Time) ([]treasure.Treasure, error) {
 	s.buildBeacon(s.updateTimeBeaconASC, s.updateTimeBeaconDESC, BeaconTypeUpdateTime)
 	switch order {
 	case IndexOrderAsc:
-		return s.updateTimeBeaconASC.GetManyFromOrderPosition(int(from), int(limit))
+		return s.updateTimeBeaconASC.GetManyFromOrderPosition(&beacon.OrderPosition{
+			From:     int(from),
+			Limit:    int(limit),
+			FromTime: fromTime,
+			ToTime:   toTime,
+		})
 	case IndexOrderDesc:
-		return s.updateTimeBeaconDESC.GetManyFromOrderPosition(int(from), int(limit))
+		return s.updateTimeBeaconDESC.GetManyFromOrderPosition(&beacon.OrderPosition{
+			From:     int(from),
+			Limit:    int(limit),
+			FromTime: fromTime,
+			ToTime:   toTime,
+		})
 	default:
 		return nil, errors.New("invalid order")
 	}
@@ -2506,9 +2526,15 @@ func (s *swamp) findInKeyBeacon(order BeaconOrder, from int32, limit int32) ([]t
 	s.buildBeacon(s.keyBeaconASC, s.keyBeaconDESC, BeaconTypeKey)
 	switch order {
 	case IndexOrderAsc:
-		return s.keyBeaconASC.GetManyFromOrderPosition(int(from), int(limit))
+		return s.keyBeaconASC.GetManyFromOrderPosition(&beacon.OrderPosition{
+			From:  int(from),
+			Limit: int(limit),
+		})
 	case IndexOrderDesc:
-		return s.keyBeaconDESC.GetManyFromOrderPosition(int(from), int(limit))
+		return s.keyBeaconDESC.GetManyFromOrderPosition(&beacon.OrderPosition{
+			From:  int(from),
+			Limit: int(limit),
+		})
 	default:
 		return nil, errors.New("invalid order")
 	}
@@ -2516,13 +2542,23 @@ func (s *swamp) findInKeyBeacon(order BeaconOrder, from int32, limit int32) ([]t
 
 // findInExpirationTimeBeacon - find the treasures in the expirationTimeBeaconASC or expirationTimeBeaconDESC slice
 // Build the two indexes if they are not exists or the indexes are empty
-func (s *swamp) findInExpirationTimeBeacon(order BeaconOrder, from int32, limit int32) ([]treasure.Treasure, error) {
+func (s *swamp) findInExpirationTimeBeacon(order BeaconOrder, from int32, limit int32, fromTime *time.Time, toTime *time.Time) ([]treasure.Treasure, error) {
 	s.buildBeacon(s.expirationTimeBeaconASC, s.expirationTimeBeaconDESC, BeaconTypeExpirationTime)
 	switch order {
 	case IndexOrderAsc:
-		return s.expirationTimeBeaconASC.GetManyFromOrderPosition(int(from), int(limit))
+		return s.expirationTimeBeaconASC.GetManyFromOrderPosition(&beacon.OrderPosition{
+			From:     int(from),
+			Limit:    int(limit),
+			FromTime: fromTime,
+			ToTime:   toTime,
+		})
 	case IndexOrderDesc:
-		return s.expirationTimeBeaconDESC.GetManyFromOrderPosition(int(from), int(limit))
+		return s.expirationTimeBeaconDESC.GetManyFromOrderPosition(&beacon.OrderPosition{
+			From:     int(from),
+			Limit:    int(limit),
+			FromTime: fromTime,
+			ToTime:   toTime,
+		})
 	default:
 		return nil, errors.New("invalid order")
 	}
@@ -2534,9 +2570,15 @@ func (s *swamp) findInValueBeacon(order BeaconOrder, bc BeaconType, from int32, 
 	s.buildBeacon(s.valueBeaconASC, s.valueBeaconDESC, bc)
 	switch order {
 	case IndexOrderAsc:
-		return s.valueBeaconASC.GetManyFromOrderPosition(int(from), int(limit))
+		return s.valueBeaconASC.GetManyFromOrderPosition(&beacon.OrderPosition{
+			From:  int(from),
+			Limit: int(limit),
+		})
 	case IndexOrderDesc:
-		return s.valueBeaconDESC.GetManyFromOrderPosition(int(from), int(limit))
+		return s.valueBeaconDESC.GetManyFromOrderPosition(&beacon.OrderPosition{
+			From:  int(from),
+			Limit: int(limit),
+		})
 	default:
 		return nil, errors.New("invalid order")
 	}

@@ -6,12 +6,13 @@ package beacon
 import (
 	"errors"
 	"fmt"
-	"github.com/hydraide/hydraide/app/core/hydra/swamp/treasure"
 	"maps"
 	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/hydraide/hydraide/app/core/hydra/swamp/treasure"
 )
 
 type Beacon interface {
@@ -147,7 +148,7 @@ type Beacon interface {
 	// 3. During logging or debugging procedures to inspect a range of treasure objects.
 	// 4. When constructing reports or analytics and you need to access a specific subset
 	//    of ordered treasure objects for calculations or summary.
-	GetManyFromOrderPosition(from int, limit int) ([]treasure.Treasure, error)
+	GetManyFromOrderPosition(orderPosition *OrderPosition) ([]treasure.Treasure, error)
 
 	// GetManyFromKey retrieves a slice of treasure objects starting from a specified key
 	// up to a given limit. The function sorts the returned treasures based on their creation time.
@@ -570,7 +571,20 @@ type beacon struct {
 	// etc... Don't forget to set the value to True, otherwise the beacon won't handle the treasuresByOrder array, and it will
 	// always be empty!
 	isOrdered bool
+	//
+	sortOrder SortOrder
 }
+
+type SortOrder int
+
+const (
+	SortByExpirationTimeAsc SortOrder = iota + 1
+	SortByExpirationTimeDesc
+	SortByCreatedAtAsc
+	SortByCreatedAtDesc
+	SortByModifiedAtAsc
+	SortByModifiedAtDesc
+)
 
 // New returns a new beacon
 func New() Beacon {
@@ -902,9 +916,43 @@ func (b *beacon) CloneUnorderedTreasures(thenReset bool) map[string]treasure.Tre
 	return treasuresClone
 }
 
-// GetManyFromOrderPosition returns the elements with the given offset and limit
-func (b *beacon) GetManyFromOrderPosition(from int, limit int) ([]treasure.Treasure, error) {
+type OrderPosition struct {
+	From     int        // Start index (inclusive) for retrieval; half-open interval logic: includes From, excludes From+Limit.
+	Limit    int        // Maximum number of elements to return. If 0, returns all elements from From to the end. The range is [From, From+Limit).
+	FromTime *time.Time // Optional: filter treasures with creation/expiration time >= FromTime.
+	ToTime   *time.Time // Optional: filter treasures with creation/expiration time < ToTime. The time range is half-open: [FromTime, ToTime).
+}
 
+// GetManyFromOrderPosition retrieves a slice of treasure objects from the beacon's ordered list,
+// starting from a specified offset position and up to a specified limit. Optionally, it can filter
+// treasures by a time range if FromTime or ToTime is provided in the OrderPosition.
+// The function is thread-safe, acquiring a read lock to prevent concurrent write operations.
+//
+// Parameters:
+//   - orderPosition *OrderPosition: Specifies the offset (From), limit (Limit), and optional time range (FromTime, ToTime).
+//
+// Returns:
+//   - []treasure.Treasure: A slice containing the retrieved treasure objects.
+//   - error: An error if the beacon is not ordered, otherwise nil.
+//
+// Side Effects:
+//   - Sets the 'initialized' flag to 1, indicating the beacon has been accessed.
+//
+// Usage Scenarios:
+//  1. Paginated retrieval of treasures from the ordered list.
+//  2. Partial loading or infinite scroll functionalities.
+//  3. Filtering treasures by creation or expiration time.
+//  4. Reporting or analytics requiring a subset of ordered treasures.
+//
+// Example:
+//
+//	pos := &OrderPosition{From: 10, Limit: 5}
+//	treasures, err := beacon.GetManyFromOrderPosition(pos)
+//	if err != nil {
+//	    log.Fatal(err)
+//	}
+//	fmt.Println("Treasures:", treasures)
+func (b *beacon) GetManyFromOrderPosition(orderPosition *OrderPosition) ([]treasure.Treasure, error) {
 	atomic.StoreInt32(&b.initialized, 1)
 
 	b.mu.RLock()
@@ -913,14 +961,180 @@ func (b *beacon) GetManyFromOrderPosition(from int, limit int) ([]treasure.Treas
 	if !b.isOrdered {
 		return nil, errors.New("beacon is not ordered")
 	}
-	if from > len(b.treasuresByOrder) {
-		return nil, errors.New("from is greater than the number of elements in the beacon")
-	}
-	if from+limit > len(b.treasuresByOrder) {
-		return b.treasuresByOrder[from:], nil
-	}
-	return b.treasuresByOrder[from : from+limit], nil
 
+	// Validate and set initial bounds
+	startIdx := 0
+	endIdx := len(b.treasuresByOrder) - 1
+
+	// Apply time filtering if specified
+	if orderPosition.FromTime != nil || orderPosition.ToTime != nil {
+		startIdx, endIdx = b.findTimeRangeBounds(orderPosition.FromTime, orderPosition.ToTime)
+		if endIdx < startIdx || startIdx < 0 {
+			return []treasure.Treasure{}, nil
+		}
+	}
+
+	// Apply offset
+	actualStart := startIdx + orderPosition.From
+	if actualStart > endIdx {
+		return []treasure.Treasure{}, nil
+	}
+
+	// Apply limit
+	var actualEnd int
+	if orderPosition.Limit == 0 {
+		actualEnd = endIdx
+	} else {
+		actualEnd = actualStart + orderPosition.Limit - 1
+		if actualEnd > endIdx {
+			actualEnd = endIdx
+		}
+	}
+
+	// Prepare result slice
+	resultSize := actualEnd - actualStart + 1
+	if resultSize <= 0 {
+		return []treasure.Treasure{}, nil
+	}
+
+	result := make([]treasure.Treasure, resultSize)
+	for i := 0; i < resultSize; i++ {
+		result[i] = b.treasuresByOrder[actualStart+i]
+	}
+
+	return result, nil
+}
+
+// getTimestampFromTreasure extracts the relevant timestamp based on sort order
+func (b *beacon) getTimestampFromTreasure(t treasure.Treasure) int64 {
+	switch b.sortOrder {
+	case SortByExpirationTimeAsc, SortByExpirationTimeDesc:
+		return t.GetExpirationTime()
+	case SortByCreatedAtAsc, SortByCreatedAtDesc:
+		return t.GetCreatedAt()
+	case SortByModifiedAtAsc, SortByModifiedAtDesc:
+		return t.GetModifiedAt()
+	default:
+		return 0
+	}
+}
+
+// findTimeRangeBounds locates the inclusive start and end indices in the ordered slice
+// for treasures whose timestamp falls within a half-open time window [fromTime, toTime).
+// Half-open semantics:
+// - fromTime is inclusive: ts >= fromTime.
+// - toTime is exclusive: ts < toTime. If toTime is nil, the upper bound is unbounded.
+// - If fromTime is nil, the lower bound is unbounded.
+//
+// Ordering assumptions:
+//   - b.treasuresByOrder is already sorted by the timestamp selected via b.sortOrder
+//     (created, modified, or expiration), either ascending or descending; the search adapts.
+//   - Timestamps are obtained via getTimestampFromTreasure.
+//
+// Returns:
+// - (startIdx, endIdx) where both are inclusive. If no items match, returns (0, -1).
+//
+// Complexity:
+// - O(log n) per boundary using binary search; overall O(log n).
+//
+// Concurrency:
+// - Caller must hold the appropriate lock (the public caller acquires an RLock).
+func (b *beacon) findTimeRangeBounds(fromTime, toTime *time.Time) (int, int) {
+	n := len(b.treasuresByOrder)
+	if n == 0 {
+		return 0, -1
+	}
+
+	var fromNano, toNano int64
+	if fromTime != nil {
+		fromNano = fromTime.UTC().UnixNano()
+	}
+	if toTime != nil {
+		toNano = toTime.UTC().UnixNano()
+	}
+
+	isAscending := b.sortOrder == SortByExpirationTimeAsc ||
+		b.sortOrder == SortByCreatedAtAsc ||
+		b.sortOrder == SortByModifiedAtAsc
+
+	startIdx := 0
+	endIdx := n - 1
+
+	if isAscending {
+		// Asc: start = first idx with ts >= fromNano
+		if fromTime != nil {
+			l, r := 0, n
+			for l < r {
+				m := l + (r-l)/2
+				if b.getTimestampFromTreasure(b.treasuresByOrder[m]) < fromNano {
+					l = m + 1
+				} else {
+					r = m
+				}
+			}
+			startIdx = l
+		}
+
+		// Asc: end = last idx with ts < toNano (exclusive upper bound)
+		if toTime != nil {
+			l, r := 0, n
+			for l < r {
+				m := l + (r-l)/2
+				if b.getTimestampFromTreasure(b.treasuresByOrder[m]) < toNano {
+					l = m + 1
+				} else {
+					r = m
+				}
+			}
+			endIdx = l - 1
+		}
+	} else {
+		// Descending order:
+		// For ts decreasing with index:
+		// - start = first idx with ts < toNano (exclusive upper bound)
+		// - end   = last idx with ts >= fromNano (inclusive lower bound)
+
+		// Desc: start = first idx where ts < toNano
+		if toTime != nil {
+			l, r := 0, n
+			for l < r {
+				m := l + (r-l)/2
+				if b.getTimestampFromTreasure(b.treasuresByOrder[m]) < toNano {
+					r = m
+				} else {
+					l = m + 1
+				}
+			}
+			startIdx = l
+		}
+
+		// Desc: end = last idx where ts >= fromNano
+		if fromTime != nil {
+			l, r := 0, n
+			for l < r {
+				m := l + (r-l)/2
+				if b.getTimestampFromTreasure(b.treasuresByOrder[m]) < fromNano {
+					r = m
+				} else {
+					l = m + 1
+				}
+			}
+			endIdx = l - 1
+		}
+	}
+
+	// Normalize and validate bounds
+	if startIdx < 0 {
+		startIdx = 0
+	}
+	if endIdx >= n {
+		endIdx = n - 1
+	}
+	if startIdx > endIdx || startIdx >= n || endIdx < 0 {
+		return 0, -1
+	}
+
+	return startIdx, endIdx
 }
 
 // GetManyFromKey returns the elements with the given offset and limit
@@ -1001,6 +1215,7 @@ func (b *beacon) SortByCreationTimeAsc() error {
 		return errors.New("the beacon is not ordered")
 	}
 
+	b.sortOrder = SortByCreatedAtAsc
 	sort.Slice(b.treasuresByOrder, func(k, l int) bool {
 		return b.treasuresByOrder[k].GetCreatedAt() < b.treasuresByOrder[l].GetCreatedAt()
 	})
@@ -1015,6 +1230,7 @@ func (b *beacon) SortByCreationTimeDesc() error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
+	b.sortOrder = SortByCreatedAtDesc
 	if !b.isOrdered {
 		return errors.New("the beacon is not ordered")
 	}
@@ -1058,6 +1274,8 @@ func (b *beacon) SortByExpirationTimeAsc() error {
 	if !b.isOrdered {
 		return errors.New("the beacon is not ordered")
 	}
+
+	b.sortOrder = SortByExpirationTimeAsc
 	sort.Slice(b.treasuresByOrder, func(k, l int) bool {
 		return b.treasuresByOrder[k].GetExpirationTime() < b.treasuresByOrder[l].GetExpirationTime()
 	})
@@ -1070,6 +1288,7 @@ func (b *beacon) SortByExpirationTimeDesc() error {
 	if !b.isOrdered {
 		return errors.New("the beacon is not ordered")
 	}
+	b.sortOrder = SortByExpirationTimeDesc
 	sort.Slice(b.treasuresByOrder, func(k, l int) bool {
 		return b.treasuresByOrder[k].GetExpirationTime() > b.treasuresByOrder[l].GetExpirationTime()
 	})
@@ -1081,6 +1300,7 @@ func (b *beacon) SortByUpdateTimeAsc() error {
 	if !b.isOrdered {
 		return errors.New("the beacon is not ordered")
 	}
+	b.sortOrder = SortByModifiedAtAsc
 	sort.Slice(b.treasuresByOrder, func(k, l int) bool {
 		return b.treasuresByOrder[k].GetModifiedAt() < b.treasuresByOrder[l].GetModifiedAt()
 	})
@@ -1092,6 +1312,7 @@ func (b *beacon) SortByUpdateTimeDesc() error {
 	if !b.isOrdered {
 		return errors.New("the beacon is not ordered")
 	}
+	b.sortOrder = SortByModifiedAtDesc
 	sort.Slice(b.treasuresByOrder, func(k, l int) bool {
 		return b.treasuresByOrder[k].GetModifiedAt() > b.treasuresByOrder[l].GetModifiedAt()
 	})
