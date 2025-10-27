@@ -54,7 +54,7 @@ jobs:
           go build -a -installsuffix cgo -o ${{ matrix.binary_name }} ./app/hydraidectl
 
       - name: Upload built binary as artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: hydraidectl-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ${{ matrix.binary_name }}
