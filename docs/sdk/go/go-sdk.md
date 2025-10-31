@@ -39,7 +39,7 @@ You can find the repo implementation and usage examples here:
 
 For a complete working example of how to initialize and run your service using the `repo` package, take a look at the demo application:
 
-▶️ [`main.go` in app-queue](examples/applications/app-queue/main.go)m a minimal end-to-end example of SDK setup and Swamp registration with a queue service
+▶️ [`main.go` in app-queue](examples/applications/app-queue/main.go) — a minimal end-to-end example of SDK setup and Swamp registration with a queue service
 
 ---
 
@@ -244,7 +244,7 @@ _ = user.Load(repo) // Hydrates entire profile
 user.Email = "new@email.com"
 user.Preferences.DarkMode = true
 _ = user.Save(repo) // Saves all changes at once
-````
+```
 
 Internally, HydrAIDE stores this under a Swamp like:
 
@@ -305,7 +305,7 @@ In Catalog Swamps, every field **except the key** can use the `omitempty` decora
 ```go
 UpdatedBy string    `hydraide:"updatedBy,omitempty"`
 UpdatedAt time.Time `hydraide:"updatedAt,omitempty"`
-````
+```
 
 If these fields are empty during initial creation, they will simply not exist in HydrAIDE.
 
@@ -361,6 +361,60 @@ _ = h.CatalogReadMany(ctx, swampName, index, CatalogModelUser{}, func(m any) err
 
 Unlike relational databases, **HydrAIDE builds indexes in memory on-demand** using fast, in-memory hashing — reducing storage duplication and ensuring sub-ms reads in hydrated Swamps.
 To keep performance high, consider keeping the Swamp in memory longer (e.g. `CloseAfterIdle: 1h`).
+
+---
+
+#### 🔎 Batch key-based read — CatalogReadBatch
+
+CatalogReadBatch is ideal when you already know the exact keys you want to fetch from the same Swamp and need to retrieve them in one fast roundtrip.
+
+- Sends a single gRPC request with all provided keys
+- Silently skips non-existent keys (no error; they’re simply not included)
+- For each found Treasure, creates a fresh instance of the provided model type and passes it to your iterator
+- If your iterator returns an error, processing stops immediately and that error is returned
+
+Requirements:
+- Iterator must not be nil
+- Model must be a non-pointer type (the SDK internally creates new instances per record)
+
+Quick example:
+
+```go
+// A basic user record (key + value + metadata)
+type CatalogModelUserBasic struct {
+    UserID    string    `hydraide:"key"`
+    Name      string    `hydraide:"value"`
+    CreatedBy string    `hydraide:"createdBy"`
+    CreatedAt time.Time `hydraide:"createdAt"`
+}
+
+func ReadUsersByIDs(r repo.Repo, ids []string) ([]*CatalogModelUserBasic, error) {
+    if len(ids) == 0 {
+        return nil, nil
+    }
+    ctx, cancel := hydraidehelper.CreateHydraContext()
+    defer cancel()
+
+    h := r.GetHydraidego()
+    swamp := name.New().Sanctuary("users").Realm("catalog").Swamp("all")
+
+    out := make([]*CatalogModelUserBasic, 0, len(ids))
+    err := h.CatalogReadBatch(ctx, swamp, ids, CatalogModelUserBasic{}, func(m any) error {
+        u := m.(*CatalogModelUserBasic)
+        out = append(out, u)
+        return nil
+    })
+    return out, err
+}
+```
+
+Great for:
+- Loading profiles by a set of IDs
+- Fast cache warm-up
+- Bulk validation/verification
+- Reading configuration entries by a list of keys
+
+> Full example: [catalog_read_batch.go](examples/models/catalog_read_batch.go)
 
 ---
 
@@ -424,7 +478,7 @@ type CatalogModelTagShardIndex struct {
 
 Then store entries in a central index Swamp:
 
-```go
+```
 /tags/shard-index/main
 ```
 
@@ -485,6 +539,7 @@ Catalogs are not suitable when:
 | CatalogCreateManyToMany   | ✅ Ready | [catalog_create_many_to_many.go](examples/models/catalog_create_many_to_many.go)             |
 | CatalogRead               | ✅ Ready | [catalog_read.go](examples/models/catalog_read.go)              |
 | CatalogReadMany           | ✅ Ready | [catalog_read_many.go](examples/models/catalog_read_many.go)            |
+| CatalogReadBatch          | ✅ Ready | [catalog_read_batch.go](examples/models/catalog_read_batch.go)            |
 | CatalogUpdate             | ✅ Ready | [catalog_update.go](examples/models/catalog_update.go)              |
 | CatalogUpdateMany         | ✅ Ready | [catalog_update_many.go](examples/models/catalog_update_many.go)              |
 | CatalogDelete             | ✅ Ready | [catalog_delete.go](examples/models/catalog_delete.go)              |
