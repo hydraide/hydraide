@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.36.8
 // 	protoc        v3.21.12
-// source: hydraide.proto
+// source: proto/hydraide.proto
 
 package hydraidepbgo
 
@@ -52,11 +52,11 @@ func (x SwampResponse_ErrCodeEnum) String() string {
 }
 
 func (SwampResponse_ErrCodeEnum) Descriptor() protoreflect.EnumDescriptor {
-	return file_hydraide_proto_enumTypes[0].Descriptor()
+	return file_proto_hydraide_proto_enumTypes[0].Descriptor()
 }
 
 func (SwampResponse_ErrCodeEnum) Type() protoreflect.EnumType {
-	return &file_hydraide_proto_enumTypes[0]
+	return &file_proto_hydraide_proto_enumTypes[0]
 }
 
 func (x SwampResponse_ErrCodeEnum) Number() protoreflect.EnumNumber {
@@ -65,7 +65,7 @@ func (x SwampResponse_ErrCodeEnum) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use SwampResponse_ErrCodeEnum.Descriptor instead.
 func (SwampResponse_ErrCodeEnum) EnumDescriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{21, 0}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{21, 0}
 }
 
 type Status_Code int32
@@ -107,11 +107,11 @@ func (x Status_Code) String() string {
 }
 
 func (Status_Code) Descriptor() protoreflect.EnumDescriptor {
-	return file_hydraide_proto_enumTypes[1].Descriptor()
+	return file_proto_hydraide_proto_enumTypes[1].Descriptor()
 }
 
 func (Status_Code) Type() protoreflect.EnumType {
-	return &file_hydraide_proto_enumTypes[1]
+	return &file_proto_hydraide_proto_enumTypes[1]
 }
 
 func (x Status_Code) Number() protoreflect.EnumNumber {
@@ -120,7 +120,7 @@ func (x Status_Code) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use Status_Code.Descriptor instead.
 func (Status_Code) EnumDescriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{23, 0}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{23, 0}
 }
 
 type Boolean_Type int32
@@ -153,11 +153,11 @@ func (x Boolean_Type) String() string {
 }
 
 func (Boolean_Type) Descriptor() protoreflect.EnumDescriptor {
-	return file_hydraide_proto_enumTypes[2].Descriptor()
+	return file_proto_hydraide_proto_enumTypes[2].Descriptor()
 }
 
 func (Boolean_Type) Type() protoreflect.EnumType {
-	return &file_hydraide_proto_enumTypes[2]
+	return &file_proto_hydraide_proto_enumTypes[2]
 }
 
 func (x Boolean_Type) Number() protoreflect.EnumNumber {
@@ -166,7 +166,7 @@ func (x Boolean_Type) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use Boolean_Type.Descriptor instead.
 func (Boolean_Type) EnumDescriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{33, 0}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{33, 0}
 }
 
 type IndexType_Type int32
@@ -241,11 +241,11 @@ func (x IndexType_Type) String() string {
 }
 
 func (IndexType_Type) Descriptor() protoreflect.EnumDescriptor {
-	return file_hydraide_proto_enumTypes[3].Descriptor()
+	return file_proto_hydraide_proto_enumTypes[3].Descriptor()
 }
 
 func (IndexType_Type) Type() protoreflect.EnumType {
-	return &file_hydraide_proto_enumTypes[3]
+	return &file_proto_hydraide_proto_enumTypes[3]
 }
 
 func (x IndexType_Type) Number() protoreflect.EnumNumber {
@@ -254,7 +254,7 @@ func (x IndexType_Type) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use IndexType_Type.Descriptor instead.
 func (IndexType_Type) EnumDescriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{35, 0}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{35, 0}
 }
 
 type OrderType_Type int32
@@ -287,11 +287,11 @@ func (x OrderType_Type) String() string {
 }
 
 func (OrderType_Type) Descriptor() protoreflect.EnumDescriptor {
-	return file_hydraide_proto_enumTypes[4].Descriptor()
+	return file_proto_hydraide_proto_enumTypes[4].Descriptor()
 }
 
 func (OrderType_Type) Type() protoreflect.EnumType {
-	return &file_hydraide_proto_enumTypes[4]
+	return &file_proto_hydraide_proto_enumTypes[4]
 }
 
 func (x OrderType_Type) Number() protoreflect.EnumNumber {
@@ -300,7 +300,7 @@ func (x OrderType_Type) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use OrderType_Type.Descriptor instead.
 func (OrderType_Type) EnumDescriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{36, 0}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{36, 0}
 }
 
 type DeleteResponse_SwampDeleteResponse_ErrorCodeEnum int32
@@ -330,11 +330,11 @@ func (x DeleteResponse_SwampDeleteResponse_ErrorCodeEnum) String() string {
 }
 
 func (DeleteResponse_SwampDeleteResponse_ErrorCodeEnum) Descriptor() protoreflect.EnumDescriptor {
-	return file_hydraide_proto_enumTypes[5].Descriptor()
+	return file_proto_hydraide_proto_enumTypes[5].Descriptor()
 }
 
 func (DeleteResponse_SwampDeleteResponse_ErrorCodeEnum) Type() protoreflect.EnumType {
-	return &file_hydraide_proto_enumTypes[5]
+	return &file_proto_hydraide_proto_enumTypes[5]
 }
 
 func (x DeleteResponse_SwampDeleteResponse_ErrorCodeEnum) Number() protoreflect.EnumNumber {
@@ -343,7 +343,7 @@ func (x DeleteResponse_SwampDeleteResponse_ErrorCodeEnum) Number() protoreflect.
 
 // Deprecated: Use DeleteResponse_SwampDeleteResponse_ErrorCodeEnum.Descriptor instead.
 func (DeleteResponse_SwampDeleteResponse_ErrorCodeEnum) EnumDescriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{41, 0, 0}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{41, 0, 0}
 }
 
 type Relational_Operator int32
@@ -388,11 +388,11 @@ func (x Relational_Operator) String() string {
 }
 
 func (Relational_Operator) Descriptor() protoreflect.EnumDescriptor {
-	return file_hydraide_proto_enumTypes[6].Descriptor()
+	return file_proto_hydraide_proto_enumTypes[6].Descriptor()
 }
 
 func (Relational_Operator) Type() protoreflect.EnumType {
-	return &file_hydraide_proto_enumTypes[6]
+	return &file_proto_hydraide_proto_enumTypes[6]
 }
 
 func (x Relational_Operator) Number() protoreflect.EnumNumber {
@@ -401,7 +401,7 @@ func (x Relational_Operator) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use Relational_Operator.Descriptor instead.
 func (Relational_Operator) EnumDescriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{71, 0}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{71, 0}
 }
 
 type HeartbeatRequest struct {
@@ -415,7 +415,7 @@ type HeartbeatRequest struct {
 
 func (x *HeartbeatRequest) Reset() {
 	*x = HeartbeatRequest{}
-	mi := &file_hydraide_proto_msgTypes[0]
+	mi := &file_proto_hydraide_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -427,7 +427,7 @@ func (x *HeartbeatRequest) String() string {
 func (*HeartbeatRequest) ProtoMessage() {}
 
 func (x *HeartbeatRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[0]
+	mi := &file_proto_hydraide_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -440,7 +440,7 @@ func (x *HeartbeatRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HeartbeatRequest.ProtoReflect.Descriptor instead.
 func (*HeartbeatRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{0}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *HeartbeatRequest) GetPing() string {
@@ -461,7 +461,7 @@ type HeartbeatResponse struct {
 
 func (x *HeartbeatResponse) Reset() {
 	*x = HeartbeatResponse{}
-	mi := &file_hydraide_proto_msgTypes[1]
+	mi := &file_proto_hydraide_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -473,7 +473,7 @@ func (x *HeartbeatResponse) String() string {
 func (*HeartbeatResponse) ProtoMessage() {}
 
 func (x *HeartbeatResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[1]
+	mi := &file_proto_hydraide_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -486,7 +486,7 @@ func (x *HeartbeatResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HeartbeatResponse.ProtoReflect.Descriptor instead.
 func (*HeartbeatResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{1}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *HeartbeatResponse) GetPong() string {
@@ -511,7 +511,7 @@ type LockRequest struct {
 
 func (x *LockRequest) Reset() {
 	*x = LockRequest{}
-	mi := &file_hydraide_proto_msgTypes[2]
+	mi := &file_proto_hydraide_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -523,7 +523,7 @@ func (x *LockRequest) String() string {
 func (*LockRequest) ProtoMessage() {}
 
 func (x *LockRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[2]
+	mi := &file_proto_hydraide_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -536,7 +536,7 @@ func (x *LockRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LockRequest.ProtoReflect.Descriptor instead.
 func (*LockRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{2}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *LockRequest) GetKey() string {
@@ -564,7 +564,7 @@ type LockResponse struct {
 
 func (x *LockResponse) Reset() {
 	*x = LockResponse{}
-	mi := &file_hydraide_proto_msgTypes[3]
+	mi := &file_proto_hydraide_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -576,7 +576,7 @@ func (x *LockResponse) String() string {
 func (*LockResponse) ProtoMessage() {}
 
 func (x *LockResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[3]
+	mi := &file_proto_hydraide_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -589,7 +589,7 @@ func (x *LockResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LockResponse.ProtoReflect.Descriptor instead.
 func (*LockResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{3}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *LockResponse) GetLockID() string {
@@ -612,7 +612,7 @@ type UnlockRequest struct {
 
 func (x *UnlockRequest) Reset() {
 	*x = UnlockRequest{}
-	mi := &file_hydraide_proto_msgTypes[4]
+	mi := &file_proto_hydraide_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -624,7 +624,7 @@ func (x *UnlockRequest) String() string {
 func (*UnlockRequest) ProtoMessage() {}
 
 func (x *UnlockRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[4]
+	mi := &file_proto_hydraide_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -637,7 +637,7 @@ func (x *UnlockRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnlockRequest.ProtoReflect.Descriptor instead.
 func (*UnlockRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{4}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *UnlockRequest) GetKey() string {
@@ -662,7 +662,7 @@ type UnlockResponse struct {
 
 func (x *UnlockResponse) Reset() {
 	*x = UnlockResponse{}
-	mi := &file_hydraide_proto_msgTypes[5]
+	mi := &file_proto_hydraide_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -674,7 +674,7 @@ func (x *UnlockResponse) String() string {
 func (*UnlockResponse) ProtoMessage() {}
 
 func (x *UnlockResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[5]
+	mi := &file_proto_hydraide_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -687,7 +687,7 @@ func (x *UnlockResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnlockResponse.ProtoReflect.Descriptor instead.
 func (*UnlockResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{5}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{5}
 }
 
 type DestroyRequest struct {
@@ -705,7 +705,7 @@ type DestroyRequest struct {
 
 func (x *DestroyRequest) Reset() {
 	*x = DestroyRequest{}
-	mi := &file_hydraide_proto_msgTypes[6]
+	mi := &file_proto_hydraide_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -717,7 +717,7 @@ func (x *DestroyRequest) String() string {
 func (*DestroyRequest) ProtoMessage() {}
 
 func (x *DestroyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[6]
+	mi := &file_proto_hydraide_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -730,7 +730,7 @@ func (x *DestroyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DestroyRequest.ProtoReflect.Descriptor instead.
 func (*DestroyRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{6}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *DestroyRequest) GetIslandID() uint64 {
@@ -755,7 +755,7 @@ type DestroyResponse struct {
 
 func (x *DestroyResponse) Reset() {
 	*x = DestroyResponse{}
-	mi := &file_hydraide_proto_msgTypes[7]
+	mi := &file_proto_hydraide_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -767,7 +767,7 @@ func (x *DestroyResponse) String() string {
 func (*DestroyResponse) ProtoMessage() {}
 
 func (x *DestroyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[7]
+	mi := &file_proto_hydraide_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -780,7 +780,7 @@ func (x *DestroyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DestroyResponse.ProtoReflect.Descriptor instead.
 func (*DestroyResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{7}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{7}
 }
 
 type SubscribeToInfoRequest struct {
@@ -798,7 +798,7 @@ type SubscribeToInfoRequest struct {
 
 func (x *SubscribeToInfoRequest) Reset() {
 	*x = SubscribeToInfoRequest{}
-	mi := &file_hydraide_proto_msgTypes[8]
+	mi := &file_proto_hydraide_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -810,7 +810,7 @@ func (x *SubscribeToInfoRequest) String() string {
 func (*SubscribeToInfoRequest) ProtoMessage() {}
 
 func (x *SubscribeToInfoRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[8]
+	mi := &file_proto_hydraide_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -823,7 +823,7 @@ func (x *SubscribeToInfoRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubscribeToInfoRequest.ProtoReflect.Descriptor instead.
 func (*SubscribeToInfoRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{8}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *SubscribeToInfoRequest) GetIslandID() uint64 {
@@ -854,7 +854,7 @@ type SubscribeToInfoResponse struct {
 
 func (x *SubscribeToInfoResponse) Reset() {
 	*x = SubscribeToInfoResponse{}
-	mi := &file_hydraide_proto_msgTypes[9]
+	mi := &file_proto_hydraide_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -866,7 +866,7 @@ func (x *SubscribeToInfoResponse) String() string {
 func (*SubscribeToInfoResponse) ProtoMessage() {}
 
 func (x *SubscribeToInfoResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[9]
+	mi := &file_proto_hydraide_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -879,7 +879,7 @@ func (x *SubscribeToInfoResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubscribeToInfoResponse.ProtoReflect.Descriptor instead.
 func (*SubscribeToInfoResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{9}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *SubscribeToInfoResponse) GetSwampName() string {
@@ -910,7 +910,7 @@ type SubscribeToEventsRequest struct {
 
 func (x *SubscribeToEventsRequest) Reset() {
 	*x = SubscribeToEventsRequest{}
-	mi := &file_hydraide_proto_msgTypes[10]
+	mi := &file_proto_hydraide_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -922,7 +922,7 @@ func (x *SubscribeToEventsRequest) String() string {
 func (*SubscribeToEventsRequest) ProtoMessage() {}
 
 func (x *SubscribeToEventsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[10]
+	mi := &file_proto_hydraide_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -935,7 +935,7 @@ func (x *SubscribeToEventsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubscribeToEventsRequest.ProtoReflect.Descriptor instead.
 func (*SubscribeToEventsRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{10}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *SubscribeToEventsRequest) GetIslandID() uint64 {
@@ -974,7 +974,7 @@ type SubscribeToEventsResponse struct {
 
 func (x *SubscribeToEventsResponse) Reset() {
 	*x = SubscribeToEventsResponse{}
-	mi := &file_hydraide_proto_msgTypes[11]
+	mi := &file_proto_hydraide_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -986,7 +986,7 @@ func (x *SubscribeToEventsResponse) String() string {
 func (*SubscribeToEventsResponse) ProtoMessage() {}
 
 func (x *SubscribeToEventsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[11]
+	mi := &file_proto_hydraide_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -999,7 +999,7 @@ func (x *SubscribeToEventsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubscribeToEventsResponse.ProtoReflect.Descriptor instead.
 func (*SubscribeToEventsResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{11}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *SubscribeToEventsResponse) GetSwampName() string {
@@ -1063,7 +1063,7 @@ type SwampKeys struct {
 
 func (x *SwampKeys) Reset() {
 	*x = SwampKeys{}
-	mi := &file_hydraide_proto_msgTypes[12]
+	mi := &file_proto_hydraide_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1075,7 +1075,7 @@ func (x *SwampKeys) String() string {
 func (*SwampKeys) ProtoMessage() {}
 
 func (x *SwampKeys) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[12]
+	mi := &file_proto_hydraide_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1088,7 +1088,7 @@ func (x *SwampKeys) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SwampKeys.ProtoReflect.Descriptor instead.
 func (*SwampKeys) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{12}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *SwampKeys) GetSwampName() string {
@@ -1137,7 +1137,7 @@ type RegisterSwampRequest struct {
 
 func (x *RegisterSwampRequest) Reset() {
 	*x = RegisterSwampRequest{}
-	mi := &file_hydraide_proto_msgTypes[13]
+	mi := &file_proto_hydraide_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1149,7 +1149,7 @@ func (x *RegisterSwampRequest) String() string {
 func (*RegisterSwampRequest) ProtoMessage() {}
 
 func (x *RegisterSwampRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[13]
+	mi := &file_proto_hydraide_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1162,7 +1162,7 @@ func (x *RegisterSwampRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterSwampRequest.ProtoReflect.Descriptor instead.
 func (*RegisterSwampRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{13}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *RegisterSwampRequest) GetSwampPattern() string {
@@ -1208,7 +1208,7 @@ type RegisterSwampResponse struct {
 
 func (x *RegisterSwampResponse) Reset() {
 	*x = RegisterSwampResponse{}
-	mi := &file_hydraide_proto_msgTypes[14]
+	mi := &file_proto_hydraide_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1220,7 +1220,7 @@ func (x *RegisterSwampResponse) String() string {
 func (*RegisterSwampResponse) ProtoMessage() {}
 
 func (x *RegisterSwampResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[14]
+	mi := &file_proto_hydraide_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1233,7 +1233,7 @@ func (x *RegisterSwampResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterSwampResponse.ProtoReflect.Descriptor instead.
 func (*RegisterSwampResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{14}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{14}
 }
 
 type DeRegisterSwampRequest struct {
@@ -1249,7 +1249,7 @@ type DeRegisterSwampRequest struct {
 
 func (x *DeRegisterSwampRequest) Reset() {
 	*x = DeRegisterSwampRequest{}
-	mi := &file_hydraide_proto_msgTypes[15]
+	mi := &file_proto_hydraide_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1261,7 +1261,7 @@ func (x *DeRegisterSwampRequest) String() string {
 func (*DeRegisterSwampRequest) ProtoMessage() {}
 
 func (x *DeRegisterSwampRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[15]
+	mi := &file_proto_hydraide_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1274,7 +1274,7 @@ func (x *DeRegisterSwampRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeRegisterSwampRequest.ProtoReflect.Descriptor instead.
 func (*DeRegisterSwampRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{15}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *DeRegisterSwampRequest) GetSwampPattern() string {
@@ -1292,7 +1292,7 @@ type DeRegisterSwampResponse struct {
 
 func (x *DeRegisterSwampResponse) Reset() {
 	*x = DeRegisterSwampResponse{}
-	mi := &file_hydraide_proto_msgTypes[16]
+	mi := &file_proto_hydraide_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1304,7 +1304,7 @@ func (x *DeRegisterSwampResponse) String() string {
 func (*DeRegisterSwampResponse) ProtoMessage() {}
 
 func (x *DeRegisterSwampResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[16]
+	mi := &file_proto_hydraide_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1317,7 +1317,7 @@ func (x *DeRegisterSwampResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeRegisterSwampResponse.ProtoReflect.Descriptor instead.
 func (*DeRegisterSwampResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{16}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{16}
 }
 
 type SetRequest struct {
@@ -1332,7 +1332,7 @@ type SetRequest struct {
 
 func (x *SetRequest) Reset() {
 	*x = SetRequest{}
-	mi := &file_hydraide_proto_msgTypes[17]
+	mi := &file_proto_hydraide_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1344,7 +1344,7 @@ func (x *SetRequest) String() string {
 func (*SetRequest) ProtoMessage() {}
 
 func (x *SetRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[17]
+	mi := &file_proto_hydraide_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1357,7 +1357,7 @@ func (x *SetRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetRequest.ProtoReflect.Descriptor instead.
 func (*SetRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{17}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *SetRequest) GetSwamps() []*SwampRequest {
@@ -1424,7 +1424,7 @@ type SwampRequest struct {
 
 func (x *SwampRequest) Reset() {
 	*x = SwampRequest{}
-	mi := &file_hydraide_proto_msgTypes[18]
+	mi := &file_proto_hydraide_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1436,7 +1436,7 @@ func (x *SwampRequest) String() string {
 func (*SwampRequest) ProtoMessage() {}
 
 func (x *SwampRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[18]
+	mi := &file_proto_hydraide_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1449,7 +1449,7 @@ func (x *SwampRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SwampRequest.ProtoReflect.Descriptor instead.
 func (*SwampRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{18}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *SwampRequest) GetIslandID() uint64 {
@@ -1546,7 +1546,7 @@ type KeyValuePair struct {
 
 func (x *KeyValuePair) Reset() {
 	*x = KeyValuePair{}
-	mi := &file_hydraide_proto_msgTypes[19]
+	mi := &file_proto_hydraide_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1558,7 +1558,7 @@ func (x *KeyValuePair) String() string {
 func (*KeyValuePair) ProtoMessage() {}
 
 func (x *KeyValuePair) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[19]
+	mi := &file_proto_hydraide_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1571,7 +1571,7 @@ func (x *KeyValuePair) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KeyValuePair.ProtoReflect.Descriptor instead.
 func (*KeyValuePair) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{19}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *KeyValuePair) GetKey() string {
@@ -1731,7 +1731,7 @@ type SetResponse struct {
 
 func (x *SetResponse) Reset() {
 	*x = SetResponse{}
-	mi := &file_hydraide_proto_msgTypes[20]
+	mi := &file_proto_hydraide_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1743,7 +1743,7 @@ func (x *SetResponse) String() string {
 func (*SetResponse) ProtoMessage() {}
 
 func (x *SetResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[20]
+	mi := &file_proto_hydraide_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1756,7 +1756,7 @@ func (x *SetResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetResponse.ProtoReflect.Descriptor instead.
 func (*SetResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{20}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *SetResponse) GetSwamps() []*SwampResponse {
@@ -1781,7 +1781,7 @@ type SwampResponse struct {
 
 func (x *SwampResponse) Reset() {
 	*x = SwampResponse{}
-	mi := &file_hydraide_proto_msgTypes[21]
+	mi := &file_proto_hydraide_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1793,7 +1793,7 @@ func (x *SwampResponse) String() string {
 func (*SwampResponse) ProtoMessage() {}
 
 func (x *SwampResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[21]
+	mi := &file_proto_hydraide_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1806,7 +1806,7 @@ func (x *SwampResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SwampResponse.ProtoReflect.Descriptor instead.
 func (*SwampResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{21}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *SwampResponse) GetSwampName() string {
@@ -1842,7 +1842,7 @@ type KeyStatusPair struct {
 
 func (x *KeyStatusPair) Reset() {
 	*x = KeyStatusPair{}
-	mi := &file_hydraide_proto_msgTypes[22]
+	mi := &file_proto_hydraide_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1854,7 +1854,7 @@ func (x *KeyStatusPair) String() string {
 func (*KeyStatusPair) ProtoMessage() {}
 
 func (x *KeyStatusPair) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[22]
+	mi := &file_proto_hydraide_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1867,7 +1867,7 @@ func (x *KeyStatusPair) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KeyStatusPair.ProtoReflect.Descriptor instead.
 func (*KeyStatusPair) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{22}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *KeyStatusPair) GetKey() string {
@@ -1892,7 +1892,7 @@ type Status struct {
 
 func (x *Status) Reset() {
 	*x = Status{}
-	mi := &file_hydraide_proto_msgTypes[23]
+	mi := &file_proto_hydraide_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1904,7 +1904,7 @@ func (x *Status) String() string {
 func (*Status) ProtoMessage() {}
 
 func (x *Status) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[23]
+	mi := &file_proto_hydraide_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1917,7 +1917,7 @@ func (x *Status) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Status.ProtoReflect.Descriptor instead.
 func (*Status) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{23}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{23}
 }
 
 type GetRequest struct {
@@ -1937,7 +1937,7 @@ type GetRequest struct {
 
 func (x *GetRequest) Reset() {
 	*x = GetRequest{}
-	mi := &file_hydraide_proto_msgTypes[24]
+	mi := &file_proto_hydraide_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1949,7 +1949,7 @@ func (x *GetRequest) String() string {
 func (*GetRequest) ProtoMessage() {}
 
 func (x *GetRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[24]
+	mi := &file_proto_hydraide_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1962,7 +1962,7 @@ func (x *GetRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetRequest.ProtoReflect.Descriptor instead.
 func (*GetRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{24}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *GetRequest) GetSwamps() []*GetSwamp {
@@ -1986,7 +1986,7 @@ type GetSwamp struct {
 
 func (x *GetSwamp) Reset() {
 	*x = GetSwamp{}
-	mi := &file_hydraide_proto_msgTypes[25]
+	mi := &file_proto_hydraide_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1998,7 +1998,7 @@ func (x *GetSwamp) String() string {
 func (*GetSwamp) ProtoMessage() {}
 
 func (x *GetSwamp) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[25]
+	mi := &file_proto_hydraide_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2011,7 +2011,7 @@ func (x *GetSwamp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSwamp.ProtoReflect.Descriptor instead.
 func (*GetSwamp) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{25}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *GetSwamp) GetIslandID() uint64 {
@@ -2045,7 +2045,7 @@ type GetResponse struct {
 
 func (x *GetResponse) Reset() {
 	*x = GetResponse{}
-	mi := &file_hydraide_proto_msgTypes[26]
+	mi := &file_proto_hydraide_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2057,7 +2057,7 @@ func (x *GetResponse) String() string {
 func (*GetResponse) ProtoMessage() {}
 
 func (x *GetResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[26]
+	mi := &file_proto_hydraide_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2070,7 +2070,7 @@ func (x *GetResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetResponse.ProtoReflect.Descriptor instead.
 func (*GetResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{26}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *GetResponse) GetSwamps() []*GetSwampResponse {
@@ -2097,7 +2097,7 @@ type GetSwampResponse struct {
 
 func (x *GetSwampResponse) Reset() {
 	*x = GetSwampResponse{}
-	mi := &file_hydraide_proto_msgTypes[27]
+	mi := &file_proto_hydraide_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2109,7 +2109,7 @@ func (x *GetSwampResponse) String() string {
 func (*GetSwampResponse) ProtoMessage() {}
 
 func (x *GetSwampResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[27]
+	mi := &file_proto_hydraide_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2122,7 +2122,7 @@ func (x *GetSwampResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSwampResponse.ProtoReflect.Descriptor instead.
 func (*GetSwampResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{27}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *GetSwampResponse) GetSwampName() string {
@@ -2163,7 +2163,7 @@ type GetAllRequest struct {
 
 func (x *GetAllRequest) Reset() {
 	*x = GetAllRequest{}
-	mi := &file_hydraide_proto_msgTypes[28]
+	mi := &file_proto_hydraide_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2175,7 +2175,7 @@ func (x *GetAllRequest) String() string {
 func (*GetAllRequest) ProtoMessage() {}
 
 func (x *GetAllRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[28]
+	mi := &file_proto_hydraide_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2188,7 +2188,7 @@ func (x *GetAllRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAllRequest.ProtoReflect.Descriptor instead.
 func (*GetAllRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{28}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *GetAllRequest) GetIslandID() uint64 {
@@ -2223,7 +2223,7 @@ type GetAllResponse struct {
 
 func (x *GetAllResponse) Reset() {
 	*x = GetAllResponse{}
-	mi := &file_hydraide_proto_msgTypes[29]
+	mi := &file_proto_hydraide_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2235,7 +2235,7 @@ func (x *GetAllResponse) String() string {
 func (*GetAllResponse) ProtoMessage() {}
 
 func (x *GetAllResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[29]
+	mi := &file_proto_hydraide_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2248,7 +2248,7 @@ func (x *GetAllResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAllResponse.ProtoReflect.Descriptor instead.
 func (*GetAllResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{29}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *GetAllResponse) GetTreasures() []*Treasure {
@@ -2277,7 +2277,7 @@ type ShiftExpiredTreasuresRequest struct {
 
 func (x *ShiftExpiredTreasuresRequest) Reset() {
 	*x = ShiftExpiredTreasuresRequest{}
-	mi := &file_hydraide_proto_msgTypes[30]
+	mi := &file_proto_hydraide_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2289,7 +2289,7 @@ func (x *ShiftExpiredTreasuresRequest) String() string {
 func (*ShiftExpiredTreasuresRequest) ProtoMessage() {}
 
 func (x *ShiftExpiredTreasuresRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[30]
+	mi := &file_proto_hydraide_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2302,7 +2302,7 @@ func (x *ShiftExpiredTreasuresRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ShiftExpiredTreasuresRequest.ProtoReflect.Descriptor instead.
 func (*ShiftExpiredTreasuresRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{30}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *ShiftExpiredTreasuresRequest) GetIslandID() uint64 {
@@ -2340,7 +2340,7 @@ type ShiftExpiredTreasuresResponse struct {
 
 func (x *ShiftExpiredTreasuresResponse) Reset() {
 	*x = ShiftExpiredTreasuresResponse{}
-	mi := &file_hydraide_proto_msgTypes[31]
+	mi := &file_proto_hydraide_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2352,7 +2352,7 @@ func (x *ShiftExpiredTreasuresResponse) String() string {
 func (*ShiftExpiredTreasuresResponse) ProtoMessage() {}
 
 func (x *ShiftExpiredTreasuresResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[31]
+	mi := &file_proto_hydraide_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2365,7 +2365,7 @@ func (x *ShiftExpiredTreasuresResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ShiftExpiredTreasuresResponse.ProtoReflect.Descriptor instead.
 func (*ShiftExpiredTreasuresResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{31}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *ShiftExpiredTreasuresResponse) GetTreasures() []*Treasure {
@@ -2438,7 +2438,7 @@ type Treasure struct {
 
 func (x *Treasure) Reset() {
 	*x = Treasure{}
-	mi := &file_hydraide_proto_msgTypes[32]
+	mi := &file_proto_hydraide_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2450,7 +2450,7 @@ func (x *Treasure) String() string {
 func (*Treasure) ProtoMessage() {}
 
 func (x *Treasure) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[32]
+	mi := &file_proto_hydraide_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2463,7 +2463,7 @@ func (x *Treasure) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Treasure.ProtoReflect.Descriptor instead.
 func (*Treasure) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{32}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *Treasure) GetKey() string {
@@ -2621,7 +2621,7 @@ type Boolean struct {
 
 func (x *Boolean) Reset() {
 	*x = Boolean{}
-	mi := &file_hydraide_proto_msgTypes[33]
+	mi := &file_proto_hydraide_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2633,7 +2633,7 @@ func (x *Boolean) String() string {
 func (*Boolean) ProtoMessage() {}
 
 func (x *Boolean) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[33]
+	mi := &file_proto_hydraide_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2646,7 +2646,7 @@ func (x *Boolean) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Boolean.ProtoReflect.Descriptor instead.
 func (*Boolean) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{33}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{33}
 }
 
 type GetByIndexRequest struct {
@@ -2691,7 +2691,7 @@ type GetByIndexRequest struct {
 
 func (x *GetByIndexRequest) Reset() {
 	*x = GetByIndexRequest{}
-	mi := &file_hydraide_proto_msgTypes[34]
+	mi := &file_proto_hydraide_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2703,7 +2703,7 @@ func (x *GetByIndexRequest) String() string {
 func (*GetByIndexRequest) ProtoMessage() {}
 
 func (x *GetByIndexRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[34]
+	mi := &file_proto_hydraide_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2716,7 +2716,7 @@ func (x *GetByIndexRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetByIndexRequest.ProtoReflect.Descriptor instead.
 func (*GetByIndexRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{34}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *GetByIndexRequest) GetIslandID() uint64 {
@@ -2783,7 +2783,7 @@ type IndexType struct {
 
 func (x *IndexType) Reset() {
 	*x = IndexType{}
-	mi := &file_hydraide_proto_msgTypes[35]
+	mi := &file_proto_hydraide_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2795,7 +2795,7 @@ func (x *IndexType) String() string {
 func (*IndexType) ProtoMessage() {}
 
 func (x *IndexType) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[35]
+	mi := &file_proto_hydraide_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2808,7 +2808,7 @@ func (x *IndexType) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IndexType.ProtoReflect.Descriptor instead.
 func (*IndexType) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{35}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{35}
 }
 
 type OrderType struct {
@@ -2819,7 +2819,7 @@ type OrderType struct {
 
 func (x *OrderType) Reset() {
 	*x = OrderType{}
-	mi := &file_hydraide_proto_msgTypes[36]
+	mi := &file_proto_hydraide_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2831,7 +2831,7 @@ func (x *OrderType) String() string {
 func (*OrderType) ProtoMessage() {}
 
 func (x *OrderType) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[36]
+	mi := &file_proto_hydraide_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2844,7 +2844,7 @@ func (x *OrderType) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OrderType.ProtoReflect.Descriptor instead.
 func (*OrderType) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{36}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{36}
 }
 
 type GetByIndexResponse struct {
@@ -2858,7 +2858,7 @@ type GetByIndexResponse struct {
 
 func (x *GetByIndexResponse) Reset() {
 	*x = GetByIndexResponse{}
-	mi := &file_hydraide_proto_msgTypes[37]
+	mi := &file_proto_hydraide_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2870,7 +2870,7 @@ func (x *GetByIndexResponse) String() string {
 func (*GetByIndexResponse) ProtoMessage() {}
 
 func (x *GetByIndexResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[37]
+	mi := &file_proto_hydraide_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2883,7 +2883,7 @@ func (x *GetByIndexResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetByIndexResponse.ProtoReflect.Descriptor instead.
 func (*GetByIndexResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{37}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *GetByIndexResponse) GetTreasures() []*Treasure {
@@ -2913,7 +2913,7 @@ type GetByKeysRequest struct {
 
 func (x *GetByKeysRequest) Reset() {
 	*x = GetByKeysRequest{}
-	mi := &file_hydraide_proto_msgTypes[38]
+	mi := &file_proto_hydraide_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2925,7 +2925,7 @@ func (x *GetByKeysRequest) String() string {
 func (*GetByKeysRequest) ProtoMessage() {}
 
 func (x *GetByKeysRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[38]
+	mi := &file_proto_hydraide_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2938,7 +2938,7 @@ func (x *GetByKeysRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetByKeysRequest.ProtoReflect.Descriptor instead.
 func (*GetByKeysRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{38}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *GetByKeysRequest) GetSwampName() string {
@@ -2976,7 +2976,7 @@ type GetByKeysResponse struct {
 
 func (x *GetByKeysResponse) Reset() {
 	*x = GetByKeysResponse{}
-	mi := &file_hydraide_proto_msgTypes[39]
+	mi := &file_proto_hydraide_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2988,7 +2988,7 @@ func (x *GetByKeysResponse) String() string {
 func (*GetByKeysResponse) ProtoMessage() {}
 
 func (x *GetByKeysResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[39]
+	mi := &file_proto_hydraide_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3001,7 +3001,7 @@ func (x *GetByKeysResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetByKeysResponse.ProtoReflect.Descriptor instead.
 func (*GetByKeysResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{39}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *GetByKeysResponse) GetTreasures() []*Treasure {
@@ -3023,7 +3023,7 @@ type DeleteRequest struct {
 
 func (x *DeleteRequest) Reset() {
 	*x = DeleteRequest{}
-	mi := &file_hydraide_proto_msgTypes[40]
+	mi := &file_proto_hydraide_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3035,7 +3035,7 @@ func (x *DeleteRequest) String() string {
 func (*DeleteRequest) ProtoMessage() {}
 
 func (x *DeleteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[40]
+	mi := &file_proto_hydraide_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3048,7 +3048,7 @@ func (x *DeleteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteRequest.ProtoReflect.Descriptor instead.
 func (*DeleteRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{40}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *DeleteRequest) GetSwamps() []*DeleteRequest_SwampKeys {
@@ -3068,7 +3068,7 @@ type DeleteResponse struct {
 
 func (x *DeleteResponse) Reset() {
 	*x = DeleteResponse{}
-	mi := &file_hydraide_proto_msgTypes[41]
+	mi := &file_proto_hydraide_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3080,7 +3080,7 @@ func (x *DeleteResponse) String() string {
 func (*DeleteResponse) ProtoMessage() {}
 
 func (x *DeleteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[41]
+	mi := &file_proto_hydraide_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3093,7 +3093,7 @@ func (x *DeleteResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteResponse.ProtoReflect.Descriptor instead.
 func (*DeleteResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{41}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *DeleteResponse) GetResponses() []*DeleteResponse_SwampDeleteResponse {
@@ -3115,7 +3115,7 @@ type CountRequest struct {
 
 func (x *CountRequest) Reset() {
 	*x = CountRequest{}
-	mi := &file_hydraide_proto_msgTypes[42]
+	mi := &file_proto_hydraide_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3127,7 +3127,7 @@ func (x *CountRequest) String() string {
 func (*CountRequest) ProtoMessage() {}
 
 func (x *CountRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[42]
+	mi := &file_proto_hydraide_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3140,7 +3140,7 @@ func (x *CountRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CountRequest.ProtoReflect.Descriptor instead.
 func (*CountRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{42}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *CountRequest) GetSwamps() []*CountRequest_SwampIdentifier {
@@ -3160,7 +3160,7 @@ type CountResponse struct {
 
 func (x *CountResponse) Reset() {
 	*x = CountResponse{}
-	mi := &file_hydraide_proto_msgTypes[43]
+	mi := &file_proto_hydraide_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3172,7 +3172,7 @@ func (x *CountResponse) String() string {
 func (*CountResponse) ProtoMessage() {}
 
 func (x *CountResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[43]
+	mi := &file_proto_hydraide_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3185,7 +3185,7 @@ func (x *CountResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CountResponse.ProtoReflect.Descriptor instead.
 func (*CountResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{43}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *CountResponse) GetSwamps() []*CountSwamp {
@@ -3209,7 +3209,7 @@ type CountSwamp struct {
 
 func (x *CountSwamp) Reset() {
 	*x = CountSwamp{}
-	mi := &file_hydraide_proto_msgTypes[44]
+	mi := &file_proto_hydraide_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3221,7 +3221,7 @@ func (x *CountSwamp) String() string {
 func (*CountSwamp) ProtoMessage() {}
 
 func (x *CountSwamp) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[44]
+	mi := &file_proto_hydraide_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3234,7 +3234,7 @@ func (x *CountSwamp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CountSwamp.ProtoReflect.Descriptor instead.
 func (*CountSwamp) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{44}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *CountSwamp) GetSwampName() string {
@@ -3271,7 +3271,7 @@ type IncrementRequestMetadata struct {
 
 func (x *IncrementRequestMetadata) Reset() {
 	*x = IncrementRequestMetadata{}
-	mi := &file_hydraide_proto_msgTypes[45]
+	mi := &file_proto_hydraide_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3283,7 +3283,7 @@ func (x *IncrementRequestMetadata) String() string {
 func (*IncrementRequestMetadata) ProtoMessage() {}
 
 func (x *IncrementRequestMetadata) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[45]
+	mi := &file_proto_hydraide_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3296,7 +3296,7 @@ func (x *IncrementRequestMetadata) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementRequestMetadata.ProtoReflect.Descriptor instead.
 func (*IncrementRequestMetadata) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{45}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *IncrementRequestMetadata) GetCreatedAt() bool {
@@ -3347,7 +3347,7 @@ type IncrementResponseMetadata struct {
 
 func (x *IncrementResponseMetadata) Reset() {
 	*x = IncrementResponseMetadata{}
-	mi := &file_hydraide_proto_msgTypes[46]
+	mi := &file_proto_hydraide_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3359,7 +3359,7 @@ func (x *IncrementResponseMetadata) String() string {
 func (*IncrementResponseMetadata) ProtoMessage() {}
 
 func (x *IncrementResponseMetadata) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[46]
+	mi := &file_proto_hydraide_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3372,7 +3372,7 @@ func (x *IncrementResponseMetadata) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementResponseMetadata.ProtoReflect.Descriptor instead.
 func (*IncrementResponseMetadata) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{46}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *IncrementResponseMetadata) GetCreatedAt() *timestamppb.Timestamp {
@@ -3437,7 +3437,7 @@ type IncrementInt8Request struct {
 
 func (x *IncrementInt8Request) Reset() {
 	*x = IncrementInt8Request{}
-	mi := &file_hydraide_proto_msgTypes[47]
+	mi := &file_proto_hydraide_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3449,7 +3449,7 @@ func (x *IncrementInt8Request) String() string {
 func (*IncrementInt8Request) ProtoMessage() {}
 
 func (x *IncrementInt8Request) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[47]
+	mi := &file_proto_hydraide_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3462,7 +3462,7 @@ func (x *IncrementInt8Request) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementInt8Request.ProtoReflect.Descriptor instead.
 func (*IncrementInt8Request) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{47}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *IncrementInt8Request) GetIslandID() uint64 {
@@ -3528,7 +3528,7 @@ type IncrementInt8Condition struct {
 
 func (x *IncrementInt8Condition) Reset() {
 	*x = IncrementInt8Condition{}
-	mi := &file_hydraide_proto_msgTypes[48]
+	mi := &file_proto_hydraide_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3540,7 +3540,7 @@ func (x *IncrementInt8Condition) String() string {
 func (*IncrementInt8Condition) ProtoMessage() {}
 
 func (x *IncrementInt8Condition) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[48]
+	mi := &file_proto_hydraide_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3553,7 +3553,7 @@ func (x *IncrementInt8Condition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementInt8Condition.ProtoReflect.Descriptor instead.
 func (*IncrementInt8Condition) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{48}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *IncrementInt8Condition) GetRelationalOperator() Relational_Operator {
@@ -3587,7 +3587,7 @@ type IncrementInt8Response struct {
 
 func (x *IncrementInt8Response) Reset() {
 	*x = IncrementInt8Response{}
-	mi := &file_hydraide_proto_msgTypes[49]
+	mi := &file_proto_hydraide_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3599,7 +3599,7 @@ func (x *IncrementInt8Response) String() string {
 func (*IncrementInt8Response) ProtoMessage() {}
 
 func (x *IncrementInt8Response) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[49]
+	mi := &file_proto_hydraide_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3612,7 +3612,7 @@ func (x *IncrementInt8Response) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementInt8Response.ProtoReflect.Descriptor instead.
 func (*IncrementInt8Response) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{49}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *IncrementInt8Response) GetValue() int32 {
@@ -3661,7 +3661,7 @@ type IncrementInt16Request struct {
 
 func (x *IncrementInt16Request) Reset() {
 	*x = IncrementInt16Request{}
-	mi := &file_hydraide_proto_msgTypes[50]
+	mi := &file_proto_hydraide_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3673,7 +3673,7 @@ func (x *IncrementInt16Request) String() string {
 func (*IncrementInt16Request) ProtoMessage() {}
 
 func (x *IncrementInt16Request) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[50]
+	mi := &file_proto_hydraide_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3686,7 +3686,7 @@ func (x *IncrementInt16Request) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementInt16Request.ProtoReflect.Descriptor instead.
 func (*IncrementInt16Request) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{50}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *IncrementInt16Request) GetIslandID() uint64 {
@@ -3753,7 +3753,7 @@ type IncrementInt16Condition struct {
 
 func (x *IncrementInt16Condition) Reset() {
 	*x = IncrementInt16Condition{}
-	mi := &file_hydraide_proto_msgTypes[51]
+	mi := &file_proto_hydraide_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3765,7 +3765,7 @@ func (x *IncrementInt16Condition) String() string {
 func (*IncrementInt16Condition) ProtoMessage() {}
 
 func (x *IncrementInt16Condition) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[51]
+	mi := &file_proto_hydraide_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3778,7 +3778,7 @@ func (x *IncrementInt16Condition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementInt16Condition.ProtoReflect.Descriptor instead.
 func (*IncrementInt16Condition) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{51}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *IncrementInt16Condition) GetRelationalOperator() Relational_Operator {
@@ -3812,7 +3812,7 @@ type IncrementInt16Response struct {
 
 func (x *IncrementInt16Response) Reset() {
 	*x = IncrementInt16Response{}
-	mi := &file_hydraide_proto_msgTypes[52]
+	mi := &file_proto_hydraide_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3824,7 +3824,7 @@ func (x *IncrementInt16Response) String() string {
 func (*IncrementInt16Response) ProtoMessage() {}
 
 func (x *IncrementInt16Response) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[52]
+	mi := &file_proto_hydraide_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3837,7 +3837,7 @@ func (x *IncrementInt16Response) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementInt16Response.ProtoReflect.Descriptor instead.
 func (*IncrementInt16Response) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{52}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *IncrementInt16Response) GetValue() int32 {
@@ -3883,7 +3883,7 @@ type IncrementInt32Request struct {
 
 func (x *IncrementInt32Request) Reset() {
 	*x = IncrementInt32Request{}
-	mi := &file_hydraide_proto_msgTypes[53]
+	mi := &file_proto_hydraide_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3895,7 +3895,7 @@ func (x *IncrementInt32Request) String() string {
 func (*IncrementInt32Request) ProtoMessage() {}
 
 func (x *IncrementInt32Request) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[53]
+	mi := &file_proto_hydraide_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3908,7 +3908,7 @@ func (x *IncrementInt32Request) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementInt32Request.ProtoReflect.Descriptor instead.
 func (*IncrementInt32Request) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{53}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *IncrementInt32Request) GetIslandID() uint64 {
@@ -3972,7 +3972,7 @@ type IncrementInt32Condition struct {
 
 func (x *IncrementInt32Condition) Reset() {
 	*x = IncrementInt32Condition{}
-	mi := &file_hydraide_proto_msgTypes[54]
+	mi := &file_proto_hydraide_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3984,7 +3984,7 @@ func (x *IncrementInt32Condition) String() string {
 func (*IncrementInt32Condition) ProtoMessage() {}
 
 func (x *IncrementInt32Condition) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[54]
+	mi := &file_proto_hydraide_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3997,7 +3997,7 @@ func (x *IncrementInt32Condition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementInt32Condition.ProtoReflect.Descriptor instead.
 func (*IncrementInt32Condition) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{54}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *IncrementInt32Condition) GetRelationalOperator() Relational_Operator {
@@ -4028,7 +4028,7 @@ type IncrementInt32Response struct {
 
 func (x *IncrementInt32Response) Reset() {
 	*x = IncrementInt32Response{}
-	mi := &file_hydraide_proto_msgTypes[55]
+	mi := &file_proto_hydraide_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4040,7 +4040,7 @@ func (x *IncrementInt32Response) String() string {
 func (*IncrementInt32Response) ProtoMessage() {}
 
 func (x *IncrementInt32Response) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[55]
+	mi := &file_proto_hydraide_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4053,7 +4053,7 @@ func (x *IncrementInt32Response) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementInt32Response.ProtoReflect.Descriptor instead.
 func (*IncrementInt32Response) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{55}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *IncrementInt32Response) GetValue() int32 {
@@ -4101,7 +4101,7 @@ type IncrementInt64Request struct {
 
 func (x *IncrementInt64Request) Reset() {
 	*x = IncrementInt64Request{}
-	mi := &file_hydraide_proto_msgTypes[56]
+	mi := &file_proto_hydraide_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4113,7 +4113,7 @@ func (x *IncrementInt64Request) String() string {
 func (*IncrementInt64Request) ProtoMessage() {}
 
 func (x *IncrementInt64Request) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[56]
+	mi := &file_proto_hydraide_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4126,7 +4126,7 @@ func (x *IncrementInt64Request) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementInt64Request.ProtoReflect.Descriptor instead.
 func (*IncrementInt64Request) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{56}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *IncrementInt64Request) GetIslandID() uint64 {
@@ -4190,7 +4190,7 @@ type IncrementInt64Condition struct {
 
 func (x *IncrementInt64Condition) Reset() {
 	*x = IncrementInt64Condition{}
-	mi := &file_hydraide_proto_msgTypes[57]
+	mi := &file_proto_hydraide_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4202,7 +4202,7 @@ func (x *IncrementInt64Condition) String() string {
 func (*IncrementInt64Condition) ProtoMessage() {}
 
 func (x *IncrementInt64Condition) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[57]
+	mi := &file_proto_hydraide_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4215,7 +4215,7 @@ func (x *IncrementInt64Condition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementInt64Condition.ProtoReflect.Descriptor instead.
 func (*IncrementInt64Condition) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{57}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *IncrementInt64Condition) GetRelationalOperator() Relational_Operator {
@@ -4246,7 +4246,7 @@ type IncrementInt64Response struct {
 
 func (x *IncrementInt64Response) Reset() {
 	*x = IncrementInt64Response{}
-	mi := &file_hydraide_proto_msgTypes[58]
+	mi := &file_proto_hydraide_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4258,7 +4258,7 @@ func (x *IncrementInt64Response) String() string {
 func (*IncrementInt64Response) ProtoMessage() {}
 
 func (x *IncrementInt64Response) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[58]
+	mi := &file_proto_hydraide_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4271,7 +4271,7 @@ func (x *IncrementInt64Response) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementInt64Response.ProtoReflect.Descriptor instead.
 func (*IncrementInt64Response) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{58}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *IncrementInt64Response) GetValue() int64 {
@@ -4322,7 +4322,7 @@ type IncrementUint8Request struct {
 
 func (x *IncrementUint8Request) Reset() {
 	*x = IncrementUint8Request{}
-	mi := &file_hydraide_proto_msgTypes[59]
+	mi := &file_proto_hydraide_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4334,7 +4334,7 @@ func (x *IncrementUint8Request) String() string {
 func (*IncrementUint8Request) ProtoMessage() {}
 
 func (x *IncrementUint8Request) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[59]
+	mi := &file_proto_hydraide_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4347,7 +4347,7 @@ func (x *IncrementUint8Request) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementUint8Request.ProtoReflect.Descriptor instead.
 func (*IncrementUint8Request) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{59}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{59}
 }
 
 func (x *IncrementUint8Request) GetIslandID() uint64 {
@@ -4413,7 +4413,7 @@ type IncrementUint8Condition struct {
 
 func (x *IncrementUint8Condition) Reset() {
 	*x = IncrementUint8Condition{}
-	mi := &file_hydraide_proto_msgTypes[60]
+	mi := &file_proto_hydraide_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4425,7 +4425,7 @@ func (x *IncrementUint8Condition) String() string {
 func (*IncrementUint8Condition) ProtoMessage() {}
 
 func (x *IncrementUint8Condition) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[60]
+	mi := &file_proto_hydraide_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4438,7 +4438,7 @@ func (x *IncrementUint8Condition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementUint8Condition.ProtoReflect.Descriptor instead.
 func (*IncrementUint8Condition) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{60}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{60}
 }
 
 func (x *IncrementUint8Condition) GetRelationalOperator() Relational_Operator {
@@ -4471,7 +4471,7 @@ type IncrementUint8Response struct {
 
 func (x *IncrementUint8Response) Reset() {
 	*x = IncrementUint8Response{}
-	mi := &file_hydraide_proto_msgTypes[61]
+	mi := &file_proto_hydraide_proto_msgTypes[61]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4483,7 +4483,7 @@ func (x *IncrementUint8Response) String() string {
 func (*IncrementUint8Response) ProtoMessage() {}
 
 func (x *IncrementUint8Response) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[61]
+	mi := &file_proto_hydraide_proto_msgTypes[61]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4496,7 +4496,7 @@ func (x *IncrementUint8Response) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementUint8Response.ProtoReflect.Descriptor instead.
 func (*IncrementUint8Response) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{61}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{61}
 }
 
 func (x *IncrementUint8Response) GetValue() uint32 {
@@ -4545,7 +4545,7 @@ type IncrementUint16Request struct {
 
 func (x *IncrementUint16Request) Reset() {
 	*x = IncrementUint16Request{}
-	mi := &file_hydraide_proto_msgTypes[62]
+	mi := &file_proto_hydraide_proto_msgTypes[62]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4557,7 +4557,7 @@ func (x *IncrementUint16Request) String() string {
 func (*IncrementUint16Request) ProtoMessage() {}
 
 func (x *IncrementUint16Request) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[62]
+	mi := &file_proto_hydraide_proto_msgTypes[62]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4570,7 +4570,7 @@ func (x *IncrementUint16Request) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementUint16Request.ProtoReflect.Descriptor instead.
 func (*IncrementUint16Request) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{62}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{62}
 }
 
 func (x *IncrementUint16Request) GetIslandID() uint64 {
@@ -4636,7 +4636,7 @@ type IncrementUint16Condition struct {
 
 func (x *IncrementUint16Condition) Reset() {
 	*x = IncrementUint16Condition{}
-	mi := &file_hydraide_proto_msgTypes[63]
+	mi := &file_proto_hydraide_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4648,7 +4648,7 @@ func (x *IncrementUint16Condition) String() string {
 func (*IncrementUint16Condition) ProtoMessage() {}
 
 func (x *IncrementUint16Condition) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[63]
+	mi := &file_proto_hydraide_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4661,7 +4661,7 @@ func (x *IncrementUint16Condition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementUint16Condition.ProtoReflect.Descriptor instead.
 func (*IncrementUint16Condition) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{63}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{63}
 }
 
 func (x *IncrementUint16Condition) GetRelationalOperator() Relational_Operator {
@@ -4694,7 +4694,7 @@ type IncrementUint16Response struct {
 
 func (x *IncrementUint16Response) Reset() {
 	*x = IncrementUint16Response{}
-	mi := &file_hydraide_proto_msgTypes[64]
+	mi := &file_proto_hydraide_proto_msgTypes[64]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4706,7 +4706,7 @@ func (x *IncrementUint16Response) String() string {
 func (*IncrementUint16Response) ProtoMessage() {}
 
 func (x *IncrementUint16Response) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[64]
+	mi := &file_proto_hydraide_proto_msgTypes[64]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4719,7 +4719,7 @@ func (x *IncrementUint16Response) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementUint16Response.ProtoReflect.Descriptor instead.
 func (*IncrementUint16Response) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{64}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{64}
 }
 
 func (x *IncrementUint16Response) GetValue() uint32 {
@@ -4767,7 +4767,7 @@ type IncrementUint32Request struct {
 
 func (x *IncrementUint32Request) Reset() {
 	*x = IncrementUint32Request{}
-	mi := &file_hydraide_proto_msgTypes[65]
+	mi := &file_proto_hydraide_proto_msgTypes[65]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4779,7 +4779,7 @@ func (x *IncrementUint32Request) String() string {
 func (*IncrementUint32Request) ProtoMessage() {}
 
 func (x *IncrementUint32Request) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[65]
+	mi := &file_proto_hydraide_proto_msgTypes[65]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4792,7 +4792,7 @@ func (x *IncrementUint32Request) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementUint32Request.ProtoReflect.Descriptor instead.
 func (*IncrementUint32Request) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{65}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{65}
 }
 
 func (x *IncrementUint32Request) GetIslandID() uint64 {
@@ -4856,7 +4856,7 @@ type IncrementUint32Condition struct {
 
 func (x *IncrementUint32Condition) Reset() {
 	*x = IncrementUint32Condition{}
-	mi := &file_hydraide_proto_msgTypes[66]
+	mi := &file_proto_hydraide_proto_msgTypes[66]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4868,7 +4868,7 @@ func (x *IncrementUint32Condition) String() string {
 func (*IncrementUint32Condition) ProtoMessage() {}
 
 func (x *IncrementUint32Condition) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[66]
+	mi := &file_proto_hydraide_proto_msgTypes[66]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4881,7 +4881,7 @@ func (x *IncrementUint32Condition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementUint32Condition.ProtoReflect.Descriptor instead.
 func (*IncrementUint32Condition) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{66}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{66}
 }
 
 func (x *IncrementUint32Condition) GetRelationalOperator() Relational_Operator {
@@ -4913,7 +4913,7 @@ type IncrementUint32Response struct {
 
 func (x *IncrementUint32Response) Reset() {
 	*x = IncrementUint32Response{}
-	mi := &file_hydraide_proto_msgTypes[67]
+	mi := &file_proto_hydraide_proto_msgTypes[67]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4925,7 +4925,7 @@ func (x *IncrementUint32Response) String() string {
 func (*IncrementUint32Response) ProtoMessage() {}
 
 func (x *IncrementUint32Response) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[67]
+	mi := &file_proto_hydraide_proto_msgTypes[67]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4938,7 +4938,7 @@ func (x *IncrementUint32Response) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementUint32Response.ProtoReflect.Descriptor instead.
 func (*IncrementUint32Response) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{67}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{67}
 }
 
 func (x *IncrementUint32Response) GetValue() uint32 {
@@ -4986,7 +4986,7 @@ type IncrementUint64Request struct {
 
 func (x *IncrementUint64Request) Reset() {
 	*x = IncrementUint64Request{}
-	mi := &file_hydraide_proto_msgTypes[68]
+	mi := &file_proto_hydraide_proto_msgTypes[68]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4998,7 +4998,7 @@ func (x *IncrementUint64Request) String() string {
 func (*IncrementUint64Request) ProtoMessage() {}
 
 func (x *IncrementUint64Request) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[68]
+	mi := &file_proto_hydraide_proto_msgTypes[68]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5011,7 +5011,7 @@ func (x *IncrementUint64Request) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementUint64Request.ProtoReflect.Descriptor instead.
 func (*IncrementUint64Request) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{68}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{68}
 }
 
 func (x *IncrementUint64Request) GetIslandID() uint64 {
@@ -5075,7 +5075,7 @@ type IncrementUint64Condition struct {
 
 func (x *IncrementUint64Condition) Reset() {
 	*x = IncrementUint64Condition{}
-	mi := &file_hydraide_proto_msgTypes[69]
+	mi := &file_proto_hydraide_proto_msgTypes[69]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5087,7 +5087,7 @@ func (x *IncrementUint64Condition) String() string {
 func (*IncrementUint64Condition) ProtoMessage() {}
 
 func (x *IncrementUint64Condition) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[69]
+	mi := &file_proto_hydraide_proto_msgTypes[69]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5100,7 +5100,7 @@ func (x *IncrementUint64Condition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementUint64Condition.ProtoReflect.Descriptor instead.
 func (*IncrementUint64Condition) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{69}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{69}
 }
 
 func (x *IncrementUint64Condition) GetRelationalOperator() Relational_Operator {
@@ -5131,7 +5131,7 @@ type IncrementUint64Response struct {
 
 func (x *IncrementUint64Response) Reset() {
 	*x = IncrementUint64Response{}
-	mi := &file_hydraide_proto_msgTypes[70]
+	mi := &file_proto_hydraide_proto_msgTypes[70]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5143,7 +5143,7 @@ func (x *IncrementUint64Response) String() string {
 func (*IncrementUint64Response) ProtoMessage() {}
 
 func (x *IncrementUint64Response) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[70]
+	mi := &file_proto_hydraide_proto_msgTypes[70]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5156,7 +5156,7 @@ func (x *IncrementUint64Response) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementUint64Response.ProtoReflect.Descriptor instead.
 func (*IncrementUint64Response) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{70}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{70}
 }
 
 func (x *IncrementUint64Response) GetValue() uint64 {
@@ -5188,7 +5188,7 @@ type Relational struct {
 
 func (x *Relational) Reset() {
 	*x = Relational{}
-	mi := &file_hydraide_proto_msgTypes[71]
+	mi := &file_proto_hydraide_proto_msgTypes[71]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5200,7 +5200,7 @@ func (x *Relational) String() string {
 func (*Relational) ProtoMessage() {}
 
 func (x *Relational) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[71]
+	mi := &file_proto_hydraide_proto_msgTypes[71]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5213,7 +5213,7 @@ func (x *Relational) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Relational.ProtoReflect.Descriptor instead.
 func (*Relational) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{71}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{71}
 }
 
 type IncrementFloat32Request struct {
@@ -5240,7 +5240,7 @@ type IncrementFloat32Request struct {
 
 func (x *IncrementFloat32Request) Reset() {
 	*x = IncrementFloat32Request{}
-	mi := &file_hydraide_proto_msgTypes[72]
+	mi := &file_proto_hydraide_proto_msgTypes[72]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5252,7 +5252,7 @@ func (x *IncrementFloat32Request) String() string {
 func (*IncrementFloat32Request) ProtoMessage() {}
 
 func (x *IncrementFloat32Request) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[72]
+	mi := &file_proto_hydraide_proto_msgTypes[72]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5265,7 +5265,7 @@ func (x *IncrementFloat32Request) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementFloat32Request.ProtoReflect.Descriptor instead.
 func (*IncrementFloat32Request) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{72}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{72}
 }
 
 func (x *IncrementFloat32Request) GetIslandID() uint64 {
@@ -5329,7 +5329,7 @@ type IncrementFloat32Condition struct {
 
 func (x *IncrementFloat32Condition) Reset() {
 	*x = IncrementFloat32Condition{}
-	mi := &file_hydraide_proto_msgTypes[73]
+	mi := &file_proto_hydraide_proto_msgTypes[73]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5341,7 +5341,7 @@ func (x *IncrementFloat32Condition) String() string {
 func (*IncrementFloat32Condition) ProtoMessage() {}
 
 func (x *IncrementFloat32Condition) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[73]
+	mi := &file_proto_hydraide_proto_msgTypes[73]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5354,7 +5354,7 @@ func (x *IncrementFloat32Condition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementFloat32Condition.ProtoReflect.Descriptor instead.
 func (*IncrementFloat32Condition) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{73}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{73}
 }
 
 func (x *IncrementFloat32Condition) GetRelationalOperator() Relational_Operator {
@@ -5385,7 +5385,7 @@ type IncrementFloat32Response struct {
 
 func (x *IncrementFloat32Response) Reset() {
 	*x = IncrementFloat32Response{}
-	mi := &file_hydraide_proto_msgTypes[74]
+	mi := &file_proto_hydraide_proto_msgTypes[74]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5397,7 +5397,7 @@ func (x *IncrementFloat32Response) String() string {
 func (*IncrementFloat32Response) ProtoMessage() {}
 
 func (x *IncrementFloat32Response) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[74]
+	mi := &file_proto_hydraide_proto_msgTypes[74]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5410,7 +5410,7 @@ func (x *IncrementFloat32Response) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementFloat32Response.ProtoReflect.Descriptor instead.
 func (*IncrementFloat32Response) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{74}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{74}
 }
 
 func (x *IncrementFloat32Response) GetValue() float32 {
@@ -5459,7 +5459,7 @@ type IncrementFloat64Request struct {
 
 func (x *IncrementFloat64Request) Reset() {
 	*x = IncrementFloat64Request{}
-	mi := &file_hydraide_proto_msgTypes[75]
+	mi := &file_proto_hydraide_proto_msgTypes[75]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5471,7 +5471,7 @@ func (x *IncrementFloat64Request) String() string {
 func (*IncrementFloat64Request) ProtoMessage() {}
 
 func (x *IncrementFloat64Request) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[75]
+	mi := &file_proto_hydraide_proto_msgTypes[75]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5484,7 +5484,7 @@ func (x *IncrementFloat64Request) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementFloat64Request.ProtoReflect.Descriptor instead.
 func (*IncrementFloat64Request) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{75}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{75}
 }
 
 func (x *IncrementFloat64Request) GetIslandID() uint64 {
@@ -5548,7 +5548,7 @@ type IncrementFloat64Condition struct {
 
 func (x *IncrementFloat64Condition) Reset() {
 	*x = IncrementFloat64Condition{}
-	mi := &file_hydraide_proto_msgTypes[76]
+	mi := &file_proto_hydraide_proto_msgTypes[76]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5560,7 +5560,7 @@ func (x *IncrementFloat64Condition) String() string {
 func (*IncrementFloat64Condition) ProtoMessage() {}
 
 func (x *IncrementFloat64Condition) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[76]
+	mi := &file_proto_hydraide_proto_msgTypes[76]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5573,7 +5573,7 @@ func (x *IncrementFloat64Condition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementFloat64Condition.ProtoReflect.Descriptor instead.
 func (*IncrementFloat64Condition) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{76}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{76}
 }
 
 func (x *IncrementFloat64Condition) GetRelationalOperator() Relational_Operator {
@@ -5604,7 +5604,7 @@ type IncrementFloat64Response struct {
 
 func (x *IncrementFloat64Response) Reset() {
 	*x = IncrementFloat64Response{}
-	mi := &file_hydraide_proto_msgTypes[77]
+	mi := &file_proto_hydraide_proto_msgTypes[77]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5616,7 +5616,7 @@ func (x *IncrementFloat64Response) String() string {
 func (*IncrementFloat64Response) ProtoMessage() {}
 
 func (x *IncrementFloat64Response) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[77]
+	mi := &file_proto_hydraide_proto_msgTypes[77]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5629,7 +5629,7 @@ func (x *IncrementFloat64Response) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementFloat64Response.ProtoReflect.Descriptor instead.
 func (*IncrementFloat64Response) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{77}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{77}
 }
 
 func (x *IncrementFloat64Response) GetValue() float64 {
@@ -5667,7 +5667,7 @@ type KeySlicePair struct {
 
 func (x *KeySlicePair) Reset() {
 	*x = KeySlicePair{}
-	mi := &file_hydraide_proto_msgTypes[78]
+	mi := &file_proto_hydraide_proto_msgTypes[78]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5679,7 +5679,7 @@ func (x *KeySlicePair) String() string {
 func (*KeySlicePair) ProtoMessage() {}
 
 func (x *KeySlicePair) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[78]
+	mi := &file_proto_hydraide_proto_msgTypes[78]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5692,7 +5692,7 @@ func (x *KeySlicePair) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KeySlicePair.ProtoReflect.Descriptor instead.
 func (*KeySlicePair) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{78}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{78}
 }
 
 func (x *KeySlicePair) GetKey() string {
@@ -5724,7 +5724,7 @@ type AddToUint32SlicePushRequest struct {
 
 func (x *AddToUint32SlicePushRequest) Reset() {
 	*x = AddToUint32SlicePushRequest{}
-	mi := &file_hydraide_proto_msgTypes[79]
+	mi := &file_proto_hydraide_proto_msgTypes[79]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5736,7 +5736,7 @@ func (x *AddToUint32SlicePushRequest) String() string {
 func (*AddToUint32SlicePushRequest) ProtoMessage() {}
 
 func (x *AddToUint32SlicePushRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[79]
+	mi := &file_proto_hydraide_proto_msgTypes[79]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5749,7 +5749,7 @@ func (x *AddToUint32SlicePushRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddToUint32SlicePushRequest.ProtoReflect.Descriptor instead.
 func (*AddToUint32SlicePushRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{79}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{79}
 }
 
 func (x *AddToUint32SlicePushRequest) GetIslandID() uint64 {
@@ -5783,7 +5783,7 @@ type AddToUint32SlicePushResponse struct {
 
 func (x *AddToUint32SlicePushResponse) Reset() {
 	*x = AddToUint32SlicePushResponse{}
-	mi := &file_hydraide_proto_msgTypes[80]
+	mi := &file_proto_hydraide_proto_msgTypes[80]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5795,7 +5795,7 @@ func (x *AddToUint32SlicePushResponse) String() string {
 func (*AddToUint32SlicePushResponse) ProtoMessage() {}
 
 func (x *AddToUint32SlicePushResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[80]
+	mi := &file_proto_hydraide_proto_msgTypes[80]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5808,7 +5808,7 @@ func (x *AddToUint32SlicePushResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddToUint32SlicePushResponse.ProtoReflect.Descriptor instead.
 func (*AddToUint32SlicePushResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{80}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{80}
 }
 
 // Uint32SliceDeleteRequest removes one or more values from one or more uint32 slices.
@@ -5826,7 +5826,7 @@ type Uint32SliceDeleteRequest struct {
 
 func (x *Uint32SliceDeleteRequest) Reset() {
 	*x = Uint32SliceDeleteRequest{}
-	mi := &file_hydraide_proto_msgTypes[81]
+	mi := &file_proto_hydraide_proto_msgTypes[81]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5838,7 +5838,7 @@ func (x *Uint32SliceDeleteRequest) String() string {
 func (*Uint32SliceDeleteRequest) ProtoMessage() {}
 
 func (x *Uint32SliceDeleteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[81]
+	mi := &file_proto_hydraide_proto_msgTypes[81]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5851,7 +5851,7 @@ func (x *Uint32SliceDeleteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Uint32SliceDeleteRequest.ProtoReflect.Descriptor instead.
 func (*Uint32SliceDeleteRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{81}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{81}
 }
 
 func (x *Uint32SliceDeleteRequest) GetIslandID() uint64 {
@@ -5885,7 +5885,7 @@ type Uint32SliceDeleteResponse struct {
 
 func (x *Uint32SliceDeleteResponse) Reset() {
 	*x = Uint32SliceDeleteResponse{}
-	mi := &file_hydraide_proto_msgTypes[82]
+	mi := &file_proto_hydraide_proto_msgTypes[82]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5897,7 +5897,7 @@ func (x *Uint32SliceDeleteResponse) String() string {
 func (*Uint32SliceDeleteResponse) ProtoMessage() {}
 
 func (x *Uint32SliceDeleteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[82]
+	mi := &file_proto_hydraide_proto_msgTypes[82]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5910,7 +5910,7 @@ func (x *Uint32SliceDeleteResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Uint32SliceDeleteResponse.ProtoReflect.Descriptor instead.
 func (*Uint32SliceDeleteResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{82}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{82}
 }
 
 // Uint32SliceSizeRequest queries the size (number of elements) of a specific uint32 slice.
@@ -5928,7 +5928,7 @@ type Uint32SliceSizeRequest struct {
 
 func (x *Uint32SliceSizeRequest) Reset() {
 	*x = Uint32SliceSizeRequest{}
-	mi := &file_hydraide_proto_msgTypes[83]
+	mi := &file_proto_hydraide_proto_msgTypes[83]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5940,7 +5940,7 @@ func (x *Uint32SliceSizeRequest) String() string {
 func (*Uint32SliceSizeRequest) ProtoMessage() {}
 
 func (x *Uint32SliceSizeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[83]
+	mi := &file_proto_hydraide_proto_msgTypes[83]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5953,7 +5953,7 @@ func (x *Uint32SliceSizeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Uint32SliceSizeRequest.ProtoReflect.Descriptor instead.
 func (*Uint32SliceSizeRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{83}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{83}
 }
 
 func (x *Uint32SliceSizeRequest) GetIslandID() uint64 {
@@ -5988,7 +5988,7 @@ type Uint32SliceSizeResponse struct {
 
 func (x *Uint32SliceSizeResponse) Reset() {
 	*x = Uint32SliceSizeResponse{}
-	mi := &file_hydraide_proto_msgTypes[84]
+	mi := &file_proto_hydraide_proto_msgTypes[84]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6000,7 +6000,7 @@ func (x *Uint32SliceSizeResponse) String() string {
 func (*Uint32SliceSizeResponse) ProtoMessage() {}
 
 func (x *Uint32SliceSizeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[84]
+	mi := &file_proto_hydraide_proto_msgTypes[84]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6013,7 +6013,7 @@ func (x *Uint32SliceSizeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Uint32SliceSizeResponse.ProtoReflect.Descriptor instead.
 func (*Uint32SliceSizeResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{84}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{84}
 }
 
 func (x *Uint32SliceSizeResponse) GetSize() int64 {
@@ -6040,7 +6040,7 @@ type Uint32SliceIsValueExistRequest struct {
 
 func (x *Uint32SliceIsValueExistRequest) Reset() {
 	*x = Uint32SliceIsValueExistRequest{}
-	mi := &file_hydraide_proto_msgTypes[85]
+	mi := &file_proto_hydraide_proto_msgTypes[85]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6052,7 +6052,7 @@ func (x *Uint32SliceIsValueExistRequest) String() string {
 func (*Uint32SliceIsValueExistRequest) ProtoMessage() {}
 
 func (x *Uint32SliceIsValueExistRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[85]
+	mi := &file_proto_hydraide_proto_msgTypes[85]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6065,7 +6065,7 @@ func (x *Uint32SliceIsValueExistRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Uint32SliceIsValueExistRequest.ProtoReflect.Descriptor instead.
 func (*Uint32SliceIsValueExistRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{85}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{85}
 }
 
 func (x *Uint32SliceIsValueExistRequest) GetIslandID() uint64 {
@@ -6107,7 +6107,7 @@ type Uint32SliceIsValueExistResponse struct {
 
 func (x *Uint32SliceIsValueExistResponse) Reset() {
 	*x = Uint32SliceIsValueExistResponse{}
-	mi := &file_hydraide_proto_msgTypes[86]
+	mi := &file_proto_hydraide_proto_msgTypes[86]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6119,7 +6119,7 @@ func (x *Uint32SliceIsValueExistResponse) String() string {
 func (*Uint32SliceIsValueExistResponse) ProtoMessage() {}
 
 func (x *Uint32SliceIsValueExistResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[86]
+	mi := &file_proto_hydraide_proto_msgTypes[86]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6132,7 +6132,7 @@ func (x *Uint32SliceIsValueExistResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Uint32SliceIsValueExistResponse.ProtoReflect.Descriptor instead.
 func (*Uint32SliceIsValueExistResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{86}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{86}
 }
 
 func (x *Uint32SliceIsValueExistResponse) GetIsExist() bool {
@@ -6155,7 +6155,7 @@ type IsSwampExistRequest struct {
 
 func (x *IsSwampExistRequest) Reset() {
 	*x = IsSwampExistRequest{}
-	mi := &file_hydraide_proto_msgTypes[87]
+	mi := &file_proto_hydraide_proto_msgTypes[87]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6167,7 +6167,7 @@ func (x *IsSwampExistRequest) String() string {
 func (*IsSwampExistRequest) ProtoMessage() {}
 
 func (x *IsSwampExistRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[87]
+	mi := &file_proto_hydraide_proto_msgTypes[87]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6180,7 +6180,7 @@ func (x *IsSwampExistRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IsSwampExistRequest.ProtoReflect.Descriptor instead.
 func (*IsSwampExistRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{87}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{87}
 }
 
 func (x *IsSwampExistRequest) GetIslandID() uint64 {
@@ -6208,7 +6208,7 @@ type IsSwampExistResponse struct {
 
 func (x *IsSwampExistResponse) Reset() {
 	*x = IsSwampExistResponse{}
-	mi := &file_hydraide_proto_msgTypes[88]
+	mi := &file_proto_hydraide_proto_msgTypes[88]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6220,7 +6220,7 @@ func (x *IsSwampExistResponse) String() string {
 func (*IsSwampExistResponse) ProtoMessage() {}
 
 func (x *IsSwampExistResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[88]
+	mi := &file_proto_hydraide_proto_msgTypes[88]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6233,7 +6233,7 @@ func (x *IsSwampExistResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IsSwampExistResponse.ProtoReflect.Descriptor instead.
 func (*IsSwampExistResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{88}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{88}
 }
 
 func (x *IsSwampExistResponse) GetIsExist() bool {
@@ -6258,7 +6258,7 @@ type IsKeyExistRequest struct {
 
 func (x *IsKeyExistRequest) Reset() {
 	*x = IsKeyExistRequest{}
-	mi := &file_hydraide_proto_msgTypes[89]
+	mi := &file_proto_hydraide_proto_msgTypes[89]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6270,7 +6270,7 @@ func (x *IsKeyExistRequest) String() string {
 func (*IsKeyExistRequest) ProtoMessage() {}
 
 func (x *IsKeyExistRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[89]
+	mi := &file_proto_hydraide_proto_msgTypes[89]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6283,7 +6283,7 @@ func (x *IsKeyExistRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IsKeyExistRequest.ProtoReflect.Descriptor instead.
 func (*IsKeyExistRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{89}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{89}
 }
 
 func (x *IsKeyExistRequest) GetIslandID() uint64 {
@@ -6318,7 +6318,7 @@ type IsKeyExistResponse struct {
 
 func (x *IsKeyExistResponse) Reset() {
 	*x = IsKeyExistResponse{}
-	mi := &file_hydraide_proto_msgTypes[90]
+	mi := &file_proto_hydraide_proto_msgTypes[90]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6330,7 +6330,7 @@ func (x *IsKeyExistResponse) String() string {
 func (*IsKeyExistResponse) ProtoMessage() {}
 
 func (x *IsKeyExistResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[90]
+	mi := &file_proto_hydraide_proto_msgTypes[90]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6343,7 +6343,7 @@ func (x *IsKeyExistResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IsKeyExistResponse.ProtoReflect.Descriptor instead.
 func (*IsKeyExistResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{90}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{90}
 }
 
 func (x *IsKeyExistResponse) GetIsExist() bool {
@@ -6367,7 +6367,7 @@ type DeleteRequest_SwampKeys struct {
 
 func (x *DeleteRequest_SwampKeys) Reset() {
 	*x = DeleteRequest_SwampKeys{}
-	mi := &file_hydraide_proto_msgTypes[91]
+	mi := &file_proto_hydraide_proto_msgTypes[91]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6379,7 +6379,7 @@ func (x *DeleteRequest_SwampKeys) String() string {
 func (*DeleteRequest_SwampKeys) ProtoMessage() {}
 
 func (x *DeleteRequest_SwampKeys) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[91]
+	mi := &file_proto_hydraide_proto_msgTypes[91]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6392,7 +6392,7 @@ func (x *DeleteRequest_SwampKeys) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteRequest_SwampKeys.ProtoReflect.Descriptor instead.
 func (*DeleteRequest_SwampKeys) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{40, 0}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{40, 0}
 }
 
 func (x *DeleteRequest_SwampKeys) GetIslandID() uint64 {
@@ -6431,7 +6431,7 @@ type DeleteResponse_SwampDeleteResponse struct {
 
 func (x *DeleteResponse_SwampDeleteResponse) Reset() {
 	*x = DeleteResponse_SwampDeleteResponse{}
-	mi := &file_hydraide_proto_msgTypes[92]
+	mi := &file_proto_hydraide_proto_msgTypes[92]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6443,7 +6443,7 @@ func (x *DeleteResponse_SwampDeleteResponse) String() string {
 func (*DeleteResponse_SwampDeleteResponse) ProtoMessage() {}
 
 func (x *DeleteResponse_SwampDeleteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[92]
+	mi := &file_proto_hydraide_proto_msgTypes[92]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6456,7 +6456,7 @@ func (x *DeleteResponse_SwampDeleteResponse) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use DeleteResponse_SwampDeleteResponse.ProtoReflect.Descriptor instead.
 func (*DeleteResponse_SwampDeleteResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{41, 0}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{41, 0}
 }
 
 func (x *DeleteResponse_SwampDeleteResponse) GetSwampName() string {
@@ -6492,7 +6492,7 @@ type CountRequest_SwampIdentifier struct {
 
 func (x *CountRequest_SwampIdentifier) Reset() {
 	*x = CountRequest_SwampIdentifier{}
-	mi := &file_hydraide_proto_msgTypes[93]
+	mi := &file_proto_hydraide_proto_msgTypes[93]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6504,7 +6504,7 @@ func (x *CountRequest_SwampIdentifier) String() string {
 func (*CountRequest_SwampIdentifier) ProtoMessage() {}
 
 func (x *CountRequest_SwampIdentifier) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[93]
+	mi := &file_proto_hydraide_proto_msgTypes[93]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6517,7 +6517,7 @@ func (x *CountRequest_SwampIdentifier) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CountRequest_SwampIdentifier.ProtoReflect.Descriptor instead.
 func (*CountRequest_SwampIdentifier) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{42, 0}
+	return file_proto_hydraide_proto_rawDescGZIP(), []int{42, 0}
 }
 
 func (x *CountRequest_SwampIdentifier) GetIslandID() uint64 {
@@ -6534,11 +6534,11 @@ func (x *CountRequest_SwampIdentifier) GetSwampName() string {
 	return ""
 }
 
-var File_hydraide_proto protoreflect.FileDescriptor
+var File_proto_hydraide_proto protoreflect.FileDescriptor
 
-const file_hydraide_proto_rawDesc = "" +
+const file_proto_hydraide_proto_rawDesc = "" +
 	"\n" +
-	"\x0ehydraide.proto\x12\fhydraidepbgo\x1a\x1fgoogle/protobuf/timestamp.proto\"&\n" +
+	"\x14proto/hydraide.proto\x12\fhydraidepbgo\x1a\x1fgoogle/protobuf/timestamp.proto\"&\n" +
 	"\x10HeartbeatRequest\x12\x12\n" +
 	"\x04Ping\x18\x01 \x01(\tR\x04Ping\"'\n" +
 	"\x11HeartbeatResponse\x12\x12\n" +
@@ -7136,20 +7136,20 @@ const file_hydraide_proto_rawDesc = "" +
 	"\x10IncrementFloat64\x12%.hydraidepbgo.IncrementFloat64Request\x1a&.hydraidepbgo.IncrementFloat64Response\"\x00BBZ@github.com/hydraide/hydraide/generated/hydraidepbgo;hydraidepbgob\x06proto3"
 
 var (
-	file_hydraide_proto_rawDescOnce sync.Once
-	file_hydraide_proto_rawDescData []byte
+	file_proto_hydraide_proto_rawDescOnce sync.Once
+	file_proto_hydraide_proto_rawDescData []byte
 )
 
-func file_hydraide_proto_rawDescGZIP() []byte {
-	file_hydraide_proto_rawDescOnce.Do(func() {
-		file_hydraide_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_hydraide_proto_rawDesc), len(file_hydraide_proto_rawDesc)))
+func file_proto_hydraide_proto_rawDescGZIP() []byte {
+	file_proto_hydraide_proto_rawDescOnce.Do(func() {
+		file_proto_hydraide_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_proto_hydraide_proto_rawDesc), len(file_proto_hydraide_proto_rawDesc)))
 	})
-	return file_hydraide_proto_rawDescData
+	return file_proto_hydraide_proto_rawDescData
 }
 
-var file_hydraide_proto_enumTypes = make([]protoimpl.EnumInfo, 7)
-var file_hydraide_proto_msgTypes = make([]protoimpl.MessageInfo, 94)
-var file_hydraide_proto_goTypes = []any{
+var file_proto_hydraide_proto_enumTypes = make([]protoimpl.EnumInfo, 7)
+var file_proto_hydraide_proto_msgTypes = make([]protoimpl.MessageInfo, 94)
+var file_proto_hydraide_proto_goTypes = []any{
 	(SwampResponse_ErrCodeEnum)(0), // 0: hydraidepbgo.SwampResponse.ErrCodeEnum
 	(Status_Code)(0),               // 1: hydraidepbgo.Status.Code
 	(Boolean_Type)(0),              // 2: hydraidepbgo.Boolean.Type
@@ -7253,7 +7253,7 @@ var file_hydraide_proto_goTypes = []any{
 	(*CountRequest_SwampIdentifier)(nil),                  // 100: hydraidepbgo.CountRequest.SwampIdentifier
 	(*timestamppb.Timestamp)(nil),                         // 101: google.protobuf.Timestamp
 }
-var file_hydraide_proto_depIdxs = []int32{
+var file_proto_hydraide_proto_depIdxs = []int32{
 	39,  // 0: hydraidepbgo.SubscribeToEventsResponse.Treasure:type_name -> hydraidepbgo.Treasure
 	39,  // 1: hydraidepbgo.SubscribeToEventsResponse.OldTreasure:type_name -> hydraidepbgo.Treasure
 	39,  // 2: hydraidepbgo.SubscribeToEventsResponse.DeletedTreasure:type_name -> hydraidepbgo.Treasure
@@ -7417,45 +7417,45 @@ var file_hydraide_proto_depIdxs = []int32{
 	0,   // [0:92] is the sub-list for field type_name
 }
 
-func init() { file_hydraide_proto_init() }
-func file_hydraide_proto_init() {
-	if File_hydraide_proto != nil {
+func init() { file_proto_hydraide_proto_init() }
+func file_proto_hydraide_proto_init() {
+	if File_proto_hydraide_proto != nil {
 		return
 	}
-	file_hydraide_proto_msgTypes[13].OneofWrappers = []any{}
-	file_hydraide_proto_msgTypes[19].OneofWrappers = []any{}
-	file_hydraide_proto_msgTypes[21].OneofWrappers = []any{}
-	file_hydraide_proto_msgTypes[32].OneofWrappers = []any{}
-	file_hydraide_proto_msgTypes[34].OneofWrappers = []any{}
-	file_hydraide_proto_msgTypes[45].OneofWrappers = []any{}
-	file_hydraide_proto_msgTypes[46].OneofWrappers = []any{}
-	file_hydraide_proto_msgTypes[47].OneofWrappers = []any{}
-	file_hydraide_proto_msgTypes[50].OneofWrappers = []any{}
-	file_hydraide_proto_msgTypes[53].OneofWrappers = []any{}
-	file_hydraide_proto_msgTypes[56].OneofWrappers = []any{}
-	file_hydraide_proto_msgTypes[59].OneofWrappers = []any{}
-	file_hydraide_proto_msgTypes[62].OneofWrappers = []any{}
-	file_hydraide_proto_msgTypes[65].OneofWrappers = []any{}
-	file_hydraide_proto_msgTypes[68].OneofWrappers = []any{}
-	file_hydraide_proto_msgTypes[72].OneofWrappers = []any{}
-	file_hydraide_proto_msgTypes[75].OneofWrappers = []any{}
-	file_hydraide_proto_msgTypes[92].OneofWrappers = []any{}
+	file_proto_hydraide_proto_msgTypes[13].OneofWrappers = []any{}
+	file_proto_hydraide_proto_msgTypes[19].OneofWrappers = []any{}
+	file_proto_hydraide_proto_msgTypes[21].OneofWrappers = []any{}
+	file_proto_hydraide_proto_msgTypes[32].OneofWrappers = []any{}
+	file_proto_hydraide_proto_msgTypes[34].OneofWrappers = []any{}
+	file_proto_hydraide_proto_msgTypes[45].OneofWrappers = []any{}
+	file_proto_hydraide_proto_msgTypes[46].OneofWrappers = []any{}
+	file_proto_hydraide_proto_msgTypes[47].OneofWrappers = []any{}
+	file_proto_hydraide_proto_msgTypes[50].OneofWrappers = []any{}
+	file_proto_hydraide_proto_msgTypes[53].OneofWrappers = []any{}
+	file_proto_hydraide_proto_msgTypes[56].OneofWrappers = []any{}
+	file_proto_hydraide_proto_msgTypes[59].OneofWrappers = []any{}
+	file_proto_hydraide_proto_msgTypes[62].OneofWrappers = []any{}
+	file_proto_hydraide_proto_msgTypes[65].OneofWrappers = []any{}
+	file_proto_hydraide_proto_msgTypes[68].OneofWrappers = []any{}
+	file_proto_hydraide_proto_msgTypes[72].OneofWrappers = []any{}
+	file_proto_hydraide_proto_msgTypes[75].OneofWrappers = []any{}
+	file_proto_hydraide_proto_msgTypes[92].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_hydraide_proto_rawDesc), len(file_hydraide_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_hydraide_proto_rawDesc), len(file_proto_hydraide_proto_rawDesc)),
 			NumEnums:      7,
 			NumMessages:   94,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
-		GoTypes:           file_hydraide_proto_goTypes,
-		DependencyIndexes: file_hydraide_proto_depIdxs,
-		EnumInfos:         file_hydraide_proto_enumTypes,
-		MessageInfos:      file_hydraide_proto_msgTypes,
+		GoTypes:           file_proto_hydraide_proto_goTypes,
+		DependencyIndexes: file_proto_hydraide_proto_depIdxs,
+		EnumInfos:         file_proto_hydraide_proto_enumTypes,
+		MessageInfos:      file_proto_hydraide_proto_msgTypes,
 	}.Build()
-	File_hydraide_proto = out.File
-	file_hydraide_proto_goTypes = nil
-	file_hydraide_proto_depIdxs = nil
+	File_proto_hydraide_proto = out.File
+	file_proto_hydraide_proto_goTypes = nil
+	file_proto_hydraide_proto_depIdxs = nil
 }

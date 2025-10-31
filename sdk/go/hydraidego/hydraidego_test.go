@@ -990,6 +990,294 @@ func TestCatalogReadMany_OrderAndPagination(t *testing.T) {
 	}
 }
 
+// TestCatalogReadBatch tests the CatalogReadBatch function which retrieves multiple treasures
+// by their keys in a single batch request. This test verifies:
+// - Successful batch retrieval of existing keys
+// - Silent skipping of non-existent keys
+// - Empty keys slice handling
+// - Iterator error propagation
+// - Model conversion correctness
+func TestCatalogReadBatch(t *testing.T) {
+
+	// Setup: Create a unique Swamp for this test
+	swampName := name.New().Sanctuary("test").Realm("catalog").Swamp("batch-read")
+	defer func() {
+		if err := hydraidegoInterface.Destroy(context.Background(), swampName); err != nil {
+			t.Logf("cleanup warning: %v", err)
+		}
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Define the test model
+	type BatchTreasure struct {
+		Key       string    `hydraide:"key"`
+		Value     string    `hydraide:"value"`
+		CreatedAt time.Time `hydraide:"createdAt"`
+	}
+
+	// Test Case 1: Create test data - 10 treasures
+	t.Run("Setup test data", func(t *testing.T) {
+		for i := 1; i <= 10; i++ {
+			treasure := &BatchTreasure{
+				Key:       fmt.Sprintf("batch-key-%d", i),
+				Value:     fmt.Sprintf("batch-value-%d", i),
+				CreatedAt: time.Now().UTC(),
+			}
+			_, err := hydraidegoInterface.CatalogSave(ctx, swampName, treasure)
+			require.NoError(t, err, "failed to save treasure: %s", treasure.Key)
+		}
+		time.Sleep(100 * time.Millisecond) // Ensure writes are committed
+	})
+
+	// Test Case 2: Read all keys in batch
+	t.Run("Read all existing keys", func(t *testing.T) {
+		keys := []string{
+			"batch-key-1", "batch-key-2", "batch-key-3", "batch-key-4", "batch-key-5",
+			"batch-key-6", "batch-key-7", "batch-key-8", "batch-key-9", "batch-key-10",
+		}
+
+		var collected []*BatchTreasure
+		err := hydraidegoInterface.CatalogReadBatch(
+			ctx,
+			swampName,
+			keys,
+			BatchTreasure{},
+			func(model any) error {
+				treasure, ok := model.(*BatchTreasure)
+				if !ok {
+					return fmt.Errorf("unexpected model type")
+				}
+				collected = append(collected, treasure)
+				return nil
+			},
+		)
+
+		assert.NoError(t, err)
+		assert.Equal(t, 10, len(collected), "Should retrieve all 10 treasures")
+
+		// Verify all values are correct
+		for _, treasure := range collected {
+			assert.NotEmpty(t, treasure.Key, "Key should not be empty")
+			assert.NotEmpty(t, treasure.Value, "Value should not be empty")
+			assert.False(t, treasure.CreatedAt.IsZero(), "CreatedAt should be set")
+		}
+	})
+
+	// Test Case 3: Read subset of keys
+	t.Run("Read subset of keys", func(t *testing.T) {
+		keys := []string{"batch-key-2", "batch-key-5", "batch-key-8"}
+
+		var collected []*BatchTreasure
+		err := hydraidegoInterface.CatalogReadBatch(
+			ctx,
+			swampName,
+			keys,
+			BatchTreasure{},
+			func(model any) error {
+				treasure := model.(*BatchTreasure)
+				collected = append(collected, treasure)
+				return nil
+			},
+		)
+
+		assert.NoError(t, err)
+		assert.Equal(t, 3, len(collected), "Should retrieve exactly 3 treasures")
+
+		// Collect keys for verification
+		var collectedKeys []string
+		for _, treasure := range collected {
+			collectedKeys = append(collectedKeys, treasure.Key)
+		}
+		assert.ElementsMatch(t, keys, collectedKeys, "Retrieved keys should match requested keys")
+	})
+
+	// Test Case 4: Mix of existing and non-existing keys
+	t.Run("Mix of existing and non-existing keys", func(t *testing.T) {
+		keys := []string{
+			"batch-key-1",       // exists
+			"non-existent-key1", // does not exist
+			"batch-key-3",       // exists
+			"non-existent-key2", // does not exist
+			"batch-key-5",       // exists
+		}
+
+		var collected []*BatchTreasure
+		err := hydraidegoInterface.CatalogReadBatch(
+			ctx,
+			swampName,
+			keys,
+			BatchTreasure{},
+			func(model any) error {
+				treasure := model.(*BatchTreasure)
+				collected = append(collected, treasure)
+				return nil
+			},
+		)
+
+		assert.NoError(t, err)
+		assert.Equal(t, 3, len(collected), "Should retrieve only existing treasures")
+
+		// Verify we got the right keys
+		var collectedKeys []string
+		for _, treasure := range collected {
+			collectedKeys = append(collectedKeys, treasure.Key)
+		}
+		expectedKeys := []string{"batch-key-1", "batch-key-3", "batch-key-5"}
+		assert.ElementsMatch(t, expectedKeys, collectedKeys, "Should only return existing keys")
+	})
+
+	// Test Case 5: Empty keys slice
+	t.Run("Empty keys slice", func(t *testing.T) {
+		keys := []string{}
+
+		var collected []*BatchTreasure
+		err := hydraidegoInterface.CatalogReadBatch(
+			ctx,
+			swampName,
+			keys,
+			BatchTreasure{},
+			func(model any) error {
+				treasure := model.(*BatchTreasure)
+				collected = append(collected, treasure)
+				return nil
+			},
+		)
+
+		assert.NoError(t, err, "Empty keys should not cause an error")
+		assert.Equal(t, 0, len(collected), "Should retrieve no treasures")
+	})
+
+	// Test Case 6: All non-existent keys
+	t.Run("All non-existent keys", func(t *testing.T) {
+		keys := []string{"non-existent-1", "non-existent-2", "non-existent-3"}
+
+		var collected []*BatchTreasure
+		err := hydraidegoInterface.CatalogReadBatch(
+			ctx,
+			swampName,
+			keys,
+			BatchTreasure{},
+			func(model any) error {
+				treasure := model.(*BatchTreasure)
+				collected = append(collected, treasure)
+				return nil
+			},
+		)
+
+		assert.NoError(t, err)
+		assert.Equal(t, 0, len(collected), "Should retrieve no treasures for non-existent keys")
+	})
+
+	// Test Case 7: Iterator returns error
+	t.Run("Iterator error propagation", func(t *testing.T) {
+		keys := []string{"batch-key-1", "batch-key-2", "batch-key-3"}
+
+		expectedErr := fmt.Errorf("iterator intentional error")
+		callCount := 0
+
+		err := hydraidegoInterface.CatalogReadBatch(
+			ctx,
+			swampName,
+			keys,
+			BatchTreasure{},
+			func(model any) error {
+				callCount++
+				if callCount == 2 {
+					return expectedErr
+				}
+				return nil
+			},
+		)
+
+		assert.Error(t, err, "Should propagate iterator error")
+		assert.Equal(t, expectedErr, err, "Error should match iterator error")
+		assert.Equal(t, 2, callCount, "Iterator should be called until error occurs")
+	})
+
+	// Test Case 8: Nil iterator should fail
+	t.Run("Nil iterator validation", func(t *testing.T) {
+		keys := []string{"batch-key-1"}
+
+		err := hydraidegoInterface.CatalogReadBatch(
+			ctx,
+			swampName,
+			keys,
+			BatchTreasure{},
+			nil, // nil iterator
+		)
+
+		assert.Error(t, err, "Should return error for nil iterator")
+		assert.Contains(t, err.Error(), "iterator can not be nil", "Error message should mention nil iterator")
+	})
+
+	// Test Case 9: Pointer model should fail
+	t.Run("Pointer model validation", func(t *testing.T) {
+		keys := []string{"batch-key-1"}
+
+		err := hydraidegoInterface.CatalogReadBatch(
+			ctx,
+			swampName,
+			keys,
+			&BatchTreasure{}, // pointer model (invalid)
+			func(model any) error { return nil },
+		)
+
+		assert.Error(t, err, "Should return error for pointer model")
+		assert.Contains(t, err.Error(), "model cannot be a pointer", "Error message should mention pointer model")
+	})
+
+	// Test Case 10: Large batch read (performance verification)
+	t.Run("Large batch read", func(t *testing.T) {
+		// Create 100 more treasures for this test
+		largeSwampName := name.New().Sanctuary("test").Realm("catalog").Swamp("large-batch")
+		defer func() {
+			if err := hydraidegoInterface.Destroy(context.Background(), largeSwampName); err != nil {
+				t.Logf("cleanup warning: %v", err)
+			}
+		}()
+
+		// Create 100 treasures
+		for i := 1; i <= 100; i++ {
+			treasure := &BatchTreasure{
+				Key:       fmt.Sprintf("large-key-%d", i),
+				Value:     fmt.Sprintf("large-value-%d", i),
+				CreatedAt: time.Now().UTC(),
+			}
+			_, err := hydraidegoInterface.CatalogSave(ctx, largeSwampName, treasure)
+			require.NoError(t, err)
+		}
+		time.Sleep(200 * time.Millisecond)
+
+		// Build keys slice
+		keys := make([]string, 100)
+		for i := 0; i < 100; i++ {
+			keys[i] = fmt.Sprintf("large-key-%d", i+1)
+		}
+
+		// Read all in one batch
+		var collected []*BatchTreasure
+		startTime := time.Now()
+		err := hydraidegoInterface.CatalogReadBatch(
+			ctx,
+			largeSwampName,
+			keys,
+			BatchTreasure{},
+			func(model any) error {
+				treasure := model.(*BatchTreasure)
+				collected = append(collected, treasure)
+				return nil
+			},
+		)
+		elapsed := time.Since(startTime)
+
+		assert.NoError(t, err)
+		assert.Equal(t, 100, len(collected), "Should retrieve all 100 treasures")
+		t.Logf("Batch read of 100 keys took: %v", elapsed)
+	})
+}
+
 type conversionTestCase struct {
 	name     string
 	input    any

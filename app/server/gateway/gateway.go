@@ -514,6 +514,68 @@ func (g Gateway) GetByIndex(ctx context.Context, in *hydrapb.GetByIndexRequest) 
 
 }
 
+func (g Gateway) GetByKeys(ctx context.Context, in *hydrapb.GetByKeysRequest) (*hydrapb.GetByKeysResponse, error) {
+
+	g.ZeusInterface.GetSafeops().LockSystem()
+	defer g.ZeusInterface.GetSafeops().UnlockSystem()
+
+	defer handlePanic()
+
+	// Validate the swamp name
+	swampName, err := checkSwampName(g.ZeusInterface, in.GetIslandID(), in.SwampName, true)
+	if err != nil {
+		return nil, err
+	}
+
+	// Validate that we have at least one key
+	if in.GetKeys() == nil || len(in.GetKeys()) == 0 {
+		// Return empty response for empty keys (not an error, as per specification)
+		return &hydrapb.GetByKeysResponse{
+			Treasures: []*hydrapb.Treasure{},
+		}, nil
+	}
+
+	hydraInterface := g.ZeusInterface.GetHydra()
+
+	// Check if the swamp exists before trying to summon it
+	isExist, err := hydraInterface.IsExistSwamp(in.GetIslandID(), swampName)
+	if err != nil || !isExist {
+		// Return empty response if swamp doesn't exist (not an error, as per specification)
+		return &hydrapb.GetByKeysResponse{
+			Treasures: []*hydrapb.Treasure{},
+		}, nil
+	}
+
+	// Summon the swamp
+	swampInterface, err := hydraInterface.SummonSwamp(ctx, in.GetIslandID(), swampName)
+	if err != nil {
+		// Return with grpc error message
+		return nil, status.Error(codes.Internal, fmt.Sprintf("internal server error in hydra: %s", err.Error()))
+	}
+
+	// Begin the vigil, to prevent closing of the swamp
+	swampInterface.BeginVigil()
+	defer swampInterface.CeaseVigil()
+
+	// Use the new GetTreasuresByKeys method for batch retrieval
+	treasures := swampInterface.GetTreasuresByKeys(in.GetKeys())
+
+	// Convert all treasures to the protobuf format
+	var response []*hydrapb.Treasure
+	for _, treasureInterface := range treasures {
+		// Convert the treasure to the protobuf format
+		t := &hydrapb.Treasure{}
+		treasureToKeyValuePair(treasureInterface, t)
+		response = append(response, t)
+	}
+
+	// Return the treasures
+	return &hydrapb.GetByKeysResponse{
+		Treasures: response,
+	}, nil
+
+}
+
 func (g Gateway) ShiftExpiredTreasures(ctx context.Context, in *hydrapb.ShiftExpiredTreasuresRequest) (*hydrapb.ShiftExpiredTreasuresResponse, error) {
 
 	g.ZeusInterface.GetSafeops().LockSystem()

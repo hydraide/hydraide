@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.5.1
 // - protoc             v3.21.12
-// source: hydraide.proto
+// source: proto/hydraide.proto
 
 package hydraidepbgo
 
@@ -1838,5 +1838,5 @@ var HydraideService_ServiceDesc = grpc.ServiceDesc{
 			ServerStreams: true,
 		},
 	},
-	Metadata: "hydraide.proto",
+	Metadata: "proto/hydraide.proto",
 }

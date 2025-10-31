@@ -3482,3 +3482,221 @@ func newSwampForTest(t *testing.T, realmName, swampName string) Swamp {
 func float32IsInf(f float32) bool {
 	return math.IsInf(float64(f), 1)
 }
+
+func TestSwamp_GetTreasuresByKeys(t *testing.T) {
+	fsInterface := filesystem.New()
+	settingsInterface := settings.New(testMaxDepth, testMaxFolderPerLevel)
+	fss := &settings.FileSystemSettings{
+		WriteIntervalSec: 1,
+		MaxFileSizeByte:  8192,
+	}
+	settingsInterface.RegisterPattern(name.New().Sanctuary(sanctuaryForQuickTest).Realm("*").Swamp("*"), false, 1, fss)
+	closeAfterIdle := 1 * time.Second
+	writeInterval := 1 * time.Second
+	maxFileSize := int64(8192)
+
+	t.Run("should retrieve multiple treasures by keys", func(t *testing.T) {
+		swampName := name.New().Sanctuary(sanctuaryForQuickTest).Realm("get-by-keys").Swamp("test1")
+		hashPath := swampName.GetFullHashPath(settingsInterface.GetHydraAbsDataFolderPath(), testAllServers, testMaxDepth, testMaxFolderPerLevel)
+		chroniclerInterface := chronicler.New(hashPath, maxFileSize, testMaxDepth, fsInterface, metadata.New(hashPath))
+		chroniclerInterface.CreateDirectoryIfNotExists()
+
+		swampEventCallbackFunc := func(e *Event) {}
+		closeCallbackFunc := func(n name.Name) {}
+		swampInfoCallbackFunc := func(i *Info) {}
+
+		fssSwamp := &FilesystemSettings{
+			ChroniclerInterface: chroniclerInterface,
+			WriteInterval:       writeInterval,
+		}
+		metadataInterface := metadata.New(hashPath)
+		swampInterface := New(swampName, closeAfterIdle, fssSwamp, swampEventCallbackFunc, swampInfoCallbackFunc, closeCallbackFunc, metadataInterface)
+
+		swampInterface.BeginVigil()
+
+		// Create multiple treasures
+		treasure1 := swampInterface.CreateTreasure("key1")
+		guardID1 := treasure1.StartTreasureGuard(true)
+		treasure1.SetContentString(guardID1, "value1")
+		_ = treasure1.Save(guardID1)
+		treasure1.ReleaseTreasureGuard(guardID1)
+
+		treasure2 := swampInterface.CreateTreasure("key2")
+		guardID2 := treasure2.StartTreasureGuard(true)
+		treasure2.SetContentString(guardID2, "value2")
+		_ = treasure2.Save(guardID2)
+		treasure2.ReleaseTreasureGuard(guardID2)
+
+		treasure3 := swampInterface.CreateTreasure("key3")
+		guardID3 := treasure3.StartTreasureGuard(true)
+		treasure3.SetContentString(guardID3, "value3")
+		_ = treasure3.Save(guardID3)
+		treasure3.ReleaseTreasureGuard(guardID3)
+
+		// Test: Get multiple existing keys
+		keys := []string{"key1", "key2", "key3"}
+		treasures := swampInterface.GetTreasuresByKeys(keys)
+
+		assert.Equal(t, 3, len(treasures), "Should return 3 treasures")
+
+		// Verify all treasures are present (order doesn't matter)
+		foundKeys := make(map[string]bool)
+		for _, tr := range treasures {
+			foundKeys[tr.GetKey()] = true
+		}
+		assert.True(t, foundKeys["key1"], "Should contain key1")
+		assert.True(t, foundKeys["key2"], "Should contain key2")
+		assert.True(t, foundKeys["key3"], "Should contain key3")
+
+		swampInterface.CeaseVigil()
+		swampInterface.Destroy()
+	})
+
+	t.Run("should handle missing keys gracefully", func(t *testing.T) {
+		swampName := name.New().Sanctuary(sanctuaryForQuickTest).Realm("get-by-keys").Swamp("test2")
+		hashPath := swampName.GetFullHashPath(settingsInterface.GetHydraAbsDataFolderPath(), testAllServers, testMaxDepth, testMaxFolderPerLevel)
+		chroniclerInterface := chronicler.New(hashPath, maxFileSize, testMaxDepth, fsInterface, metadata.New(hashPath))
+		chroniclerInterface.CreateDirectoryIfNotExists()
+
+		swampEventCallbackFunc := func(e *Event) {}
+		closeCallbackFunc := func(n name.Name) {}
+		swampInfoCallbackFunc := func(i *Info) {}
+
+		fssSwamp := &FilesystemSettings{
+			ChroniclerInterface: chroniclerInterface,
+			WriteInterval:       writeInterval,
+		}
+		metadataInterface := metadata.New(hashPath)
+		swampInterface := New(swampName, closeAfterIdle, fssSwamp, swampEventCallbackFunc, swampInfoCallbackFunc, closeCallbackFunc, metadataInterface)
+
+		swampInterface.BeginVigil()
+
+		// Create only 2 treasures
+		treasure1 := swampInterface.CreateTreasure("existing1")
+		guardID1 := treasure1.StartTreasureGuard(true)
+		treasure1.SetContentString(guardID1, "value1")
+		_ = treasure1.Save(guardID1)
+		treasure1.ReleaseTreasureGuard(guardID1)
+
+		treasure2 := swampInterface.CreateTreasure("existing2")
+		guardID2 := treasure2.StartTreasureGuard(true)
+		treasure2.SetContentString(guardID2, "value2")
+		_ = treasure2.Save(guardID2)
+		treasure2.ReleaseTreasureGuard(guardID2)
+
+		// Request some existing and some non-existing keys
+		keys := []string{"existing1", "nonexistent1", "existing2", "nonexistent2"}
+		treasures := swampInterface.GetTreasuresByKeys(keys)
+
+		assert.Equal(t, 2, len(treasures), "Should return only 2 existing treasures")
+
+		foundKeys := make(map[string]bool)
+		for _, tr := range treasures {
+			foundKeys[tr.GetKey()] = true
+		}
+		assert.True(t, foundKeys["existing1"], "Should contain existing1")
+		assert.True(t, foundKeys["existing2"], "Should contain existing2")
+
+		swampInterface.CeaseVigil()
+		swampInterface.Destroy()
+	})
+
+	t.Run("should return empty slice for empty keys", func(t *testing.T) {
+		swampName := name.New().Sanctuary(sanctuaryForQuickTest).Realm("get-by-keys").Swamp("test3")
+		hashPath := swampName.GetFullHashPath(settingsInterface.GetHydraAbsDataFolderPath(), testAllServers, testMaxDepth, testMaxFolderPerLevel)
+		chroniclerInterface := chronicler.New(hashPath, maxFileSize, testMaxDepth, fsInterface, metadata.New(hashPath))
+		chroniclerInterface.CreateDirectoryIfNotExists()
+
+		swampEventCallbackFunc := func(e *Event) {}
+		closeCallbackFunc := func(n name.Name) {}
+		swampInfoCallbackFunc := func(i *Info) {}
+
+		fssSwamp := &FilesystemSettings{
+			ChroniclerInterface: chroniclerInterface,
+			WriteInterval:       writeInterval,
+		}
+		metadataInterface := metadata.New(hashPath)
+		swampInterface := New(swampName, closeAfterIdle, fssSwamp, swampEventCallbackFunc, swampInfoCallbackFunc, closeCallbackFunc, metadataInterface)
+
+		swampInterface.BeginVigil()
+
+		// Request with empty keys array
+		keys := []string{}
+		treasures := swampInterface.GetTreasuresByKeys(keys)
+
+		assert.Equal(t, 0, len(treasures), "Should return empty slice for empty keys")
+
+		swampInterface.CeaseVigil()
+		swampInterface.Destroy()
+	})
+
+	t.Run("should return empty slice when no keys exist", func(t *testing.T) {
+		swampName := name.New().Sanctuary(sanctuaryForQuickTest).Realm("get-by-keys").Swamp("test4")
+		hashPath := swampName.GetFullHashPath(settingsInterface.GetHydraAbsDataFolderPath(), testAllServers, testMaxDepth, testMaxFolderPerLevel)
+		chroniclerInterface := chronicler.New(hashPath, maxFileSize, testMaxDepth, fsInterface, metadata.New(hashPath))
+		chroniclerInterface.CreateDirectoryIfNotExists()
+
+		swampEventCallbackFunc := func(e *Event) {}
+		closeCallbackFunc := func(n name.Name) {}
+		swampInfoCallbackFunc := func(i *Info) {}
+
+		fssSwamp := &FilesystemSettings{
+			ChroniclerInterface: chroniclerInterface,
+			WriteInterval:       writeInterval,
+		}
+		metadataInterface := metadata.New(hashPath)
+		swampInterface := New(swampName, closeAfterIdle, fssSwamp, swampEventCallbackFunc, swampInfoCallbackFunc, closeCallbackFunc, metadataInterface)
+
+		swampInterface.BeginVigil()
+
+		// Request non-existing keys
+		keys := []string{"nonexistent1", "nonexistent2", "nonexistent3"}
+		treasures := swampInterface.GetTreasuresByKeys(keys)
+
+		assert.Equal(t, 0, len(treasures), "Should return empty slice when no keys exist")
+
+		swampInterface.CeaseVigil()
+		swampInterface.Destroy()
+	})
+
+	t.Run("should work with large number of keys", func(t *testing.T) {
+		swampName := name.New().Sanctuary(sanctuaryForQuickTest).Realm("get-by-keys").Swamp("test5")
+		hashPath := swampName.GetFullHashPath(settingsInterface.GetHydraAbsDataFolderPath(), testAllServers, testMaxDepth, testMaxFolderPerLevel)
+		chroniclerInterface := chronicler.New(hashPath, maxFileSize, testMaxDepth, fsInterface, metadata.New(hashPath))
+		chroniclerInterface.CreateDirectoryIfNotExists()
+
+		swampEventCallbackFunc := func(e *Event) {}
+		closeCallbackFunc := func(n name.Name) {}
+		swampInfoCallbackFunc := func(i *Info) {}
+
+		fssSwamp := &FilesystemSettings{
+			ChroniclerInterface: chroniclerInterface,
+			WriteInterval:       writeInterval,
+		}
+		metadataInterface := metadata.New(hashPath)
+		swampInterface := New(swampName, closeAfterIdle, fssSwamp, swampEventCallbackFunc, swampInfoCallbackFunc, closeCallbackFunc, metadataInterface)
+
+		swampInterface.BeginVigil()
+
+		// Create 100 treasures
+		numTreasures := 100
+		keys := make([]string, numTreasures)
+		for i := 0; i < numTreasures; i++ {
+			key := fmt.Sprintf("key_%d", i)
+			keys[i] = key
+			treasure := swampInterface.CreateTreasure(key)
+			guardID := treasure.StartTreasureGuard(true)
+			treasure.SetContentInt32(guardID, int32(i))
+			_ = treasure.Save(guardID)
+			treasure.ReleaseTreasureGuard(guardID)
+		}
+
+		// Retrieve all treasures
+		treasures := swampInterface.GetTreasuresByKeys(keys)
+
+		assert.Equal(t, numTreasures, len(treasures), "Should return all 100 treasures")
+
+		swampInterface.CeaseVigil()
+		swampInterface.Destroy()
+	})
+}
