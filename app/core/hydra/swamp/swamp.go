@@ -102,6 +102,42 @@ type Swamp interface {
 	// 2. Real-world scenarios such as retrieving user details for profile display.
 	GetTreasure(key string) (treasure treasure.Treasure, err error)
 
+	// GetTreasuresByKeys retrieves multiple "Treasures" from a "Swamp" by their unique keys in a single operation.
+	//
+	// This function takes a slice of key strings as a parameter, which uniquely identify the desired treasures within the Swamp.
+	// It returns a slice of `treasure.Treasure` objects representing the retrieved treasures. Only existing treasures are returned;
+	// missing keys are silently ignored and will not appear in the result.
+	//
+	// The order of returned treasures is not guaranteed to match the order of input keys. The response is unordered for
+	// performance optimization.
+	//
+	// Real-world use-case:
+	//    Fetching multiple user profiles at once for a batch operation, or retrieving multiple product details
+	//    after a secondary index lookup that returned a list of IDs.
+	//
+	// Example:
+	//     keys := []string{"user123", "user456", "user789"}
+	//
+	//     swamp.BeginVigil()
+	//     retrievedTreasures := swamp.GetTreasuresByKeys(keys)
+	//     swamp.CeaseVigil()
+	//
+	//     for _, treasure := range retrievedTreasures {
+	//         log.Printf("Retrieved treasure: %+v\n", treasure)
+	//     }
+	//
+	// Returns:
+	// - A slice of `treasure.Treasure` objects representing all found treasures.
+	//   If a key does not exist, it simply won't be included in the result.
+	//   If none of the keys exist, an empty slice is returned (not an error).
+	//
+	// Use-cases:
+	// 1. Batch fetching of multiple treasures by their keys in a single operation.
+	// 2. Efficient multi-key reads after secondary index lookups.
+	// 3. Reducing network roundtrips by fetching many records at once.
+	// 4. Real-world scenarios such as loading multiple user profiles, product details, or cached objects.
+	GetTreasuresByKeys(keys []string) []treasure.Treasure
+
 	// GetAll retrieves all "Treasures" from a "Swamp."
 	//
 	// This function fetches all treasures from the Swamp and returns them as a map of key-value pairs, where the key is the
@@ -2207,6 +2243,31 @@ func (s *swamp) GetTreasure(key string) (treasure treasure.Treasure, err error) 
 		return treasureObj, nil
 	}
 	return nil, errors.New(ErrorTreasureDoesNotExists)
+}
+
+// GetTreasuresByKeys retrieves multiple "Treasures" from a "Swamp" by their unique keys in a single operation.
+// Real-world use-case: Batch fetching multiple user profiles or product details after a secondary index lookup.
+func (s *swamp) GetTreasuresByKeys(keys []string) []treasure.Treasure {
+	// set the last interaction time to the current time
+	atomic.StoreInt64(&s.lastInteractionTime, time.Now().UnixNano())
+
+	// If no keys provided, return empty slice
+	if len(keys) == 0 {
+		return []treasure.Treasure{}
+	}
+
+	// Pre-allocate slice with capacity (though actual size may be smaller if some keys don't exist)
+	result := make([]treasure.Treasure, 0, len(keys))
+
+	// Iterate through all keys and fetch existing treasures
+	for _, key := range keys {
+		if treasureObj := s.beaconKey.Get(key); treasureObj != nil {
+			result = append(result, treasureObj)
+		}
+		// Missing keys are silently ignored (as per specification)
+	}
+
+	return result
 }
 
 // GetAll Retrieves all "Treasures" from a "Swamp".
