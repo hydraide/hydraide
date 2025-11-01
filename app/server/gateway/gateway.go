@@ -2215,6 +2215,8 @@ func checkSwampName(zeusInterface zeus.Zeus, islandID uint64, inputSwampName str
 
 func inputIndexTypeToBeaconType(inputIndexType hydrapb.IndexType_Type) swamp.BeaconType {
 	switch inputIndexType {
+	case hydrapb.IndexType_KEY:
+		return swamp.BeaconTypeKey
 	case hydrapb.IndexType_EXPIRATION_TIME:
 		return swamp.BeaconTypeExpirationTime
 	case hydrapb.IndexType_CREATION_TIME:

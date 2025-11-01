@@ -517,6 +517,74 @@ func TestSwamp_GetTreasuresByBeacon(t *testing.T) {
 
 	})
 
+	t.Run("should get treasures by the key beacon", func(t *testing.T) {
+
+		allTests := 10
+
+		swampName := name.New().Sanctuary(sanctuaryForQuickTest).Realm("should-get-treasure").Swamp("by-key-beacon")
+
+		hashPath := swampName.GetFullHashPath(settingsInterface.GetHydraAbsDataFolderPath(), testAllServers, testMaxDepth, testMaxFolderPerLevel)
+		chroniclerInterface := chronicler.New(hashPath, maxFileSize, testMaxDepth, fsInterface, metadata.New(hashPath))
+		chroniclerInterface.CreateDirectoryIfNotExists()
+
+		swampEventCallbackFunc := func(e *Event) {}
+
+		closeCallbackFunc := func(n name.Name) {}
+
+		swampInfoCallbackFunc := func(i *Info) {}
+
+		fssSwamp := &FilesystemSettings{
+			ChroniclerInterface: chroniclerInterface,
+			WriteInterval:       writeInterval,
+		}
+
+		metadataInterface := metadata.New(hashPath)
+		swampInterface := New(swampName, closeAfterIdle, fssSwamp, swampEventCallbackFunc, swampInfoCallbackFunc, closeCallbackFunc, metadataInterface)
+		swampInterface.BeginVigil()
+
+		// Create treasures with keys that will be sorted alphabetically (not numerically)
+		// Using keys like: "key-0", "key-1", ..., "key-9"
+		for i := 0; i < allTests; i++ {
+			treasureInterface := swampInterface.CreateTreasure(fmt.Sprintf("key-%d", i))
+			if treasureInterface == nil {
+				t.Errorf("treasureInterface should not be nil")
+			}
+			guardID := treasureInterface.StartTreasureGuard(true)
+			treasureInterface.SetContentString(guardID, fmt.Sprintf("content-%d", i))
+			treasureInterface.ReleaseTreasureGuard(guardID)
+
+			guardID = treasureInterface.StartTreasureGuard(true)
+			_ = treasureInterface.Save(guardID)
+			treasureInterface.ReleaseTreasureGuard(guardID)
+		}
+
+		// Test ASC order - keys should be sorted alphabetically
+		receivedTreasures, err := swampInterface.GetTreasuresByBeacon(BeaconTypeKey, IndexOrderAsc, 0, 10, nil, nil)
+		assert.Nil(t, err, "error should be nil")
+		assert.Equal(t, allTests, len(receivedTreasures), "treasures should be 10")
+
+		// Verify that keys are in alphabetical ascending order
+		expectedKeysAsc := []string{"key-0", "key-1", "key-2", "key-3", "key-4", "key-5", "key-6", "key-7", "key-8", "key-9"}
+		for i, tr := range receivedTreasures {
+			assert.Equal(t, expectedKeysAsc[i], tr.GetKey(), "key should be in ascending alphabetical order")
+		}
+
+		// Test DESC order - keys should be sorted in reverse alphabetical order
+		receivedTreasures, err = swampInterface.GetTreasuresByBeacon(BeaconTypeKey, IndexOrderDesc, 0, 10, nil, nil)
+		assert.Nil(t, err, "error should be nil")
+		assert.Equal(t, allTests, len(receivedTreasures), "treasures should be 10")
+
+		// Verify that keys are in alphabetical descending order
+		expectedKeysDesc := []string{"key-9", "key-8", "key-7", "key-6", "key-5", "key-4", "key-3", "key-2", "key-1", "key-0"}
+		for i, tr := range receivedTreasures {
+			assert.Equal(t, expectedKeysDesc[i], tr.GetKey(), "key should be in descending alphabetical order")
+		}
+
+		swampInterface.CeaseVigil()
+		swampInterface.Destroy()
+
+	})
+
 	t.Run("should get treasures by the int beacon", func(t *testing.T) {
 
 		allTests := 10
