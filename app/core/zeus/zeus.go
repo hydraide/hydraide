@@ -7,6 +7,7 @@ import (
 	"github.com/hydraide/hydraide/app/core/hydra/lock"
 	"github.com/hydraide/hydraide/app/core/safeops"
 	"github.com/hydraide/hydraide/app/core/settings"
+	"github.com/hydraide/hydraide/app/panichandler"
 	"log/slog"
 	"os"
 )
@@ -86,7 +87,7 @@ func (z *zeus) StartHydra() {
 
 	z.safeopsInterface = safeops.New()
 
-	go func() {
+	panichandler.SafeGo("panic-monitor", func() {
 		for {
 			select {
 			case <-z.safeopsInterface.MonitorPanic():
@@ -95,7 +96,7 @@ func (z *zeus) StartHydra() {
 				return
 			}
 		}
-	}()
+	})
 
 	// hashRing interface init
 	// create new hydra interface

@@ -3,6 +3,12 @@ package hydra
 import (
 	"context"
 	"errors"
+	"log/slog"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/hydraide/hydraide/app/core/filesystem"
 	"github.com/hydraide/hydraide/app/core/hydra/lock"
@@ -13,11 +19,7 @@ import (
 	"github.com/hydraide/hydraide/app/core/settings"
 	"github.com/hydraide/hydraide/app/core/settings/setting"
 	"github.com/hydraide/hydraide/app/name"
-	"log/slog"
-	"strings"
-	"sync"
-	"sync/atomic"
-	"time"
+	"github.com/hydraide/hydraide/app/panichandler"
 )
 
 type Hydra interface {
@@ -688,7 +690,9 @@ func (h *hydra) GracefulStop() {
 	h.infoSubscribers = sync.Map{}
 
 	// start a new routine and close all swamps
-	go h.tryToCloseAllSwamps()
+	panichandler.SafeGo("swamp-closing", func() {
+		h.tryToCloseAllSwamps()
+	})
 
 	slog.Info("waiting for graceful stop")
 
@@ -712,7 +716,7 @@ func (h *hydra) GracefulStop() {
 
 			slog.Error("can not close all swamps within 10 seconds, Force close all swamps", "activeSwamps", strings.Join(h.ListActiveSwamps(), ", "))
 
-			go func() {
+			panichandler.SafeGo("force-close-swamps", func() {
 				// iterating over the swamps and close them
 				h.swamps.Range(func(key, value interface{}) bool {
 
@@ -753,7 +757,7 @@ func (h *hydra) GracefulStop() {
 
 				})
 
-			}()
+			})
 
 			// waiting for 30 seconds then force close the server
 			time.Sleep(30 * time.Second)

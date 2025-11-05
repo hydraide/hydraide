@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/hydraide/hydraide/app/panichandler"
 	"github.com/hydraide/hydraide/app/paniclogger"
 	"github.com/hydraide/hydraide/app/server/loghandlers/fallback"
 	"github.com/hydraide/hydraide/app/server/loghandlers/graylog"
@@ -260,13 +261,13 @@ func main() {
 		panic(fmt.Sprintf("HydrAIDE server is not running: %v", err))
 	}
 
-	go func() {
+	panichandler.SafeGo("health-check-server", func() {
 		http.HandleFunc("/health", healthCheckHandler)
 		port := fmt.Sprintf(":%d", healthCheckPort)
 		if err := http.ListenAndServe(port, nil); err != nil {
 			slog.Error("http server error - health check server is not running", "error", err)
 		}
-	}()
+	})
 
 	// blocker for the main goroutine and waiting for kill signal
 	waitingForKillSignal()
