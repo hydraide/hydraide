@@ -136,7 +136,7 @@ func (s *server) Start() error {
 					case codes.ResourceExhausted:
 						slog.Error("client request rejected: resource exhausted", "method", info.FullMethod, "clientIP", clientIP, "error", grpcErr.Message())
 					case codes.FailedPrecondition:
-						slog.Debug("client request rejected: failed precondition", "method", info.FullMethod, "clientIP", clientIP, "error", grpcErr.Message())
+						// slog removed, because this is often used for expected errors
 					case codes.Aborted:
 						slog.Debug("client request rejected: aborted", "method", info.FullMethod, "clientIP", clientIP, "error", grpcErr.Message())
 					case codes.OutOfRange:
