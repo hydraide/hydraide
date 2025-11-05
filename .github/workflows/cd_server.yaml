@@ -220,8 +220,7 @@ jobs:
       - name: Copy entrypoint script
         shell: bash
         run: |
-          mkdir -p docker-context/scripts
-          cp entrypoint.sh docker-context/scripts/
+          cp entrypoint.sh docker-context/
 
       - name: Copy Dockerfile
         shell: bash
