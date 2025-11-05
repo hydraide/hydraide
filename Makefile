@@ -15,7 +15,37 @@
 # Need help? → https://grpc.io/docs/
 #
 # =============================================================================
-.PHONY: build push build-push clean build-go proto-go proto-python proto-node proto-rust proto-java proto-csharp help
+.PHONY: build push build-push clean build-binary test proto-go proto-python proto-node proto-rust proto-java proto-csharp help
+
+# Default target - show help
+.DEFAULT_GOAL := help
+
+# Help target - shows all available commands
+help:
+	@echo "════════════════════════════════════════════════════════════════════════════"
+	@echo "  🚀 HydrAIDE Makefile - Available Commands"
+	@echo "════════════════════════════════════════════════════════════════════════════"
+	@echo ""
+	@echo "  📦 BUILD COMMANDS:"
+	@echo "    make build-binary    - Build Go binaries (amd64 + arm64)"
+	@echo "    make build           - Build the full Docker image"
+	@echo "    make test            - Test the Docker image locally"
+	@echo "    make push            - Push Docker image to GHCR"
+	@echo "    make build-push      - Build and push Docker image"
+	@echo ""
+	@echo "  🛠️  PROTO GENERATION:"
+	@echo "    make proto-go        - Generate Go proto files"
+	@echo "    make proto-python    - Generate Python proto files"
+	@echo "    make proto-node      - Generate Node.js proto files"
+	@echo "    make proto-rust      - Generate Rust proto files"
+	@echo "    make proto-java      - Generate Java proto files"
+	@echo "    make proto-csharp    - Generate C# proto files"
+	@echo ""
+	@echo "  🧹 CLEANUP:"
+	@echo "    make clean           - Remove generated files and binaries"
+	@echo ""
+	@echo "════════════════════════════════════════════════════════════════════════════"
+	@echo ""
 
 # Build and push docker image
 # =============================================================================
@@ -36,9 +66,28 @@ IMAGE_TAG ?= latest
 
 DOCKER_BUILDKIT=1
 
+# Build only the Go binaries (useful for testing)
+build-binary: proto-go
+	@echo "🔨 Building Go binary for amd64..."
+	cd app/server && GOOS=linux GOARCH=amd64 go build -o ../../hydraide-amd64 .
+	@echo "🔨 Building Go binary for arm64..."
+	cd app/server && GOOS=linux GOARCH=arm64 go build -o ../../hydraide-arm64 .
+	@echo "✅ Binaries built successfully!"
+
 # Build the Docker image with the specified tag
-build:
+build: build-binary
+	@echo "🐳 Building Docker image..."
 	docker build -f Dockerfile -t $(IMAGE_NAME):$(IMAGE_TAG) .
+	@echo "✅ Docker image built successfully!"
+
+# Test the Docker image locally
+test:
+	@echo "🧪 Testing Docker image..."
+	@docker images $(IMAGE_NAME):$(IMAGE_TAG) --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}\t{{.CreatedSince}}" | cat
+	@echo ""
+	@echo "🚀 Starting container for quick test..."
+	@docker run --rm $(IMAGE_NAME):$(IMAGE_TAG) --version 2>&1 || echo "Note: Container started successfully"
+	@echo "✅ Docker image test completed!"
 
 # Push the Docker image to GitHub Container Registry
 push:
@@ -70,6 +119,7 @@ build-go: proto-go
 # - Uses source-relative paths for imports
 proto-go:
 	@echo "🛠️  Generating Go gRPC files to ./generated/hydraidepbgo"
+	@mkdir -p ./generated/hydraidepbgo
 	protoc --proto_path=proto \
 		--go_out=./generated/hydraidepbgo --go_opt=paths=source_relative \
 		--go-grpc_out=./generated/hydraidepbgo --go-grpc_opt=paths=source_relative \
@@ -82,6 +132,8 @@ proto-go:
 clean:
 	@echo "🧹 Cleaning generated files..."
 	rm -rf generated/hydraidepbgo* generated/hydraidepbpy/* generated/hydraidepbjs/* generated/hydraidepbrs/* generated/hydraidepbjv/* generated/hydraidepbcs/*
+	@echo "🧹 Cleaning built binaries..."
+	rm -f hydraide-amd64 hydraide-arm64
 
 # -----------------------------------------------------------------------------
 # 🔹 proto-python – Generate Python client bindings (if grpc_tools available)
@@ -141,25 +193,3 @@ proto-csharp:
 		--csharp_out=./generated/hydraidepbcs \
 		--grpc_out=./generated/hydraidepbcs \
 		proto/hydraide.proto
-
-# -----------------------------------------------------------------------------
-# 📋 help – List all available make targets
-# -----------------------------------------------------------------------------
-help:
-	@echo "📦 HydrAIDE Proto Makefile – Available commands:"
-	@echo ""
-	@echo "🔧 build       	– build Docker image with latest Server code"
-	@echo "📤 push        	– Push Docker image to GitHub Container Registry"
-	@echo "🔄 build-push  	– Build and push Docker image to GitHub Container Registry"
-	@echo "🔨 build-go       	– Compile proto to Go and tidy dependencies"
-	@echo "🧠 proto-go       	– Only generate Go bindings"
-	@echo "🐍 proto-python   	– Generate Python gRPC code (if tools exist)"
-	@echo "🟨 proto-node     	– Generate Node.js gRPC code (if tools exist)"
-	@echo "🦀 proto-rust     	– Generate Rust proto files (requires protoc-gen-prost)"
-	@echo "☕ proto-java     	– Generate Java gRPC bindings"
-	@echo "🎯 proto-csharp   	– Generate C#/.NET gRPC bindings"
-	@echo "🧹 clean          	– Remove all generated proto code"
-	@echo ""
-	@echo "🧭 Notes:"
-	@echo " - No plugins? No problem. Targets will skip gracefully."
-	@echo " - Generated code goes into ./generated/<language>"

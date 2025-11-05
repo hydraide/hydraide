@@ -26,16 +26,11 @@ func TestGenerateWindowsService_NSSM(t *testing.T) {
 		// install
 		"nssm install hydraserver-test " + bin: {},
 
-		// beállítások
-		"nssm set hydraserver-test DisplayName HydrAIDE Service - test":                     {},
-		"nssm set hydraserver-test Description HydrAIDE Service Instance: test":             {},
-		"nssm set hydraserver-test Start SERVICE_AUTO_START":                                {},
-		"nssm set hydraserver-test AppDirectory " + basePath:                                {},
-		"nssm set hydraserver-test AppStdout " + filepath.Join(basePath, "logs", "app.log"): {},
-		"nssm set hydraserver-test AppStderr " + filepath.Join(basePath, "logs", "app.log"): {},
-		"nssm set hydraserver-test AppRotateFiles 1":                                        {},
-		"nssm set hydraserver-test AppRotateSeconds 86400":                                  {},
-		"nssm set hydraserver-test AppRotateBytes 10485760":                                 {},
+		// beállítások - app.log removed, logs go to Windows Event Viewer
+		"nssm set hydraserver-test DisplayName HydrAIDE Service - test":         {},
+		"nssm set hydraserver-test Description HydrAIDE Service Instance: test": {},
+		"nssm set hydraserver-test Start SERVICE_AUTO_START":                    {},
+		"nssm set hydraserver-test AppDirectory " + basePath:                    {},
 	}
 
 	mock := &MockRunner{Script: script}
@@ -53,11 +48,6 @@ func TestGenerateWindowsService_NSSM(t *testing.T) {
 		"nssm set hydraserver-test Description HydrAIDE Service Instance: test",
 		"nssm set hydraserver-test Start SERVICE_AUTO_START",
 		"nssm set hydraserver-test AppDirectory " + basePath,
-		"nssm set hydraserver-test AppStdout " + filepath.Join(basePath, "logs", "app.log"),
-		"nssm set hydraserver-test AppStderr " + filepath.Join(basePath, "logs", "app.log"),
-		"nssm set hydraserver-test AppRotateFiles 1",
-		"nssm set hydraserver-test AppRotateSeconds 86400",
-		"nssm set hydraserver-test AppRotateBytes 10485760",
 	}
 	if len(mock.Calls) != len(want) {
 		t.Fatalf("calls mismatch: got %v, want %v", mock.Calls, want)
@@ -104,16 +94,11 @@ func TestGenerateWindowsService_NSSM_InstallsViaWinget(t *testing.T) {
 			"winget install --id=nssm.nssm --source=winget --accept-package-agreements --accept-source-agreements": {},
 
 			// utána megy az install + set
-			"nssm install hydraserver-test " + bin:                                              {},
-			"nssm set hydraserver-test DisplayName HydrAIDE Service - test":                     {},
-			"nssm set hydraserver-test Description HydrAIDE Service Instance: test":             {},
-			"nssm set hydraserver-test Start SERVICE_AUTO_START":                                {},
-			"nssm set hydraserver-test AppDirectory " + basePath:                                {},
-			"nssm set hydraserver-test AppStdout " + filepath.Join(basePath, "logs", "app.log"): {},
-			"nssm set hydraserver-test AppStderr " + filepath.Join(basePath, "logs", "app.log"): {},
-			"nssm set hydraserver-test AppRotateFiles 1":                                        {},
-			"nssm set hydraserver-test AppRotateSeconds 86400":                                  {},
-			"nssm set hydraserver-test AppRotateBytes 10485760":                                 {},
+			"nssm install hydraserver-test " + bin:                                  {},
+			"nssm set hydraserver-test DisplayName HydrAIDE Service - test":         {},
+			"nssm set hydraserver-test Description HydrAIDE Service Instance: test": {},
+			"nssm set hydraserver-test Start SERVICE_AUTO_START":                    {},
+			"nssm set hydraserver-test AppDirectory " + basePath:                    {},
 		},
 	}
 

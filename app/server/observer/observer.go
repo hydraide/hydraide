@@ -6,11 +6,11 @@ package observer
 import (
 	"context"
 	"fmt"
+	"github.com/hydraide/hydraide/app/panichandler"
 	"github.com/shirou/gopsutil/cpu"
 	"log/slog"
 	"math"
 	"runtime"
-	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -63,15 +63,9 @@ func New(ctx context.Context, systemResourceLogging bool) Observer {
 
 	// start system resource logging only if the systemResourceLogging is true
 	if systemResourceLogging {
-		go func() {
-			defer func() {
-				if r := recover(); r != nil {
-					stackTrace := debug.Stack()
-					slog.Error("caught panic while detecting memory and processor peak", "error", r, "stack", string(stackTrace))
-				}
-			}()
+		panichandler.SafeGo("system-resource-monitor", func() {
 			o.detectMemoryAndProcessorPeak(ctx)
-		}()
+		})
 	}
 
 	return o

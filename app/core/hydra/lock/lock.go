@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hydraide/hydraide/sdk/go/hydraidego/utils/panichandler"
+	"github.com/hydraide/hydraide/app/panichandler"
 )
 
 type Lock interface {
@@ -150,7 +150,9 @@ func (l *lock) Lock(ctx context.Context, key string, ttl time.Duration) (lockID 
 				// This prevents deadlocks in the database that could block other callers.
 				// If the lock is released this way, Unlock will return an error
 				// indicating that a timeout occurred.
-				go q.StartAutoUnlock(ctx, lockID, ttl)
+				panichandler.SafeGo("auto-unlock", func() {
+					q.StartAutoUnlock(ctx, lockID, ttl)
+				})
 				return lockID, nil
 			}
 

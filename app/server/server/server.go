@@ -10,13 +10,13 @@ import (
 	"log/slog"
 	"net"
 	"os"
-	"runtime/debug"
 	"sync"
 	"time"
 
 	"github.com/hydraide/hydraide/app/core/filesystem"
 	"github.com/hydraide/hydraide/app/core/settings"
 	"github.com/hydraide/hydraide/app/core/zeus"
+	"github.com/hydraide/hydraide/app/panichandler"
 	"github.com/hydraide/hydraide/app/server/gateway"
 	"github.com/hydraide/hydraide/app/server/observer"
 	hydrapb "github.com/hydraide/hydraide/generated/hydraidepbgo"
@@ -136,7 +136,7 @@ func (s *server) Start() error {
 					case codes.ResourceExhausted:
 						slog.Error("client request rejected: resource exhausted", "method", info.FullMethod, "clientIP", clientIP, "error", grpcErr.Message())
 					case codes.FailedPrecondition:
-						slog.Debug("client request rejected: failed precondition", "method", info.FullMethod, "clientIP", clientIP, "error", grpcErr.Message())
+						// slog removed, because this is often used for expected errors
 					case codes.Aborted:
 						slog.Debug("client request rejected: aborted", "method", info.FullMethod, "clientIP", clientIP, "error", grpcErr.Message())
 					case codes.OutOfRange:
@@ -167,16 +167,7 @@ func (s *server) Start() error {
 	}
 
 	// start the main server and waiting for incoming requests
-	go func() {
-
-		// Guard the goroutine against panics so the process can log and continue shutting down cleanly.
-		defer func() {
-			if r := recover(); r != nil {
-				// get the stack trace
-				stackTrace := debug.Stack()
-				slog.Error("caught panic in HydrAIDE gRPC server", "error", r, "stack", string(stackTrace))
-			}
-		}()
+	panichandler.SafeGo("grpc-server", func() {
 
 		// Resolve a TCP listener on the configured port. This is a hard failure: without a port, we cannot serve.
 		lis, err := net.Listen("tcp", fmt.Sprintf(":%d", s.configuration.HydraServerPort))
@@ -268,7 +259,7 @@ func (s *server) Start() error {
 			slog.Error("can not start the HydrAIDE server", "error", err)
 		}
 
-	}()
+	})
 
 	return nil
 

@@ -6,10 +6,6 @@
 
 version: 2
 updates:
-  - package-ecosystem: "uv"
-    directory: "/sdk/python/hydraidepy"
-    schedule:
-      interval: weekly
 
   - package-ecosystem: "github-actions"
     directory: "/"
