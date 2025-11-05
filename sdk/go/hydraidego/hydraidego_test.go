@@ -1551,3 +1551,117 @@ func TestOmitEmptyFieldsE2E(t *testing.T) {
 		assert.False(t, readData.ExpiredAt.IsZero(), "ExpiredAt should be populated")
 	})
 }
+
+// TestCatalogSaveWithOmitEmptyRealWorldScenario tests a real-world scenario
+// where a model is saved without UpdatedAt/UpdatedBy, then loaded, modified,
+// and saved again with UpdatedAt/UpdatedBy populated using CatalogSave.
+// This mimics the user's test case exactly with CatalogSave instead of CatalogUpdate.
+func TestCatalogSaveWithOmitEmptyRealWorldScenario(t *testing.T) {
+	ctx := context.Background()
+
+	// Create a test swamp
+	swampName := name.New().
+		Sanctuary("tests").
+		Realm("real-world").
+		Swamp(fmt.Sprintf("catalog-save-%d", time.Now().UnixNano()))
+
+	// Clean up
+	defer func() {
+		if destroyErr := hydraidegoInterface.Destroy(ctx, swampName); destroyErr != nil {
+			t.Logf("Failed to destroy swamp: %v", destroyErr)
+		}
+	}()
+
+	// Define a payload structure (similar to user's EmailManagerPayload)
+	type TestPayload struct {
+		Title  string
+		Status int
+		Count  int
+	}
+
+	// Define test model (similar to user's ModelEmailManagerCatalog)
+	type TestCatalog struct {
+		EmailID   string       `hydraide:"key"`
+		Payload   *TestPayload `hydraide:"value"`
+		CreatedAt time.Time    `hydraide:"createdAt"`
+		CreatedBy string       `hydraide:"createdBy"`
+		UpdatedAt time.Time    `hydraide:"updatedAt,omitempty"`
+		UpdatedBy string       `hydraide:"updatedBy,omitempty"`
+	}
+
+	// Step 1: Save initial model WITHOUT UpdatedAt/UpdatedBy (using CatalogSave like user does)
+	t.Run("Step1_InitialSaveWithoutUpdatedFields", func(t *testing.T) {
+		testModel := &TestCatalog{
+			EmailID: "test-email-1",
+			Payload: &TestPayload{
+				Title:  "Original Title",
+				Status: 1,
+				Count:  10,
+			},
+			CreatedAt: time.Now().UTC(),
+			CreatedBy: "unittest-user",
+			// UpdatedAt and UpdatedBy are intentionally NOT set (zero values)
+		}
+
+		_, err := hydraidegoInterface.CatalogSave(ctx, swampName, testModel)
+		require.NoError(t, err, "Initial save should succeed")
+	})
+
+	// Step 2: Load the model (simulate user's Load() method)
+	t.Run("Step2_LoadModel", func(t *testing.T) {
+		loadedModel := &TestCatalog{
+			EmailID: "test-email-1",
+		}
+
+		err := hydraidegoInterface.CatalogRead(ctx, swampName, "test-email-1", loadedModel)
+		require.NoError(t, err, "Load should succeed")
+
+		// Verify initial state
+		assert.Equal(t, "test-email-1", loadedModel.EmailID)
+		assert.Equal(t, "Original Title", loadedModel.Payload.Title)
+		assert.Equal(t, "unittest-user", loadedModel.CreatedBy)
+		assert.False(t, loadedModel.CreatedAt.IsZero(), "CreatedAt should be populated")
+		assert.True(t, loadedModel.UpdatedAt.IsZero(), "UpdatedAt should be empty (zero)")
+		assert.Empty(t, loadedModel.UpdatedBy, "UpdatedBy should be empty")
+	})
+
+	// Step 3: Modify and save WITH UpdatedAt/UpdatedBy (using CatalogSave like user does)
+	t.Run("Step3_ModifyAndSaveWithUpdatedFields", func(t *testing.T) {
+		loadedModel := &TestCatalog{
+			EmailID: "test-email-1",
+		}
+		err := hydraidegoInterface.CatalogRead(ctx, swampName, "test-email-1", loadedModel)
+		require.NoError(t, err)
+
+		// Modify the model
+		loadedModel.Payload.Title = "Updated Title"
+		loadedModel.Payload.Status = 2
+		loadedModel.Payload.Count = 25
+		loadedModel.UpdatedAt = time.Now().UTC()
+		loadedModel.UpdatedBy = "unittest-updater"
+
+		// Save using CatalogSave (like user does)
+		_, err = hydraidegoInterface.CatalogSave(ctx, swampName, loadedModel)
+		require.NoError(t, err, "Save with UpdatedAt/UpdatedBy should succeed")
+	})
+
+	// Step 4: Reload and verify UpdatedAt/UpdatedBy are populated
+	t.Run("Step4_ReloadAndVerifyUpdatedFields", func(t *testing.T) {
+		reloadedModel := &TestCatalog{
+			EmailID: "test-email-1",
+		}
+
+		err := hydraidegoInterface.CatalogRead(ctx, swampName, "test-email-1", reloadedModel)
+		require.NoError(t, err, "Reload should succeed")
+
+		// Verify updated fields
+		assert.Equal(t, "test-email-1", reloadedModel.EmailID)
+		assert.Equal(t, "Updated Title", reloadedModel.Payload.Title, "Title should be updated")
+		assert.Equal(t, 2, reloadedModel.Payload.Status, "Status should be updated")
+		assert.Equal(t, 25, reloadedModel.Payload.Count, "Count should be updated")
+		assert.False(t, reloadedModel.UpdatedAt.IsZero(), "UpdatedAt MUST be populated after second save")
+		assert.Equal(t, "unittest-updater", reloadedModel.UpdatedBy, "UpdatedBy MUST be populated after second save")
+		assert.False(t, reloadedModel.CreatedAt.IsZero(), "CreatedAt should still be populated")
+		assert.Equal(t, "unittest-user", reloadedModel.CreatedBy, "CreatedBy should remain unchanged")
+	})
+}
