@@ -160,25 +160,6 @@ func newWithDeps(d deps) *serviceManagerImpl {
 	return &serviceManagerImpl{d: d}
 }
 
-// ensureLogDirectory creates the `logs/` subdirectory under basePath.
-//
-// ✅ Behavior:
-// - Ensures `<basePath>/logs` exists (creates if missing)
-// - Returns the absolute path to `app.log` inside that folder
-// - Logs actions for observability
-//
-// ⚠️ Permissions: created with 0755 (owner read/write/exec, group+others read/exec)
-func ensureLogDirectory(basePath string) (string, error) {
-	logDir := filepath.Join(basePath, "logs")
-	if err := os.MkdirAll(logDir, 0o755); err != nil {
-		return "", fmt.Errorf("failed to create logs directory: %v", err)
-	}
-	logFile := filepath.Join(logDir, "app.log")
-	slog.Info("Log directory ensured", "path", logDir)
-	slog.Info("Log file path", "path", logFile)
-	return logFile, nil
-}
-
 // GenerateServiceFile writes the service definition for the current OS.
 //
 // ✅ Behavior by platform:
@@ -211,7 +192,7 @@ func (s *serviceManagerImpl) GenerateServiceFile(instanceName, basePath string) 
 //
 // ✅ Responsibilities:
 // - Generates a fully functional `.service` unit file under /etc/systemd/system
-// - Ensures logs are written to `<basePath>/logs/app.log`
+// - Logs are automatically collected by systemd journald (no file needed)
 // - Reloads systemd, enables, and starts the service automatically
 //
 // 📂 Service file location:
@@ -222,7 +203,12 @@ func (s *serviceManagerImpl) GenerateServiceFile(instanceName, basePath string) 
 // - ExecStart → HydrAIDE binary path (`basePath/hydraide`)
 // - WorkingDirectory → `basePath`
 // - Restart policy (always, with 5s delay)
-// - Logs redirected to `logs/app.log`
+// - StandardOutput/Error → journald (native systemd logging)
+//
+// 📊 Viewing logs:
+//
+//	journalctl -u hydraserver-<instance> -f  # follow mode
+//	journalctl -u hydraserver-<instance> -n 100  # last 100 lines
 //
 // ⚠️ Safety checks:
 // - If a service file with the same name already exists → returns error
@@ -238,7 +224,7 @@ func (s *serviceManagerImpl) GenerateServiceFile(instanceName, basePath string) 
 //	sm.generateSystemdService("prod", "/opt/hydraide")
 //
 // This will create and start `/etc/systemd/system/hydraserver-prod.service`
-// with logs in `/opt/hydraide/logs/app.log`.
+// with logs available via journalctl.
 func (s *serviceManagerImpl) generateSystemdService(instanceName, basePath string) error {
 	slog.Info("Creating systemd service for Linux")
 	serviceName := fmt.Sprintf("%s-%s", BASE_SERVICE_NAME, instanceName)
@@ -257,13 +243,9 @@ func (s *serviceManagerImpl) generateSystemdService(instanceName, basePath strin
 	serviceFilePath := filepath.Join(s.d.paths.SystemdDir, serviceName+".service")
 	executablePath := filepath.Join(basePath, LINUX_MAC_BINARY_NAME)
 
-	// Ensure log directory exists before writing unit file.
-	logFile, err := ensureLogDirectory(basePath)
-	if err != nil {
-		return err
-	}
-
 	// Systemd unit file content.
+	// Logs are automatically collected by journald (no need for app.log file)
+	// View logs with: journalctl -u hydraserver-<instance> -f
 	serviceContent := fmt.Sprintf(`[Unit]
 Description=HydrAIDE Service - %s
 After=network.target
@@ -273,12 +255,12 @@ ExecStart=%s
 WorkingDirectory=%s
 Restart=always
 RestartSec=5
-StandardOutput=append:%s
-StandardError=append:%s
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
-`, instanceName, executablePath, basePath, logFile, logFile)
+`, instanceName, executablePath, basePath)
 
 	// Ensure target directory exists
 	if err := os.MkdirAll(filepath.Dir(serviceFilePath), 0o755); err != nil {
@@ -308,7 +290,7 @@ WantedBy=multi-user.target
 	}
 
 	slog.Info("Service file created successfully", "path", serviceFilePath)
-	slog.Info("Logs will be written to", "path", logFile)
+	slog.Info("Logs will be available via journald", "command", fmt.Sprintf("journalctl -u %s -f", serviceName))
 	return nil
 }
 
@@ -317,7 +299,7 @@ WantedBy=multi-user.target
 // ✅ Responsibilities:
 // - Generates a `.plist` file under /Library/LaunchDaemons
 // - Ensures the HydrAIDE binary exists and is executable
-// - Redirects logs to `<basePath>/logs/app.log`
+// - Logs are automatically collected by macOS Unified Logging (no file needed)
 // - Boots, enables, and kickstarts the service via launchctl
 //
 // 📂 Service file location:
@@ -330,7 +312,12 @@ WantedBy=multi-user.target
 // - WorkingDirectory → `basePath`
 // - RunAtLoad → true (auto-start on boot)
 // - KeepAlive → restarts unless exit was successful
-// - Logs → redirected to `<basePath>/logs/app.log`
+// - ProcessType → Background
+//
+// 📊 Viewing logs:
+//
+//	log stream --predicate 'processImagePath contains "hydraide"'  # live
+//	log show --predicate 'processImagePath contains "hydraide"' --last 1h  # history
 //
 // ⚠️ Notes & Safety:
 // - Root privileges are required to write to /Library/LaunchDaemons
@@ -353,7 +340,7 @@ WantedBy=multi-user.target
 //
 //	/Library/LaunchDaemons/com.hydraide.hydraserver-prod.plist
 //
-// Logs will be written to `/opt/hydraide/logs/app.log`.
+// Logs will be available via macOS Unified Logging.
 func (s *serviceManagerImpl) generateLaunchdService(instanceName, basePath string) error {
 	slog.Info("Creating launchd service for macOS")
 
@@ -361,12 +348,6 @@ func (s *serviceManagerImpl) generateLaunchdService(instanceName, basePath strin
 	label := fmt.Sprintf("com.hydraide.%s-%s", BASE_SERVICE_NAME, instanceName)
 	plistPath := filepath.Join(s.d.paths.LaunchDaemonsDir, label+".plist")
 	executablePath := filepath.Join(basePath, LINUX_MAC_BINARY_NAME)
-
-	// Ensure log directory exists
-	logFile, err := ensureLogDirectory(basePath)
-	if err != nil {
-		return err
-	}
 
 	// Verify binary exists and is executable
 	if fi, err := os.Stat(executablePath); err != nil || fi.IsDir() {
@@ -376,6 +357,9 @@ func (s *serviceManagerImpl) generateLaunchdService(instanceName, basePath strin
 	}
 
 	// Launchd plist content
+	// Logs are automatically collected by macOS Unified Logging
+	// View logs with: log stream --predicate 'processImagePath contains "hydraide"'
+	// Or: log show --predicate 'processImagePath contains "hydraide"' --last 1h
 	plistContent := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -391,12 +375,10 @@ func (s *serviceManagerImpl) generateLaunchdService(instanceName, basePath strin
 	<dict>
 		<key>SuccessfulExit</key><false/>
 	</dict>
-	<key>StandardOutPath</key><string>%s</string>
-	<key>StandardErrorPath</key><string>%s</string>
 	<key>ProcessType</key><string>Background</string>
 </dict>
 </plist>
-`, label, executablePath, basePath, logFile, logFile)
+`, label, executablePath, basePath)
 
 	// Write plist file
 	if err := os.WriteFile(plistPath, []byte(plistContent), 0o644); err != nil {
@@ -422,7 +404,8 @@ func (s *serviceManagerImpl) generateLaunchdService(instanceName, basePath strin
 		slog.Warn("kickstart failed", "error", err, "output", string(out))
 	}
 
-	slog.Info("launchd service created", "label", label, "plist", plistPath, "log", logFile)
+	slog.Info("Plist file created successfully", "path", plistPath)
+	slog.Info("Logs will be available via macOS Unified Logging", "command", "log stream --predicate 'processImagePath contains \"hydraide\"'")
 	return nil
 }
 
@@ -776,22 +759,20 @@ func (s *serviceManagerImpl) checkAndInstallNSSM() error {
 // ✅ Responsibilities:
 // - Verifies/installs NSSM (via winget) if not present
 // - Installs a Windows service: hydraserver-<instance>
-// - Redirects stdout/stderr to `<basePath>/logs/app.log`
-// - Enables log rotation (size and time based) to prevent unbounded growth
+// - Logs are automatically collected by Windows Event Log (no file needed)
 //
 // 🗂️ Artifacts:
 // - Binary: <basePath>\hydraide.exe
-// - Logs:   <basePath>\logs\app.log
 //
 // 🔧 NSSM settings applied:
 // - DisplayName:  "HydrAIDE Service - <instance>"
 // - Description:  "HydrAIDE Service Instance: <instance>"
 // - Start:        SERVICE_AUTO_START (start at boot)
 // - AppDirectory: <basePath>
-// - AppStdout / AppStderr: <basePath>\logs\app.log
-// - AppRotateFiles: 1 (enabled)
-// - AppRotateSeconds: 86400 (daily)
-// - AppRotateBytes: 10485760 (10 MB)
+//
+// 📊 Viewing logs:
+//   - Windows Event Viewer → Windows Logs → Application
+//   - Filter by source: "HydrAIDE Service" or the service name
 //
 // ⚠️ Requirements & Notes:
 //   - Requires Windows with winget available for automatic NSSM install,
@@ -814,11 +795,6 @@ func (s *serviceManagerImpl) generateWindowsNSSMService(instanceName, basePath s
 	serviceName := fmt.Sprintf("%s-%s", BASE_SERVICE_NAME, instanceName)
 	executablePath := filepath.Join(basePath, WINDOWS_BINARY_NAME)
 
-	logFile, err := ensureLogDirectory(basePath)
-	if err != nil {
-		return err
-	}
-
 	if _, err := os.Stat(executablePath); os.IsNotExist(err) {
 		return fmt.Errorf("executable not found at: %s", executablePath)
 	}
@@ -829,16 +805,14 @@ func (s *serviceManagerImpl) generateWindowsNSSMService(instanceName, basePath s
 		return fmt.Errorf("failed to install NSSM service: %v", err)
 	}
 
+	// Configure NSSM service settings
+	// Logs are automatically collected by Windows Event Log
+	// View logs in Event Viewer under Windows Logs > Application
 	configs := [][]string{
 		{"set", serviceName, "DisplayName", fmt.Sprintf("HydrAIDE Service - %s", instanceName)},
 		{"set", serviceName, "Description", fmt.Sprintf("HydrAIDE Service Instance: %s", instanceName)},
 		{"set", serviceName, "Start", "SERVICE_AUTO_START"},
 		{"set", serviceName, "AppDirectory", basePath},
-		{"set", serviceName, "AppStdout", logFile},
-		{"set", serviceName, "AppStderr", logFile},
-		{"set", serviceName, "AppRotateFiles", "1"},
-		{"set", serviceName, "AppRotateSeconds", "86400"},
-		{"set", serviceName, "AppRotateBytes", "10485760"},
 	}
 	for _, cfg := range configs {
 		if output, err := s.d.runner.Run("nssm", cfg...); err != nil {
@@ -848,6 +822,7 @@ func (s *serviceManagerImpl) generateWindowsNSSMService(instanceName, basePath s
 		}
 	}
 
-	slog.Info("NSSM service configured successfully", "service", serviceName, "log", logFile)
+	slog.Info("NSSM service configured successfully", "service", serviceName)
+	slog.Info("Logs will be available in Windows Event Viewer", "location", "Windows Logs > Application")
 	return nil
 }

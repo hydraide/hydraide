@@ -44,3 +44,4 @@ vendor/
 
 db/
 fallback.log
+.github/copilot-instructions.md

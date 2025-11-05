@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/hydraide/hydraide/app/paniclogger"
 	"github.com/hydraide/hydraide/app/server/loghandlers/fallback"
 	"github.com/hydraide/hydraide/app/server/loghandlers/graylog"
 	"github.com/hydraide/hydraide/app/server/loghandlers/slogmulti"
@@ -27,6 +28,7 @@ var (
 	graylogServer         = ""
 	graylogServiceName    = "HydrAIDE-Server"
 	logLevel              = "debug"
+	localLoggingEnabled   = false
 	hydraMaxMessageSize   = 104857600   // 100 MB
 	defaultCloseAfterIdle = int64(1)    // 1 second
 	defaultWriteInterval  = int64(10)   // 10 seconds
@@ -94,6 +96,10 @@ func init() {
 		logLevel = os.Getenv("LOG_LEVEL")
 	}
 
+	if os.Getenv("LOCAL_LOGGING_ENABLED") == "true" {
+		localLoggingEnabled = true // default local logging is disabled
+	}
+
 	if os.Getenv("SYSTEM_RESOURCE_LOGGING") == "true" {
 		systemResourceLogging = true // default system resource logging is disabled
 	}
@@ -152,14 +158,28 @@ func main() {
 	defer panicHandler()
 
 	// ----------------------------------------------------------------------------
-	// Logger setup with console output + optional Graylog + file fallback
+	// Panic logger inicializálása - MINDIG aktív
+	// ----------------------------------------------------------------------------
+	if err := paniclogger.Init(); err != nil {
+		fmt.Printf("WARNING: failed to initialize panic logger: %v\n", err)
+	}
+	defer func() {
+		if err := paniclogger.Close(); err != nil {
+			fmt.Printf("WARNING: failed to close panic logger: %v\n", err)
+		}
+	}()
+
+	// ----------------------------------------------------------------------------
+	// Logger setup with console output + optional Graylog (+ optional file fallback)
 	// ----------------------------------------------------------------------------
 	// Logging architecture:
 	// - Always: logs go to console
-	// - If Graylog is defined:
+	// - If Graylog is enabled AND defined:
 	//   - logs go to Graylog
-	//   - if Graylog fails, logs go to fallback.log (and are retried later)
+	//   - if LOCAL_LOGGING_ENABLED=true: logs also go to fallback.log when Graylog is down
+	//   - if LOCAL_LOGGING_ENABLED=false: logs go ONLY to Graylog (no fallback file)
 	// - If Graylog is undefined: logs go ONLY to console (no file write)
+	// - Panic logs: ALWAYS go to panic.log (regardless of any setting)
 	// ----------------------------------------------------------------------------
 
 	ll := parseLogLevel(logLevel)
@@ -170,7 +190,7 @@ func main() {
 		Level: ll,
 	})
 
-	// Optional Graylog + fallback setup
+	// Optional Graylog + optional fallback setup
 	var combinedHandler slog.Handler
 
 	if graylogAvailable {
@@ -185,25 +205,33 @@ func main() {
 				slog.String("server", graylogServer),
 				slog.String("service", graylogServiceName))
 
-			// Local file fallback (only enabled if Graylog is used)
-			localHandler := fallback.LocalHandler(ll)
+			// Only use local file fallback if explicitly enabled
+			if localLoggingEnabled {
+				// Local file fallback (only enabled if user explicitly enables it)
+				localHandler := fallback.LocalHandler(ll)
 
-			combinedHandler = fallback.New(
-				gh,
-				localHandler,
-				func() bool {
-					conn, err := net.DialTimeout("tcp", graylogServer, 1*time.Second)
-					if err != nil {
-						return false
-					}
-					_ = conn.Close()
-					return true
-				},
-			)
+				combinedHandler = fallback.New(
+					gh,
+					localHandler,
+					func() bool {
+						conn, err := net.DialTimeout("tcp", graylogServer, 1*time.Second)
+						if err != nil {
+							return false
+						}
+						_ = conn.Close()
+						return true
+					},
+				)
+				slog.Info("Local logging fallback enabled (will write to fallback.log if Graylog is unavailable)")
+			} else {
+				// Use Graylog directly without file fallback
+				combinedHandler = gh
+				slog.Info("Local logging fallback disabled (logs will be lost if Graylog is unavailable)")
+			}
 		}
 	}
 
-	// Final logger: console only, or console + Graylog + fallback
+	// Final logger: console only, or console + Graylog (+ optional fallback)
 	if combinedHandler != nil {
 		logger := slog.New(slogmulti.New(consoleHandler, combinedHandler))
 		slog.SetDefault(logger)
@@ -264,8 +292,13 @@ func panicHandler() {
 	if r := recover(); r != nil {
 		// get the stack trace
 		stackTrace := debug.Stack()
-		// Log the panic error and stack trace
+
+		// Always write panic to panic.log
+		paniclogger.LogPanic("main function", r, string(stackTrace))
+
+		// Log the panic error and stack trace to console/Graylog
 		slog.Error("caught panic", "error", r, "stack", string(stackTrace))
+
 		// get the graceful stop
 		gracefulStop()
 	}
@@ -277,6 +310,12 @@ func gracefulStop() {
 	slog.Info("hydra server stopped gracefully. Program is exiting...")
 	// waiting for logs to be written to the file
 	time.Sleep(1 * time.Second)
+
+	// Close panic logger before exit
+	if err := paniclogger.Close(); err != nil {
+		fmt.Printf("WARNING: failed to close panic logger: %v\n", err)
+	}
+
 	// exit the program if the microservice is stopped gracefully
 	os.Exit(0)
 }
