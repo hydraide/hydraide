@@ -15,7 +15,7 @@
 # Need help? → https://grpc.io/docs/
 #
 # =============================================================================
-.PHONY: build push build-push clean build-binary test proto-go proto-python proto-node proto-rust proto-java proto-csharp help
+.PHONY: build push build-push clean build-binary build-hydraidectl test proto-go proto-python proto-node proto-rust proto-java proto-csharp help
 
 # Default target - show help
 .DEFAULT_GOAL := help
@@ -28,6 +28,7 @@ help:
 	@echo ""
 	@echo "  📦 BUILD COMMANDS:"
 	@echo "    make build-binary    - Build Go binaries (amd64 + arm64)"
+	@echo "    make build-hydraidectl - Build hydraidectl CLI (dev version)"
 	@echo "    make build           - Build the full Docker image"
 	@echo "    make test            - Test the Docker image locally"
 	@echo "    make push            - Push Docker image to GHCR"
@@ -73,6 +74,21 @@ build-binary: proto-go
 	@echo "🔨 Building Go binary for arm64..."
 	cd app/server && GOOS=linux GOARCH=arm64 go build -o ../../hydraide-arm64 .
 	@echo "✅ Binaries built successfully!"
+
+# Build hydraidectl CLI with version information
+build-hydraidectl:
+	@echo "🔨 Building hydraidectl CLI..."
+	@VERSION=$$(git describe --tags --match "hydraidectl/v*" --abbrev=0 2>/dev/null | sed 's/hydraidectl\///' || echo "dev"); \
+	COMMIT=$$(git rev-parse --short HEAD 2>/dev/null || echo "unknown"); \
+	BUILD_DATE=$$(date -u +"%Y-%m-%dT%H:%M:%SZ"); \
+	echo "Version: $$VERSION, Commit: $$COMMIT, Build Date: $$BUILD_DATE"; \
+	cd app/hydraidectl && go build \
+		-ldflags="-X 'github.com/hydraide/hydraide/app/hydraidectl/cmd.Version=$$VERSION' \
+		          -X 'github.com/hydraide/hydraide/app/hydraidectl/cmd.Commit=$$COMMIT' \
+		          -X 'github.com/hydraide/hydraide/app/hydraidectl/cmd.BuildDate=$$BUILD_DATE'" \
+		-o ../../hydraidectl .
+	@echo "✅ hydraidectl built successfully!"
+	@echo "   Install with: sudo mv hydraidectl /usr/local/bin/"
 
 # Build the Docker image with the specified tag
 build: build-binary
@@ -133,7 +149,7 @@ clean:
 	@echo "🧹 Cleaning generated files..."
 	rm -rf generated/hydraidepbgo* generated/hydraidepbpy/* generated/hydraidepbjs/* generated/hydraidepbrs/* generated/hydraidepbjv/* generated/hydraidepbcs/*
 	@echo "🧹 Cleaning built binaries..."
-	rm -f hydraide-amd64 hydraide-arm64
+	rm -f hydraide-amd64 hydraide-arm64 hydraidectl
 
 # -----------------------------------------------------------------------------
 # 🔹 proto-python – Generate Python client bindings (if grpc_tools available)

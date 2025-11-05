@@ -51,7 +51,17 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
-          go build -a -installsuffix cgo -o ${{ matrix.binary_name }} ./app/hydraidectl
+          # Strip 'hydraidectl/' prefix from version (e.g., hydraidectl/v1.0.4 -> v1.0.4)
+          VERSION=${{ steps.extract_version.outputs.version }}
+          VERSION=${VERSION#hydraidectl/}
+          COMMIT=${{ github.sha }}
+          BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          
+          go build -a -installsuffix cgo \
+            -ldflags="-X 'github.com/hydraide/hydraide/app/hydraidectl/cmd.Version=${VERSION}' \
+                      -X 'github.com/hydraide/hydraide/app/hydraidectl/cmd.Commit=${COMMIT}' \
+                      -X 'github.com/hydraide/hydraide/app/hydraidectl/cmd.BuildDate=${BUILD_DATE}'" \
+            -o ${{ matrix.binary_name }} ./app/hydraidectl
 
       - name: Upload built binary as artifact
         uses: actions/upload-artifact@v4

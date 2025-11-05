@@ -82,7 +82,7 @@ type GitHubRelease struct {
 
 var versionCmd = &cobra.Command{
 	Use:   "version",
-	Short: "Display version information",
+	Short: "Display version and check for hydraidectl updates",
 	Long: `Display version information for the hydraidectl CLI.
 Optionally include a single HydrAIDE instance's metadata version and check GitHub for CLI updates.
 
@@ -250,6 +250,15 @@ func isNewerVersion(latest, current string) bool {
 	// Handle dev version - always consider updates available
 	if current == "dev" {
 		return true
+	}
+
+	// Handle full tag format (e.g., "hydraidectl/v1.0.4")
+	// Extract just the version part if tag prefix is present
+	if strings.Contains(current, "/") {
+		parts := strings.Split(current, "/")
+		if len(parts) >= 2 {
+			current = parts[1]
+		}
 	}
 
 	// Remove 'v' prefix if present for parsing
