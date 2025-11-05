@@ -4945,14 +4945,15 @@ func convertCatalogModelToKeyValuePair(model any) (*hydraidepbgo.KeyValuePair, e
 		// This defines the logical expiration time of the Treasure.
 		// Once the given timestamp is reached, HydrAIDE will treat the record as expired.
 		// - Must be of type `time.Time`
-		// - Must not be the zero time
+		// - If omitempty is set, zero values are skipped without error
+		// - Otherwise must be non-zero
 		// - Automatically converted to a `timestamppb.Timestamp` for protobuf
 		if key, ok := field.Tag.Lookup(tagHydrAIDE); ok && strings.Contains(key, tagExpireAt) {
 
-			expireAt := time.Time{}
 			value := v.Field(i)
+			hasOmitempty := strings.Contains(key, tagOmitempty)
 
-			if strings.Contains(key, tagOmitempty) && isFieldEmpty(value) {
+			if hasOmitempty && isFieldEmpty(value) {
 				// If omitempty is set and the field is empty, skip setting expireAt
 				continue
 			}
@@ -4960,13 +4961,17 @@ func convertCatalogModelToKeyValuePair(model any) (*hydraidepbgo.KeyValuePair, e
 			if value.Kind() != reflect.Struct || value.Type() != reflect.TypeOf(time.Time{}) {
 				return nil, errors.New("expireAt field must be a time.Time")
 			}
-			expireAt = value.Interface().(time.Time).UTC()
-			if expireAt.IsZero() {
+			expireAt := value.Interface().(time.Time).UTC()
+
+			// Only validate non-zero if omitempty is NOT set
+			if !hasOmitempty && expireAt.IsZero() {
 				return nil, errors.New("expireAt field must be a non-zero time.Time")
 			}
-			expireAt = value.Interface().(time.Time).UTC()
 
-			kvPair.ExpiredAt = timestamppb.New(expireAt)
+			// If omitempty is set and we got here, the value is non-zero, so we can set it
+			if !expireAt.IsZero() {
+				kvPair.ExpiredAt = timestamppb.New(expireAt)
+			}
 			continue
 
 		}
@@ -4999,13 +5004,15 @@ func convertCatalogModelToKeyValuePair(model any) (*hydraidepbgo.KeyValuePair, e
 		// Process the `createdAt` field (tagged with `hydraide:"createdAt"`).
 		// Optional metadata representing when the Treasure was created.
 		// - Must be of type `time.Time`
-		// - Must not be zero
+		// - If omitempty is set, zero values are skipped without error
+		// - Otherwise must be non-zero
 		// - Converted to protobuf-compatible timestamp
 		if key, ok := field.Tag.Lookup(tagHydrAIDE); ok && strings.Contains(key, tagCreatedAt) {
 
 			value := v.Field(i)
+			hasOmitempty := strings.Contains(key, tagOmitempty)
 
-			if strings.Contains(key, tagOmitempty) && isFieldEmpty(value) {
+			if hasOmitempty && isFieldEmpty(value) {
 				continue
 			}
 
@@ -5013,22 +5020,30 @@ func convertCatalogModelToKeyValuePair(model any) (*hydraidepbgo.KeyValuePair, e
 				return nil, errors.New("createdAt field must be a time.Time")
 			}
 			createdAt := value.Interface().(time.Time).UTC()
-			if createdAt.IsZero() {
+
+			// Only validate non-zero if omitempty is NOT set
+			if !hasOmitempty && createdAt.IsZero() {
 				return nil, errors.New("createdAt field must be a non-zero time.Time")
 			}
-			kvPair.CreatedAt = timestamppb.New(createdAt)
+
+			// If omitempty is set and we got here, the value is non-zero, so we can set it
+			if !createdAt.IsZero() {
+				kvPair.CreatedAt = timestamppb.New(createdAt)
+			}
 			continue
 		}
 
 		// Process the `updatedBy` field (tagged with `hydraide:"updatedBy"`).
 		// Optional metadata indicating who or what last updated the Treasure.
 		// - Must be of type `string`
-		// - Ignored if empty
+		// - If omitempty is set, empty values are skipped
+		// - Otherwise empty values are still allowed but not set
 		if key, ok := field.Tag.Lookup(tagHydrAIDE); ok && strings.Contains(key, tagUpdatedBy) {
 
 			value := v.Field(i)
+			hasOmitempty := strings.Contains(key, tagOmitempty)
 
-			if strings.Contains(key, tagOmitempty) && isFieldEmpty(value) {
+			if hasOmitempty && isFieldEmpty(value) {
 				// If omitempty is set and the field is empty, skip setting updatedBy
 				continue
 			}
@@ -5036,6 +5051,8 @@ func convertCatalogModelToKeyValuePair(model any) (*hydraidepbgo.KeyValuePair, e
 			if value.Kind() != reflect.String {
 				return nil, errors.New("updatedBy field must be a string")
 			}
+
+			// Only set if the value is non-empty
 			if value.String() != "" {
 				updatedBy := value.String()
 				kvPair.UpdatedBy = &updatedBy
@@ -5046,13 +5063,15 @@ func convertCatalogModelToKeyValuePair(model any) (*hydraidepbgo.KeyValuePair, e
 		// Process the `updatedAt` field (tagged with `hydraide:"updatedAt"`).
 		// Optional metadata representing the last modification time of the Treasure.
 		// - Must be of type `time.Time`
-		// - Must be non-zero
+		// - If omitempty is set, zero values are skipped without error
+		// - Otherwise must be non-zero
 		// - Automatically converted to a `timestamppb.Timestamp` for protobuf transmission
 		if key, ok := field.Tag.Lookup(tagHydrAIDE); ok && strings.Contains(key, tagUpdatedAt) {
 
 			value := v.Field(i)
+			hasOmitempty := strings.Contains(key, tagOmitempty)
 
-			if strings.Contains(key, tagOmitempty) && isFieldEmpty(value) {
+			if hasOmitempty && isFieldEmpty(value) {
 				// If omitempty is set and the field is empty, skip setting updatedAt
 				continue
 			}
@@ -5061,10 +5080,16 @@ func convertCatalogModelToKeyValuePair(model any) (*hydraidepbgo.KeyValuePair, e
 				return nil, errors.New("updatedAt field must be a time.Time")
 			}
 			updatedAt := value.Interface().(time.Time).UTC()
-			if updatedAt.IsZero() {
+
+			// Only validate non-zero if omitempty is NOT set
+			if !hasOmitempty && updatedAt.IsZero() {
 				return nil, errors.New("updatedAt field must be a non-zero time.Time")
 			}
-			kvPair.UpdatedAt = timestamppb.New(updatedAt)
+
+			// If omitempty is set and we got here, the value is non-zero, so we can set it
+			if !updatedAt.IsZero() {
+				kvPair.UpdatedAt = timestamppb.New(updatedAt)
+			}
 			continue
 		}
 
@@ -5106,12 +5131,12 @@ func convertProtoTreasureToCatalogModel(treasure *hydraidepbgo.Treasure, model a
 	t := v.Elem().Type()
 	for i := 0; i < t.NumField(); i++ {
 
-		if key, ok := t.Field(i).Tag.Lookup(tagHydrAIDE); ok && key == tagKey {
+		if key, ok := t.Field(i).Tag.Lookup(tagHydrAIDE); ok && strings.Contains(key, tagKey) {
 			v.Elem().Field(i).SetString(treasure.GetKey())
 			continue
 		}
 
-		if key, ok := t.Field(i).Tag.Lookup(tagHydrAIDE); ok && key == tagValue {
+		if key, ok := t.Field(i).Tag.Lookup(tagHydrAIDE); ok && strings.Contains(key, tagValue) {
 
 			field := v.Elem().Field(i)
 
@@ -5124,35 +5149,35 @@ func convertProtoTreasureToCatalogModel(treasure *hydraidepbgo.Treasure, model a
 
 		}
 
-		if key, ok := t.Field(i).Tag.Lookup(tagHydrAIDE); ok && key == tagExpireAt {
+		if key, ok := t.Field(i).Tag.Lookup(tagHydrAIDE); ok && strings.Contains(key, tagExpireAt) {
 			if treasure.ExpiredAt != nil {
 				v.Elem().Field(i).Set(reflect.ValueOf(treasure.ExpiredAt.AsTime()))
 			}
 			continue
 		}
 
-		if key, ok := t.Field(i).Tag.Lookup(tagHydrAIDE); ok && key == tagCreatedBy {
+		if key, ok := t.Field(i).Tag.Lookup(tagHydrAIDE); ok && strings.Contains(key, tagCreatedBy) {
 			if treasure.CreatedBy != nil {
 				v.Elem().Field(i).SetString(*treasure.CreatedBy)
 			}
 			continue
 		}
 
-		if key, ok := t.Field(i).Tag.Lookup(tagHydrAIDE); ok && key == tagCreatedAt {
+		if key, ok := t.Field(i).Tag.Lookup(tagHydrAIDE); ok && strings.Contains(key, tagCreatedAt) {
 			if treasure.CreatedAt != nil {
 				v.Elem().Field(i).Set(reflect.ValueOf(treasure.CreatedAt.AsTime()))
 			}
 			continue
 		}
 
-		if key, ok := t.Field(i).Tag.Lookup(tagHydrAIDE); ok && key == tagUpdatedBy {
+		if key, ok := t.Field(i).Tag.Lookup(tagHydrAIDE); ok && strings.Contains(key, tagUpdatedBy) {
 			if treasure.UpdatedBy != nil {
 				v.Elem().Field(i).SetString(*treasure.UpdatedBy)
 			}
 			continue
 		}
 
-		if key, ok := t.Field(i).Tag.Lookup(tagHydrAIDE); ok && key == tagUpdatedAt {
+		if key, ok := t.Field(i).Tag.Lookup(tagHydrAIDE); ok && strings.Contains(key, tagUpdatedAt) {
 			if treasure.UpdatedAt != nil {
 				v.Elem().Field(i).Set(reflect.ValueOf(treasure.UpdatedAt.AsTime()))
 			}

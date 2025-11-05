@@ -13,6 +13,7 @@ import (
 	"github.com/hydraide/hydraide/app/server/server"
 	"github.com/hydraide/hydraide/generated/hydraidepbgo"
 	"github.com/hydraide/hydraide/sdk/go/hydraidego/client"
+	"github.com/hydraide/hydraide/sdk/go/hydraidego/config"
 	"github.com/hydraide/hydraide/sdk/go/hydraidego/name"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -22,6 +23,7 @@ import (
 var hydraidegoInterface Hydraidego
 var clientInterface client.Client
 var serverInterface server.Server
+var testConfig *config.E2ETestConfig
 
 func TestMain(m *testing.M) {
 	fmt.Println("Setting up test environment...")
@@ -33,56 +35,39 @@ func TestMain(m *testing.M) {
 }
 
 func setup() {
-
-	if os.Getenv("E2E_HYDRA_SERVER_CRT") == "" {
-		slog.Error("E2E_HYDRA_SERVER_CRT environment variable is not set")
-		panic("E2E_HYDRA_SERVER_CRT environment variable is not set")
-	}
-	if os.Getenv("E2E_HYDRA_SERVER_KEY") == "" {
-		slog.Error("HYDRA_SERVER_KEY environment variable is not set")
-		panic("HYDRA_SERVER_KEY environment variable is not set")
-	}
-	if os.Getenv("E2E_HYDRA_CA_CRT") == "" {
-		slog.Error("E2E_HYDRA_CA_CRT environment variable is not set")
-		panic("E2E_HYDRA_CA_CRT environment variable is not set")
-	}
-
-	if os.Getenv("E2E_HYDRA_CLIENT_CRT") == "" {
-		slog.Error("E2E_HYDRA_CLIENT_CRT environment variable is not set")
-		panic("E2E_HYDRA_CLIENT_CRT environment variable is not set")
-	}
-
-	if os.Getenv("E2E_HYDRA_CLIENT_KEY") == "" {
-		slog.Error("E2E_HYDRA_CLIENT_KEY environment variable is not set")
-		panic("E2E_HYDRA_CLIENT_KEY environment variable is not set")
-	}
-
-	if os.Getenv("HYDRA_E2E_GRPC_CONN_ANALYSIS") == "" {
-		slog.Warn("HYDRA_E2E_GRPC_CONN_ANALYSIS environment variable is not set, using default value: false")
-		if err := os.Setenv("HYDRA_E2E_GRPC_CONN_ANALYSIS", "false"); err != nil {
-			slog.Error("error while setting HYDRA_E2E_GRPC_CONN_ANALYSIS environment variable", "error", err)
-			panic(fmt.Sprintf("error while setting HYDRA_E2E_GRPC_CONN_ANALYSIS environment variable: %v", err))
-		}
-	}
-
-	port := strings.Split(os.Getenv("E2E_HYDRA_TEST_SERVER"), ":")
-	if len(port) != 2 {
-		slog.Error("E2E_HYDRA_TEST_SERVER environment variable is not set or invalid")
-		panic("E2E_HYDRA_TEST_SERVER environment variable is not set or invalid")
-	}
-
-	portAsNUmber, err := strconv.Atoi(port[1])
+	// Load E2E test configuration from .env file
+	var err error
+	testConfig, err = config.LoadE2ETestConfig()
 	if err != nil {
-		slog.Error("E2E_HYDRA_TEST_SERVER port is not a valid number", "error", err)
-		panic(fmt.Sprintf("E2E_HYDRA_TEST_SERVER port is not a valid number: %v", err))
+		slog.Error("Failed to load E2E test configuration", "error", err)
+		panic(fmt.Sprintf("Failed to load E2E test configuration: %v", err))
 	}
 
-	// start the new Hydra server
+	// Validate that all certificate files exist
+	if err := testConfig.Validate(); err != nil {
+		slog.Error("E2E test configuration validation failed", "error", err)
+		panic(fmt.Sprintf("E2E test configuration validation failed: %v", err))
+	}
+
+	// Parse server address to get port
+	port := strings.Split(testConfig.TestServerAddr, ":")
+	if len(port) != 2 {
+		slog.Error("HYDRAIDE_E2E_TEST_SERVER_ADDR environment variable is invalid, expected format: host:port")
+		panic("HYDRAIDE_E2E_TEST_SERVER_ADDR environment variable is invalid, expected format: host:port")
+	}
+
+	portAsNumber, err := strconv.Atoi(port[1])
+	if err != nil {
+		slog.Error("HYDRAIDE_E2E_TEST_SERVER_ADDR port is not a valid number", "error", err)
+		panic(fmt.Sprintf("HYDRAIDE_E2E_TEST_SERVER_ADDR port is not a valid number: %v", err))
+	}
+
+	// Start the new Hydra server
 	serverInterface = server.New(&server.Configuration{
-		CertificateCrtFile:  os.Getenv("E2E_HYDRA_SERVER_CRT"),
-		CertificateKeyFile:  os.Getenv("E2E_HYDRA_SERVER_KEY"),
-		ClientCAFile:        os.Getenv("E2E_HYDRA_CA_CRT"), // this is the CA that signed the client certificates
-		HydraServerPort:     portAsNUmber,
+		CertificateCrtFile:  testConfig.ServerCertFile,
+		CertificateKeyFile:  testConfig.ServerKeyFile,
+		ClientCAFile:        testConfig.CACertFile, // this is the CA that signed the client certificates
+		HydraServerPort:     portAsNumber,
 		HydraMaxMessageSize: 1024 * 1024 * 1024, // 1 GB
 	})
 
@@ -91,28 +76,26 @@ func setup() {
 		panic(fmt.Sprintf("error while starting the server: %v", err))
 	}
 
-	// create a new Hydraidego interface
+	// Create a new Hydraidego interface
 	createGrpcClient()
-
 }
 
 func createGrpcClient() {
-
-	// create a new gRPC client object
+	// Create a new gRPC client object
 	servers := []*client.Server{
 		{
-			Host:          os.Getenv("E2E_HYDRA_TEST_SERVER"),
+			Host:          testConfig.TestServerAddr,
 			FromIsland:    0,
 			ToIsland:      100,
-			CACrtPath:     os.Getenv("E2E_HYDRA_CA_CRT"),
-			ClientCrtPath: os.Getenv("E2E_HYDRA_CLIENT_CRT"),
-			ClientKeyPath: os.Getenv("E2E_HYDRA_CLIENT_KEY"),
+			CACrtPath:     testConfig.CACertFile,
+			ClientCrtPath: testConfig.ClientCertFile,
+			ClientKeyPath: testConfig.ClientKeyFile,
 		},
 	}
 
 	// 100 folders and 2 gig message size
 	clientInterface = client.New(servers, 100, 2147483648)
-	if err := clientInterface.Connect(false); err != nil {
+	if err := clientInterface.Connect(testConfig.GRPCConnAnalysis); err != nil {
 		slog.Error("error while connecting to the server", "error", err)
 	}
 
@@ -1442,4 +1425,129 @@ func TestHydraideTypeConversions(t *testing.T) {
 			require.Equal(t, tc.expected, reflect.ValueOf(restored).Elem().Interface())
 		})
 	}
+}
+
+// TestOmitEmptyFieldsE2E tests the real behavior of omitempty fields with the server
+// This test validates that:
+// 1. Creating data without updatedAt, updatedBy, and expiredAt works correctly (omitempty)
+// 2. Reading data returns empty values for these fields
+// 3. Updating data with these fields populated works correctly
+// 4. Reading data after update returns the populated values
+func TestOmitEmptyFieldsE2E(t *testing.T) {
+	ctx := context.Background()
+
+	// Create a test swamp
+	swampName := name.New().
+		Sanctuary("tests").
+		Realm("omitempty").
+		Swamp(fmt.Sprintf("test-omit-%d", time.Now().UnixNano()))
+
+	// Register the swamp
+	err := hydraidegoInterface.RegisterSwamp(ctx, &RegisterSwampRequest{
+		SwampPattern: swampName,
+	})
+	require.Empty(t, err, "Failed to register swamp")
+
+	// Clean up
+	defer func() {
+		if destroyErr := hydraidegoInterface.Destroy(ctx, swampName); destroyErr != nil {
+			t.Logf("Failed to destroy swamp: %v", destroyErr)
+		}
+	}()
+
+	// Define test model with omitempty fields
+	type TestModel struct {
+		Key       string    `hydraide:"key"`
+		Value     string    `hydraide:"value"`
+		UpdatedAt time.Time `hydraide:"updatedAt,omitempty"`
+		UpdatedBy string    `hydraide:"updatedBy,omitempty"`
+		ExpiredAt time.Time `hydraide:"expireAt,omitempty"`
+	}
+
+	// Step 1: Create data without updatedAt, updatedBy, and expiredAt
+	t.Run("Step1_CreateWithoutOmitEmptyFields", func(t *testing.T) {
+		initialData := &TestModel{
+			Key:   "test-key-1",
+			Value: "initial-value",
+			// UpdatedAt, UpdatedBy, ExpiredAt are intentionally not set (zero values)
+		}
+
+		err := hydraidegoInterface.CatalogCreate(ctx, swampName, initialData)
+		require.NoError(t, err, "Failed to create data without omitempty fields")
+	})
+
+	// Step 2: Read data and verify that updatedAt, updatedBy, and expiredAt are empty
+	t.Run("Step2_ReadAndVerifyEmptyFields", func(t *testing.T) {
+		readData := &TestModel{}
+		err := hydraidegoInterface.CatalogRead(ctx, swampName, "test-key-1", readData)
+		require.NoError(t, err, "Failed to read data")
+
+		assert.Equal(t, "test-key-1", readData.Key, "Key should match")
+		assert.Equal(t, "initial-value", readData.Value, "Value should match")
+		assert.True(t, readData.UpdatedAt.IsZero(), "UpdatedAt should be empty (zero value)")
+		assert.Empty(t, readData.UpdatedBy, "UpdatedBy should be empty")
+		assert.True(t, readData.ExpiredAt.IsZero(), "ExpiredAt should be empty (zero value)")
+	})
+
+	// Step 3: Update data with updatedAt, updatedBy, and expiredAt values
+	t.Run("Step3_UpdateWithOmitEmptyFields", func(t *testing.T) {
+		now := time.Now().UTC()
+		futureTime := now.Add(24 * time.Hour)
+
+		updateData := &TestModel{
+			Key:       "test-key-1",
+			Value:     "updated-value",
+			UpdatedAt: now,
+			UpdatedBy: "test-user",
+			ExpiredAt: futureTime,
+		}
+
+		err := hydraidegoInterface.CatalogUpdate(ctx, swampName, updateData)
+		require.NoError(t, err, "Failed to update data with omitempty fields")
+	})
+
+	// Step 4: Read data and verify that updatedAt, updatedBy, and expiredAt are now populated
+	t.Run("Step4_ReadAndVerifyPopulatedFields", func(t *testing.T) {
+		readData := &TestModel{}
+		err := hydraidegoInterface.CatalogRead(ctx, swampName, "test-key-1", readData)
+		require.NoError(t, err, "Failed to read updated data")
+
+		assert.Equal(t, "test-key-1", readData.Key, "Key should match")
+		assert.Equal(t, "updated-value", readData.Value, "Value should be updated")
+		assert.False(t, readData.UpdatedAt.IsZero(), "UpdatedAt should be populated")
+		assert.Equal(t, "test-user", readData.UpdatedBy, "UpdatedBy should be populated")
+		assert.False(t, readData.ExpiredAt.IsZero(), "ExpiredAt should be populated")
+
+		// Verify that the times are within a reasonable range (1 second tolerance)
+		assert.WithinDuration(t, time.Now().UTC(), readData.UpdatedAt, 5*time.Second, "UpdatedAt should be recent")
+		assert.WithinDuration(t, time.Now().UTC().Add(24*time.Hour), readData.ExpiredAt, 5*time.Second, "ExpiredAt should be ~24 hours in the future")
+	})
+
+	// Additional test: Create a second record with all fields populated from the start
+	t.Run("Step5_CreateWithAllFieldsPopulated", func(t *testing.T) {
+		now := time.Now().UTC()
+		futureTime := now.Add(48 * time.Hour)
+
+		fullData := &TestModel{
+			Key:       "test-key-2",
+			Value:     "full-value",
+			UpdatedAt: now,
+			UpdatedBy: "admin",
+			ExpiredAt: futureTime,
+		}
+
+		err := hydraidegoInterface.CatalogCreate(ctx, swampName, fullData)
+		require.NoError(t, err, "Failed to create data with all fields populated")
+
+		// Read back and verify
+		readData := &TestModel{}
+		err = hydraidegoInterface.CatalogRead(ctx, swampName, "test-key-2", readData)
+		require.NoError(t, err, "Failed to read fully populated data")
+
+		assert.Equal(t, "test-key-2", readData.Key, "Key should match")
+		assert.Equal(t, "full-value", readData.Value, "Value should match")
+		assert.False(t, readData.UpdatedAt.IsZero(), "UpdatedAt should be populated")
+		assert.Equal(t, "admin", readData.UpdatedBy, "UpdatedBy should be 'admin'")
+		assert.False(t, readData.ExpiredAt.IsZero(), "ExpiredAt should be populated")
+	})
 }
