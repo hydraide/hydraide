@@ -74,7 +74,9 @@ type Hydraidego interface {
 	CatalogSaveManyToMany(ctx context.Context, request []*CatalogManyToManyRequest, iterator CatalogSaveManyToManyIteratorFunc) error
 	CatalogShiftExpired(ctx context.Context, swampName name.Name, howMany int32, model any, iterator CatalogShiftExpiredIteratorFunc) error
 	ProfileSave(ctx context.Context, swampName name.Name, model any) (err error)
+	ProfileSaveBatch(ctx context.Context, swampNames []name.Name, models []any, iterator ProfileSaveBatchIteratorFunc) error
 	ProfileRead(ctx context.Context, swampName name.Name, model any) (err error)
+	ProfileReadBatch(ctx context.Context, swampNames []name.Name, model any, iterator ProfileReadBatchIteratorFunc) error
 	Count(ctx context.Context, swampName name.Name) (int32, error)
 	Destroy(ctx context.Context, swampName name.Name) error
 	Subscribe(ctx context.Context, swampName name.Name, getExistingData bool, model any, iterator SubscribeIteratorFunc) error
@@ -2478,6 +2480,276 @@ func (h *hydraidego) ProfileSave(ctx context.Context, swampName name.Name, model
 
 }
 
+type ProfileSaveBatchIteratorFunc func(swampName name.Name, err error) error
+
+// ProfileSaveBatch saves multiple complete profile-like structs to multiple Swamps in a single gRPC call.
+//
+// This is a highly optimized version of `ProfileSave` designed to efficiently save
+// dozens or even hundreds of profile models at once, rather than making individual
+// requests in a loop.
+//
+// ✅ Use when:
+//   - You need to save 50-100+ profile models (e.g., bulk user updates, batch imports)
+//   - You want to minimize network round-trips and latency
+//   - Each profile is stored in a separate Swamp with its fields as individual keys
+//   - You want to apply deletable field cleanup across multiple profiles at once
+//
+// ⚙️ Behavior:
+//   - Validates that swampNames and models have the same length
+//   - Converts each model to KeyValuePairs using reflection and struct tags
+//   - Handles deletable fields for each profile (deletes empty deletable fields first)
+//   - Groups operations by target server based on Swamp name hashing
+//   - Executes batch Set and Delete operations per server
+//   - Calls the `iterator` function for each Swamp with success or error status
+//
+// 📦 Model Requirements:
+//   - Each model must be a pointer to a struct
+//   - Fields should use `hydraide` tags to indicate field names
+//   - Supports `omitempty` and `deletable` tags same as ProfileSave
+//
+// 🔁 Iterator (required):
+//   - Called once per profile with:
+//   - `swampName`: the name of the Swamp being processed
+//   - `err`: error if the save failed, nil if successful
+//   - Return `nil` to continue processing, or an error to abort
+//
+// ✨ Example use:
+//
+//	type UserProfile struct {
+//	    Username string `hydraide:"Username"`
+//	    Email    string `hydraide:"Email"`
+//	    Age      int    `hydraide:"Age"`
+//	}
+//
+//	swampNames := []name.Name{
+//	    name.New().Sanctuary("users").Realm("profiles").Swamp("alice"),
+//	    name.New().Sanctuary("users").Realm("profiles").Swamp("bob"),
+//	    // ... 50 more users
+//	}
+//
+//	models := []any{&profile1, &profile2, ...} // same length as swampNames
+//
+//	err := client.ProfileSaveBatch(ctx, swampNames, models, func(swampName name.Name, err error) error {
+//	    if err != nil {
+//	        log.Printf("❌ failed to save %s: %v", swampName.Get(), err)
+//	        return nil // continue with other profiles
+//	    }
+//	    log.Printf("✅ saved %s", swampName.Get())
+//	    return nil
+//	})
+//
+// 🚀 Performance:
+//   - 50 individual ProfileSave calls = 50+ network round-trips (with deletes)
+//   - 1 ProfileSaveBatch call with 50 swamps = 1-2 network round-trips
+//   - Can dramatically reduce total save time from seconds to milliseconds
+//
+// ⚠️ **Important:**
+//   - swampNames and models must have the same length
+//   - swampNames[i] corresponds to models[i]
+//   - iterator must not be nil
+//
+// 💡 Best used for bulk profile updates, batch imports, or synchronized state saves.
+func (h *hydraidego) ProfileSaveBatch(ctx context.Context, swampNames []name.Name, models []any, iterator ProfileSaveBatchIteratorFunc) error {
+
+	if iterator == nil {
+		return NewError(ErrCodeInvalidArgument, "iterator must not be nil")
+	}
+
+	if len(swampNames) == 0 {
+		return NewError(ErrCodeInvalidArgument, "swampNames must not be empty")
+	}
+
+	if len(swampNames) != len(models) {
+		return NewError(ErrCodeInvalidArgument, fmt.Sprintf("swampNames and models must have the same length: got %d swampNames and %d models", len(swampNames), len(models)))
+	}
+
+	// Track which swamps need deletable key cleanup
+	type swampDeleteRequest struct {
+		swampName     name.Name
+		deletableKeys []string
+	}
+
+	// Track Set requests per swamp
+	type swampSetRequest struct {
+		swampName name.Name
+		kvPairs   []*hydraidepbgo.KeyValuePair
+	}
+
+	deleteRequests := make([]swampDeleteRequest, 0)
+	setRequests := make([]swampSetRequest, 0, len(swampNames))
+
+	// Convert all models and prepare requests
+	for i, model := range models {
+		swampName := swampNames[i]
+
+		kvPairs, deletableKeys, err := convertProfileModelToKeyValuePair(model)
+		if err != nil {
+			// Call iterator with error for this specific swamp
+			iterErr := iterator(swampName, NewError(ErrCodeInvalidModel, err.Error()))
+			if iterErr != nil {
+				return iterErr
+			}
+			continue
+		}
+
+		// Track deletable keys for this swamp if any
+		if len(deletableKeys) > 0 {
+			deleteRequests = append(deleteRequests, swampDeleteRequest{
+				swampName:     swampName,
+				deletableKeys: deletableKeys,
+			})
+		}
+
+		// Track set request for this swamp
+		setRequests = append(setRequests, swampSetRequest{
+			swampName: swampName,
+			kvPairs:   kvPairs,
+		})
+	}
+
+	// Step 1: Handle deletable keys first (if any)
+	if len(deleteRequests) > 0 {
+		// Group delete requests by server
+		type deleteGroup struct {
+			client hydraidepbgo.HydraideServiceClient
+			swamps []*hydraidepbgo.DeleteRequest_SwampKeys
+		}
+
+		serverDeleteGroups := make(map[string]*deleteGroup)
+
+		for _, delReq := range deleteRequests {
+			clientAndHost := h.client.GetServiceClientAndHost(delReq.swampName)
+
+			if _, ok := serverDeleteGroups[clientAndHost.Host]; !ok {
+				serverDeleteGroups[clientAndHost.Host] = &deleteGroup{
+					client: clientAndHost.GrpcClient,
+					swamps: make([]*hydraidepbgo.DeleteRequest_SwampKeys, 0),
+				}
+			}
+
+			serverDeleteGroups[clientAndHost.Host].swamps = append(serverDeleteGroups[clientAndHost.Host].swamps, &hydraidepbgo.DeleteRequest_SwampKeys{
+				IslandID:  delReq.swampName.GetIslandID(h.client.GetAllIslands()),
+				SwampName: delReq.swampName.Get(),
+				Keys:      delReq.deletableKeys,
+			})
+		}
+
+		// Execute delete requests per server
+		for _, delGroup := range serverDeleteGroups {
+			_, err := delGroup.client.Delete(ctx, &hydraidepbgo.DeleteRequest{
+				Swamps: delGroup.swamps,
+			})
+
+			if err != nil {
+				if s, ok := status.FromError(err); ok {
+					switch s.Code() {
+					case codes.Aborted:
+						return NewError(ErrorShuttingDown, errorMessageShuttingDown)
+					case codes.Unavailable:
+						return NewError(ErrCodeConnectionError, errorMessageConnectionError)
+					case codes.DeadlineExceeded:
+						return NewError(ErrCodeCtxTimeout, errorMessageCtxTimeout)
+					case codes.Canceled:
+						return NewError(ErrCodeCtxClosedByClient, errorMessageCtxClosedByClient)
+					default:
+						// Silently continue on delete errors (non-critical)
+						continue
+					}
+				}
+			}
+		}
+	}
+
+	// Step 2: Handle Set requests
+	// Group set requests by server
+	type setGroup struct {
+		client   hydraidepbgo.HydraideServiceClient
+		swamps   []*hydraidepbgo.SwampRequest
+		swampMap map[string]name.Name // swampName string -> name.Name for iterator callback
+	}
+
+	serverSetGroups := make(map[string]*setGroup)
+
+	for _, setReq := range setRequests {
+		clientAndHost := h.client.GetServiceClientAndHost(setReq.swampName)
+
+		if _, ok := serverSetGroups[clientAndHost.Host]; !ok {
+			serverSetGroups[clientAndHost.Host] = &setGroup{
+				client:   clientAndHost.GrpcClient,
+				swamps:   make([]*hydraidepbgo.SwampRequest, 0),
+				swampMap: make(map[string]name.Name),
+			}
+		}
+
+		swampNameStr := setReq.swampName.Get()
+		serverSetGroups[clientAndHost.Host].swampMap[swampNameStr] = setReq.swampName
+		serverSetGroups[clientAndHost.Host].swamps = append(serverSetGroups[clientAndHost.Host].swamps, &hydraidepbgo.SwampRequest{
+			IslandID:         setReq.swampName.GetIslandID(h.client.GetAllIslands()),
+			SwampName:        swampNameStr,
+			KeyValues:        setReq.kvPairs,
+			CreateIfNotExist: true,
+			Overwrite:        true,
+		})
+	}
+
+	// Execute set requests per server and call iterator
+	for _, setGroup := range serverSetGroups {
+		_, err := setGroup.client.Set(ctx, &hydraidepbgo.SetRequest{
+			Swamps: setGroup.swamps,
+		})
+
+		if err != nil {
+			if s, ok := status.FromError(err); ok {
+				var returnErr error
+				switch s.Code() {
+				case codes.Aborted:
+					returnErr = NewError(ErrorShuttingDown, errorMessageShuttingDown)
+				case codes.Unavailable:
+					returnErr = NewError(ErrCodeConnectionError, errorMessageConnectionError)
+				case codes.DeadlineExceeded:
+					returnErr = NewError(ErrCodeCtxTimeout, errorMessageCtxTimeout)
+				case codes.Canceled:
+					returnErr = NewError(ErrCodeCtxClosedByClient, errorMessageCtxClosedByClient)
+				case codes.Internal:
+					returnErr = NewError(ErrCodeInternalDatabaseError, fmt.Sprintf("%s: %v", errorMessageInternalError, s.Message()))
+				default:
+					returnErr = NewError(ErrCodeUnknown, fmt.Sprintf("%s: %v", errorMessageUnknown, err))
+				}
+
+				// Call iterator with error for all swamps in this group
+				for swampNameStr, swampName := range setGroup.swampMap {
+					iterErr := iterator(swampName, returnErr)
+					if iterErr != nil {
+						return iterErr
+					}
+					_ = swampNameStr // avoid unused warning
+				}
+				continue
+			} else {
+				// Non-gRPC error - report to all swamps in group
+				returnErr := NewError(ErrCodeUnknown, fmt.Sprintf("%s: %v", errorMessageUnknown, err))
+				for _, swampName := range setGroup.swampMap {
+					iterErr := iterator(swampName, returnErr)
+					if iterErr != nil {
+						return iterErr
+					}
+				}
+				continue
+			}
+		}
+
+		// Success - call iterator with nil error for all swamps in this group
+		for _, swampName := range setGroup.swampMap {
+			iterErr := iterator(swampName, nil)
+			if iterErr != nil {
+				return iterErr
+			}
+		}
+	}
+
+	return nil
+}
+
 // ProfileRead loads a complete profile-like struct from a Swamp, field by field.
 //
 // This is the counterpart of `ProfileSave`, used to reconstruct a previously saved struct
@@ -2561,6 +2833,173 @@ func (h *hydraidego) ProfileRead(ctx context.Context, swampName name.Name, model
 	// Successfully populated all available fields into the model
 	return nil
 
+}
+
+type ProfileReadBatchIteratorFunc func(swampName name.Name, model any, err error) error
+
+// ProfileReadBatch loads multiple complete profile-like structs from multiple Swamps in a single gRPC call.
+//
+// This is a highly optimized version of `ProfileRead` designed to efficiently load
+// dozens or even hundreds of profile models at once, rather than making individual
+// requests in a loop.
+//
+// ✅ Use when:
+//   - You need to load 50-100+ profile models (e.g., user settings, entity states)
+//   - You want to minimize network round-trips and latency
+//   - Each profile is stored in a separate Swamp with its fields as individual keys
+//
+// ⚙️ Behavior:
+//   - Batches all Swamp read requests into a single gRPC `Get` call
+//   - For each Swamp, extracts the expected keys from the model's struct tags
+//   - Fetches all keys from all Swamps in parallel on the server side
+//   - Calls the `iterator` function for each Swamp with its populated model
+//   - If a Swamp does not exist → iterator is called with ErrCodeSwampNotFound
+//   - If a key is missing → silently skipped (same as ProfileRead)
+//
+// 📦 Model Requirements:
+//   - `model` must be a pointer to a struct (used as a template for reflection)
+//   - The same model type will be used to populate results for all Swamps
+//   - Each field should be tagged to indicate which key to read from the Swamp
+//
+// 🔁 Iterator (required):
+//   - Called once per Swamp with:
+//   - `swampName`: the name of the Swamp being processed
+//   - `model`: a populated copy of the model (you must type-assert it)
+//   - `err`: error if the Swamp couldn't be read (e.g., ErrCodeSwampNotFound)
+//   - Return `nil` to continue processing, or an error to abort
+//
+// ✨ Example use:
+//
+//	type UserSettings struct {
+//	    Theme       string `hydraide:"Theme"`
+//	    Language    string `hydraide:"Language"`
+//	    Notifications bool `hydraide:"Notifications"`
+//	}
+//
+//	swampNames := []name.Name{
+//	    name.Swamp("user-settings", "user", "alice"),
+//	    name.Swamp("user-settings", "user", "bob"),
+//	    // ... 50 more users
+//	}
+//
+//	var results []*UserSettings
+//	err := client.ProfileReadBatch(ctx, swampNames, &UserSettings{}, func(swampName name.Name, model any, err error) error {
+//	    if err != nil {
+//	        log.Printf("❌ failed to read %s: %v", swampName.Get(), err)
+//	        return nil // continue with other swamps
+//	    }
+//	    settings := model.(*UserSettings)
+//	    results = append(results, settings)
+//	    return nil
+//	})
+//
+// 🚀 Performance:
+//   - 50 individual ProfileRead calls = 50 network round-trips
+//   - 1 ProfileReadBatch call with 50 swamps = 1 network round-trip
+//   - Can dramatically reduce total read time from seconds to milliseconds
+//
+// ⚠️ **Important: `model` must be a pointer to a struct, and `iterator` must not be nil.**
+//
+// 💡 Best used for bulk profile loading, dashboard data fetching, or batch entity hydration.
+func (h *hydraidego) ProfileReadBatch(ctx context.Context, swampNames []name.Name, model any, iterator ProfileReadBatchIteratorFunc) error {
+
+	if iterator == nil {
+		return NewError(ErrCodeInvalidArgument, "iterator must not be nil")
+	}
+
+	if len(swampNames) == 0 {
+		return NewError(ErrCodeInvalidArgument, "swampNames must not be empty")
+	}
+
+	// Validate that model is a pointer to a struct
+	v := reflect.ValueOf(model)
+	if v.Kind() != reflect.Ptr || v.Elem().Kind() != reflect.Struct {
+		return NewError(ErrCodeInvalidModel, "model must be a pointer to a struct")
+	}
+
+	// Extract the expected keys from the model using reflection and struct tags
+	keys, err := getKeyFromProfileModel(model)
+	if err != nil {
+		return NewError(ErrCodeInvalidModel, err.Error())
+	}
+
+	// Build the batch GetRequest with all swamps
+	getSwamps := make([]*hydraidepbgo.GetSwamp, 0, len(swampNames))
+	for _, swampName := range swampNames {
+		getSwamps = append(getSwamps, &hydraidepbgo.GetSwamp{
+			IslandID:  swampName.GetIslandID(h.client.GetAllIslands()),
+			SwampName: swampName.Get(),
+			Keys:      keys,
+		})
+	}
+
+	// Execute the batch Get request
+	response, err := h.client.GetServiceClient(swampNames[0]).Get(ctx, &hydraidepbgo.GetRequest{
+		Swamps: getSwamps,
+	})
+
+	if err != nil {
+		// Translate server-side or network error to client-side semantics
+		if s, ok := status.FromError(err); ok {
+			switch s.Code() {
+			case codes.Aborted:
+				return NewError(ErrorShuttingDown, errorMessageShuttingDown)
+			case codes.Unavailable:
+				return NewError(ErrCodeConnectionError, errorMessageConnectionError)
+			case codes.DeadlineExceeded:
+				return NewError(ErrCodeCtxTimeout, errorMessageCtxTimeout)
+			case codes.Canceled:
+				return NewError(ErrCodeCtxClosedByClient, errorMessageCtxClosedByClient)
+			case codes.Internal:
+				return NewError(ErrCodeInternalDatabaseError, fmt.Sprintf("%s: %v", errorMessageInternalError, s.Message()))
+			default:
+				return NewError(ErrCodeUnknown, fmt.Sprintf("%s: %v", errorMessageUnknown, err))
+			}
+		}
+		return NewError(ErrCodeUnknown, fmt.Sprintf("%s: %v", errorMessageUnknown, err))
+	}
+
+	// Process each swamp response and call the iterator
+	for i, swampResponse := range response.GetSwamps() {
+		swampName := swampNames[i]
+
+		// Check if the swamp exists
+		if !swampResponse.GetIsExist() {
+			// Swamp doesn't exist - call iterator with error
+			iterErr := iterator(swampName, nil, NewError(ErrCodeSwampNotFound, fmt.Sprintf("%s: %s", errorMessageSwampNotFound, swampName.Get())))
+			if iterErr != nil {
+				return iterErr
+			}
+			continue
+		}
+
+		// Create a new instance of the model for this swamp
+		modelType := reflect.TypeOf(model).Elem()
+		newModel := reflect.New(modelType).Interface()
+
+		// Parse the response and assign values to the model fields
+		for _, treasure := range swampResponse.GetTreasures() {
+			// If the key does not exist, skip it silently
+			if !treasure.IsExist {
+				continue
+			}
+
+			// Use reflection to set the value into the model struct
+			err = setTreasureValueToProfileModel(newModel, treasure)
+			if err != nil {
+				// Skip faulty assignments silently to avoid halting the whole load
+				continue
+			}
+		}
+
+		// Call the iterator with the populated model
+		iterErr := iterator(swampName, newModel, nil)
+		if iterErr != nil {
+			return iterErr
+		}
+	}
+
+	return nil
 }
 
 // Count returns the number of Treasures stored in a given Swamp.

@@ -1665,3 +1665,336 @@ func TestCatalogSaveWithOmitEmptyRealWorldScenario(t *testing.T) {
 		assert.Equal(t, "unittest-user", reloadedModel.CreatedBy, "CreatedBy should remain unchanged")
 	})
 }
+
+// TestProfileReadBatch tests the batch profile read functionality
+func TestProfileReadBatch(t *testing.T) {
+	ctx := context.Background()
+
+	// Define a profile model for testing
+	type UserProfile struct {
+		Username      string    `hydraide:"Username"`
+		Email         string    `hydraide:"Email"`
+		Age           int       `hydraide:"Age"`
+		IsActive      bool      `hydraide:"IsActive"`
+		LastLoginTime time.Time `hydraide:"LastLoginTime"`
+	}
+
+	// Step 1: Create multiple profiles in different swamps
+	t.Run("Step1_CreateMultipleProfiles", func(t *testing.T) {
+		profiles := []struct {
+			swampID  string
+			username string
+			email    string
+			age      int
+			active   bool
+		}{
+			{"user-alice", "alice", "alice@example.com", 25, true},
+			{"user-bob", "bob", "bob@example.com", 30, true},
+			{"user-charlie", "charlie", "charlie@example.com", 35, false},
+			{"user-diana", "diana", "diana@example.com", 28, true},
+			{"user-eve", "eve", "eve@example.com", 32, true},
+		}
+
+		for _, p := range profiles {
+			swampName := name.New().Sanctuary("unittest-profiles").Realm("batch-test").Swamp(p.swampID)
+			profile := &UserProfile{
+				Username:      p.username,
+				Email:         p.email,
+				Age:           p.age,
+				IsActive:      p.active,
+				LastLoginTime: time.Now().UTC(),
+			}
+
+			err := hydraidegoInterface.ProfileSave(ctx, swampName, profile)
+			require.NoError(t, err, "ProfileSave should succeed for %s", p.username)
+		}
+	})
+
+	// Step 2: Read all profiles using ProfileReadBatch
+	t.Run("Step2_ReadBatch", func(t *testing.T) {
+		swampNames := []name.Name{
+			name.New().Sanctuary("unittest-profiles").Realm("batch-test").Swamp("user-alice"),
+			name.New().Sanctuary("unittest-profiles").Realm("batch-test").Swamp("user-bob"),
+			name.New().Sanctuary("unittest-profiles").Realm("batch-test").Swamp("user-charlie"),
+			name.New().Sanctuary("unittest-profiles").Realm("batch-test").Swamp("user-diana"),
+			name.New().Sanctuary("unittest-profiles").Realm("batch-test").Swamp("user-eve"),
+		}
+
+		var results []*UserProfile
+		var callCount int
+
+		err := hydraidegoInterface.ProfileReadBatch(ctx, swampNames, &UserProfile{}, func(swampName name.Name, model any, err error) error {
+			callCount++
+			require.NoError(t, err, "ProfileReadBatch should not return error for swamp: %s", swampName.Get())
+
+			profile := model.(*UserProfile)
+			results = append(results, profile)
+			return nil
+		})
+
+		require.NoError(t, err, "ProfileReadBatch should succeed")
+		assert.Equal(t, 5, callCount, "Iterator should be called 5 times")
+		assert.Equal(t, 5, len(results), "Should have 5 profiles loaded")
+
+		// Verify each profile
+		expectedUsers := map[string]struct {
+			email    string
+			age      int
+			isActive bool
+		}{
+			"alice":   {"alice@example.com", 25, true},
+			"bob":     {"bob@example.com", 30, true},
+			"charlie": {"charlie@example.com", 35, false},
+			"diana":   {"diana@example.com", 28, true},
+			"eve":     {"eve@example.com", 32, true},
+		}
+
+		for _, profile := range results {
+			expected, ok := expectedUsers[profile.Username]
+			require.True(t, ok, "Unexpected username: %s", profile.Username)
+			assert.Equal(t, expected.email, profile.Email, "Email should match for %s", profile.Username)
+			assert.Equal(t, expected.age, profile.Age, "Age should match for %s", profile.Username)
+			assert.Equal(t, expected.isActive, profile.IsActive, "IsActive should match for %s", profile.Username)
+			assert.False(t, profile.LastLoginTime.IsZero(), "LastLoginTime should be set for %s", profile.Username)
+		}
+	})
+
+	// Step 3: Test with non-existent swamp
+	t.Run("Step3_ReadBatchWithNonExistentSwamp", func(t *testing.T) {
+		swampNames := []name.Name{
+			name.New().Sanctuary("unittest-profiles").Realm("batch-test").Swamp("user-alice"),
+			name.New().Sanctuary("unittest-profiles").Realm("batch-test").Swamp("user-nonexistent"), // This doesn't exist
+			name.New().Sanctuary("unittest-profiles").Realm("batch-test").Swamp("user-bob"),
+		}
+
+		var successCount int
+		var errorCount int
+
+		err := hydraidegoInterface.ProfileReadBatch(ctx, swampNames, &UserProfile{}, func(swampName name.Name, model any, err error) error {
+			if err != nil {
+				errorCount++
+				assert.Contains(t, swampName.Get(), "user-nonexistent", "Error should be for non-existent swamp")
+				return nil // Continue processing other swamps
+			}
+			successCount++
+			return nil
+		})
+
+		require.NoError(t, err, "ProfileReadBatch should not fail even if some swamps don't exist")
+		assert.Equal(t, 2, successCount, "Should successfully read 2 existing swamps")
+		assert.Equal(t, 1, errorCount, "Should have 1 error for non-existent swamp")
+	})
+
+	// Step 4: Test with empty swamp list
+	t.Run("Step4_ReadBatchWithEmptyList", func(t *testing.T) {
+		var swampNames []name.Name
+		var callCount int
+
+		err := hydraidegoInterface.ProfileReadBatch(ctx, swampNames, &UserProfile{}, func(swampName name.Name, model any, err error) error {
+			callCount++
+			return nil
+		})
+
+		// Should handle empty list gracefully
+		assert.Error(t, err, "Should return error for empty swamp list")
+		assert.Equal(t, 0, callCount, "Iterator should not be called for empty list")
+	})
+
+	// Step 5: Cleanup - destroy all test swamps
+	t.Run("Step5_Cleanup", func(t *testing.T) {
+		swampIDs := []string{"user-alice", "user-bob", "user-charlie", "user-diana", "user-eve"}
+		for _, swampID := range swampIDs {
+			swampName := name.New().Sanctuary("unittest-profiles").Realm("batch-test").Swamp(swampID)
+			err := hydraidegoInterface.Destroy(ctx, swampName)
+			assert.NoError(t, err, "Destroy should succeed for %s", swampID)
+		}
+	})
+}
+
+// TestProfileSaveBatch tests the batch profile save functionality
+func TestProfileSaveBatch(t *testing.T) {
+	ctx := context.Background()
+
+	// Define a profile model for testing
+	type UserProfile struct {
+		Username      string    `hydraide:"Username"`
+		Email         string    `hydraide:"Email"`
+		Age           int       `hydraide:"Age"`
+		IsActive      bool      `hydraide:"IsActive"`
+		LastLoginTime time.Time `hydraide:"LastLoginTime"`
+		Score         float64   `hydraide:"Score,omitempty,deletable"`
+	}
+
+	// Step 1: Save multiple profiles using ProfileSaveBatch
+	t.Run("Step1_SaveBatch", func(t *testing.T) {
+		swampNames := []name.Name{
+			name.New().Sanctuary("unittest-profiles").Realm("batch-save-test").Swamp("user-alice"),
+			name.New().Sanctuary("unittest-profiles").Realm("batch-save-test").Swamp("user-bob"),
+			name.New().Sanctuary("unittest-profiles").Realm("batch-save-test").Swamp("user-charlie"),
+			name.New().Sanctuary("unittest-profiles").Realm("batch-save-test").Swamp("user-diana"),
+			name.New().Sanctuary("unittest-profiles").Realm("batch-save-test").Swamp("user-eve"),
+		}
+
+		profiles := []any{
+			&UserProfile{Username: "alice", Email: "alice@test.com", Age: 25, IsActive: true, LastLoginTime: time.Now().UTC(), Score: 100.5},
+			&UserProfile{Username: "bob", Email: "bob@test.com", Age: 30, IsActive: true, LastLoginTime: time.Now().UTC(), Score: 200.75},
+			&UserProfile{Username: "charlie", Email: "charlie@test.com", Age: 35, IsActive: false, LastLoginTime: time.Now().UTC(), Score: 150.0},
+			&UserProfile{Username: "diana", Email: "diana@test.com", Age: 28, IsActive: true, LastLoginTime: time.Now().UTC(), Score: 300.25},
+			&UserProfile{Username: "eve", Email: "eve@test.com", Age: 32, IsActive: true, LastLoginTime: time.Now().UTC(), Score: 250.5},
+		}
+
+		var successCount int
+		var errorCount int
+
+		err := hydraidegoInterface.ProfileSaveBatch(ctx, swampNames, profiles, func(swampName name.Name, err error) error {
+			if err != nil {
+				errorCount++
+				t.Logf("❌ Failed to save %s: %v", swampName.Get(), err)
+				return nil // Continue with other profiles
+			}
+			successCount++
+			return nil
+		})
+
+		require.NoError(t, err, "ProfileSaveBatch should succeed")
+		assert.Equal(t, 5, successCount, "Should have saved 5 profiles")
+		assert.Equal(t, 0, errorCount, "Should have no errors")
+	})
+
+	// Step 2: Read back the profiles to verify they were saved correctly
+	t.Run("Step2_VerifyBatchSave", func(t *testing.T) {
+		swampNames := []name.Name{
+			name.New().Sanctuary("unittest-profiles").Realm("batch-save-test").Swamp("user-alice"),
+			name.New().Sanctuary("unittest-profiles").Realm("batch-save-test").Swamp("user-bob"),
+			name.New().Sanctuary("unittest-profiles").Realm("batch-save-test").Swamp("user-charlie"),
+			name.New().Sanctuary("unittest-profiles").Realm("batch-save-test").Swamp("user-diana"),
+			name.New().Sanctuary("unittest-profiles").Realm("batch-save-test").Swamp("user-eve"),
+		}
+
+		var results []*UserProfile
+
+		err := hydraidegoInterface.ProfileReadBatch(ctx, swampNames, &UserProfile{}, func(swampName name.Name, model any, err error) error {
+			require.NoError(t, err, "ProfileReadBatch should not return error for swamp: %s", swampName.Get())
+			profile := model.(*UserProfile)
+			results = append(results, profile)
+			return nil
+		})
+
+		require.NoError(t, err, "ProfileReadBatch should succeed")
+		assert.Equal(t, 5, len(results), "Should have read 5 profiles")
+
+		// Verify specific values
+		expectedUsers := map[string]struct {
+			email    string
+			age      int
+			isActive bool
+			score    float64
+		}{
+			"alice":   {"alice@test.com", 25, true, 100.5},
+			"bob":     {"bob@test.com", 30, true, 200.75},
+			"charlie": {"charlie@test.com", 35, false, 150.0},
+			"diana":   {"diana@test.com", 28, true, 300.25},
+			"eve":     {"eve@test.com", 32, true, 250.5},
+		}
+
+		for _, profile := range results {
+			expected, ok := expectedUsers[profile.Username]
+			require.True(t, ok, "Unexpected username: %s", profile.Username)
+			assert.Equal(t, expected.email, profile.Email, "Email should match for %s", profile.Username)
+			assert.Equal(t, expected.age, profile.Age, "Age should match for %s", profile.Username)
+			assert.Equal(t, expected.isActive, profile.IsActive, "IsActive should match for %s", profile.Username)
+			assert.InDelta(t, expected.score, profile.Score, 0.001, "Score should match for %s", profile.Username)
+		}
+	})
+
+	// Step 3: Update profiles using batch save (test deletable field)
+	t.Run("Step3_UpdateBatchWithDeletable", func(t *testing.T) {
+		swampNames := []name.Name{
+			name.New().Sanctuary("unittest-profiles").Realm("batch-save-test").Swamp("user-alice"),
+			name.New().Sanctuary("unittest-profiles").Realm("batch-save-test").Swamp("user-bob"),
+		}
+
+		// Update alice and bob - set Score to 0 (should delete due to deletable tag)
+		profiles := []any{
+			&UserProfile{Username: "alice", Email: "alice_updated@test.com", Age: 26, IsActive: true, LastLoginTime: time.Now().UTC(), Score: 0},
+			&UserProfile{Username: "bob", Email: "bob_updated@test.com", Age: 31, IsActive: false, LastLoginTime: time.Now().UTC(), Score: 0},
+		}
+
+		var successCount int
+
+		err := hydraidegoInterface.ProfileSaveBatch(ctx, swampNames, profiles, func(swampName name.Name, err error) error {
+			require.NoError(t, err, "Should save successfully for %s", swampName.Get())
+			successCount++
+			return nil
+		})
+
+		require.NoError(t, err, "ProfileSaveBatch should succeed")
+		assert.Equal(t, 2, successCount, "Should have saved 2 profiles")
+
+		// Verify updates
+		var results []*UserProfile
+		err = hydraidegoInterface.ProfileReadBatch(ctx, swampNames, &UserProfile{}, func(swampName name.Name, model any, err error) error {
+			require.NoError(t, err)
+			results = append(results, model.(*UserProfile))
+			return nil
+		})
+
+		require.NoError(t, err)
+		assert.Equal(t, 2, len(results))
+
+		for _, profile := range results {
+			if profile.Username == "alice" {
+				assert.Equal(t, "alice_updated@test.com", profile.Email)
+				assert.Equal(t, 26, profile.Age)
+				assert.True(t, profile.IsActive)
+				assert.Equal(t, 0.0, profile.Score, "Score should be 0 (deleted due to deletable)")
+			} else if profile.Username == "bob" {
+				assert.Equal(t, "bob_updated@test.com", profile.Email)
+				assert.Equal(t, 31, profile.Age)
+				assert.False(t, profile.IsActive)
+				assert.Equal(t, 0.0, profile.Score, "Score should be 0 (deleted due to deletable)")
+			}
+		}
+	})
+
+	// Step 4: Test with mismatched lengths (validation)
+	t.Run("Step4_MismatchedLengths", func(t *testing.T) {
+		swampNames := []name.Name{
+			name.New().Sanctuary("unittest-profiles").Realm("batch-save-test").Swamp("user-alice"),
+			name.New().Sanctuary("unittest-profiles").Realm("batch-save-test").Swamp("user-bob"),
+		}
+
+		profiles := []any{
+			&UserProfile{Username: "alice", Email: "alice@test.com", Age: 25, IsActive: true, LastLoginTime: time.Now().UTC()},
+		}
+
+		err := hydraidegoInterface.ProfileSaveBatch(ctx, swampNames, profiles, func(swampName name.Name, err error) error {
+			return nil
+		})
+
+		assert.Error(t, err, "Should return error for mismatched lengths")
+		assert.Contains(t, err.Error(), "must have the same length")
+	})
+
+	// Step 5: Test with empty list
+	t.Run("Step5_EmptyList", func(t *testing.T) {
+		var swampNames []name.Name
+		var profiles []any
+
+		err := hydraidegoInterface.ProfileSaveBatch(ctx, swampNames, profiles, func(swampName name.Name, err error) error {
+			return nil
+		})
+
+		assert.Error(t, err, "Should return error for empty list")
+	})
+
+	// Step 6: Cleanup - destroy all test swamps
+	t.Run("Step6_Cleanup", func(t *testing.T) {
+		swampIDs := []string{"user-alice", "user-bob", "user-charlie", "user-diana", "user-eve"}
+		for _, swampID := range swampIDs {
+			swampName := name.New().Sanctuary("unittest-profiles").Realm("batch-save-test").Swamp(swampID)
+			err := hydraidegoInterface.Destroy(ctx, swampName)
+			assert.NoError(t, err, "Destroy should succeed for %s", swampID)
+		}
+	})
+}
