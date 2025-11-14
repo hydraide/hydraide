@@ -494,6 +494,104 @@ Great for:
 
 ---
 
+#### 🔎 Batch key-based shift — CatalogShiftBatch
+
+CatalogShiftBatch is designed for scenarios where you need to **retrieve and delete** multiple Treasures by their keys in a single atomic operation. This is particularly useful for job queue processing, message consumption, shopping cart checkout, and other consume-and-remove workflows.
+
+**What makes it different from CatalogReadBatch?**
+
+- CatalogReadBatch **reads** Treasures without deleting them
+- CatalogShiftBatch **reads AND deletes** Treasures in one atomic operation
+- Each Treasure is cloned before deletion, ensuring you get the full data
+- Original Treasures are permanently removed from the Swamp (not shadow delete)
+
+**Key characteristics:**
+
+- ⚡ **Atomic operation**: Each treasure is locked, cloned, and deleted safely
+- 🔒 **Thread-safe**: Treasure-level locks prevent concurrent access issues
+- 🗑️ **Permanent deletion**: Removed treasures cannot be recovered
+- 🔕 **Event notifications**: All swamp subscribers receive deletion events
+- 🎯 **Selective**: Only specified keys are affected
+- 🚫 **Graceful**: Missing keys are silently ignored (no error)
+
+**Requirements:**
+
+- Iterator must not be nil
+- Model must be a non-pointer type (the SDK internally creates new instances per record)
+- Keys can be an empty slice (returns immediately with no error)
+
+**Quick example — Job Queue Processing:**
+
+```go
+// Define your job model
+type CatalogModelJob struct {
+    JobID      string    `hydraide:"key"`
+    Payload    string    `hydraide:"value"`
+    Priority   int       `hydraide:"priority"`
+    CreatedBy  string    `hydraide:"createdBy"`
+    CreatedAt  time.Time `hydraide:"createdAt"`
+}
+
+// Fetch and consume jobs from the queue
+func ProcessJobBatch(r repo.Repo, jobIDs []string) error {
+    ctx, cancel := hydraidehelper.CreateHydraContext()
+    defer cancel()
+
+    h := r.GetHydraidego()
+    swamp := name.New().Sanctuary("jobs").Realm("catalog").Swamp("pending")
+
+    // Shift (clone and delete) jobs atomically
+    return h.CatalogShiftBatch(ctx, swamp, jobIDs, CatalogModelJob{}, func(m any) error {
+        job := m.(*CatalogModelJob)
+        
+        // Process the job (it's already deleted from the queue)
+        if err := executeJob(job); err != nil {
+            log.Printf("Job %s failed: %v", job.JobID, err)
+            // Job is already deleted, handle failure appropriately
+            return err
+        }
+        
+        log.Printf("✅ Job %s completed", job.JobID)
+        return nil
+    })
+}
+```
+
+**Use cases:**
+
+- 📦 **Job queue workers**: Fetch jobs and acknowledge (delete) them atomically
+- 🛒 **Shopping cart checkout**: Retrieve cart items and remove them in one call
+- 📨 **Message queue consumers**: Read and acknowledge messages
+- 🗃️ **Batch cleanup**: Extract items for archival before deletion
+- ⚙️ **Task processing**: Claim and remove tasks without race conditions
+
+**Comparison with other batch operations:**
+
+| Operation             | Reads Data | Deletes Data | Use Case |
+|-----------------------|------------|--------------|----------|
+| `CatalogReadBatch`    | ✅ Yes     | ❌ No        | Fetch multiple records by keys |
+| `CatalogShiftBatch`   | ✅ Yes     | ✅ Yes       | Consume and remove records atomically |
+| `CatalogShiftExpired` | ✅ Yes     | ✅ Yes       | Process expired items by TTL |
+| `CatalogDeleteMany`   | ❌ No      | ✅ Yes       | Delete without reading data |
+
+**Performance benefits:**
+
+- 30-50× faster than individual read+delete operations in a loop
+- Single gRPC call instead of N network roundtrips
+- No risk of partial deletion (each treasure operation is atomic)
+- No double-processing in concurrent environments
+
+**Important notes:**
+
+- ⚠️ **Destructive operation**: Deleted Treasures cannot be recovered
+- ⚠️ **Permanent deletion**: This is not a shadow delete
+- 📢 **Event stream**: Subscribers will be notified of deletions
+- 🎯 **Order not guaranteed**: Results may come back in any order
+
+> Full example with edge cases and best practices: [catalog_shift_batch.go](examples/models/catalog_shift_batch.go)
+
+---
+
 ### 📚 Good to Know: Split Catalogs When Needed
 
 While Catalog Swamps are highly scalable, **putting too many entries into a single Swamp** can reduce performance 
@@ -625,6 +723,7 @@ Catalogs are not suitable when:
 | CatalogSaveMany           | ✅ Ready | [catalog_save_many.go](examples/models/catalog_save_many.go)             |
 | CatalogSaveManyToMany     | ✅ Ready | [catalog_save_many_to_many.go](examples/models/catalog_save_many_to_many.go)             |
 | CatalogShiftExpired       | ✅ Ready | [catalog_shift_expired.go](examples/models/catalog_shift_expired.go)              |
+| CatalogShiftBatch         | ✅ Ready | [catalog_shift_batch.go](examples/models/catalog_shift_batch.go)              |
 
 ---
 

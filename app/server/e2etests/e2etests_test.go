@@ -739,3 +739,161 @@ func destroySwamp(selectedClient hydraidepbgo.HydraideServiceClient, swampName n
 	}
 
 }
+
+func TestShiftByKeys(t *testing.T) {
+
+	writeInterval := int64(1)
+	maxFileSize := int64(65536)
+
+	swampPattern := name.New().Sanctuary("shifttest").Realm("*").Swamp("*")
+	selectedClient := clientInterface.GetServiceClient(swampPattern)
+	_, err := selectedClient.RegisterSwamp(context.Background(), &hydraidepbgo.RegisterSwampRequest{
+		SwampPattern:   swampPattern.Get(),
+		CloseAfterIdle: int64(3600),
+		WriteInterval:  &writeInterval,
+		MaxFileSize:    &maxFileSize,
+	})
+	assert.NoError(t, err)
+
+	swampName := name.New().Sanctuary("shifttest").Realm("batch").Swamp("shift-by-keys")
+	swampClient := clientInterface.GetServiceClient(swampName)
+	defer func() {
+		_, err = swampClient.Destroy(context.Background(), &hydraidepbgo.DestroyRequest{
+			SwampName: swampName.Get(),
+		})
+		assert.NoError(t, err)
+	}()
+
+	// Create 10 treasures
+	var keyValues []*hydraidepbgo.KeyValuePair
+	for i := 0; i < 10; i++ {
+		myVal := fmt.Sprintf("value-%d", i)
+		createdBy := "test-user"
+		keyValues = append(keyValues, &hydraidepbgo.KeyValuePair{
+			Key:       fmt.Sprintf("item-%d", i),
+			StringVal: &myVal,
+			CreatedAt: timestamppb.Now(),
+			CreatedBy: &createdBy,
+			UpdatedAt: timestamppb.Now(),
+			UpdatedBy: &createdBy,
+		})
+	}
+
+	// Set the treasures
+	setResponse, err := swampClient.Set(context.Background(), &hydraidepbgo.SetRequest{
+		Swamps: []*hydraidepbgo.SwampRequest{
+			{
+				SwampName:        swampName.Get(),
+				CreateIfNotExist: true,
+				Overwrite:        true,
+				KeyValues:        keyValues,
+			},
+		}})
+
+	assert.NoError(t, err)
+	assert.NotNil(t, setResponse)
+	assert.Equal(t, 1, len(setResponse.GetSwamps()), "response should contain one swamp")
+	assert.Equal(t, 10, len(setResponse.GetSwamps()[0].GetKeysAndStatuses()), "the swamp should contain 10 keys")
+
+	slog.Info("Set 10 treasures to swamp", "swamp", swampName.Get())
+
+	// Now shift (clone and delete) specific keys
+	keysToShift := []string{"item-1", "item-3", "item-5", "item-7", "item-9"}
+	shiftResponse, err := swampClient.ShiftByKeys(context.Background(), &hydraidepbgo.ShiftByKeysRequest{
+		SwampName: swampName.Get(),
+		Keys:      keysToShift,
+	})
+
+	assert.NoError(t, err)
+	assert.NotNil(t, shiftResponse)
+	assert.Equal(t, 5, len(shiftResponse.GetTreasures()), "should return 5 shifted treasures")
+
+	slog.Info("Shifted 5 treasures from swamp", "swamp", swampName.Get(), "count", len(shiftResponse.GetTreasures()))
+
+	// Verify the shifted treasures have correct data
+	shiftedKeys := make(map[string]bool)
+	for _, treasure := range shiftResponse.GetTreasures() {
+		shiftedKeys[treasure.GetKey()] = true
+		assert.NotNil(t, treasure.GetStringVal(), "treasure should have string value")
+		slog.Debug("Shifted treasure", "key", treasure.GetKey(), "value", treasure.GetStringVal())
+	}
+
+	// Verify all expected keys were shifted
+	for _, key := range keysToShift {
+		assert.True(t, shiftedKeys[key], "key %s should be in shifted treasures", key)
+	}
+
+	// Verify the shifted keys are deleted from the swamp
+	getResponse, err := swampClient.Get(context.Background(), &hydraidepbgo.GetRequest{
+		Swamps: []*hydraidepbgo.GetSwamp{
+			{
+				SwampName: swampName.Get(),
+				Keys:      keysToShift,
+			},
+		},
+	})
+
+	assert.NoError(t, err)
+	assert.NotNil(t, getResponse)
+
+	// Count existing treasures in the response
+	existingCount := 0
+	for _, treasure := range getResponse.GetSwamps()[0].GetTreasures() {
+		if treasure.IsExist {
+			existingCount++
+		}
+	}
+	assert.Equal(t, 0, existingCount, "shifted keys should be deleted from swamp")
+
+	slog.Info("Verified shifted keys are deleted from swamp")
+
+	// Verify the remaining keys still exist
+	remainingKeys := []string{"item-0", "item-2", "item-4", "item-6", "item-8"}
+	getResponse2, err := swampClient.Get(context.Background(), &hydraidepbgo.GetRequest{
+		Swamps: []*hydraidepbgo.GetSwamp{
+			{
+				SwampName: swampName.Get(),
+				Keys:      remainingKeys,
+			},
+		},
+	})
+
+	assert.NoError(t, err)
+	assert.NotNil(t, getResponse2)
+
+	// Count existing treasures in the response
+	existingCount2 := 0
+	for _, treasure := range getResponse2.GetSwamps()[0].GetTreasures() {
+		if treasure.IsExist {
+			existingCount2++
+		}
+	}
+	assert.Equal(t, 5, existingCount2, "remaining keys should still exist")
+
+	slog.Info("Verified remaining keys still exist in swamp", "count", existingCount2)
+
+	// Test edge case: shift non-existent keys
+	nonExistentKeys := []string{"item-99", "item-100"}
+	shiftResponse2, err := swampClient.ShiftByKeys(context.Background(), &hydraidepbgo.ShiftByKeysRequest{
+		SwampName: swampName.Get(),
+		Keys:      nonExistentKeys,
+	})
+
+	assert.NoError(t, err)
+	assert.NotNil(t, shiftResponse2)
+	assert.Equal(t, 0, len(shiftResponse2.GetTreasures()), "should return empty array for non-existent keys")
+
+	slog.Info("Verified non-existent keys return empty result")
+
+	// Test edge case: empty keys array
+	shiftResponse3, err := swampClient.ShiftByKeys(context.Background(), &hydraidepbgo.ShiftByKeysRequest{
+		SwampName: swampName.Get(),
+		Keys:      []string{},
+	})
+
+	assert.NoError(t, err)
+	assert.NotNil(t, shiftResponse3)
+	assert.Equal(t, 0, len(shiftResponse3.GetTreasures()), "should return empty array for empty keys")
+
+	slog.Info("Test completed successfully")
+}

@@ -73,6 +73,7 @@ type Hydraidego interface {
 	CatalogSaveMany(ctx context.Context, swampName name.Name, models []any, iterator CatalogSaveManyIteratorFunc) error
 	CatalogSaveManyToMany(ctx context.Context, request []*CatalogManyToManyRequest, iterator CatalogSaveManyToManyIteratorFunc) error
 	CatalogShiftExpired(ctx context.Context, swampName name.Name, howMany int32, model any, iterator CatalogShiftExpiredIteratorFunc) error
+	CatalogShiftBatch(ctx context.Context, swampName name.Name, keys []string, model any, iterator CatalogShiftBatchIteratorFunc) error
 	ProfileSave(ctx context.Context, swampName name.Name, model any) (err error)
 	ProfileSaveBatch(ctx context.Context, swampNames []name.Name, models []any, iterator ProfileSaveBatchIteratorFunc) error
 	ProfileRead(ctx context.Context, swampName name.Name, model any) (err error)
@@ -2365,6 +2366,159 @@ func (h *hydraidego) CatalogShiftExpired(ctx context.Context, swampName name.Nam
 			if iterErr := iterator(modelValue); iterErr != nil {
 				return iterErr
 			}
+		}
+	}
+
+	// All operations completed successfully
+	return nil
+
+}
+
+// CatalogShiftBatchIteratorFunc is used to stream per-Treasure result feedback in CatalogShiftBatch.
+//
+// It receives each successfully shifted (cloned and deleted) Treasure as a fully unmarshaled model instance.
+//
+// Parameters:
+//   - `model`: The unmarshaled Treasure that was just removed from the Swamp
+//
+// Returning an error aborts the entire shift operation immediately.
+type CatalogShiftBatchIteratorFunc func(model any) error
+
+// CatalogShiftBatch retrieves and deletes multiple Treasures from a Swamp by their keys in a single atomic operation.
+//
+// This function performs a **batch shift** operation, which combines read, clone, and delete operations
+// for multiple Treasures identified by their keys. It's ideal for scenarios where you need to consume
+// and remove items from the Swamp in one call, such as job queue processing, shopping cart checkout,
+// or message queue consumption.
+//
+// ✅ Use when:
+//   - You want to fetch and delete multiple specific Treasures by their keys in one operation
+//   - You're implementing job queues, task processors, or message consumers
+//   - You need to atomically remove items after retrieving them
+//   - You want to avoid the N+1 problem of reading then deleting multiple items separately
+//
+// ⚙️ Behavior:
+//   - Takes a list of keys and fetches all matching Treasures from the specified Swamp
+//   - For each existing Treasure:
+//   - Locks the Treasure (treasure-level lock, thread-safe)
+//   - Clones the Treasure data
+//   - Deletes the original Treasure from the Swamp (permanent deletion)
+//   - Returns the cloned data
+//   - Missing keys are silently ignored (not an error, just not included in results)
+//   - Each Treasure is unmarshaled into the provided model type
+//   - The iterator is called for each successfully shifted Treasure
+//   - If `keys` is empty, returns immediately with no error
+//
+// 📦 `model` usage:
+//   - This must be a **non-pointer, empty struct instance**, e.g. `Job{}`
+//   - It is used internally to infer the type to which Treasures should be unmarshaled
+//   - ❌ Passing a pointer (e.g. `&Job{}`) will result in an error
+//   - ✅ Always pass the same struct type here that was used when saving the original Treasure
+//
+// 🛡️ Guarantees:
+//   - Thread-safe: treasure-level locks prevent concurrent access issues
+//   - Atomic per treasure: each treasure is cloned and deleted in one operation
+//   - No duplicate processing: once deleted, the treasure is permanently removed
+//   - Order is not guaranteed: results may come back in any order
+//
+// ⚠️ Important notes:
+//   - This is a **destructive operation** — deleted Treasures cannot be recovered
+//   - This is a **permanent deletion** (not shadow delete)
+//   - All Swamp subscribers will receive deletion notifications via the event stream
+//
+// 💡 Ideal for implementing:
+//   - Job queue workers: fetch jobs and acknowledge (delete) them
+//   - Shopping cart checkout: retrieve items and remove them from cart
+//   - Message queue consumers: read and acknowledge messages
+//   - Batch cleanup operations: extract items for archival before deletion
+//   - Task processing systems: claim and remove tasks atomically
+//
+// 💬 If the iterator function returns an error, the operation halts immediately.
+//
+// Example - Job Queue Processing:
+//
+//	jobKeys := []string{"job:123", "job:456", "job:789"}
+//	var processedJobs []Job
+//
+//	err := client.CatalogShiftBatch(ctx, swampName, jobKeys, Job{}, func(model any) error {
+//	    job := model.(*Job)
+//	    // Process the job (it's already deleted from the queue)
+//	    if err := processJob(job); err != nil {
+//	        return err // Stop processing on error
+//	    }
+//	    processedJobs = append(processedJobs, *job)
+//	    return nil
+//	})
+//
+// Example - Shopping Cart Checkout:
+//
+//	itemKeys := []string{"cart:item1", "cart:item2", "cart:item3"}
+//	var purchasedItems []CartItem
+//
+//	err := client.CatalogShiftBatch(ctx, cartSwamp, itemKeys, CartItem{}, func(model any) error {
+//	    item := model.(*CartItem)
+//	    purchasedItems = append(purchasedItems, *item)
+//	    return nil
+//	})
+//	// Items are now removed from cart, ready for purchase processing
+//
+// 🧯 Errors:
+//   - If iterator is nil → `ErrCodeInvalidArgument`
+//   - If model is a pointer → `ErrCodeInvalidArgument`
+//   - Invalid model conversion → `ErrCodeInvalidModel`
+//   - gRPC/connection errors → mapped to consistent SDK error codes
+func (h *hydraidego) CatalogShiftBatch(ctx context.Context, swampName name.Name, keys []string, model any, iterator CatalogShiftBatchIteratorFunc) error {
+
+	// Validate required parameters
+	if iterator == nil {
+		return NewError(ErrCodeInvalidArgument, "iterator can not be nil")
+	}
+
+	// Ensure that the model is not a pointer type (we create new instances internally)
+	if reflect.TypeOf(model).Kind() == reflect.Ptr {
+		return NewError(ErrCodeInvalidArgument, "model cannot be a pointer")
+	}
+
+	// If no keys provided, return early (not an error, just nothing to do)
+	if len(keys) == 0 {
+		return nil
+	}
+
+	// Create the gRPC request for batch shift operation
+	shiftByKeysRequest := &hydraidepbgo.ShiftByKeysRequest{
+		IslandID:  swampName.GetIslandID(h.client.GetAllIslands()),
+		SwampName: swampName.Get(),
+		Keys:      keys,
+	}
+
+	// Send ShiftByKeys request to the HydrAIDE service
+	response, err := h.client.GetServiceClient(swampName).ShiftByKeys(ctx, shiftByKeysRequest)
+
+	// Handle gRPC or internal errors with detailed messages
+	if err != nil {
+		return errorHandler(err)
+	}
+
+	// Iterate through each returned Treasure and convert it into a usable model instance
+	for _, treasure := range response.GetTreasures() {
+
+		// Skip non-existent records (should not happen in shift, but defensive programming)
+		if treasure.IsExist == false {
+			continue
+		}
+
+		// Create a fresh instance of the model (we clone the type, not the original value)
+		modelValue := reflect.New(reflect.TypeOf(model)).Interface()
+
+		// Unmarshal the Treasure into the model using the internal conversion logic
+		if convErr := convertProtoTreasureToCatalogModel(treasure, modelValue); convErr != nil {
+			return NewError(ErrCodeInvalidModel, convErr.Error())
+		}
+
+		// Pass the result to the user-provided iterator function
+		// If it returns an error, halt iteration and return the error
+		if iterErr := iterator(modelValue); iterErr != nil {
+			return iterErr
 		}
 	}
 

@@ -284,6 +284,62 @@ type Swamp interface {
 	// 2. Automating scheduled operations, such as sending emails or notifications, based on expiration times.
 	CloneAndDeleteExpiredTreasures(howMany int32) ([]treasure.Treasure, error)
 
+	// CloneAndDeleteTreasuresByKeys retrieves and deletes multiple Treasures from the Swamp by their unique keys
+	// in a single atomic operation. This function combines read, clone, and delete operations efficiently.
+	//
+	// Parameters:
+	// - keys ([]string): A slice of unique keys identifying the Treasures to retrieve and delete.
+	//
+	// The function processes each key individually:
+	// - If a key exists, the Treasure is cloned and then deleted from the Swamp.
+	// - If a key does not exist, it is silently skipped (no error is returned for missing keys).
+	// - Only successfully retrieved Treasures are returned in the result slice.
+	//
+	// Real-world Examples:
+	// - Example 1: Processing and Removing Batch Jobs
+	//   ----------------------------------------------
+	//   In a job queue system, you might want to retrieve multiple jobs by their IDs, process them,
+	//   and remove them from the queue in one operation to ensure consistency.
+	//
+	//     jobKeys := []string{"job_123", "job_456", "job_789"}
+	//     jobSwamp.BeginVigil()
+	//     jobs, err := jobSwamp.CloneAndDeleteTreasuresByKeys(jobKeys)
+	//     jobSwamp.CeaseVigil()
+	//     if err != nil {
+	//         log.Println("Error retrieving and removing jobs:", err)
+	//     }
+	//     // Process each job...
+	//     for _, job := range jobs {
+	//         // Process job logic...
+	//     }
+	//
+	// - Example 2: Shopping Cart Checkout
+	//   ----------------------------------
+	//   When a user completes a purchase, retrieve all cart items by their IDs and remove them
+	//   from the cart Swamp atomically.
+	//
+	//     cartItemKeys := []string{"item_1", "item_2", "item_3"}
+	//     cartSwamp.BeginVigil()
+	//     items, err := cartSwamp.CloneAndDeleteTreasuresByKeys(cartItemKeys)
+	//     cartSwamp.CeaseVigil()
+	//     if err != nil {
+	//         log.Println("Error processing checkout:", err)
+	//     }
+	//     // Process purchase for each item...
+	//
+	// Returns:
+	// - ([]treasure.Treasure): A slice containing clones of all successfully retrieved and deleted Treasures.
+	//                          If a key does not exist, it won't appear in the result.
+	//                          Returns an empty slice if none of the keys exist.
+	// - (error): An error if any issues occur during the operation (e.g., Swamp is closing).
+	//
+	// Use-cases:
+	// 1. Batch processing of work items that need to be consumed and removed.
+	// 2. Shopping cart operations where items are retrieved and removed upon checkout.
+	// 3. Message queue processing where messages are read and acknowledged (deleted) atomically.
+	// 4. Cleanup operations where specific items need to be extracted and archived before deletion.
+	CloneAndDeleteTreasuresByKeys(keys []string) ([]treasure.Treasure, error)
+
 	// DeleteTreasure deletes a single "Treasure" from a "Swamp" by its unique key.
 	//
 	// Parameters:
@@ -2339,6 +2395,48 @@ func (s *swamp) CloneAndDeleteExpiredTreasures(howMany int32) ([]treasure.Treasu
 
 	// return with the shifted treasures
 	return shiftedTreasures, nil
+}
+
+// CloneAndDeleteTreasuresByKeys retrieves and deletes multiple Treasures from the Swamp by their unique keys.
+// This is an atomic operation that clones each Treasure and then removes it from the Swamp.
+// Use this function carefully as it deletes the Treasures from the Swamp.
+func (s *swamp) CloneAndDeleteTreasuresByKeys(keys []string) ([]treasure.Treasure, error) {
+
+	// set the last interaction time to the current time
+	atomic.StoreInt64(&s.lastInteractionTime, time.Now().UnixNano())
+
+	// If no keys provided, return empty slice
+	if len(keys) == 0 {
+		return []treasure.Treasure{}, nil
+	}
+
+	// Pre-allocate slice with capacity (though actual size may be smaller if some keys don't exist)
+	result := make([]treasure.Treasure, 0, len(keys))
+
+	// Iterate through all keys and process existing treasures
+	for _, key := range keys {
+		// Check if the treasure exists
+		if treasureObj := s.beaconKey.Get(key); treasureObj != nil {
+			// Start treasure guard with write lock (true = write lock)
+			lockerID := treasureObj.StartTreasureGuard(true)
+
+			// Clone the treasure before deletion
+			clonedTreasure := treasureObj.Clone(lockerID)
+
+			// Release the treasure guard
+			treasureObj.ReleaseTreasureGuard(lockerID)
+
+			// Add cloned treasure to result
+			result = append(result, clonedTreasure)
+
+			// Delete the treasure from the swamp (permanent deletion, not shadow delete)
+			// This is similar to CloneAndDeleteExpiredTreasures where we always do real deletion
+			s.deleteHandler(key, false)
+		}
+		// Missing keys are silently ignored (as per specification)
+	}
+
+	return result, nil
 }
 
 // TreasureExists Checks if the given key exists in the swamp.

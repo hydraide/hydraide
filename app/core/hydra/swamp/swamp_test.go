@@ -3768,3 +3768,221 @@ func TestSwamp_GetTreasuresByKeys(t *testing.T) {
 		swampInterface.Destroy()
 	})
 }
+
+func TestSwamp_CloneAndDeleteTreasuresByKeys(t *testing.T) {
+
+	fsInterface := filesystem.New()
+	settingsInterface := settings.New(testMaxDepth, testMaxFolderPerLevel)
+	fss := &settings.FileSystemSettings{
+		WriteIntervalSec: 1,
+		MaxFileSizeByte:  8192,
+	}
+	settingsInterface.RegisterPattern(name.New().Sanctuary(sanctuaryForQuickTest).Realm("*").Swamp("*"), false, 1, fss)
+	closeAfterIdle := 10 * time.Second
+	writeInterval := 1 * time.Second
+	maxFileSize := int64(8192)
+
+	t.Run("should clone and delete existing treasures by keys", func(t *testing.T) {
+
+		swampName := name.New().Sanctuary(sanctuaryForQuickTest).Realm("clone-delete").Swamp("basic-test")
+
+		hashPath := swampName.GetFullHashPath(settingsInterface.GetHydraAbsDataFolderPath(), testAllServers, testMaxDepth, testMaxFolderPerLevel)
+		chroniclerInterface := chronicler.New(hashPath, maxFileSize, testMaxDepth, fsInterface, metadata.New(hashPath))
+		chroniclerInterface.CreateDirectoryIfNotExists()
+
+		swampEventCallbackFunc := func(e *Event) {}
+		closeCallbackFunc := func(n name.Name) {
+			t.Log("swamp closed" + n.Get())
+		}
+		swampInfoCallbackFunc := func(i *Info) {}
+
+		fssSwamp := &FilesystemSettings{
+			ChroniclerInterface: chroniclerInterface,
+			WriteInterval:       writeInterval,
+		}
+
+		metadataInterface := metadata.New(hashPath)
+		swampInterface := New(swampName, closeAfterIdle, fssSwamp, swampEventCallbackFunc, swampInfoCallbackFunc, closeCallbackFunc, metadataInterface)
+
+		swampInterface.BeginVigil()
+
+		// Create 10 treasures
+		for i := 0; i < 10; i++ {
+			treasureInterface := swampInterface.CreateTreasure(fmt.Sprintf("treasure-%d", i))
+			assert.NotNil(t, treasureInterface)
+			guardID := treasureInterface.StartTreasureGuard(true)
+			treasureInterface.SetContentString(guardID, fmt.Sprintf("value-%d", i))
+			_ = treasureInterface.Save(guardID)
+			treasureInterface.ReleaseTreasureGuard(guardID)
+		}
+
+		// Verify all treasures exist
+		assert.Equal(t, 10, swampInterface.CountTreasures(), "Should have 10 treasures initially")
+
+		// Clone and delete specific keys
+		keysToShift := []string{"treasure-1", "treasure-3", "treasure-5", "treasure-7"}
+		shiftedTreasures, err := swampInterface.CloneAndDeleteTreasuresByKeys(keysToShift)
+
+		assert.NoError(t, err)
+		assert.Equal(t, 4, len(shiftedTreasures), "Should return 4 shifted treasures")
+
+		// Verify the shifted treasures have correct values
+		for i, treasure := range shiftedTreasures {
+			assert.NotNil(t, treasure)
+			t.Logf("Shifted treasure %d: key=%s", i, treasure.GetKey())
+		}
+
+		// Verify treasures were deleted from swamp
+		assert.Equal(t, 6, swampInterface.CountTreasures(), "Should have 6 treasures remaining")
+
+		// Verify specific treasures were deleted
+		_, err = swampInterface.GetTreasure("treasure-1")
+		assert.Error(t, err, "treasure-1 should be deleted")
+
+		_, err = swampInterface.GetTreasure("treasure-3")
+		assert.Error(t, err, "treasure-3 should be deleted")
+
+		// Verify other treasures still exist
+		treasure0, err := swampInterface.GetTreasure("treasure-0")
+		assert.NoError(t, err)
+		assert.NotNil(t, treasure0)
+
+		treasure2, err := swampInterface.GetTreasure("treasure-2")
+		assert.NoError(t, err)
+		assert.NotNil(t, treasure2)
+
+		swampInterface.CeaseVigil()
+		swampInterface.Destroy()
+	})
+
+	t.Run("should handle non-existent keys gracefully", func(t *testing.T) {
+
+		swampName := name.New().Sanctuary(sanctuaryForQuickTest).Realm("clone-delete").Swamp("missing-keys")
+
+		hashPath := swampName.GetFullHashPath(settingsInterface.GetHydraAbsDataFolderPath(), testAllServers, testMaxDepth, testMaxFolderPerLevel)
+		chroniclerInterface := chronicler.New(hashPath, maxFileSize, testMaxDepth, fsInterface, metadata.New(hashPath))
+		chroniclerInterface.CreateDirectoryIfNotExists()
+
+		swampEventCallbackFunc := func(e *Event) {}
+		closeCallbackFunc := func(n name.Name) {}
+		swampInfoCallbackFunc := func(i *Info) {}
+
+		fssSwamp := &FilesystemSettings{
+			ChroniclerInterface: chroniclerInterface,
+			WriteInterval:       writeInterval,
+		}
+
+		metadataInterface := metadata.New(hashPath)
+		swampInterface := New(swampName, closeAfterIdle, fssSwamp, swampEventCallbackFunc, swampInfoCallbackFunc, closeCallbackFunc, metadataInterface)
+
+		swampInterface.BeginVigil()
+
+		// Create only 3 treasures
+		for i := 0; i < 3; i++ {
+			treasureInterface := swampInterface.CreateTreasure(fmt.Sprintf("treasure-%d", i))
+			guardID := treasureInterface.StartTreasureGuard(true)
+			_ = treasureInterface.Save(guardID)
+			treasureInterface.ReleaseTreasureGuard(guardID)
+		}
+
+		// Try to shift keys that partially exist
+		keysToShift := []string{"treasure-0", "treasure-99", "treasure-1", "treasure-88", "treasure-2"}
+		shiftedTreasures, err := swampInterface.CloneAndDeleteTreasuresByKeys(keysToShift)
+
+		assert.NoError(t, err)
+		assert.Equal(t, 3, len(shiftedTreasures), "Should only return 3 existing treasures")
+
+		// Verify all original treasures were deleted
+		assert.Equal(t, 0, swampInterface.CountTreasures(), "All treasures should be deleted")
+
+		swampInterface.CeaseVigil()
+		swampInterface.Destroy()
+	})
+
+	t.Run("should return empty slice for empty keys", func(t *testing.T) {
+
+		swampName := name.New().Sanctuary(sanctuaryForQuickTest).Realm("clone-delete").Swamp("empty-keys")
+
+		hashPath := swampName.GetFullHashPath(settingsInterface.GetHydraAbsDataFolderPath(), testAllServers, testMaxDepth, testMaxFolderPerLevel)
+		chroniclerInterface := chronicler.New(hashPath, maxFileSize, testMaxDepth, fsInterface, metadata.New(hashPath))
+		chroniclerInterface.CreateDirectoryIfNotExists()
+
+		swampEventCallbackFunc := func(e *Event) {}
+		closeCallbackFunc := func(n name.Name) {}
+		swampInfoCallbackFunc := func(i *Info) {}
+
+		fssSwamp := &FilesystemSettings{
+			ChroniclerInterface: chroniclerInterface,
+			WriteInterval:       writeInterval,
+		}
+
+		metadataInterface := metadata.New(hashPath)
+		swampInterface := New(swampName, closeAfterIdle, fssSwamp, swampEventCallbackFunc, swampInfoCallbackFunc, closeCallbackFunc, metadataInterface)
+
+		swampInterface.BeginVigil()
+
+		// Call with empty keys
+		shiftedTreasures, err := swampInterface.CloneAndDeleteTreasuresByKeys([]string{})
+
+		assert.NoError(t, err)
+		assert.NotNil(t, shiftedTreasures)
+		assert.Equal(t, 0, len(shiftedTreasures), "Should return empty slice")
+
+		swampInterface.CeaseVigil()
+		swampInterface.Destroy()
+	})
+
+	t.Run("should properly clone treasure data before deletion", func(t *testing.T) {
+
+		swampName := name.New().Sanctuary(sanctuaryForQuickTest).Realm("clone-delete").Swamp("data-integrity")
+
+		hashPath := swampName.GetFullHashPath(settingsInterface.GetHydraAbsDataFolderPath(), testAllServers, testMaxDepth, testMaxFolderPerLevel)
+		chroniclerInterface := chronicler.New(hashPath, maxFileSize, testMaxDepth, fsInterface, metadata.New(hashPath))
+		chroniclerInterface.CreateDirectoryIfNotExists()
+
+		swampEventCallbackFunc := func(e *Event) {}
+		closeCallbackFunc := func(n name.Name) {}
+		swampInfoCallbackFunc := func(i *Info) {}
+
+		fssSwamp := &FilesystemSettings{
+			ChroniclerInterface: chroniclerInterface,
+			WriteInterval:       writeInterval,
+		}
+
+		metadataInterface := metadata.New(hashPath)
+		swampInterface := New(swampName, closeAfterIdle, fssSwamp, swampEventCallbackFunc, swampInfoCallbackFunc, closeCallbackFunc, metadataInterface)
+
+		swampInterface.BeginVigil()
+
+		// Create a treasure with specific data
+		treasureInterface := swampInterface.CreateTreasure("data-treasure")
+		guardID := treasureInterface.StartTreasureGuard(true)
+		treasureInterface.SetContentString(guardID, "important-data-12345")
+		treasureInterface.SetCreatedBy(guardID, "test-user")
+		treasureInterface.SetModifiedBy(guardID, "test-user")
+		_ = treasureInterface.Save(guardID)
+		treasureInterface.ReleaseTreasureGuard(guardID)
+
+		// Clone and delete the treasure
+		shiftedTreasures, err := swampInterface.CloneAndDeleteTreasuresByKeys([]string{"data-treasure"})
+
+		assert.NoError(t, err)
+		assert.Equal(t, 1, len(shiftedTreasures), "Should return 1 treasure")
+
+		// Verify the cloned data is correct
+		clonedTreasure := shiftedTreasures[0]
+		assert.Equal(t, "data-treasure", clonedTreasure.GetKey())
+		contentStr, contentErr := clonedTreasure.GetContentString()
+		assert.NoError(t, contentErr)
+		assert.Equal(t, "important-data-12345", contentStr)
+		assert.Equal(t, "test-user", clonedTreasure.GetCreatedBy())
+		assert.Equal(t, "test-user", clonedTreasure.GetModifiedBy())
+
+		// Verify the original treasure is deleted
+		_, errGet := swampInterface.GetTreasure("data-treasure")
+		assert.Error(t, errGet, "Original treasure should be deleted")
+
+		swampInterface.CeaseVigil()
+		swampInterface.Destroy()
+	})
+}

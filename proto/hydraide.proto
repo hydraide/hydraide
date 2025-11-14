@@ -124,6 +124,38 @@ service HydraideService {
   // and reducing latency dramatically.
   rpc GetByKeys(GetByKeysRequest) returns (GetByKeysResponse) {}
 
+  // ShiftByKeys retrieves and deletes multiple treasures from a swamp by their keys in a single atomic operation.
+  //
+  // This feature is called **CatalogShiftBatch**, and it combines read, clone, and delete operations
+  // for multiple treasures identified by their keys. This is particularly useful for batch processing
+  // scenarios where items need to be consumed and removed from the swamp.
+  //
+  // ⚠️ Behavioral notes:
+  // - Each treasure is locked individually during the operation (treasure-level locks).
+  // - The request can contain any number of keys (bounded by server configuration).
+  // - The response may be unordered — the server does not need to preserve key order.
+  // - Missing keys are silently ignored (they simply don't appear in the response).
+  // - If none of the keys exist, the response should be empty (not an error).
+  // - This is a permanent deletion (not shadow delete) — similar to ShiftExpiredTreasures behavior.
+  //
+  // ⚠️ Important: This method is destructive – the returned items will be permanently removed from the swamp.
+  //
+  // 🔔 Realtime: All subscribers to the swamp will receive an immediate
+  // notification about the deleted treasures via the SubscribeToEvents stream.
+  //
+  // 💡 Use cases:
+  // - Job queue processing: fetch and acknowledge jobs in one operation
+  // - Shopping cart checkout: retrieve cart items and remove them atomically
+  // - Message queue consumption: read and delete messages in a single call
+  // - Batch cleanup: extract specific items for archival before deletion
+  //
+  // Example workflow:
+  // 1. Client queries a secondary index to find relevant keys
+  // 2. Client calls ShiftByKeys with those keys
+  // 3. Server clones each treasure, deletes it, and returns the clones
+  // 4. Client processes the returned treasures (originals are already removed)
+  rpc ShiftByKeys(ShiftByKeysRequest) returns (ShiftByKeysResponse) {}
+
   // ShiftExpiredTreasures retrieves and deletes expired treasures from a given swamp.
   //
   // This method is ideal for implementing task queues, time-based processing systems,
@@ -960,6 +992,41 @@ message GetByKeysResponse {
   //
   // Only existing keys are included in the response.
   // If none of the requested keys exist, this list will be empty.
+  repeated Treasure Treasures = 1;
+}
+
+// ShiftByKeysRequest allows clients to retrieve and delete multiple treasures by their keys in a single atomic operation.
+//
+// This is the request message for the CatalogShiftBatch feature, which combines clone and delete operations.
+message ShiftByKeysRequest {
+  // SwampName is the fully qualified swamp name to operate on.
+  string SwampName = 1;
+
+  // Keys is the list of keys to retrieve and delete from the swamp.
+  //
+  // The server will:
+  // 1. Lock each treasure individually
+  // 2. Clone the treasure
+  // 3. Delete the original treasure from the swamp
+  // 4. Return the cloned treasures
+  //
+  // Missing keys are silently ignored and will not appear in the response.
+  repeated string Keys = 2;
+
+  // IslandID is the deterministic storage zone (or "island") where this Swamp lives.
+  // Optional island identifier for routing.
+  uint64 IslandID = 3;
+}
+
+// ShiftByKeysResponse contains all the treasures that were successfully retrieved and deleted.
+message ShiftByKeysResponse {
+  // Treasures is the list of cloned treasures that were removed from the swamp (unordered).
+  //
+  // Only existing keys are included in the response.
+  // If none of the requested keys exist, this list will be empty.
+  //
+  // ⚠️ Important: These treasures have already been deleted from the swamp.
+  // The returned data is a clone of what existed before deletion.
   repeated Treasure Treasures = 1;
 }
 

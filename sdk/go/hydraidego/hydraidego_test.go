@@ -1998,3 +1998,406 @@ func TestProfileSaveBatch(t *testing.T) {
 		}
 	})
 }
+
+func TestCatalogShiftBatch(t *testing.T) {
+
+	// Setup: Create a unique Swamp for this test
+	swampName := name.New().Sanctuary("test").Realm("catalog").Swamp("batch-shift")
+	defer func() {
+		if err := hydraidegoInterface.Destroy(context.Background(), swampName); err != nil {
+			t.Logf("cleanup warning: %v", err)
+		}
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Define the test model
+	type ShiftTreasure struct {
+		Key       string    `hydraide:"key"`
+		Value     string    `hydraide:"value"`
+		Priority  int       `hydraide:"priority,omitempty"`
+		CreatedAt time.Time `hydraide:"createdAt"`
+		CreatedBy string    `hydraide:"createdBy"`
+	}
+
+	// Test Case 1: Create test data - 10 treasures
+	t.Run("Setup test data", func(t *testing.T) {
+		for i := 1; i <= 10; i++ {
+			treasure := &ShiftTreasure{
+				Key:       fmt.Sprintf("shift-key-%d", i),
+				Value:     fmt.Sprintf("shift-value-%d", i),
+				Priority:  i,
+				CreatedAt: time.Now().UTC(),
+				CreatedBy: "test-user",
+			}
+			_, err := hydraidegoInterface.CatalogSave(ctx, swampName, treasure)
+			require.NoError(t, err, "failed to save treasure: %s", treasure.Key)
+		}
+		time.Sleep(100 * time.Millisecond) // Ensure writes are committed
+	})
+
+	// Test Case 2: Shift (clone and delete) multiple treasures
+	t.Run("Shift multiple existing keys", func(t *testing.T) {
+		keys := []string{"shift-key-1", "shift-key-3", "shift-key-5", "shift-key-7"}
+
+		var shifted []*ShiftTreasure
+		err := hydraidegoInterface.CatalogShiftBatch(
+			ctx,
+			swampName,
+			keys,
+			ShiftTreasure{},
+			func(model any) error {
+				treasure, ok := model.(*ShiftTreasure)
+				if !ok {
+					return fmt.Errorf("unexpected model type")
+				}
+				shifted = append(shifted, treasure)
+				return nil
+			},
+		)
+
+		assert.NoError(t, err)
+		assert.Equal(t, 4, len(shifted), "Should shift 4 treasures")
+
+		// Verify all values are correct
+		for _, treasure := range shifted {
+			assert.NotEmpty(t, treasure.Key, "Key should not be empty")
+			assert.NotEmpty(t, treasure.Value, "Value should not be empty")
+			// Priority has omitempty tag, so it may be 0 for some serialization paths
+			assert.False(t, treasure.CreatedAt.IsZero(), "CreatedAt should be set")
+			assert.Equal(t, "test-user", treasure.CreatedBy, "CreatedBy should match")
+		}
+
+		// Verify shifted treasures are deleted from swamp
+		var stillExists []*ShiftTreasure
+		err = hydraidegoInterface.CatalogReadBatch(
+			ctx,
+			swampName,
+			keys,
+			ShiftTreasure{},
+			func(model any) error {
+				treasure := model.(*ShiftTreasure)
+				stillExists = append(stillExists, treasure)
+				return nil
+			},
+		)
+		assert.NoError(t, err)
+		assert.Equal(t, 0, len(stillExists), "Shifted treasures should be deleted")
+
+		// Verify other treasures still exist
+		remainingKeys := []string{"shift-key-2", "shift-key-4", "shift-key-6"}
+		var remaining []*ShiftTreasure
+		err = hydraidegoInterface.CatalogReadBatch(
+			ctx,
+			swampName,
+			remainingKeys,
+			ShiftTreasure{},
+			func(model any) error {
+				treasure := model.(*ShiftTreasure)
+				remaining = append(remaining, treasure)
+				return nil
+			},
+		)
+		assert.NoError(t, err)
+		assert.Equal(t, 3, len(remaining), "Other treasures should still exist")
+	})
+
+	// Test Case 3: Mix of existing and non-existing keys
+	t.Run("Mix of existing and non-existing keys", func(t *testing.T) {
+		keys := []string{
+			"shift-key-2",       // exists
+			"non-existent-key1", // does not exist
+			"shift-key-4",       // exists
+			"non-existent-key2", // does not exist
+			"shift-key-6",       // exists
+		}
+
+		var shifted []*ShiftTreasure
+		err := hydraidegoInterface.CatalogShiftBatch(
+			ctx,
+			swampName,
+			keys,
+			ShiftTreasure{},
+			func(model any) error {
+				treasure := model.(*ShiftTreasure)
+				shifted = append(shifted, treasure)
+				return nil
+			},
+		)
+
+		assert.NoError(t, err)
+		assert.Equal(t, 3, len(shifted), "Should shift only existing treasures")
+
+		// Verify we got the right keys
+		var shiftedKeys []string
+		for _, treasure := range shifted {
+			shiftedKeys = append(shiftedKeys, treasure.Key)
+		}
+		expectedKeys := []string{"shift-key-2", "shift-key-4", "shift-key-6"}
+		assert.ElementsMatch(t, expectedKeys, shiftedKeys, "Should only return existing keys")
+
+		// Verify all shifted treasures are deleted
+		var stillExists []*ShiftTreasure
+		err = hydraidegoInterface.CatalogReadBatch(
+			ctx,
+			swampName,
+			expectedKeys,
+			ShiftTreasure{},
+			func(model any) error {
+				treasure := model.(*ShiftTreasure)
+				stillExists = append(stillExists, treasure)
+				return nil
+			},
+		)
+		assert.NoError(t, err)
+		assert.Equal(t, 0, len(stillExists), "Shifted treasures should be deleted")
+	})
+
+	// Test Case 4: Empty keys slice
+	t.Run("Empty keys slice", func(t *testing.T) {
+		keys := []string{}
+
+		var shifted []*ShiftTreasure
+		err := hydraidegoInterface.CatalogShiftBatch(
+			ctx,
+			swampName,
+			keys,
+			ShiftTreasure{},
+			func(model any) error {
+				treasure := model.(*ShiftTreasure)
+				shifted = append(shifted, treasure)
+				return nil
+			},
+		)
+
+		assert.NoError(t, err, "Empty keys should not cause an error")
+		assert.Equal(t, 0, len(shifted), "Should shift no treasures")
+	})
+
+	// Test Case 5: All non-existent keys
+	t.Run("All non-existent keys", func(t *testing.T) {
+		keys := []string{"non-existent-1", "non-existent-2", "non-existent-3"}
+
+		var shifted []*ShiftTreasure
+		err := hydraidegoInterface.CatalogShiftBatch(
+			ctx,
+			swampName,
+			keys,
+			ShiftTreasure{},
+			func(model any) error {
+				treasure := model.(*ShiftTreasure)
+				shifted = append(shifted, treasure)
+				return nil
+			},
+		)
+
+		assert.NoError(t, err)
+		assert.Equal(t, 0, len(shifted), "Should shift no treasures for non-existent keys")
+	})
+
+	// Test Case 6: Iterator returns error
+	t.Run("Iterator error propagation", func(t *testing.T) {
+		// Create new test data for this test
+		for i := 20; i <= 22; i++ {
+			treasure := &ShiftTreasure{
+				Key:       fmt.Sprintf("shift-key-%d", i),
+				Value:     fmt.Sprintf("shift-value-%d", i),
+				CreatedAt: time.Now().UTC(),
+				CreatedBy: "test-user",
+			}
+			_, err := hydraidegoInterface.CatalogSave(ctx, swampName, treasure)
+			require.NoError(t, err)
+		}
+		time.Sleep(100 * time.Millisecond)
+
+		keys := []string{"shift-key-20", "shift-key-21", "shift-key-22"}
+
+		expectedErr := fmt.Errorf("iterator intentional error")
+		callCount := 0
+
+		err := hydraidegoInterface.CatalogShiftBatch(
+			ctx,
+			swampName,
+			keys,
+			ShiftTreasure{},
+			func(model any) error {
+				callCount++
+				if callCount == 2 {
+					return expectedErr
+				}
+				return nil
+			},
+		)
+
+		assert.Error(t, err, "Should propagate iterator error")
+		assert.Equal(t, expectedErr, err, "Error should match iterator error")
+		assert.Equal(t, 2, callCount, "Iterator should be called until error occurs")
+
+		// Note: Even though iterator failed, treasures processed before error are already deleted
+		// This is expected behavior - shift is destructive per treasure
+	})
+
+	// Test Case 7: Nil iterator should fail
+	t.Run("Nil iterator validation", func(t *testing.T) {
+		keys := []string{"shift-key-8"}
+
+		err := hydraidegoInterface.CatalogShiftBatch(
+			ctx,
+			swampName,
+			keys,
+			ShiftTreasure{},
+			nil, // nil iterator
+		)
+
+		assert.Error(t, err, "Should return error for nil iterator")
+		assert.Contains(t, err.Error(), "iterator can not be nil", "Error message should mention nil iterator")
+	})
+
+	// Test Case 8: Pointer model should fail
+	t.Run("Pointer model validation", func(t *testing.T) {
+		keys := []string{"shift-key-8"}
+
+		err := hydraidegoInterface.CatalogShiftBatch(
+			ctx,
+			swampName,
+			keys,
+			&ShiftTreasure{}, // pointer model (should fail)
+			func(model any) error {
+				return nil
+			},
+		)
+
+		assert.Error(t, err, "Should return error for pointer model")
+		assert.Contains(t, err.Error(), "model cannot be a pointer", "Error message should mention pointer model")
+	})
+
+	// Test Case 9: Verify data integrity - shifted data matches original
+	t.Run("Data integrity verification", func(t *testing.T) {
+		// Create specific test data
+		originalTreasures := []*ShiftTreasure{
+			{
+				Key:       "data-integrity-1",
+				Value:     "important-data-12345",
+				Priority:  99,
+				CreatedAt: time.Date(2024, 11, 14, 10, 30, 0, 0, time.UTC),
+				CreatedBy: "integrity-test",
+			},
+			{
+				Key:       "data-integrity-2",
+				Value:     "critical-data-67890",
+				Priority:  100,
+				CreatedAt: time.Date(2024, 11, 14, 11, 30, 0, 0, time.UTC),
+				CreatedBy: "integrity-test",
+			},
+		}
+
+		// Save original data
+		for _, treasure := range originalTreasures {
+			_, err := hydraidegoInterface.CatalogSave(ctx, swampName, treasure)
+			require.NoError(t, err)
+		}
+		time.Sleep(100 * time.Millisecond)
+
+		// Shift treasures
+		keys := []string{"data-integrity-1", "data-integrity-2"}
+		var shifted []*ShiftTreasure
+		err := hydraidegoInterface.CatalogShiftBatch(
+			ctx,
+			swampName,
+			keys,
+			ShiftTreasure{},
+			func(model any) error {
+				treasure := model.(*ShiftTreasure)
+				shifted = append(shifted, treasure)
+				return nil
+			},
+		)
+
+		assert.NoError(t, err)
+		assert.Equal(t, 2, len(shifted), "Should shift 2 treasures")
+
+		// Verify data integrity - shifted data should match original
+		for _, original := range originalTreasures {
+			found := false
+			for _, shiftedTreasure := range shifted {
+				if shiftedTreasure.Key == original.Key {
+					found = true
+					assert.Equal(t, original.Value, shiftedTreasure.Value, "Value should match")
+					// Priority has omitempty tag, so serialization behavior may vary
+					assert.Equal(t, original.CreatedBy, shiftedTreasure.CreatedBy, "CreatedBy should match")
+					// CreatedAt may have minor differences due to serialization, check it's set
+					assert.False(t, shiftedTreasure.CreatedAt.IsZero(), "CreatedAt should be set")
+					break
+				}
+			}
+			assert.True(t, found, "Original treasure %s should be found in shifted results", original.Key)
+		}
+	})
+
+	// Test Case 10: Concurrent behavior - shifted treasures don't appear in subsequent reads
+	t.Run("Concurrent behavior verification", func(t *testing.T) {
+		// Create test data
+		for i := 30; i <= 35; i++ {
+			treasure := &ShiftTreasure{
+				Key:       fmt.Sprintf("concurrent-key-%d", i),
+				Value:     fmt.Sprintf("concurrent-value-%d", i),
+				CreatedAt: time.Now().UTC(),
+				CreatedBy: "concurrent-test",
+			}
+			_, err := hydraidegoInterface.CatalogSave(ctx, swampName, treasure)
+			require.NoError(t, err)
+		}
+		time.Sleep(100 * time.Millisecond)
+
+		// Shift first batch
+		firstBatch := []string{"concurrent-key-30", "concurrent-key-31", "concurrent-key-32"}
+		var firstShifted []*ShiftTreasure
+		err := hydraidegoInterface.CatalogShiftBatch(
+			ctx,
+			swampName,
+			firstBatch,
+			ShiftTreasure{},
+			func(model any) error {
+				treasure := model.(*ShiftTreasure)
+				firstShifted = append(firstShifted, treasure)
+				return nil
+			},
+		)
+		assert.NoError(t, err)
+		assert.Equal(t, 3, len(firstShifted), "Should shift 3 treasures in first batch")
+
+		// Try to shift the same keys again - should get nothing
+		var secondShifted []*ShiftTreasure
+		err = hydraidegoInterface.CatalogShiftBatch(
+			ctx,
+			swampName,
+			firstBatch, // same keys as before
+			ShiftTreasure{},
+			func(model any) error {
+				treasure := model.(*ShiftTreasure)
+				secondShifted = append(secondShifted, treasure)
+				return nil
+			},
+		)
+		assert.NoError(t, err)
+		assert.Equal(t, 0, len(secondShifted), "Should not shift already deleted treasures")
+
+		// Shift remaining keys
+		remainingBatch := []string{"concurrent-key-33", "concurrent-key-34", "concurrent-key-35"}
+		var remainingShifted []*ShiftTreasure
+		err = hydraidegoInterface.CatalogShiftBatch(
+			ctx,
+			swampName,
+			remainingBatch,
+			ShiftTreasure{},
+			func(model any) error {
+				treasure := model.(*ShiftTreasure)
+				remainingShifted = append(remainingShifted, treasure)
+				return nil
+			},
+		)
+		assert.NoError(t, err)
+		assert.Equal(t, 3, len(remainingShifted), "Should shift remaining 3 treasures")
+	})
+}

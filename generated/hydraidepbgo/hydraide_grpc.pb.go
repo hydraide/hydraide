@@ -29,6 +29,7 @@ const (
 	HydraideService_GetAll_FullMethodName                  = "/hydraidepbgo.HydraideService/GetAll"
 	HydraideService_GetByIndex_FullMethodName              = "/hydraidepbgo.HydraideService/GetByIndex"
 	HydraideService_GetByKeys_FullMethodName               = "/hydraidepbgo.HydraideService/GetByKeys"
+	HydraideService_ShiftByKeys_FullMethodName             = "/hydraidepbgo.HydraideService/ShiftByKeys"
 	HydraideService_ShiftExpiredTreasures_FullMethodName   = "/hydraidepbgo.HydraideService/ShiftExpiredTreasures"
 	HydraideService_Destroy_FullMethodName                 = "/hydraidepbgo.HydraideService/Destroy"
 	HydraideService_Delete_FullMethodName                  = "/hydraidepbgo.HydraideService/Delete"
@@ -164,6 +165,37 @@ type HydraideServiceClient interface {
 	// With `GetByKeys`, the same can be done with a *single RPC call*, improving throughput by 30–50×
 	// and reducing latency dramatically.
 	GetByKeys(ctx context.Context, in *GetByKeysRequest, opts ...grpc.CallOption) (*GetByKeysResponse, error)
+	// ShiftByKeys retrieves and deletes multiple treasures from a swamp by their keys in a single atomic operation.
+	//
+	// This feature is called **CatalogShiftBatch**, and it combines read, clone, and delete operations
+	// for multiple treasures identified by their keys. This is particularly useful for batch processing
+	// scenarios where items need to be consumed and removed from the swamp.
+	//
+	// ⚠️ Behavioral notes:
+	// - Each treasure is locked individually during the operation (treasure-level locks).
+	// - The request can contain any number of keys (bounded by server configuration).
+	// - The response may be unordered — the server does not need to preserve key order.
+	// - Missing keys are silently ignored (they simply don't appear in the response).
+	// - If none of the keys exist, the response should be empty (not an error).
+	// - This is a permanent deletion (not shadow delete) — similar to ShiftExpiredTreasures behavior.
+	//
+	// ⚠️ Important: This method is destructive – the returned items will be permanently removed from the swamp.
+	//
+	// 🔔 Realtime: All subscribers to the swamp will receive an immediate
+	// notification about the deleted treasures via the SubscribeToEvents stream.
+	//
+	// 💡 Use cases:
+	// - Job queue processing: fetch and acknowledge jobs in one operation
+	// - Shopping cart checkout: retrieve cart items and remove them atomically
+	// - Message queue consumption: read and delete messages in a single call
+	// - Batch cleanup: extract specific items for archival before deletion
+	//
+	// Example workflow:
+	// 1. Client queries a secondary index to find relevant keys
+	// 2. Client calls ShiftByKeys with those keys
+	// 3. Server clones each treasure, deletes it, and returns the clones
+	// 4. Client processes the returned treasures (originals are already removed)
+	ShiftByKeys(ctx context.Context, in *ShiftByKeysRequest, opts ...grpc.CallOption) (*ShiftByKeysResponse, error)
 	// ShiftExpiredTreasures retrieves and deletes expired treasures from a given swamp.
 	//
 	// This method is ideal for implementing task queues, time-based processing systems,
@@ -461,6 +493,16 @@ func (c *hydraideServiceClient) GetByKeys(ctx context.Context, in *GetByKeysRequ
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetByKeysResponse)
 	err := c.cc.Invoke(ctx, HydraideService_GetByKeys_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *hydraideServiceClient) ShiftByKeys(ctx context.Context, in *ShiftByKeysRequest, opts ...grpc.CallOption) (*ShiftByKeysResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ShiftByKeysResponse)
+	err := c.cc.Invoke(ctx, HydraideService_ShiftByKeys_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -816,6 +858,37 @@ type HydraideServiceServer interface {
 	// With `GetByKeys`, the same can be done with a *single RPC call*, improving throughput by 30–50×
 	// and reducing latency dramatically.
 	GetByKeys(context.Context, *GetByKeysRequest) (*GetByKeysResponse, error)
+	// ShiftByKeys retrieves and deletes multiple treasures from a swamp by their keys in a single atomic operation.
+	//
+	// This feature is called **CatalogShiftBatch**, and it combines read, clone, and delete operations
+	// for multiple treasures identified by their keys. This is particularly useful for batch processing
+	// scenarios where items need to be consumed and removed from the swamp.
+	//
+	// ⚠️ Behavioral notes:
+	// - Each treasure is locked individually during the operation (treasure-level locks).
+	// - The request can contain any number of keys (bounded by server configuration).
+	// - The response may be unordered — the server does not need to preserve key order.
+	// - Missing keys are silently ignored (they simply don't appear in the response).
+	// - If none of the keys exist, the response should be empty (not an error).
+	// - This is a permanent deletion (not shadow delete) — similar to ShiftExpiredTreasures behavior.
+	//
+	// ⚠️ Important: This method is destructive – the returned items will be permanently removed from the swamp.
+	//
+	// 🔔 Realtime: All subscribers to the swamp will receive an immediate
+	// notification about the deleted treasures via the SubscribeToEvents stream.
+	//
+	// 💡 Use cases:
+	// - Job queue processing: fetch and acknowledge jobs in one operation
+	// - Shopping cart checkout: retrieve cart items and remove them atomically
+	// - Message queue consumption: read and delete messages in a single call
+	// - Batch cleanup: extract specific items for archival before deletion
+	//
+	// Example workflow:
+	// 1. Client queries a secondary index to find relevant keys
+	// 2. Client calls ShiftByKeys with those keys
+	// 3. Server clones each treasure, deletes it, and returns the clones
+	// 4. Client processes the returned treasures (originals are already removed)
+	ShiftByKeys(context.Context, *ShiftByKeysRequest) (*ShiftByKeysResponse, error)
 	// ShiftExpiredTreasures retrieves and deletes expired treasures from a given swamp.
 	//
 	// This method is ideal for implementing task queues, time-based processing systems,
@@ -1048,6 +1121,9 @@ func (UnimplementedHydraideServiceServer) GetByIndex(context.Context, *GetByInde
 }
 func (UnimplementedHydraideServiceServer) GetByKeys(context.Context, *GetByKeysRequest) (*GetByKeysResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetByKeys not implemented")
+}
+func (UnimplementedHydraideServiceServer) ShiftByKeys(context.Context, *ShiftByKeysRequest) (*ShiftByKeysResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ShiftByKeys not implemented")
 }
 func (UnimplementedHydraideServiceServer) ShiftExpiredTreasures(context.Context, *ShiftExpiredTreasuresRequest) (*ShiftExpiredTreasuresResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ShiftExpiredTreasures not implemented")
@@ -1312,6 +1388,24 @@ func _HydraideService_GetByKeys_Handler(srv interface{}, ctx context.Context, de
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(HydraideServiceServer).GetByKeys(ctx, req.(*GetByKeysRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _HydraideService_ShiftByKeys_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ShiftByKeysRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HydraideServiceServer).ShiftByKeys(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HydraideService_ShiftByKeys_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HydraideServiceServer).ShiftByKeys(ctx, req.(*ShiftByKeysRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1744,6 +1838,10 @@ var HydraideService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetByKeys",
 			Handler:    _HydraideService_GetByKeys_Handler,
+		},
+		{
+			MethodName: "ShiftByKeys",
+			Handler:    _HydraideService_ShiftByKeys_Handler,
 		},
 		{
 			MethodName: "ShiftExpiredTreasures",
