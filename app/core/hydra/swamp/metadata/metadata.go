@@ -71,6 +71,11 @@ type Metadata interface {
 	// SetUpdatedAt updates the last modification timestamp to now.
 	SetUpdatedAt()
 
+	// GetBackupAt returns the timestamp of the last successful backup.
+	GetBackupAt() time.Time
+	// SetBackupAt sets the timestamp of the last successful backup.
+	SetBackupAt(t time.Time)
+
 	// Destroy deletes the metadata file and clears the in-memory metadata object.
 	// Useful when the object it was attached to has been deleted and will never be used again.
 	// Note: currently the file system deletes the metadata file via DeleteAllFiles within the swamp folder,
@@ -146,6 +151,22 @@ func (m *metadata) GetUpdatedAt() time.Time {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.meta.UpdatedAt
+}
+
+func (m *metadata) GetBackupAt() time.Time {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.meta.BackupAt
+}
+
+func (m *metadata) SetBackupAt(t time.Time) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	// only set and mark modified if value changed to avoid unnecessary writes
+	if m.meta.BackupAt != t {
+		m.meta.BackupAt = t
+		m.isModified = true
+	}
 }
 
 func (m *metadata) Destroy() {

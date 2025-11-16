@@ -283,6 +283,11 @@ type Hydra interface {
 	// Employing GracefulStop is in our interest as it allows us to maintain high availability and reliability
 	// in our services, ensuring a seamless user experience even during maintenance periods.
 	GracefulStop()
+
+	// SummonSwampByFolderPath opens a swamp by its absolute folder path by reading the metadata file
+	// to recover the original swamp name, and parsing the IslandID from the path relative to Hydra's data root.
+	// This is useful for filesystem scans and backup/restore workflows.
+	SummonSwampByFolderPath(ctx context.Context, absFolderPath string) (swampObj swamp.Swamp, err error)
 }
 
 const (
@@ -815,6 +820,10 @@ func (h *hydra) createNewSwamp(islandID uint64, swampName name.Name) swamp.Swamp
 	if swampSettings.GetSwampType() == setting.PermanentSwamp {
 		fss = &swamp.FilesystemSettings{}
 		fss.ChroniclerInterface = h.loadChronicler(swampSettings, swampDataFolderPath, metadataInterface)
+		// Ensure the directory exists immediately so we can persist metadata right away
+		fss.ChroniclerInterface.CreateDirectoryIfNotExists()
+		// Persist the meta (SwampName) immediately so filesystem scans can reconstruct the name
+		metadataInterface.SaveToFile()
 		fss.WriteInterval = swampSettings.GetWriteInterval()
 	}
 
@@ -1013,4 +1022,60 @@ func (h *hydra) infoCallbackFunction(si *swamp.Info) {
 // closeEventCallbackFunction removes the swamp from the opened swamps map
 func (h *hydra) closeEventCallbackFunction(swampName name.Name) {
 	h.swamps.Delete(swampName.Get())
+}
+
+// SummonSwampByFolderPath opens a swamp by reading its metadata (for Name) and parsing the IslandID from path.
+func (h *hydra) SummonSwampByFolderPath(ctx context.Context, absFolderPath string) (swamp.Swamp, error) {
+	// Basic validations
+	if atomic.LoadInt32(&h.shuttingDown) == 1 {
+		return nil, errors.New(ErrorHydraIsShuttingDown)
+	}
+	if absFolderPath == "" {
+		return nil, errors.New("empty folder path")
+	}
+
+	// Determine the relative path to the Hydra data root to extract the IslandID (first segment)
+	root := h.settingsInterface.GetHydraAbsDataFolderPath()
+	// Normalize by removing the root prefix if present
+	var rel string
+	if strings.HasPrefix(absFolderPath, root) {
+		rel = strings.TrimPrefix(absFolderPath, root)
+		// remove leading path separator if any
+		rel = strings.TrimLeft(rel, "/")
+	} else {
+		// If the folder is not under the configured root, we cannot parse the IslandID deterministically
+		slog.Error("folder path is not under hydra data root", "folder", absFolderPath, "root", root)
+		return nil, errors.New("folder path is not under hydra data root")
+	}
+
+	// Extract the IslandID from the first path segment
+	parts := strings.Split(rel, "/")
+	if len(parts) == 0 || parts[0] == "" {
+		return nil, errors.New("can not parse island id from folder path")
+	}
+	// Convert to uint64
+	var islandID uint64
+	{
+		// parse as base-10 number; ignore leading zeros
+		var parsed uint64
+		for i := 0; i < len(parts[0]); i++ {
+			ch := parts[0][i]
+			if ch < '0' || ch > '9' {
+				return nil, errors.New("invalid island id in path")
+			}
+			parsed = parsed*10 + uint64(ch-'0')
+		}
+		islandID = parsed
+	}
+
+	// Load metadata to recover the original swamp name
+	meta := metadata.New(absFolderPath)
+	meta.LoadFromFile()
+	swName := meta.GetSwampName()
+	if swName == nil || swName.Get() == "" {
+		return nil, errors.New("metadata does not contain swamp name; cannot reconstruct")
+	}
+
+	// Summon using the reconstructed parameters
+	return h.SummonSwamp(ctx, islandID, swName)
 }

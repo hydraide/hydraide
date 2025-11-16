@@ -44,10 +44,11 @@ package name
 
 import (
 	"fmt"
-	"github.com/cespare/xxhash/v2"
 	"path/filepath"
 	"strings"
 	"sync"
+
+	"github.com/cespare/xxhash/v2"
 )
 
 type Name interface {
