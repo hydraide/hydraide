@@ -50,9 +50,19 @@ type CatalogCreditLog struct {
 	// The logical expiration timestamp of this Treasure.
 	//
 	// When set, this field indicates when the data is considered "expired"
-	// and eligible for deletion or TTL-based operations like CatalogShiftExpired.
+	// and can be queried or extracted using expiration-based operations.
 	//
-	// ❗IMPORTANT:
+	// ❗IMPORTANT — HydrAIDE DOES NOT auto-delete expired data!
+	//   - HydrAIDE does NOT automatically remove Treasures when ExpireAt is reached
+	//   - Instead, it provides tools to query or extract expired data on-demand:
+	//     * Query expired data separately using filter operations
+	//     * Use Shift operations (e.g., CatalogShiftExpired) to atomically query AND remove expired items
+	//   - This makes ExpireAt a powerful, unique metadata field for:
+	//     * Task scheduling and time-based workflows
+	//     * Deferred data processing
+	//     * Manual or batch-based cleanup strategies
+	//
+	// ⏰ Timezone handling:
 	//   - Must be a valid, non-zero `time.Time`
 	//   - Strongly recommended to set it in **UTC**, e.g., using `time.Now().UTC()`
 	//   - HydrAIDE internally compares expiration using `time.Now().UTC()`
@@ -66,7 +76,17 @@ type CatalogCreditLog struct {
 	ExpireAt time.Time `hydraide:"expireAt,omitempty"`
 
 	// 🧾 OPTIONAL METADATA — useful for tracking/audit purposes
-	// If omitted, these fields will not be included in the stored record.
+	// If omitted (with `omitempty` tag), these fields will not be included in the stored record.
+	//
+	// ❗IMPORTANT — Non-nullable constraint:
+	//   - If you remove `omitempty` from any of these fields (CreatedAt, UpdatedAt, ExpireAt),
+	//     you MUST provide a valid value at creation time
+	//   - Once set, these fields CANNOT be nullified or zeroed in subsequent updates
+	//   - This ensures data integrity and prevents accidental loss of audit information
+	//
+	// ✅ Example:
+	//   With `omitempty`:    field is optional, can be omitted
+	//   Without `omitempty`: field is REQUIRED, must always have a valid value
 
 	CreatedBy string    `hydraide:"createdBy,omitempty"` // Who created the record
 	CreatedAt time.Time `hydraide:"createdAt,omitempty"` // When it was created
