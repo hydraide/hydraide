@@ -620,20 +620,19 @@ HA BÁRMI HIBA:
 
 **Fázis státusz:** ✅ Kész
 
-### 5.5 Fázis 5: Standalone Migrátor Tool
+### 5.5 Fázis 5: Standalone Migrátor Tool ✅ KÉSZ
 
-- [ ] `hydraidectl migrate` command implementáció
-- [ ] Rekurzív folder bejárás (V1 swamp detektálás)
-- [ ] V1 → V2 konverter (load V1, write V2)
-- [ ] Verify logika (visszaolvasás és összehasonlítás)
-- [ ] Párhuzamos worker pool (konfigurálható)
-- [ ] Progress reporting és logging
-- [ ] Dry-run mód (szimuláció)
-- [ ] Cleanup (régi fájlok törlése)
-- [ ] Rollback támogatás (hiba esetén)
-- [ ] Statisztika generálás (méret előtte/utána, idő, hibák)
+- [x] `hydraidectl migrate` command implementáció
+- [x] Rekurzív folder bejárás (V1 swamp detektálás)
+- [x] V1 → V2 konverter (load V1, write V2)
+- [x] Verify logika (visszaolvasás és összehasonlítás)
+- [x] Párhuzamos worker pool (konfigurálható)
+- [x] Progress reporting és logging
+- [x] Dry-run mód (szimuláció)
+- [x] Cleanup (régi fájlok törlése)
+- [x] Statisztika generálás (méret előtte/utána, idő, hibák)
 
-**Becsült idő:** 3-4 nap
+**Fázis státusz:** ✅ Kész
 
 ### 5.6 Fázis 6: Integráció
 
