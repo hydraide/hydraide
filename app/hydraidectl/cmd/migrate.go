@@ -1,13 +1,21 @@
 package cmd
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/hydraide/hydraide/app/core/hydra/swamp/chronicler/v2/migrator"
+	buildmeta "github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/buildmetadata"
+	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/filesystem"
+	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/instancerunner"
 	"github.com/spf13/cobra"
 )
+
+const migrationLockFile = ".migration-lock"
 
 var migrateCmd = &cobra.Command{
 	Use:   "migrate",
@@ -17,57 +25,136 @@ var migrateCmd = &cobra.Command{
 
 Migrates HydrAIDE swamp data from V1 (multi-file chunks) to V2 (single-file append-only) format.
 
-IMPORTANT: 
-  - Stop the HydrAIDE service before running migration
-  - Create a backup before migration (ZFS snapshot recommended)
-  - Run with --dry-run first to validate
+USAGE WITH INSTANCE (recommended):
+  hydraidectl migrate --instance prod --full
 
-USAGE:
-  1. Validation (dry-run):
-     hydraidectl migrate --data-path=/var/hydraide/data --dry-run
-
-  2. Live migration with verification:
-     hydraidectl migrate --data-path=/var/hydraide/data --verify
-
-  3. Full migration with old file cleanup:
-     hydraidectl migrate --data-path=/var/hydraide/data --verify --delete-old
-
-EXAMPLES:
-  # Validate all swamps (no changes made)
-  hydraidectl migrate --data-path=/var/hydraide/data --dry-run
-
-  # Migrate with verification (keeps old files)
+USAGE WITH DATA PATH (manual):
   hydraidectl migrate --data-path=/var/hydraide/data --verify
 
-  # Full migration with cleanup
-  hydraidectl migrate --data-path=/var/hydraide/data --verify --delete-old --parallel=8
+FLAGS:
+  --instance   Use instance name (automatically handles stop/start/engine)
+  --full       Complete migration: stop → migrate → set engine V2 → cleanup → start
+  --dry-run    Validate only, don't write any data
 `,
 	Run: runMigrate,
 }
 
 var (
-	migrateDataPath   string
-	migrateDryRun     bool
-	migrateVerify     bool
-	migrateDeleteOld  bool
-	migrateParallel   int
-	migrateJSONOutput bool
+	migrateDataPath     string
+	migrateInstanceName string
+	migrateFull         bool
+	migrateDryRun       bool
+	migrateVerify       bool
+	migrateDeleteOld    bool
+	migrateParallel     int
+	migrateJSONOutput   bool
 )
 
 func init() {
 	rootCmd.AddCommand(migrateCmd)
 
-	migrateCmd.Flags().StringVar(&migrateDataPath, "data-path", "", "Path to HydrAIDE data directory (required)")
+	migrateCmd.Flags().StringVarP(&migrateInstanceName, "instance", "i", "", "Instance name (use with --full)")
+	migrateCmd.Flags().StringVar(&migrateDataPath, "data-path", "", "Path to HydrAIDE data directory")
+	migrateCmd.Flags().BoolVar(&migrateFull, "full", false, "Complete migration (stop → migrate → set V2 → cleanup → start)")
 	migrateCmd.Flags().BoolVar(&migrateDryRun, "dry-run", false, "Validate only, don't write any data")
 	migrateCmd.Flags().BoolVar(&migrateVerify, "verify", false, "Verify migration after writing")
 	migrateCmd.Flags().BoolVar(&migrateDeleteOld, "delete-old", false, "Delete old V1 files after successful migration")
 	migrateCmd.Flags().IntVar(&migrateParallel, "parallel", 4, "Number of parallel workers")
 	migrateCmd.Flags().BoolVar(&migrateJSONOutput, "json", false, "Output result as JSON")
-
-	_ = migrateCmd.MarkFlagRequired("data-path")
 }
 
 func runMigrate(cmd *cobra.Command, args []string) {
+	// Handle --instance mode
+	if migrateInstanceName != "" {
+		runMigrateWithInstance()
+		return
+	}
+
+	// Handle --data-path mode (legacy)
+	if migrateDataPath == "" {
+		fmt.Println("❌ Error: --instance or --data-path is required")
+		os.Exit(1)
+	}
+
+	runMigrateWithDataPath()
+}
+
+func runMigrateWithInstance() {
+	fs := filesystem.New()
+	store, err := buildmeta.New(fs)
+	if err != nil {
+		fmt.Printf("❌ Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	instance, err := store.GetInstance(migrateInstanceName)
+	if err != nil {
+		fmt.Printf("❌ Error: Instance '%s' not found: %v\n", migrateInstanceName, err)
+		os.Exit(1)
+	}
+
+	migrateDataPath = filepath.Join(instance.BasePath, "data")
+	settingsPath := filepath.Join(instance.BasePath, "settings", "settings.json")
+	lockPath := filepath.Join(instance.BasePath, migrationLockFile)
+
+	// Check migration lock
+	if _, err := os.Stat(lockPath); err == nil {
+		fmt.Println("❌ Error: Migration already in progress (lock file exists)")
+		fmt.Printf("   Lock file: %s\n", lockPath)
+		fmt.Println("   If no migration is running, delete the lock file manually.")
+		os.Exit(1)
+	}
+
+	// Create lock file
+	if !migrateDryRun {
+		if err := os.WriteFile(lockPath, []byte(time.Now().Format(time.RFC3339)), 0644); err != nil {
+			fmt.Printf("❌ Error creating lock file: %v\n", err)
+			os.Exit(1)
+		}
+		defer os.Remove(lockPath)
+	}
+
+	ctx := context.Background()
+	runner := instancerunner.NewInstanceController()
+
+	// Full migration: stop instance first
+	if migrateFull && !migrateDryRun {
+		fmt.Printf("Stopping instance '%s'...\n", migrateInstanceName)
+		_ = runner.StopInstance(ctx, migrateInstanceName)
+
+		// Enable full mode settings
+		migrateVerify = true
+		migrateDeleteOld = true
+	}
+
+	// Run migration
+	runMigrateWithDataPath()
+
+	// Full migration: set engine and restart
+	if migrateFull && !migrateDryRun {
+		fmt.Println("\nSetting engine to V2...")
+		settings, _ := loadEngineSettings(settingsPath)
+		if settings == nil {
+			settings = &SettingsModelEngine{}
+		}
+		settings.Engine = EngineVersionV2
+		if err := saveEngineSettings(settingsPath, settings); err != nil {
+			fmt.Printf("⚠️  Warning: Could not set engine to V2: %v\n", err)
+		} else {
+			fmt.Println("✅ Engine set to V2")
+		}
+
+		fmt.Printf("\nStarting instance '%s'...\n", migrateInstanceName)
+		if err := runner.StartInstance(ctx, migrateInstanceName); err != nil {
+			fmt.Printf("⚠️  Warning: Could not start instance: %v\n", err)
+			fmt.Printf("   Start manually: sudo hydraidectl start --instance %s\n", migrateInstanceName)
+		} else {
+			fmt.Printf("✅ Instance '%s' started\n", migrateInstanceName)
+		}
+	}
+}
+
+func runMigrateWithDataPath() {
 	// Validate data path
 	if migrateDataPath == "" {
 		fmt.Println("❌ Error: --data-path is required")

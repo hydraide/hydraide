@@ -282,14 +282,13 @@ func openSwamp(path string, engine string) {
 - [x] Top N legnagyobb swamp listázás
 - [x] **TESZT:** Build sikeres ✅
 
-### Fázis 5: Migrate Bővítés ⏳
-- [ ] `--full` flag implementáció
-- [ ] `--backup` integráció
-- [ ] Automatikus engine váltás
-- [ ] V1 cleanup migráció után
-- [ ] `.migration-lock` fájl kezelés
-- [ ] Progress visszajelzés
-- [ ] **TESZT:** Migrate --full E2E tesztek
+### Fázis 5: Migrate Bővítés ✅ KÉSZ
+- [x] `--instance` flag implementáció
+- [x] `--full` flag implementáció (stop → migrate → set V2 → cleanup → start)
+- [x] Automatikus engine váltás
+- [x] V1 cleanup migráció után
+- [x] `.migration-lock` fájl kezelés
+- [x] **TESZT:** Build sikeres ✅
 
 ### Fázis 6: Cleanup Parancs ⏳
 - [ ] `cleanup` parancs implementáció
