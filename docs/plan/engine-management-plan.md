@@ -263,12 +263,12 @@ func openSwamp(path string, engine string) {
 - [x] Hydra engine-alapú chronicler választás
 - [x] **TESZT:** Settings engine mező unit tesztek (4 teszt ✅)
 
-### Fázis 2: hydraidectl engine ⏳
-- [ ] `engine` parancs implementáció
-- [ ] `--set` flag engine váltáshoz
-- [ ] Migráció ellenőrzés V2 beállítás előtt
-- [ ] Instance újraindítás engine váltás után
-- [ ] **TESZT:** Engine parancs unit tesztek
+### Fázis 2: hydraidectl engine ✅ KÉSZ
+- [x] `engine` parancs implementáció
+- [x] `--set` flag engine váltáshoz
+- [x] Migráció ellenőrzés V2 beállítás előtt (warning prompt)
+- [x] Instance újraindítás engine váltás után
+- [x] **TESZT:** Build sikeres ✅
 
 ### Fázis 3: hydraidectl backup/restore ⏳
 - [ ] `backup` parancs implementáció
