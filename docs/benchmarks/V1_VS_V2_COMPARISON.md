@@ -41,6 +41,36 @@
 | **Teljes méret** | **~3.0 MB** | **~1.5 MB** | **~50% kisebb** ✅ |
 | **Bytes/entry** | **~30 bytes** | **~15 bytes** | **~50% hatékonyabb** ✅ |
 
+### ZFS Metaadat és Overhead (100K Entry Swamp)
+
+> **ZFS Konfiguráció:** 8KB record size (standard)
+
+| Overhead Típus | V1 | V2 | Megtakarítás |
+|----------------|----|----|--------------|
+| **Nettó adat** | 2.74 MB | 1.54 MB | **44% kisebb** ✅ |
+| **Blokkméret alignment** | 120 KB (4.4%) | 10 KB (0.6%) | **92% kevesebb** ✅ |
+| **ZFS metaadat** | 121 KB | 15.5 KB | **87% kevesebb** ✅ |
+| **TELJES (lemezen)** | **~3.0 MB** | **~1.57 MB** | **48% megtakarítás** ✅ |
+
+**ZFS Overhead Breakdown:**
+- **V1:** 241 KB overhead (9.5% az adathoz képest)
+- **V2:** 25.5 KB overhead (1.9% az adathoz képest)
+- **Overhead csökkenés:** 89% ✅
+
+### Trendizz Teljes Rendszer Vetítés (1M Swamp)
+
+| Metrika | V1 | V2 | Megtakarítás |
+|---------|----|----|--------------|
+| **Fájlok száma** | 22 millió | 1 millió | **21M kevesebb (95%)** ✅ |
+| **Nettó adat** | 2.74 TB | 1.54 TB | **1.2 TB (44%)** ✅ |
+| **ZFS overhead** | 241 GB | 25.5 GB | **215.5 GB (89%)** ✅ |
+| **TELJES tárhely** | **~3.0 TB** | **~1.57 TB** | **~1.43 TB (48%)** ✅ |
+
+**Költségmegtakarítás:**
+- **V1 igény:** 3.0 TB → 2× Samsung 990 PRO 2TB = **~160,000 Ft**
+- **V2 igény:** 1.57 TB → 1× Samsung 990 PRO 2TB = **~80,000 Ft**
+- **Megtakarítás:** **~80,000 Ft (50%)** 💰
+
 ### Méret Növekedés Update Után (10K update)
 
 | Metrika | V1 (mért) | V2 (mért) | Megjegyzés |
