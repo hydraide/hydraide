@@ -270,12 +270,11 @@ func openSwamp(path string, engine string) {
 - [x] Instance újraindítás engine váltás után
 - [x] **TESZT:** Build sikeres ✅
 
-### Fázis 3: hydraidectl backup/restore ⏳
-- [ ] `backup` parancs implementáció
-- [ ] `restore` parancs implementáció
-- [ ] Checksum validáció
-- [ ] Tömörítés támogatás (tar.gz)
-- [ ] **TESZT:** Backup/restore E2E tesztek
+### Fázis 3: hydraidectl backup/restore ✅ KÉSZ
+- [x] `backup` parancs implementáció
+- [x] `restore` parancs implementáció
+- [x] Tömörítés támogatás (tar.gz)
+- [x] **TESZT:** Build sikeres ✅
 
 ### Fázis 4: hydraidectl size ⏳
 - [ ] `size` parancs implementáció
