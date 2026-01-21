@@ -473,51 +473,87 @@ RECOMMENDATION:
 ================================================================================
 ```
 
-#### Migrátor Pszeudokód
+#### Live Migráció Pszeudokód
 
 ```go
-func Migrate(config MigrationConfig) MigrationResult {
-    result := MigrationResult{}
+func (m *Migrator) LiveMigrate() MigrationResult {
+    result := MigrationResult{DryRun: false}
     
     // 1. Fájlrendszer bejárása
-    swampFolders := walkAndFindSwampFolders(config.DataPath)
+    swampFolders := m.walkAndFindSwampFolders()
     result.TotalSwamps = len(swampFolders)
     
     // 2. Párhuzamos migráció (worker pool)
-    workerPool := NewWorkerPool(config.Parallel)
+    workerPool := NewWorkerPool(m.config.Parallel)
     
     for _, folder := range swampFolders {
         workerPool.Submit(func() error {
             // 2a. V1 Load
-            treasures, meta := loadV1Swamp(folder)
+            treasures, meta, err := m.loadV1Swamp(folder)
+            if err != nil {
+                return fmt.Errorf("load failed: %w", err)
+            }
             result.OldSizeBytes += getFolderSize(folder)
             
             // 2b. V2 Write
             hydFile := folder + ".hyd"  // apple/ → apple.hyd
-            writeV2File(hydFile, treasures, meta)
+            if err := m.writeV2File(hydFile, treasures, meta); err != nil {
+                return fmt.Errorf("write failed: %w", err)
+            }
             result.NewSizeBytes += getFileSize(hydFile)
             
-            // 2c. Verify (opcionális, de ajánlott!)
-            if config.VerifyAfter {
-                loadedTreasures := loadV2File(hydFile)
-                if !compareTreasures(treasures, loadedTreasures) {
-                    return fmt.Errorf("verification failed: %s", folder)
+            // 2c. Verify
+            if m.config.VerifyAfter {
+                if err := m.verifyMigration(folder, hydFile, treasures); err != nil {
+                    // Hiba esetén töröljük az új fájlt, régi marad
+                    os.Remove(hydFile)
+                    return fmt.Errorf("verify failed: %w", err)
                 }
             }
             
-            // 2d. Cleanup
-            if config.DeleteOldFiles && !config.DryRun {
+            // 2d. Cleanup - CSAK sikeres verify után!
+            if m.config.DeleteOldFiles {
                 os.RemoveAll(folder)
             }
             
-            result.MigratedSwamps++
+            result.SuccessfulSwamps++
+            result.TotalEntries += int64(len(treasures))
             return nil
         })
     }
     
     // 3. Várakozás és eredmény
     workerPool.Wait()
+    m.generateReport(result)
     return result
+}
+
+func (m *Migrator) verifyMigration(oldFolder, newFile string, originalTreasures []treasure.Treasure) error {
+    // Visszaolvassuk az új fájlt
+    loadedTreasures, err := m.loadV2File(newFile)
+    if err != nil {
+        return fmt.Errorf("cannot load new file: %w", err)
+    }
+    
+    // Darabszám egyezés
+    if len(loadedTreasures) != len(originalTreasures) {
+        return fmt.Errorf("count mismatch: expected %d, got %d", 
+            len(originalTreasures), len(loadedTreasures))
+    }
+    
+    // Minden treasure összehasonlítása
+    for _, orig := range originalTreasures {
+        loaded, exists := loadedTreasures[orig.GetKey()]
+        if !exists {
+            return fmt.Errorf("missing key: %s", orig.GetKey())
+        }
+        
+        if !orig.Equals(loaded) {
+            return fmt.Errorf("content mismatch for key: %s", orig.GetKey())
+        }
+    }
+    
+    return nil
 }
 ```
 
