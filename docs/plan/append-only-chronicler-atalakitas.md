@@ -203,49 +203,344 @@ Entry Operation Types:
 
 ## 4. Visszafelé Kompatibilitás
 
-### 4.1 Verzió Detektálás
+### 4.1 Verzió Kezelés (Migráció után)
 
-```go
-func (c *chronicler) detectVersion(path string) int {
-    // Ha folder → Version 1 (régi)
-    if isDirectory(path) {
-        return 1
-    }
-    
-    // Ha fájl és HYDR magic → Version 2 (új)
-    if isFile(path) {
-        header := readHeader(path)
-        if header.magic == "HYDR" {
-            return header.version
-        }
-    }
-    
-    return 0 // Nem létezik
-}
-```
-
-### 4.2 Migráció
+Mivel a migrációt **standalone tool-lal, egyszerre** végezzük el, a chronicler kód egyszerűsödik:
 
 ```go
 func (c *chronicler) Load() {
-    version := c.detectVersion(c.path)
+    // Migráció után CSAK V2 fájlok léteznek!
+    // A V1 kód teljesen eltávolítható a kódbázisból.
     
-    switch version {
-    case 0:
+    if !fileExists(c.hydFilePath) {
         // Új swamp, nincs mit betölteni
         return
-        
-    case 1:
-        // Régi formátum - betöltés és konvertálás
-        c.loadLegacy()           // Régi módon betölt
-        c.migrateToV2()          // Új formátumba ment
-        c.deleteLegacyFiles()    // Régi fájlok törlése
-        
-    case 2:
-        // Új formátum
-        c.loadV2()
     }
+    
+    // V2 betöltés
+    c.loadV2()
 }
+```
+
+**Előnyök:**
+- Nincs verzió detektálás overhead
+- Nincs V1 legacy kód karbantartás
+- Tiszta, egyszerű kódbázis
+- Nincs race condition kockázat
+
+### 4.2 Migráció: Standalone Egyszeri Átalakítás
+
+> **FONTOS:** A migrációt NEM menet közben csináljuk, hanem egy **önálló, egyszeri folyamatként**, 
+> tervezett leállás alatt (pl. hétvégén). Ez sokkal biztonságosabb és egyszerűbb!
+
+#### Miért jobb az egyszeri migráció?
+
+| Menet közbeni migráció | Egyszeri standalone migráció |
+|------------------------|------------------------------|
+| ❌ Bonyolult verzió detektálás | ✅ Egyszerű: minden V1 → V2 |
+| ❌ Race condition kockázat | ✅ Nincs versenyhelyzet |
+| ❌ Kétféle kód karbantartása | ✅ Migráció után V1 kód törölhető |
+| ❌ Teljesítmény overhead | ✅ Optimális futás |
+| ❌ Rollback bonyolult | ✅ Backup → egyszerű rollback |
+
+#### Migráció Folyamat
+
+```
+1. ELŐKÉSZÍTÉS
+   ├── Trendizz szolgáltatás leállítása
+   ├── Teljes backup készítése (ZFS snapshot vagy rsync)
+   └── Migrátor tool indítása
+
+2. FÁJLBEJÁRÁS (rekurzív)
+   data/
+   ├── words/
+   │   ├── ap/
+   │   │   └── apple/          ← FOLDER detektálva
+   │   │       ├── uuid1.dat
+   │   │       ├── uuid2.dat
+   │   │       └── meta.json
+   │   ...
+   
+3. SWAMP MIGRÁCIÓ (egyesével)
+   for each swamp_folder:
+       a) V1 Load: beolvassa az összes chunk-ot és meta.json-t
+       b) V2 Write: egyetlen .hyd fájlba ír (append-only blokkok)
+       c) Verify: visszaolvasás és összehasonlítás
+       d) Cleanup: régi folder törlése
+       e) Log: migráció státusz
+
+4. BEFEJEZÉS
+   ├── Migráció log ellenőrzése (hibák?)
+   ├── Statisztika: hány swamp, mennyi idő, helyfoglalás előtte/utána
+   └── Trendizz szolgáltatás indítása (már V2 kóddal!)
+```
+
+#### Migrátor Tool Interface
+
+```go
+// Standalone CLI tool: hydraidectl migrate
+type MigrationConfig struct {
+    DataPath        string        // pl. "/var/hydraide/data"
+    DryRun          bool          // ELSŐ FUTÁS: csak validál, nem ír semmit
+    Parallel        int           // párhuzamos worker-ek száma
+    VerifyAfter     bool          // minden swamp után verify (csak live módban)
+    DeleteOldFiles  bool          // régi fájlok törlése (csak live módban)
+    StopOnError     bool          // első hibánál megáll, vagy folytatja
+    ProgressReport  time.Duration // progress log gyakoriság
+}
+
+type MigrationResult struct {
+    TotalSwamps      int
+    ProcessedSwamps  int
+    SuccessfulSwamps int
+    FailedSwamps     []FailedSwamp
+    TotalEntries     int64
+    OldSizeBytes     int64
+    NewSizeBytes     int64      // dry-run esetén becsült méret
+    Duration         time.Duration
+    DryRun           bool
+}
+
+type FailedSwamp struct {
+    Path   string
+    Error  string
+    Phase  string  // "load", "convert", "write", "verify"
+}
+```
+
+#### Kétlépcsős Migráció
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 1. LÉPÉS: DRY-RUN (pénteken, működő rendszer mellett is futhat)             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  $ hydraidectl migrate --data-path=/var/hydraide/data --dry-run             │
+│                                                                             │
+│  Mit csinál:                                                                │
+│  ├── Végigmegy minden swamp folder-en                                       │
+│  ├── Beolvassa a V1 adatokat (CSAK OLVASÁS!)                                │
+│  ├── Ellenőrzi, hogy minden adat deszerializálható-e                        │
+│  ├── Ellenőrzi, hogy a konverzió hibátlan lenne-e                           │
+│  ├── Kiszámítja a becsült új méretet                                        │
+│  ├── NEM ír semmit a lemezre!                                               │
+│  └── Riportot generál: hibák listája, statisztikák                          │
+│                                                                             │
+│  Output:                                                                    │
+│  ├── migration-dryrun-2026-01-21.log   (részletes log)                      │
+│  └── migration-dryrun-2026-01-21.json  (gépi feldolgozáshoz)                │
+│                                                                             │
+│  Ha HIBA van:                                                               │
+│  ├── Hibás swamp-ok listája                                                 │
+│  ├── Hiba típusa és fázisa                                                  │
+│  └── Javítás ELŐTTE, majd újra dry-run                                      │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼ Ha minden OK
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 2. LÉPÉS: LIVE MIGRÁCIÓ (hétvégén, leállított rendszer mellett)             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  # Előtte: Trendizz leállítása + ZFS snapshot / backup                      │
+│                                                                             │
+│  $ hydraidectl migrate --data-path=/var/hydraide/data \                     │
+│                        --verify \                                           │
+│                        --delete-old \                                       │
+│                        --parallel=8                                         │
+│                                                                             │
+│  Mit csinál:                                                                │
+│  ├── Végigmegy minden swamp folder-en                                       │
+│  ├── Beolvassa a V1 adatokat                                                │
+│  ├── Konvertálja V2 formátumra                                              │
+│  ├── Kiírja az új .hyd fájlt                                                │
+│  ├── Verify: visszaolvassa és összehasonlítja                               │
+│  ├── Törli a régi folder-t                                                  │
+│  └── Riportot generál                                                       │
+│                                                                             │
+│  # Utána: Trendizz indítása az új V2 kóddal                                 │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### Dry-Run Részletes Működés
+
+```go
+func (m *Migrator) DryRun() MigrationResult {
+    result := MigrationResult{DryRun: true}
+    
+    swampFolders := m.walkAndFindSwampFolders()
+    result.TotalSwamps = len(swampFolders)
+    
+    for _, folder := range swampFolders {
+        result.ProcessedSwamps++
+        
+        // 1. Tudunk-e olvasni?
+        treasures, meta, err := m.tryLoadV1(folder)
+        if err != nil {
+            result.FailedSwamps = append(result.FailedSwamps, FailedSwamp{
+                Path:  folder,
+                Error: err.Error(),
+                Phase: "load",
+            })
+            if m.config.StopOnError {
+                break
+            }
+            continue
+        }
+        
+        // 2. Minden treasure deszerializálható?
+        for _, t := range treasures {
+            if err := t.Validate(); err != nil {
+                result.FailedSwamps = append(result.FailedSwamps, FailedSwamp{
+                    Path:  folder,
+                    Error: fmt.Sprintf("treasure %s: %v", t.GetKey(), err),
+                    Phase: "convert",
+                })
+                break
+            }
+        }
+        
+        // 3. Méret kalkuláció (becsült)
+        result.OldSizeBytes += getFolderSize(folder)
+        result.NewSizeBytes += estimateV2Size(treasures)
+        result.TotalEntries += int64(len(treasures))
+        
+        result.SuccessfulSwamps++
+        m.logProgress(result)
+    }
+    
+    // 4. Riport generálás
+    m.generateReport(result)
+    
+    return result
+}
+```
+
+#### CLI Használat Példák
+
+```bash
+# 1. Dry-run: minden swamp validálása
+hydraidectl migrate --data-path=/var/hydraide/data --dry-run
+
+# 2. Dry-run: részletes output + nem áll meg hibánál
+hydraidectl migrate --data-path=/var/hydraide/data --dry-run --continue-on-error
+
+# 3. Live migráció: verify + régi fájlok törlése + 8 worker
+hydraidectl migrate --data-path=/var/hydraide/data --verify --delete-old --parallel=8
+
+# 4. Live migráció: csak egy almappa (teszteléshez)
+hydraidectl migrate --data-path=/var/hydraide/data/words/ap --verify --delete-old
+```
+
+#### Dry-Run Output Példa
+
+```
+================================================================================
+HydrAIDE Migration Dry-Run Report
+Date: 2026-01-21 14:30:00
+================================================================================
+
+SUMMARY:
+  Total swamps found:     1,234,567
+  Successfully validated: 1,234,560
+  Failed:                 7
+  
+SIZE ESTIMATION:
+  Current size (V1):      847.3 GB
+  Estimated size (V2):    312.5 GB
+  Estimated savings:      534.8 GB (63.1%)
+
+ENTRIES:
+  Total treasures:        45,678,901
+  Average per swamp:      37
+
+FAILED SWAMPS:
+  1. /var/hydraide/data/words/co/corrupted-word/
+     Phase: load
+     Error: invalid meta.json: unexpected EOF
+     
+  2. /var/hydraide/data/words/te/test-bad/
+     Phase: convert  
+     Error: treasure "key123": binary data corrupted (checksum mismatch)
+     
+  ... (5 more)
+
+RECOMMENDATION:
+  ❌ 7 swamps need manual inspection before live migration.
+  Fix the issues and re-run dry-run.
+  
+================================================================================
+```
+
+#### Migrátor Pszeudokód
+
+```go
+func Migrate(config MigrationConfig) MigrationResult {
+    result := MigrationResult{}
+    
+    // 1. Fájlrendszer bejárása
+    swampFolders := walkAndFindSwampFolders(config.DataPath)
+    result.TotalSwamps = len(swampFolders)
+    
+    // 2. Párhuzamos migráció (worker pool)
+    workerPool := NewWorkerPool(config.Parallel)
+    
+    for _, folder := range swampFolders {
+        workerPool.Submit(func() error {
+            // 2a. V1 Load
+            treasures, meta := loadV1Swamp(folder)
+            result.OldSizeBytes += getFolderSize(folder)
+            
+            // 2b. V2 Write
+            hydFile := folder + ".hyd"  // apple/ → apple.hyd
+            writeV2File(hydFile, treasures, meta)
+            result.NewSizeBytes += getFileSize(hydFile)
+            
+            // 2c. Verify (opcionális, de ajánlott!)
+            if config.VerifyAfter {
+                loadedTreasures := loadV2File(hydFile)
+                if !compareTreasures(treasures, loadedTreasures) {
+                    return fmt.Errorf("verification failed: %s", folder)
+                }
+            }
+            
+            // 2d. Cleanup
+            if config.DeleteOldFiles && !config.DryRun {
+                os.RemoveAll(folder)
+            }
+            
+            result.MigratedSwamps++
+            return nil
+        })
+    }
+    
+    // 3. Várakozás és eredmény
+    workerPool.Wait()
+    return result
+}
+```
+
+#### Becsült Migráció Idő
+
+| Swamp szám | Becsült idő (8 worker) | Megjegyzés |
+|------------|------------------------|------------|
+| 10,000 | ~2-3 perc | Kis adatbázis |
+| 100,000 | ~20-30 perc | Közepes |
+| 1,000,000 | ~3-4 óra | Nagy (Trendizz) |
+| 10,000,000 | ~30-40 óra | Nagyon nagy |
+
+*Megjegyzés: 990 PRO SSD-vel, verify-val együtt*
+
+#### Rollback Terv
+
+```
+HA BÁRMI HIBA:
+1. Migrátor leáll az első hibánál (vagy folytatja, konfig függő)
+2. Hibalista generálása
+3. ZFS snapshot restore VAGY backup visszaállítás
+4. Hibajavítás
+5. Újrapróbálás
 ```
 
 ---
@@ -289,14 +584,20 @@ func (c *chronicler) Load() {
 
 **Becsült idő:** 2 nap
 
-### 5.5 Fázis 5: Migráció és Kompatibilitás
+### 5.5 Fázis 5: Standalone Migrátor Tool
 
-- [ ] Version detection
-- [ ] Legacy loader megtartása
-- [ ] V1 → V2 migráció
-- [ ] Legacy cleanup
+- [ ] `hydraidectl migrate` command implementáció
+- [ ] Rekurzív folder bejárás (V1 swamp detektálás)
+- [ ] V1 → V2 konverter (load V1, write V2)
+- [ ] Verify logika (visszaolvasás és összehasonlítás)
+- [ ] Párhuzamos worker pool (konfigurálható)
+- [ ] Progress reporting és logging
+- [ ] Dry-run mód (szimuláció)
+- [ ] Cleanup (régi fájlok törlése)
+- [ ] Rollback támogatás (hiba esetén)
+- [ ] Statisztika generálás (méret előtte/utána, idő, hibák)
 
-**Becsült idő:** 2 nap
+**Becsült idő:** 3-4 nap
 
 ### 5.6 Fázis 6: Integráció
 
@@ -448,7 +749,7 @@ type ChroniclerV2Config struct {
 - ⚠️ **Kicsit bonyolultabb chronicler** (de tisztább!)
 
 ### Becsült össz implementációs idő:
-**18-23 munkanap**
+**20-26 munkanap**
 
 ---
 
