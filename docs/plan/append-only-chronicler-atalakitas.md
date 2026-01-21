@@ -307,15 +307,88 @@ func (c *chronicler) Load() {
 
 **Becsült idő:** 2-3 nap
 
-### 5.7 Fázis 7: Tesztelés
+### 5.7 Fázis 7: Migrációs Tesztelés (End-to-End)
 
-- [ ] Unit tesztek minden komponensre
-- [ ] Integration tesztek
-- [ ] Performance benchmarkok
-- [ ] Migráció tesztek
-- [ ] Edge case-ek (üres swamp, nagy swamp, crash recovery)
+> **KRITIKUS FÁZIS!** Teljes körű tesztelési eljárás a migráció validálására.
 
-**Becsült idő:** 3-4 nap
+#### Tesztelési Stratégia:
+
+```
+1. RÉGI RENDSZERREL ADATOK LÉTREHOZÁSA
+   ├── Teszt swamp-ok generálása (V1 formátum)
+   ├── Különböző méretű swamp-ok (kicsi, közepes, nagy)
+   ├── Edge case-ek: üres swamp, 1 entry, 100K+ entry
+   └── Flush to disk → V1 fájlok lemezen
+
+2. MIGRÁCIÓ VÉGREHAJTÁSA
+   ├── Swamp megnyitása (Load detektálja V1-et)
+   ├── Automatikus konverzió V2 formátumra
+   ├── Régi fájlok törlése
+   └── Új .hyd fájl létrehozása
+
+3. VISSZAOLVASÁS ÉS VALIDÁCIÓ
+   ├── Minden kulcs visszaolvasható?
+   ├── Adatok byte-ra megegyeznek?
+   ├── Metaadatok megmaradtak? (created_at, updated_at, stb.)
+   └── Beacon indexek helyesen épülnek fel?
+
+4. MŰKÖDÉSI TESZTEK MIGRÁCIÓT KÖVETŐEN
+   ├── Új adatok írása (append működik?)
+   ├── Meglévő adatok módosítása
+   ├── Törlés (DELETE entry)
+   ├── Compaction működik?
+   └── Újraindítás után is minden OK?
+```
+
+#### Tesztelési Checklist:
+
+- [ ] **V1 teszt fixture-ök generálása**
+    - [ ] Kis swamp: 10 treasure, különböző típusokkal
+    - [ ] Közepes swamp: 1000 treasure
+    - [ ] Nagy swamp: 50000 treasure
+    - [ ] Edge case: üres swamp (csak meta.json)
+    - [ ] Edge case: 1 treasure
+    - [ ] Edge case: törölt treasure-ök (shadowDelete)
+    
+- [ ] **Migráció tesztek**
+    - [ ] V1 → V2 konverzió hibátlan
+    - [ ] Régi fájlok törlődnek
+    - [ ] Új .hyd fájl létrejön
+    - [ ] Ha migráció közben crash → újra tud próbálkozni
+    
+- [ ] **Adatintegritás validáció**
+    - [ ] Minden kulcs megtalálható migráció után
+    - [ ] GetTreasure() ugyanazt adja vissza
+    - [ ] Binary content byte-ra egyezik
+    - [ ] Metaadatok: createdAt, modifiedAt, expirationTime
+    - [ ] Shadow deleted treasure-ök megmaradnak
+    
+- [ ] **Működési tesztek V2-n**
+    - [ ] SaveTreasure() új adat → append működik
+    - [ ] SaveTreasure() módosítás → UPDATE entry
+    - [ ] DeleteTreasure() → DELETE entry
+    - [ ] GetTreasuresByKeys() batch read
+    - [ ] GetAll() minden adat visszajön
+    - [ ] Beacon lekérdezések (CreationTime, ExpirationTime, stb.)
+    
+- [ ] **Compaction tesztek**
+    - [ ] 50%+ fragmentation → compact fut
+    - [ ] Compact után minden adat megvan
+    - [ ] Fájlméret csökken
+    - [ ] Observer védelem működik (shutdown block)
+    
+- [ ] **Újraindítás tesztek**
+    - [ ] Swamp close → reopen → minden adat megvan
+    - [ ] Crash szimuláció (kill) → recovery
+    - [ ] Félig írt block → skip/recover
+
+- [ ] **Performance benchmark**
+    - [ ] V1 vs V2 write speed összehasonlítás
+    - [ ] V1 vs V2 load speed összehasonlítás
+    - [ ] Compaction idő mérése
+    - [ ] Memory footprint összehasonlítás
+
+**Becsült idő:** 4-5 nap
 
 ### 5.8 Fázis 8: Dokumentáció
 
@@ -375,7 +448,7 @@ type ChroniclerV2Config struct {
 - ⚠️ **Kicsit bonyolultabb chronicler** (de tisztább!)
 
 ### Becsült össz implementációs idő:
-**16-20 munkanap**
+**18-23 munkanap**
 
 ---
 
