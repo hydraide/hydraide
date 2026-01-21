@@ -27,6 +27,9 @@ type Setting interface {
 	// Real-world scenario: In-memory swamps are useful for testing and broadcasting data between services.
 	// Permanent swamps are useful for storing data that needs to be persisted.
 	GetSwampType() SwampType
+	// UseChroniclerV2 returns true if the swamp should use the new V2 append-only chronicler.
+	// V2 is 32-112x faster and uses 50% less storage than V1.
+	UseChroniclerV2() bool
 }
 
 type SwampType string
@@ -49,6 +52,9 @@ type SwampSetting struct {
 	WriteIntervalSec time.Duration
 	// MaxFileSizeByte The maximum file size of the swamp's file. Only used if the swamp is not in-memory swamp (i.e. it writes to SSD).
 	MaxFileSizeByte int64
+	// ChroniclerV2 enables the new append-only V2 chronicler format.
+	// V2 is 32-112x faster and uses 50% less storage than V1.
+	ChroniclerV2 bool
 }
 
 type setting struct {
@@ -87,4 +93,9 @@ func (s *setting) GetSwampType() SwampType {
 		return InMemorySwamp
 	}
 	return PermanentSwamp
+}
+
+// UseChroniclerV2 returns true if the swamp should use the V2 chronicler
+func (s *setting) UseChroniclerV2() bool {
+	return s.ws.ChroniclerV2
 }

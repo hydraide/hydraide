@@ -634,16 +634,16 @@ HA BÁRMI HIBA:
 
 **Fázis státusz:** ✅ Kész
 
-### 5.6 Fázis 6: Integráció ⏳ FOLYAMATBAN
+### 5.6 Fázis 6: Integráció ✅ KÉSZ
 
 - [x] Chronicler V2 adapter implementáció (`chronicler_v2.go`)
 - [x] Chronicler interface kompatibilitás (NewV2 constructor)
 - [x] V2 adapter tesztek (`chronicler_v2_test.go`)
-- [ ] Swamp integráció (chronicler csere konfiguráció alapján)
-- [ ] Path kezelés módosítása (folder → file)
-- [ ] Name package kompatibilitás
+- [x] Setting interface bővítése (`UseChroniclerV2()`)
+- [x] Hydra integráció (loadChronicler V1/V2 választás)
+- [x] FileSystemSettings bővítése (`UseChroniclerV2` flag)
 
-**Fázis státusz:** ⏳ Folyamatban
+**Fázis státusz:** ✅ Kész
 
 ### 5.7 Fázis 7: Migrációs Tesztelés (End-to-End)
 

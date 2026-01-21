@@ -126,6 +126,10 @@ type FileSystemSettings struct {
 	WriteIntervalSec int64
 	// MaxFileSizeByte is the maximum size of the file fragments of the swamp in bytes
 	MaxFileSizeByte int64
+	// UseChroniclerV2 enables the new append-only V2 chronicler format.
+	// V2 is significantly faster (32-112x) and uses less storage (50%).
+	// Once enabled and data is migrated, it cannot be reverted without migration.
+	UseChroniclerV2 bool
 }
 
 // RegisterPattern registers a pattern for a swamp to the settings only if it is not exist
@@ -163,6 +167,7 @@ func (s *settings) RegisterPattern(pattern name.Name, inMemorySwamp bool, closeA
 		if filesystemSettings != nil {
 			swampSetting.WriteIntervalSec = time.Duration(filesystemSettings.WriteIntervalSec) * time.Second
 			swampSetting.MaxFileSizeByte = filesystemSettings.MaxFileSizeByte
+			swampSetting.ChroniclerV2 = filesystemSettings.UseChroniclerV2
 		}
 
 	}
