@@ -271,14 +271,20 @@ type SwampFilesystemSettings struct {
 
 	// MaxFileSize defines the maximum compressed chunk size on disk.
 	//
-	// Once this size is reached, a new chunk is created for further writes.
+	// ⚠️ DEPRECATED: This field is only used by the legacy V1 storage engine.
+	// After migrating to V2 (using `hydraidectl migrate`), this field is ignored
+	// and can be safely removed from your code.
 	//
+	// The V2 engine uses a single append-only file per swamp with automatic
+	// block management, eliminating the need for manual chunk size configuration.
+	//
+	// For V1 (legacy) behavior:
+	// Once this size is reached, a new chunk is created for further writes.
 	// This prevents large file rewrites, which can damage SSDs over time.
 	// Smaller sizes → more files, better endurance.
 	// Larger sizes → fewer files, better read performance for rarely-changed data.
 	//
-	// ⚠️ Always ensure MaxFileSize is larger than the filesystem block size.
-	// HydrAIDE automatically compresses data, so this refers to the compressed size.
+	// Deprecated: Use V2 storage engine instead. Migrate with `hydraidectl migrate`.
 	MaxFileSize int
 }
 

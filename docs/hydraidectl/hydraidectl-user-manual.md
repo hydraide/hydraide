@@ -26,6 +26,7 @@ Although `hydraidectl` is stable and production-tested, new features are under d
 * [`destroy` – Fully delete an instance, optionally including all its data](#restart--restart-instance)
 * [`cert` – Generate TLS Certificates (without modifying instances)](#cert--generate-tls-certificates-without-modifying-instances)
 * [`update` – Update an Instance In‑Place](#update--update-an-instance-inplace-allinone)
+* [`migrate` – Migrate V1 storage to V2 format](#migrate--migrate-v1-storage-to-v2-format)
 * [`version` – Display CLI and optional instance metadata](#version--display-cli-and-optional-instance-metadata)
 
 ---
@@ -634,3 +635,77 @@ Update: vX.Y.Z available → run:
 ```
 
 Use that command to reinstall the CLI with the latest stable binary.
+
+---
+
+## `migrate` – Migrate V1 Storage to V2 Format
+
+**⚠️ IMPORTANT: Always create a full backup before migration!**
+
+Migrates HydrAIDE data from the legacy V1 multi-chunk storage format to the new V2 append-only single-file format.
+
+The V2 storage engine provides:
+- **32-112x faster** write operations
+- **50% smaller** storage footprint
+- **95% fewer** files on disk
+- **100x longer** SSD lifespan
+
+**Behavior**
+- Scans the source directory recursively for V1 swamps (folders with chunk files)
+- Converts each V1 swamp to a single `.hyd` file (V2 format)
+- Verifies data integrity (optional)
+- Removes old V1 files after successful migration (unless `--keep-original`)
+
+**Flags**
+- `--source`, `-s` — Path to HydrAIDE data directory (**required**)
+- `--dry-run`, `-d` — Simulate migration without making changes
+- `--workers`, `-w` — Number of parallel migration workers (default: 4)
+- `--verify`, `-v` — Verify data integrity after each swamp migration
+- `--keep-original` — Keep original V1 files after migration
+
+**Examples**
+
+```bash
+# Step 1: Create a backup first!
+cp -r /path/to/hydraide/data /path/to/backup/hydraide-backup
+
+# Step 2: Dry-run to see what would be migrated
+hydraidectl migrate --source /path/to/hydraide/data --dry-run
+
+# Step 3: Run actual migration with 8 workers
+hydraidectl migrate --source /path/to/hydraide/data --workers 8
+
+# Migration with verification (slower but safer)
+hydraidectl migrate --source /path/to/hydraide/data --verify
+
+# Keep original files (for rollback capability, uses more disk space)
+hydraidectl migrate --source /path/to/hydraide/data --keep-original
+```
+
+**Output**
+
+```
+HydrAIDE V1 → V2 Migration
+==========================
+
+Source: /data/hydraide
+Mode: Live Migration
+Workers: 4
+
+Scanning for V1 swamps...
+Found: 15,234 V1 swamps
+
+Migrating...
+[████████████████████████████████] 100% (15234/15234)
+
+Migration Complete!
+===================
+✅ Migrated: 15,234 swamps
+❌ Errors: 0
+📁 Size before: 45.2 GB
+📁 Size after: 23.1 GB
+💾 Saved: 22.1 GB (49%)
+⏱️ Duration: 4m 32s
+```
+
+👉 For complete migration guide, see: [HydrAIDE Migration Guide](hydraidectl-migration.md)
