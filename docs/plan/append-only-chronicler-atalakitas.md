@@ -634,14 +634,16 @@ HA BÁRMI HIBA:
 
 **Fázis státusz:** ✅ Kész
 
-### 5.6 Fázis 6: Integráció
+### 5.6 Fázis 6: Integráció ⏳ FOLYAMATBAN
 
-- [ ] Chronicler interface bővítése
-- [ ] Swamp integráció (chronicler csere)
+- [x] Chronicler V2 adapter implementáció (`chronicler_v2.go`)
+- [x] Chronicler interface kompatibilitás (NewV2 constructor)
+- [x] V2 adapter tesztek (`chronicler_v2_test.go`)
+- [ ] Swamp integráció (chronicler csere konfiguráció alapján)
 - [ ] Path kezelés módosítása (folder → file)
 - [ ] Name package kompatibilitás
 
-**Becsült idő:** 2-3 nap
+**Fázis státusz:** ⏳ Folyamatban
 
 ### 5.7 Fázis 7: Migrációs Tesztelés (End-to-End)
 
