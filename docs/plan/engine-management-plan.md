@@ -276,11 +276,11 @@ func openSwamp(path string, engine string) {
 - [x] Tömörítés támogatás (tar.gz)
 - [x] **TESZT:** Build sikeres ✅
 
-### Fázis 4: hydraidectl size ⏳
-- [ ] `size` parancs implementáció
-- [ ] V1/V2 szétválasztás
-- [ ] Top N legnagyobb swamp listázás
-- [ ] **TESZT:** Size parancs unit tesztek
+### Fázis 4: hydraidectl size ✅ KÉSZ
+- [x] `size` parancs implementáció
+- [x] V1/V2 szétválasztás
+- [x] Top N legnagyobb swamp listázás
+- [x] **TESZT:** Build sikeres ✅
 
 ### Fázis 5: Migrate Bővítés ⏳
 - [ ] `--full` flag implementáció
