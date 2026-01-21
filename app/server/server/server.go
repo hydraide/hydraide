@@ -44,6 +44,9 @@ type Configuration struct {
 	DefaultWriteInterval  int64 // the default write interval time in seconds
 	DefaultFileSize       int64 // the default file size in bytes
 	SystemResourceLogging bool  // if true, the system resource usage is logged
+	// UseV2Engine enables the new append-only V2 storage engine.
+	// V2 is significantly faster (32-112x) and uses less storage (50%).
+	UseV2Engine bool
 }
 
 type Server interface {
@@ -90,6 +93,16 @@ func (s *server) Start() error {
 	s.mu.Unlock()
 
 	settingsInterface := settings.New(maxDepth, foldersPerLevel)
+
+	// Enable V2 engine if configured
+	if s.configuration.UseV2Engine {
+		if err := settingsInterface.SetEngine(settings.EngineV2); err != nil {
+			slog.Warn("failed to set V2 engine, using V1", "error", err)
+		} else {
+			slog.Info("V2 append-only storage engine enabled")
+		}
+	}
+
 	s.zeusInterface = zeus.New(settingsInterface, filesystem.New())
 	s.zeusInterface.StartHydra()
 

@@ -76,13 +76,18 @@ type Metadata interface {
 	// Note: currently the file system deletes the metadata file via DeleteAllFiles within the swamp folder,
 	// either when Destroy is called on the swamp, or when the swamp has no remaining data.
 	Destroy()
+
+	// DisableFilePersistence disables saving metadata to a separate file.
+	// Used by V2 engine where metadata is stored in the .hyd file instead.
+	DisableFilePersistence()
 }
 
 type metadata struct {
-	mu         sync.RWMutex
-	meta       *Meta
-	path       string
-	isModified bool
+	mu                  sync.RWMutex
+	meta                *Meta
+	path                string
+	isModified          bool
+	filePersistDisabled bool // When true, SaveToFile() is a no-op (used by V2 engine)
 }
 
 func New(path string) Metadata {
@@ -107,12 +112,24 @@ func (m *metadata) LoadFromFile() {
 func (m *metadata) SaveToFile() {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
+
+	// If file persistence is disabled (V2 engine), don't save to file
+	if m.filePersistDisabled {
+		return
+	}
+
 	if !m.isModified {
 		return
 	}
 	if err := m.save(); err != nil {
 		slog.Error("failed to save metadata to file", "error", err)
 	}
+}
+
+func (m *metadata) DisableFilePersistence() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.filePersistDisabled = true
 }
 
 func (m *metadata) SetSwampName(swampName name.Name) {

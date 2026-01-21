@@ -72,7 +72,7 @@ func runCleanupCmd(cmd *cobra.Command, args []string) {
 	dataPath := filepath.Join(instance.BasePath, "data")
 
 	if cleanupDryRun {
-		fmt.Println("DRY RUN - No files will be deleted\n")
+		fmt.Println("DRY RUN - No files will be deleted")
 	}
 
 	var totalSize int64

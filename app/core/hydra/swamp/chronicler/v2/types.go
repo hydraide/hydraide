@@ -37,9 +37,10 @@ const (
 
 // Operation types for entries
 const (
-	OpInsert uint8 = 1
-	OpUpdate uint8 = 2
-	OpDelete uint8 = 3
+	OpInsert   uint8 = 1
+	OpUpdate   uint8 = 2
+	OpDelete   uint8 = 3
+	OpMetadata uint8 = 4 // Special entry for swamp metadata (name, key-value pairs)
 )
 
 // Errors
@@ -262,4 +263,128 @@ func CalculateChecksum(data []byte) uint32 {
 // ValidateChecksum verifies if the checksum matches
 func ValidateChecksum(data []byte, expected uint32) bool {
 	return CalculateChecksum(data) == expected
+}
+
+// SwampMetadata represents the metadata stored in V2 files.
+// This replaces the separate meta file used in V1.
+// Key is always "__swamp_metadata__" for metadata entries.
+const MetadataKey = "__swamp_metadata__"
+
+// SwampMetadata contains swamp-level metadata that is stored in the .hyd file
+type SwampMetadata struct {
+	SwampName     string            // Full swamp name for reverse lookup
+	CreatedAt     int64             // Unix nano timestamp when swamp was created
+	KeyValuePairs map[string]string // Custom key-value metadata
+}
+
+// Serialize converts SwampMetadata to bytes using a simple format:
+// nameLen(2) + name(N) + createdAt(8) + kvCount(2) + [keyLen(2) + key + valLen(2) + val]...
+func (m *SwampMetadata) Serialize() []byte {
+	nameBytes := []byte(m.SwampName)
+	nameLen := len(nameBytes)
+
+	// Calculate total size
+	totalSize := 2 + nameLen + 8 + 2 // nameLen + name + createdAt + kvCount
+	for k, v := range m.KeyValuePairs {
+		totalSize += 2 + len(k) + 2 + len(v)
+	}
+
+	buf := make([]byte, totalSize)
+	offset := 0
+
+	// Name length and name
+	binary.LittleEndian.PutUint16(buf[offset:offset+2], uint16(nameLen))
+	offset += 2
+	copy(buf[offset:offset+nameLen], nameBytes)
+	offset += nameLen
+
+	// CreatedAt
+	binary.LittleEndian.PutUint64(buf[offset:offset+8], uint64(m.CreatedAt))
+	offset += 8
+
+	// Key-value pairs count
+	binary.LittleEndian.PutUint16(buf[offset:offset+2], uint16(len(m.KeyValuePairs)))
+	offset += 2
+
+	// Key-value pairs
+	for k, v := range m.KeyValuePairs {
+		kBytes := []byte(k)
+		vBytes := []byte(v)
+
+		binary.LittleEndian.PutUint16(buf[offset:offset+2], uint16(len(kBytes)))
+		offset += 2
+		copy(buf[offset:offset+len(kBytes)], kBytes)
+		offset += len(kBytes)
+
+		binary.LittleEndian.PutUint16(buf[offset:offset+2], uint16(len(vBytes)))
+		offset += 2
+		copy(buf[offset:offset+len(vBytes)], vBytes)
+		offset += len(vBytes)
+	}
+
+	return buf
+}
+
+// Deserialize parses bytes into SwampMetadata
+func (m *SwampMetadata) Deserialize(buf []byte) error {
+	if len(buf) < 12 { // minimum: nameLen(2) + createdAt(8) + kvCount(2)
+		return errors.New("buffer too small for swamp metadata")
+	}
+
+	offset := 0
+
+	// Name length and name
+	nameLen := int(binary.LittleEndian.Uint16(buf[offset : offset+2]))
+	offset += 2
+	if len(buf) < offset+nameLen {
+		return errors.New("buffer too small for swamp name")
+	}
+	m.SwampName = string(buf[offset : offset+nameLen])
+	offset += nameLen
+
+	// CreatedAt
+	if len(buf) < offset+8 {
+		return errors.New("buffer too small for createdAt")
+	}
+	m.CreatedAt = int64(binary.LittleEndian.Uint64(buf[offset : offset+8]))
+	offset += 8
+
+	// Key-value pairs count
+	if len(buf) < offset+2 {
+		return errors.New("buffer too small for kv count")
+	}
+	kvCount := int(binary.LittleEndian.Uint16(buf[offset : offset+2]))
+	offset += 2
+
+	// Key-value pairs
+	m.KeyValuePairs = make(map[string]string, kvCount)
+	for i := 0; i < kvCount; i++ {
+		if len(buf) < offset+2 {
+			return errors.New("buffer too small for key length")
+		}
+		keyLen := int(binary.LittleEndian.Uint16(buf[offset : offset+2]))
+		offset += 2
+
+		if len(buf) < offset+keyLen {
+			return errors.New("buffer too small for key")
+		}
+		key := string(buf[offset : offset+keyLen])
+		offset += keyLen
+
+		if len(buf) < offset+2 {
+			return errors.New("buffer too small for value length")
+		}
+		valLen := int(binary.LittleEndian.Uint16(buf[offset : offset+2]))
+		offset += 2
+
+		if len(buf) < offset+valLen {
+			return errors.New("buffer too small for value")
+		}
+		val := string(buf[offset : offset+valLen])
+		offset += valLen
+
+		m.KeyValuePairs[key] = val
+	}
+
+	return nil
 }

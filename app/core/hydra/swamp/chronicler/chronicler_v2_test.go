@@ -61,6 +61,11 @@ func TestChroniclerV2_WriteAndLoad(t *testing.T) {
 	// Write treasures
 	chron.Write(treasures)
 
+	// Close to flush buffer (required for persistent writer)
+	if err := chron.Close(); err != nil {
+		t.Fatalf("failed to close chronicler: %v", err)
+	}
+
 	// Verify .hyd file exists
 	hydPath := swampPath + ".hyd"
 	if _, err := os.Stat(hydPath); os.IsNotExist(err) {
@@ -110,6 +115,11 @@ func TestChroniclerV2_Update(t *testing.T) {
 
 	chron.Write([]treasure.Treasure{tr2})
 
+	// Close to flush buffer
+	if err := chron.Close(); err != nil {
+		t.Fatalf("failed to close chronicler: %v", err)
+	}
+
 	// Load and verify
 	beac := beacon.New()
 	chron.Load(beac)
@@ -158,6 +168,11 @@ func TestChroniclerV2_Delete(t *testing.T) {
 
 	chron.Write([]treasure.Treasure{tr2})
 
+	// Close to flush buffer
+	if err := chron.Close(); err != nil {
+		t.Fatalf("failed to close chronicler: %v", err)
+	}
+
 	// Load and verify deletion
 	beac := beacon.New()
 	chron.Load(beac)
@@ -190,6 +205,11 @@ func TestChroniclerV2_LargeDataset(t *testing.T) {
 	}
 
 	chron.Write(treasures)
+
+	// Close to flush buffer
+	if err := chron.Close(); err != nil {
+		t.Fatalf("failed to close chronicler: %v", err)
+	}
 
 	// Load and verify
 	beac := beacon.New()
@@ -226,6 +246,11 @@ func TestChroniclerV2_Persistence(t *testing.T) {
 		tr.ReleaseTreasureGuard(guardID)
 
 		chron.Write([]treasure.Treasure{tr})
+
+		// Close to flush buffer (simulating graceful shutdown)
+		if err := chron.Close(); err != nil {
+			t.Fatalf("failed to close chronicler: %v", err)
+		}
 	}
 
 	// Second chronicler - read data (simulating restart)

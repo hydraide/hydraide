@@ -21,6 +21,12 @@ import (
 
 // chroniclerV2 implements the Chronicler interface using the V2 append-only format.
 // It stores all data in a single .hyd file instead of multiple chunk files.
+//
+// Key design decisions:
+// - Persistent writer: The file writer stays open while the swamp is active
+// - Lazy initialization: Writer is created on first write, not on chronicler creation
+// - Proper cleanup: Close() flushes all pending data and closes the file handle
+// - This approach minimizes file open/close overhead for frequently written swamps
 type chroniclerV2 struct {
 	mu sync.RWMutex
 
@@ -36,12 +42,20 @@ type chroniclerV2 struct {
 	dontSendFilePointer bool
 	compactionOnSave    bool // Whether to check and run compaction on save
 
+	// Swamp metadata (stored in .hyd file, replaces separate meta file)
+	swampName string // Full swamp name for reverse lookup
+
 	// Callbacks
 	swampSaveFunction           func(t treasure.Treasure, guardID guard.ID) treasure.TreasureStatus
 	filePointerCallbackFunction func(event []*FileNameEvent) error
 
 	// Runtime state
 	lastFragmentation float64 // Last calculated fragmentation ratio
+
+	// Persistent writer - stays open while swamp is active
+	// This avoids repeated file open/close for each Write() call
+	writer       *v2.FileWriter
+	writerClosed bool
 }
 
 // NewV2 creates a new V2 chronicler that uses append-only storage.
@@ -63,6 +77,23 @@ func NewV2(swampDataFolderPath string, maxDepth int) Chronicler {
 		compactionThreshold: 0.5,
 		maxDepth:            maxDepth,
 		compactionOnSave:    true,
+	}
+}
+
+// NewV2WithName creates a new V2 chronicler with the swamp name for metadata storage.
+// The swamp name is stored in the .hyd file and can be used for reverse lookup
+// when iterating over hashed folder names.
+func NewV2WithName(swampDataFolderPath string, maxDepth int, swampName string) Chronicler {
+	hydFilePath := swampDataFolderPath + ".hyd"
+
+	return &chroniclerV2{
+		swampDataFolderPath: swampDataFolderPath,
+		hydFilePath:         hydFilePath,
+		maxBlockSize:        v2.DefaultMaxBlockSize,
+		compactionThreshold: 0.5,
+		maxDepth:            maxDepth,
+		compactionOnSave:    true,
+		swampName:           swampName,
 	}
 }
 
@@ -211,6 +242,10 @@ func (c *chroniclerV2) Load(indexObj beacon.Beacon) {
 // Write saves treasures to the .hyd file using append-only operations.
 // Deleted treasures are written as DELETE entries.
 // Modified/new treasures are written as UPDATE/INSERT entries.
+//
+// Performance optimization: Uses a persistent writer that stays open
+// while the swamp is active. The writer is lazily initialized on first
+// write and closed only when Close() is called on the chronicler.
 func (c *chroniclerV2) Write(treasures []treasure.Treasure) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -219,10 +254,9 @@ func (c *chroniclerV2) Write(treasures []treasure.Treasure) {
 		return
 	}
 
-	// Open or create the file writer
-	writer, err := v2.NewFileWriter(c.hydFilePath, c.maxBlockSize)
-	if err != nil {
-		slog.Error("cannot open swamp file for writing",
+	// Ensure we have a writer (lazy initialization)
+	if err := c.ensureWriter(); err != nil {
+		slog.Error("cannot initialize swamp file writer",
 			"path", c.hydFilePath,
 			"error", err)
 		return
@@ -236,7 +270,9 @@ func (c *chroniclerV2) Write(treasures []treasure.Treasure) {
 		guardID := t.StartTreasureGuard(true, guard.BodyAuthID)
 
 		key := t.GetKey()
-		isDeleted := t.GetShadowDelete()
+		// Check if treasure is deleted (DeletedAt > 0 means it's marked for deletion)
+		// This works for both shadow delete and real delete
+		isDeleted := t.GetDeletedAt() > 0
 
 		var entry v2.Entry
 
@@ -271,8 +307,8 @@ func (c *chroniclerV2) Write(treasures []treasure.Treasure) {
 			}
 		}
 
-		// Write the entry
-		if err := writer.WriteEntry(entry); err != nil {
+		// Write the entry to persistent writer
+		if err := c.writer.WriteEntry(entry); err != nil {
 			slog.Error("cannot write entry to swamp file",
 				"key", key,
 				"error", err)
@@ -291,13 +327,6 @@ func (c *chroniclerV2) Write(treasures []treasure.Treasure) {
 		t.ReleaseTreasureGuard(guardID)
 	}
 
-	// Close the writer (flushes remaining buffer)
-	if err := writer.Close(); err != nil {
-		slog.Error("cannot close swamp file writer",
-			"path", c.hydFilePath,
-			"error", err)
-	}
-
 	// Send file pointer callback if registered
 	if len(filePointerEvents) > 0 && c.filePointerCallbackFunction != nil && !c.dontSendFilePointer {
 		if err := c.filePointerCallbackFunction(filePointerEvents); err != nil {
@@ -306,10 +335,26 @@ func (c *chroniclerV2) Write(treasures []treasure.Treasure) {
 		}
 	}
 
-	// Check if compaction is needed
-	if c.compactionOnSave {
-		c.maybeCompact()
+	// Note: We don't close the writer here anymore!
+	// The writer stays open and will be closed when Close() is called.
+	// Compaction is checked during Close() instead of every write.
+}
+
+// ensureWriter creates the persistent writer if it doesn't exist.
+// Must be called with lock held.
+func (c *chroniclerV2) ensureWriter() error {
+	if c.writer != nil && !c.writerClosed {
+		return nil
 	}
+
+	writer, err := v2.NewFileWriter(c.hydFilePath, c.maxBlockSize)
+	if err != nil {
+		return err
+	}
+
+	c.writer = writer
+	c.writerClosed = false
+	return nil
 }
 
 // maybeCompact checks fragmentation and runs compaction if threshold exceeded.
@@ -413,9 +458,120 @@ func (c *chroniclerV2) ForceCompaction() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	// Close writer first if open (to release file handle)
+	if c.writer != nil && !c.writerClosed {
+		if err := c.writer.Close(); err != nil {
+			return err
+		}
+		c.writerClosed = true
+	}
+
 	compactor := v2.NewCompactor(c.hydFilePath, c.maxBlockSize, 0)
 	_, err := compactor.Compact()
+
+	// Reset writer so next write will create a new one
+	c.writer = nil
+
 	return err
+}
+
+// Close flushes all pending writes and closes the file handle.
+// This method MUST be called when the swamp is closing to ensure
+// all data is written to disk. After Close(), the chronicler
+// can be reopened by calling Write() again (lazy reinitialization).
+//
+// The Close() method also checks if compaction is needed and runs it
+// if the fragmentation threshold is exceeded.
+func (c *chroniclerV2) Close() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// If writer is not open, nothing to do
+	if c.writer == nil || c.writerClosed {
+		return nil
+	}
+
+	// Close the writer - this flushes all pending data
+	if err := c.writer.Close(); err != nil {
+		slog.Error("failed to close V2 chronicler writer",
+			"path", c.hydFilePath,
+			"error", err)
+		return err
+	}
+
+	c.writerClosed = true
+	c.writer = nil
+
+	slog.Debug("V2 chronicler closed",
+		"path", c.hydFilePath)
+
+	// Check if compaction is needed (now that writer is closed)
+	if c.compactionOnSave {
+		c.maybeCompactUnlocked()
+	}
+
+	return nil
+}
+
+// maybeCompactUnlocked checks and runs compaction without acquiring lock.
+// Must be called with lock already held.
+func (c *chroniclerV2) maybeCompactUnlocked() {
+	// Only compact if we have a file
+	if _, err := os.Stat(c.hydFilePath); os.IsNotExist(err) {
+		return
+	}
+
+	// Read current fragmentation
+	reader, err := v2.NewFileReader(c.hydFilePath)
+	if err != nil {
+		return
+	}
+
+	fragmentation, _, _, err := reader.CalculateFragmentation()
+	reader.Close()
+
+	if err != nil {
+		return
+	}
+
+	c.lastFragmentation = fragmentation
+
+	// Compact if threshold exceeded
+	if fragmentation > c.compactionThreshold {
+		slog.Info("compaction triggered on close",
+			"path", c.hydFilePath,
+			"fragmentation", fragmentation,
+			"threshold", c.compactionThreshold)
+
+		compactor := v2.NewCompactor(c.hydFilePath, c.maxBlockSize, c.compactionThreshold)
+		result, err := compactor.Compact()
+		if err != nil {
+			slog.Error("compaction failed",
+				"path", c.hydFilePath,
+				"error", err)
+			return
+		}
+
+		slog.Info("compaction completed",
+			"path", c.hydFilePath,
+			"old_size", result.OldFileSize,
+			"new_size", result.NewFileSize,
+			"saved_bytes", result.OldFileSize-result.NewFileSize)
+	}
+}
+
+// Sync forces a sync of pending data to disk without closing the writer.
+// Use this for periodic syncs when you want to ensure data durability
+// but keep the writer open for more writes.
+func (c *chroniclerV2) Sync() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.writer == nil || c.writerClosed {
+		return nil
+	}
+
+	return c.writer.Sync()
 }
 
 // gobEncode is a helper for GOB encoding
