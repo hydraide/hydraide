@@ -290,11 +290,11 @@ func openSwamp(path string, engine string) {
 - [x] `.migration-lock` fájl kezelés
 - [x] **TESZT:** Build sikeres ✅
 
-### Fázis 6: Cleanup Parancs ⏳
-- [ ] `cleanup` parancs implementáció
-- [ ] V1/V2 fájl törlés
-- [ ] Dry-run támogatás
-- [ ] **TESZT:** Cleanup unit tesztek
+### Fázis 6: Cleanup Parancs ✅ KÉSZ
+- [x] `cleanup` parancs implementáció
+- [x] V1/V2 fájl törlés (--v1-files, --v2-files)
+- [x] Dry-run támogatás
+- [x] **TESZT:** Build sikeres ✅
 
 ### Fázis 7: Dokumentáció ⏳
 - [ ] Migration guide frissítés
