@@ -831,8 +831,11 @@ func (h *hydra) loadChronicler(swampSettings setting.Setting, swampDataFolderPat
 
 	var fs chronicler.Chronicler
 
-	// Check if V2 chronicler should be used
-	if swampSettings.UseChroniclerV2() {
+	// Check if V2 engine is globally enabled
+	// Priority: Global engine setting > per-pattern setting (for backward compatibility)
+	useV2 := h.settingsInterface.IsV2Engine() || swampSettings.UseChroniclerV2()
+
+	if useV2 {
 		// Use new append-only V2 chronicler (32-112x faster, 50% less storage)
 		fs = chronicler.NewV2(swampDataFolderPath, h.settingsInterface.GetHashFolderDepth())
 	} else {

@@ -34,11 +34,28 @@ type Settings interface {
 	DeregisterPattern(pattern name.Name)
 	// CallbackAtChanges wait a callback function and the settigns will call it when the settings changed
 	CallbackAtChanges(func()) chan bool
+	// GetEngine returns the current storage engine version (V1 or V2)
+	GetEngine() EngineVersion
+	// SetEngine sets the storage engine version and saves to settings.json
+	// Returns error if the engine change is not valid (e.g., V2 without migration)
+	SetEngine(engine EngineVersion) error
+	// IsV2Engine returns true if the V2 append-only engine is enabled
+	IsV2Engine() bool
 }
 
 const (
 	fileName      = "settings.json"
 	writetestFile = "writetest"
+)
+
+// EngineVersion defines the storage engine version
+type EngineVersion string
+
+const (
+	// EngineV1 is the legacy multi-chunk file storage engine (default)
+	EngineV1 EngineVersion = "V1"
+	// EngineV2 is the new append-only single-file storage engine
+	EngineV2 EngineVersion = "V2"
 )
 
 var (
@@ -63,6 +80,10 @@ type settings struct {
 }
 
 type Model struct {
+	// Engine specifies the storage engine version to use.
+	// Empty string or "V1" = legacy multi-chunk storage
+	// "V2" = new append-only single-file storage (requires migration)
+	Engine        EngineVersion            `json:"engine,omitempty"`
 	Patterns      map[string]*PatternModel `json:"patterns,omitempty"`
 	StreamPath    string                   `json:"streamPath,omitempty"`
 	AutoMoverPath string                   `json:"autoMoverPath,omitempty"`
@@ -356,4 +377,42 @@ func checkFolder(folderPath string) {
 		slog.Error("failed to remove test file", "error", err, "folder", folderPath)
 		panic("failed to remove test file")
 	}
+}
+
+// GetEngine returns the current storage engine version.
+// Returns EngineV1 if not set (backward compatibility).
+func (s *settings) GetEngine() EngineVersion {
+	s.modelMutex.RLock()
+	defer s.modelMutex.RUnlock()
+
+	if s.model.Engine == "" {
+		return EngineV1
+	}
+	return s.model.Engine
+}
+
+// SetEngine sets the storage engine version and persists it to settings.json.
+// This should only be called after successful migration for V2.
+func (s *settings) SetEngine(engine EngineVersion) error {
+	s.modelMutex.Lock()
+	defer s.modelMutex.Unlock()
+
+	// Validate engine version
+	if engine != EngineV1 && engine != EngineV2 {
+		return fmt.Errorf("invalid engine version: %s (must be V1 or V2)", engine)
+	}
+
+	s.model.Engine = engine
+
+	if err := s.SaveSettingsToFilesystem(); err != nil {
+		return fmt.Errorf("failed to save engine setting: %w", err)
+	}
+
+	slog.Info("Storage engine changed", "engine", engine)
+	return nil
+}
+
+// IsV2Engine returns true if the V2 append-only storage engine is enabled.
+func (s *settings) IsV2Engine() bool {
+	return s.GetEngine() == EngineV2
 }
