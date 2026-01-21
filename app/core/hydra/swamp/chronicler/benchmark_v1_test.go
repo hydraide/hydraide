@@ -5,9 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
-	"github.com/google/uuid"
 	"github.com/hydraide/hydraide/app/core/filesystem"
 	"github.com/hydraide/hydraide/app/core/hydra/swamp/beacon"
 	"github.com/hydraide/hydraide/app/core/hydra/swamp/metadata"
@@ -23,23 +21,18 @@ func BenchmarkV1_Insert100K(b *testing.B) {
 		swampPath := filepath.Join(tmpDir, "test-swamp")
 
 		fs := filesystem.New()
-		meta := metadata.New(swampPath, fs)
+		meta := metadata.New(swampPath)
 		chron := New(swampPath, 250*1024, 10, fs, meta)
 		chron.CreateDirectoryIfNotExists()
 
-		beac := beacon.New()
 		treasures := make([]treasure.Treasure, 100000)
 
 		// Generate treasures
 		for i := 0; i < 100000; i++ {
 			t := treasure.New(nil)
 			guardID := t.StartTreasureGuard(false, guard.BodyAuthID)
-			t.SetKey(guardID, fmt.Sprintf("key-%d", i))
-			t.SetContent(guardID, map[string]interface{}{
-				"data":      fmt.Sprintf("test-data-%d", i),
-				"index":     i,
-				"timestamp": time.Now().Unix(),
-			})
+			t.BodySetKey(guardID, fmt.Sprintf("key-%d", i))
+			t.SetContentString(guardID, fmt.Sprintf("test-data-%d-with-some-extra-content-to-simulate-real-data", i))
 			t.ReleaseTreasureGuard(guardID)
 			treasures[i] = t
 		}
@@ -50,8 +43,10 @@ func BenchmarkV1_Insert100K(b *testing.B) {
 
 		// Record metrics
 		totalSize := calculateDirSize(swampPath)
+		fileCount := countFiles(swampPath)
 		b.ReportMetric(float64(totalSize), "bytes")
 		b.ReportMetric(float64(totalSize)/100000, "bytes/treasure")
+		b.ReportMetric(float64(fileCount), "files")
 	}
 }
 
@@ -62,28 +57,24 @@ func BenchmarkV1_Update10K(b *testing.B) {
 	swampPath := filepath.Join(tmpDir, "test-swamp")
 
 	fs := filesystem.New()
-	meta := metadata.New(swampPath, fs)
+	meta := metadata.New(swampPath)
 	chron := New(swampPath, 250*1024, 10, fs, meta)
 	chron.CreateDirectoryIfNotExists()
-
-	beac := beacon.New()
 
 	// Initial insert
 	initialTreasures := make([]treasure.Treasure, 100000)
 	for i := 0; i < 100000; i++ {
 		t := treasure.New(nil)
 		guardID := t.StartTreasureGuard(false, guard.BodyAuthID)
-		t.SetKey(guardID, fmt.Sprintf("key-%d", i))
-		t.SetContent(guardID, map[string]interface{}{
-			"data":  fmt.Sprintf("initial-%d", i),
-			"index": i,
-		})
+		t.BodySetKey(guardID, fmt.Sprintf("key-%d", i))
+		t.SetContentString(guardID, fmt.Sprintf("initial-data-%d", i))
 		t.ReleaseTreasureGuard(guardID)
 		initialTreasures[i] = t
 	}
 	chron.Write(initialTreasures)
 
 	sizeBefore := calculateDirSize(swampPath)
+	fileCountBefore := countFiles(swampPath)
 
 	b.ResetTimer()
 
@@ -94,12 +85,8 @@ func BenchmarkV1_Update10K(b *testing.B) {
 		for i := 0; i < 10000; i++ {
 			t := treasure.New(nil)
 			guardID := t.StartTreasureGuard(false, guard.BodyAuthID)
-			t.SetKey(guardID, fmt.Sprintf("key-%d", i))
-			t.SetContent(guardID, map[string]interface{}{
-				"data":      fmt.Sprintf("updated-%d-%d", i, n),
-				"index":     i,
-				"timestamp": time.Now().Unix(),
-			})
+			t.BodySetKey(guardID, fmt.Sprintf("key-%d", i))
+			t.SetContentString(guardID, fmt.Sprintf("updated-data-%d-iteration-%d", i, n))
 			t.ReleaseTreasureGuard(guardID)
 			updateTreasures[i] = t
 		}
@@ -110,9 +97,13 @@ func BenchmarkV1_Update10K(b *testing.B) {
 	}
 
 	sizeAfter := calculateDirSize(swampPath)
+	fileCountAfter := countFiles(swampPath)
+
 	b.ReportMetric(float64(sizeBefore), "bytes_before")
 	b.ReportMetric(float64(sizeAfter), "bytes_after")
 	b.ReportMetric(float64(sizeAfter-sizeBefore), "bytes_growth")
+	b.ReportMetric(float64(fileCountBefore), "files_before")
+	b.ReportMetric(float64(fileCountAfter), "files_after")
 }
 
 // BenchmarkV1_Delete10K benchmarks deleting 10,000 treasures
@@ -122,19 +113,17 @@ func BenchmarkV1_Delete10K(b *testing.B) {
 	swampPath := filepath.Join(tmpDir, "test-swamp")
 
 	fs := filesystem.New()
-	meta := metadata.New(swampPath, fs)
+	meta := metadata.New(swampPath)
 	chron := New(swampPath, 250*1024, 10, fs, meta)
 	chron.CreateDirectoryIfNotExists()
-
-	beac := beacon.New()
 
 	// Initial insert
 	initialTreasures := make([]treasure.Treasure, 100000)
 	for i := 0; i < 100000; i++ {
 		t := treasure.New(nil)
 		guardID := t.StartTreasureGuard(false, guard.BodyAuthID)
-		t.SetKey(guardID, fmt.Sprintf("key-%d", i))
-		t.SetContent(guardID, map[string]interface{}{"data": fmt.Sprintf("test-%d", i)})
+		t.BodySetKey(guardID, fmt.Sprintf("key-%d", i))
+		t.SetContentString(guardID, fmt.Sprintf("test-data-%d", i))
 		t.ReleaseTreasureGuard(guardID)
 		initialTreasures[i] = t
 	}
@@ -149,8 +138,8 @@ func BenchmarkV1_Delete10K(b *testing.B) {
 		for i := 0; i < 10000; i++ {
 			t := treasure.New(nil)
 			guardID := t.StartTreasureGuard(false, guard.BodyAuthID)
-			t.SetKey(guardID, fmt.Sprintf("key-%d", i))
-			t.ShadowDelete(guardID)
+			t.BodySetKey(guardID, fmt.Sprintf("key-%d", i))
+			t.BodySetForDeletion(guardID, "benchmark", true)
 			t.ReleaseTreasureGuard(guardID)
 			deleteTreasures[i] = t
 		}
@@ -168,23 +157,24 @@ func BenchmarkV1_Read100K(b *testing.B) {
 	swampPath := filepath.Join(tmpDir, "test-swamp")
 
 	fs := filesystem.New()
-	meta := metadata.New(swampPath, fs)
+	meta := metadata.New(swampPath)
 	chron := New(swampPath, 250*1024, 10, fs, meta)
 	chron.CreateDirectoryIfNotExists()
-
-	beac := beacon.New()
 
 	// Initial insert
 	initialTreasures := make([]treasure.Treasure, 100000)
 	for i := 0; i < 100000; i++ {
 		t := treasure.New(nil)
 		guardID := t.StartTreasureGuard(false, guard.BodyAuthID)
-		t.SetKey(guardID, fmt.Sprintf("key-%d", i))
-		t.SetContent(guardID, map[string]interface{}{"data": fmt.Sprintf("test-%d", i)})
+		t.BodySetKey(guardID, fmt.Sprintf("key-%d", i))
+		t.SetContentString(guardID, fmt.Sprintf("test-data-%d", i))
 		t.ReleaseTreasureGuard(guardID)
 		initialTreasures[i] = t
 	}
 	chron.Write(initialTreasures)
+
+	fileCount := countFiles(swampPath)
+	totalSize := calculateDirSize(swampPath)
 
 	b.ResetTimer()
 
@@ -192,6 +182,9 @@ func BenchmarkV1_Read100K(b *testing.B) {
 		newBeacon := beacon.New()
 		chron.Load(newBeacon)
 	}
+
+	b.ReportMetric(float64(totalSize), "bytes")
+	b.ReportMetric(float64(fileCount), "files")
 }
 
 // BenchmarkV1_MixedWorkload benchmarks a realistic mixed workload
@@ -200,19 +193,17 @@ func BenchmarkV1_MixedWorkload(b *testing.B) {
 	swampPath := filepath.Join(tmpDir, "test-swamp")
 
 	fs := filesystem.New()
-	meta := metadata.New(swampPath, fs)
+	meta := metadata.New(swampPath)
 	chron := New(swampPath, 250*1024, 10, fs, meta)
 	chron.CreateDirectoryIfNotExists()
-
-	beac := beacon.New()
 
 	// Initial 100K
 	initialTreasures := make([]treasure.Treasure, 100000)
 	for i := 0; i < 100000; i++ {
 		t := treasure.New(nil)
 		guardID := t.StartTreasureGuard(false, guard.BodyAuthID)
-		t.SetKey(guardID, fmt.Sprintf("key-%d", i))
-		t.SetContent(guardID, map[string]interface{}{"data": fmt.Sprintf("test-%d", i)})
+		t.BodySetKey(guardID, fmt.Sprintf("key-%d", i))
+		t.SetContentString(guardID, fmt.Sprintf("test-data-%d", i))
 		t.ReleaseTreasureGuard(guardID)
 		initialTreasures[i] = t
 	}
@@ -234,16 +225,16 @@ func BenchmarkV1_MixedWorkload(b *testing.B) {
 
 			if i < 5000 {
 				// Update existing
-				t.SetKey(guardID, fmt.Sprintf("key-%d", i))
-				t.SetContent(guardID, map[string]interface{}{"data": fmt.Sprintf("updated-%d", n)})
+				t.BodySetKey(guardID, fmt.Sprintf("key-%d", i))
+				t.SetContentString(guardID, fmt.Sprintf("updated-data-%d", n))
 			} else if i < 8000 {
 				// Insert new
-				t.SetKey(guardID, fmt.Sprintf("key-new-%s", uuid.New().String()))
-				t.SetContent(guardID, map[string]interface{}{"data": "new"})
+				t.BodySetKey(guardID, fmt.Sprintf("key-new-%d-%d", n, i))
+				t.SetContentString(guardID, "new-data")
 			} else {
 				// Delete
-				t.SetKey(guardID, fmt.Sprintf("key-%d", 50000+i))
-				t.ShadowDelete(guardID)
+				t.BodySetKey(guardID, fmt.Sprintf("key-%d", 50000+i))
+				t.BodySetForDeletion(guardID, "benchmark", true)
 			}
 
 			t.ReleaseTreasureGuard(guardID)
