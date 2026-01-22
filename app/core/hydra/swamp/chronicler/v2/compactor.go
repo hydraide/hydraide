@@ -26,6 +26,7 @@ type CompactionResult struct {
 	RemovedEntries int
 	Fragmentation  float64
 	Compacted      bool
+	FileDeleted    bool // True if file was deleted because all entries were removed
 	Error          error
 }
 

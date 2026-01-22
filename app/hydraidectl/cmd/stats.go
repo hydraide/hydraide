@@ -526,13 +526,27 @@ func outputStatsTable(report *StatsReport) {
 	// Oldest/Newest swamps
 	if report.OldestSwamp != nil || report.NewestSwamp != nil {
 		fmt.Println("📅 TIMELINE")
-		fmt.Println(strings.Repeat("─", 60))
+		fmt.Println(strings.Repeat("─", 80))
 
 		if report.OldestSwamp != nil {
-			printRow("Oldest Swamp", fmt.Sprintf("%s (%s)", truncateName(report.OldestSwamp.Name, 30), report.OldestSwamp.CreatedAt.Format("2006-01-02 15:04")))
+			swampName := report.OldestSwamp.SwampName
+			if swampName == "" {
+				swampName = "(no name)"
+			}
+			fmt.Printf("  Oldest Swamp:\n")
+			fmt.Printf("    Path: %s\n", report.OldestSwamp.Name)
+			fmt.Printf("    Name: %s\n", swampName)
+			fmt.Printf("    Date: %s\n", report.OldestSwamp.CreatedAt.Format("2006-01-02 15:04:05"))
 		}
 		if report.NewestSwamp != nil {
-			printRow("Newest Swamp", fmt.Sprintf("%s (%s)", truncateName(report.NewestSwamp.Name, 30), report.NewestSwamp.CreatedAt.Format("2006-01-02 15:04")))
+			swampName := report.NewestSwamp.SwampName
+			if swampName == "" {
+				swampName = "(no name)"
+			}
+			fmt.Printf("  Newest Swamp:\n")
+			fmt.Printf("    Path: %s\n", report.NewestSwamp.Name)
+			fmt.Printf("    Name: %s\n", swampName)
+			fmt.Printf("    Date: %s\n", report.NewestSwamp.CreatedAt.Format("2006-01-02 15:04:05"))
 		}
 		fmt.Println()
 	}
@@ -541,31 +555,23 @@ func outputStatsTable(report *StatsReport) {
 	if len(report.LargestSwamps) > 0 {
 		fmt.Println("📦 TOP 10 LARGEST SWAMPS")
 		fmt.Println(strings.Repeat("─", 80))
-		fmt.Printf("  %-3s  %-28s  %-25s  %10s  %10s\n", "#", "Path", "Swamp Name", "Size", "Records")
-		fmt.Println(strings.Repeat("─", 80))
 
 		for i, s := range report.LargestSwamps {
 			swampName := s.SwampName
 			if swampName == "" {
-				swampName = "-"
+				swampName = "(no name)"
 			}
-			fmt.Printf("  %-3d  %-28s  %-25s  %10s  %10s\n",
-				i+1,
-				truncateName(s.Name, 28),
-				truncateName(swampName, 25),
-				formatBytes(s.SizeBytes),
-				formatNumber(int64(s.LiveEntries)),
-			)
+			fmt.Printf("  %d. %s\n", i+1, s.Name)
+			fmt.Printf("     Name: %s\n", swampName)
+			fmt.Printf("     Size: %s | Records: %s\n", formatBytes(s.SizeBytes), formatNumber(int64(s.LiveEntries)))
+			fmt.Println()
 		}
-		fmt.Println()
 	}
 
 	// Top 10 Most Fragmented
 	if len(report.MostFragmentedSwamps) > 0 {
 		fmt.Println("⚡ TOP 10 MOST FRAGMENTED SWAMPS")
-		fmt.Println(strings.Repeat("─", 90))
-		fmt.Printf("  %-3s  %-25s  %-20s  %7s  %8s  %8s  %s\n", "#", "Path", "Swamp Name", "Frag%", "Dead", "Live", "Compact?")
-		fmt.Println(strings.Repeat("─", 90))
+		fmt.Println(strings.Repeat("─", 80))
 
 		for i, s := range report.MostFragmentedSwamps {
 			compactIcon := "—"
@@ -574,19 +580,13 @@ func outputStatsTable(report *StatsReport) {
 			}
 			swampName := s.SwampName
 			if swampName == "" {
-				swampName = "-"
+				swampName = "(no name)"
 			}
-			fmt.Printf("  %-3d  %-25s  %-20s  %6.1f%%  %8d  %8d  %s\n",
-				i+1,
-				truncateName(s.Name, 25),
-				truncateName(swampName, 20),
-				s.Fragmentation,
-				s.DeadEntries,
-				s.LiveEntries,
-				compactIcon,
-			)
+			fmt.Printf("  %d. %s %s\n", i+1, s.Name, compactIcon)
+			fmt.Printf("     Name: %s\n", swampName)
+			fmt.Printf("     Frag: %.1f%% | Dead: %d | Live: %d\n", s.Fragmentation, s.DeadEntries, s.LiveEntries)
+			fmt.Println()
 		}
-		fmt.Println()
 	}
 
 	// Footer

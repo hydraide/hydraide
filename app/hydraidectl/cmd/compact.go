@@ -83,6 +83,7 @@ type CompactReport struct {
 	TotalSwamps      int                 `json:"total_swamps"`
 	ScannedSwamps    int                 `json:"scanned_swamps"`
 	CompactedSwamps  int                 `json:"compacted_swamps"`
+	DeletedSwamps    int                 `json:"deleted_swamps"` // Swamps deleted because all entries were removed
 	SkippedSwamps    int                 `json:"skipped_swamps"`
 	FailedSwamps     int                 `json:"failed_swamps"`
 	TotalOldSize     int64               `json:"total_old_size_bytes"`
@@ -365,6 +366,9 @@ func outputCompactTable(report *CompactReport) {
 	printCompactRow("Total Swamps", fmt.Sprintf("%d", report.TotalSwamps))
 	printCompactRow("Scanned", fmt.Sprintf("%d", report.ScannedSwamps))
 	printCompactRow("Compacted", fmt.Sprintf("%d", report.CompactedSwamps))
+	if report.DeletedSwamps > 0 {
+		printCompactRow("Deleted (empty)", fmt.Sprintf("🗑️  %d", report.DeletedSwamps))
+	}
 	printCompactRow("Skipped (below threshold)", fmt.Sprintf("%d", report.SkippedSwamps))
 	if report.FailedSwamps > 0 {
 		printCompactRow("Failed", fmt.Sprintf("❌ %d", report.FailedSwamps))

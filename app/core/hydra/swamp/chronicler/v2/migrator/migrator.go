@@ -43,18 +43,21 @@ type Config struct {
 
 // Result contains the migration results
 type Result struct {
-	StartTime        time.Time
-	EndTime          time.Time
-	Duration         time.Duration
-	TotalSwamps      int64
-	ProcessedSwamps  int64
-	SuccessfulSwamps int64
-	FailedSwamps     []FailedSwamp
-	TotalEntries     int64
-	OldSizeBytes     int64
-	NewSizeBytes     int64
-	DryRun           bool
-	Errors           []string
+	StartTime          time.Time
+	EndTime            time.Time
+	Duration           time.Duration
+	TotalSwamps        int64
+	ProcessedSwamps    int64
+	SuccessfulSwamps   int64
+	FailedSwamps       []FailedSwamp
+	TotalEntries       int64
+	TotalRawEntries    int64 // Total entries before deduplication
+	DuplicateKeys      int64 // Number of duplicate keys removed
+	EmptySwampsSkipped int64 // Number of empty swamps skipped (not migrated)
+	OldSizeBytes       int64
+	NewSizeBytes       int64
+	DryRun             bool
+	Errors             []string
 }
 
 // FailedSwamp contains information about a failed migration
@@ -252,8 +255,8 @@ func (m *Migrator) migrateSwamp(folderPath string) {
 		// Continue anyway - swamp name is optional for basic functionality
 	}
 
-	// Step 1: Load V1 data
-	entries, oldSize, err := m.loadV1Swamp(folderPath)
+	// Step 1: Load V1 data (with deduplication)
+	entries, rawEntryCount, duplicateCount, oldSize, err := m.loadV1Swamp(folderPath)
 	if err != nil {
 		m.recordFailure(folderPath, err.Error(), "load")
 		return
@@ -261,6 +264,37 @@ func (m *Migrator) migrateSwamp(folderPath string) {
 
 	atomic.AddInt64(&m.result.OldSizeBytes, oldSize)
 	atomic.AddInt64(&m.result.TotalEntries, int64(len(entries)))
+	atomic.AddInt64(&m.result.TotalRawEntries, rawEntryCount)
+	atomic.AddInt64(&m.result.DuplicateKeys, duplicateCount)
+
+	// Log if duplicates were found
+	if duplicateCount > 0 {
+		slog.Info("Deduplicated entries in swamp",
+			"path", folderPath,
+			"raw_entries", rawEntryCount,
+			"deduplicated_entries", len(entries),
+			"duplicates_removed", duplicateCount)
+	}
+
+	// Skip empty swamps - don't create V2 file if there are no entries
+	if len(entries) == 0 {
+		slog.Info("Skipping empty swamp - no entries to migrate",
+			"path", folderPath,
+			"swamp_name", swampName)
+		atomic.AddInt64(&m.result.EmptySwampsSkipped, 1)
+
+		// Delete old V1 files if enabled (even for empty swamps)
+		if m.config.DeleteOld && !m.config.DryRun {
+			if err := m.deleteV1Files(folderPath); err != nil {
+				slog.Warn("Failed to delete old V1 files for empty swamp",
+					"path", folderPath,
+					"error", err)
+			}
+		}
+
+		atomic.AddInt64(&m.result.SuccessfulSwamps, 1)
+		return
+	}
 
 	// If dry-run, we're done after successful load
 	if m.config.DryRun {
@@ -301,14 +335,19 @@ func (m *Migrator) migrateSwamp(folderPath string) {
 	atomic.AddInt64(&m.result.SuccessfulSwamps, 1)
 }
 
-// loadV1Swamp loads all treasures from a V1 swamp folder
-func (m *Migrator) loadV1Swamp(folderPath string) ([]v2.Entry, int64, error) {
-	var entries []v2.Entry
+// loadV1Swamp loads all treasures from a V1 swamp folder.
+// It deduplicates entries by key - if the same key appears in multiple chunk files,
+// only the last encountered version is kept (matching V1 Load behavior).
+// Returns: deduplicated entries, raw entry count, duplicate count, total size, error
+func (m *Migrator) loadV1Swamp(folderPath string) ([]v2.Entry, int64, int64, int64, error) {
+	// Use a map for deduplication - just like V1 Load did
+	entryMap := make(map[string]v2.Entry)
 	var totalSize int64
+	var rawEntryCount int64
 
 	files, err := os.ReadDir(folderPath)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, 0, 0, err
 	}
 
 	for _, file := range files {
@@ -338,20 +377,33 @@ func (m *Migrator) loadV1Swamp(folderPath string) ([]v2.Entry, int64, error) {
 		filePath := filepath.Join(folderPath, name)
 		fileInfo, err := os.Stat(filePath)
 		if err != nil {
-			return nil, 0, fmt.Errorf("stat %s: %w", filePath, err)
+			return nil, 0, 0, 0, fmt.Errorf("stat %s: %w", filePath, err)
 		}
 		totalSize += fileInfo.Size()
 
 		// Read and decompress the file
 		fileEntries, err := m.loadV1File(filePath)
 		if err != nil {
-			return nil, 0, fmt.Errorf("load %s: %w", filePath, err)
+			return nil, 0, 0, 0, fmt.Errorf("load %s: %w", filePath, err)
 		}
 
-		entries = append(entries, fileEntries...)
+		// Add to map - duplicates will be overwritten (last wins, like V1 Load)
+		for _, entry := range fileEntries {
+			rawEntryCount++
+			entryMap[entry.Key] = entry
+		}
 	}
 
-	return entries, totalSize, nil
+	// Convert map to slice
+	entries := make([]v2.Entry, 0, len(entryMap))
+	for _, entry := range entryMap {
+		entries = append(entries, entry)
+	}
+
+	// Calculate duplicate count
+	duplicateCount := rawEntryCount - int64(len(entries))
+
+	return entries, rawEntryCount, duplicateCount, totalSize, nil
 }
 
 // loadV1File reads a single V1 .dat file and returns entries
@@ -639,6 +691,7 @@ func (r *Result) Summary() string {
 	sb.WriteString("SUMMARY:\n")
 	sb.WriteString(fmt.Sprintf("  Total swamps found:     %d\n", r.TotalSwamps))
 	sb.WriteString(fmt.Sprintf("  Successfully processed: %d\n", r.SuccessfulSwamps))
+	sb.WriteString(fmt.Sprintf("  Empty swamps skipped:   %d\n", r.EmptySwampsSkipped))
 	sb.WriteString(fmt.Sprintf("  Failed:                 %d\n", len(r.FailedSwamps)))
 	sb.WriteString(fmt.Sprintf("  Duration:               %s\n", r.Duration.Round(time.Second)))
 	sb.WriteString("\n")
@@ -655,9 +708,16 @@ func (r *Result) Summary() string {
 	}
 
 	sb.WriteString("ENTRIES:\n")
-	sb.WriteString(fmt.Sprintf("  Total entries:          %d\n", r.TotalEntries))
-	if r.TotalSwamps > 0 {
-		sb.WriteString(fmt.Sprintf("  Average per swamp:      %d\n", r.TotalEntries/r.TotalSwamps))
+	sb.WriteString(fmt.Sprintf("  Raw entries (before dedup): %d\n", r.TotalRawEntries))
+	sb.WriteString(fmt.Sprintf("  Deduplicated entries:       %d\n", r.TotalEntries))
+	sb.WriteString(fmt.Sprintf("  Duplicate keys removed:     %d\n", r.DuplicateKeys))
+	if r.TotalSwamps > 0 && r.TotalEntries > 0 {
+		sb.WriteString(fmt.Sprintf("  Average per swamp:          %d\n", r.TotalEntries/(r.TotalSwamps-r.EmptySwampsSkipped)))
+	}
+	if r.DuplicateKeys > 0 {
+		sb.WriteString("\n")
+		sb.WriteString("  ⚠️  Duplicates were found and deduplicated!\n")
+		sb.WriteString("     This is normal - V1 kept old versions in separate chunk files.\n")
 	}
 	sb.WriteString("\n")
 
