@@ -27,6 +27,7 @@ import (
 	"github.com/hydraide/hydraide/app/core/compressor"
 	"github.com/hydraide/hydraide/app/core/hydra/swamp/chronicler/v2"
 	"github.com/hydraide/hydraide/app/core/hydra/swamp/metadata"
+	"github.com/hydraide/hydraide/app/core/hydra/swamp/treasure"
 )
 
 // Config holds the migration configuration
@@ -428,22 +429,9 @@ func (m *Migrator) parseV1Segments(data []byte) ([][]byte, error) {
 // extractKeyFromTreasure extracts the key from a GOB-encoded treasure
 // This is a simplified extraction - we decode just enough to get the key
 func (m *Migrator) extractKeyFromTreasure(data []byte) (string, error) {
-	// The treasure is GOB-encoded. We need to decode it to get the key.
-	// Since GOB is complex, we'll use a struct that matches the treasure.Model structure
-	type TreasureModel struct {
-		Key            string
-		ExpirationTime int64
-		CreatedAt      int64
-		CreatedBy      string
-		DeletedAt      int64
-		DeletedBy      string
-		ModifiedAt     int64
-		ModifiedBy     string
-		Content        interface{}
-		FileName       *string
-	}
-
-	var model TreasureModel
+	// The treasure is GOB-encoded using treasure.Model type.
+	// We need to decode it with the same type to properly extract the key.
+	var model treasure.Model
 	decoder := NewGobDecoder(data)
 	if err := decoder.Decode(&model); err != nil {
 		return "", fmt.Errorf("gob decode: %w", err)
