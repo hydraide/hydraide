@@ -13,90 +13,209 @@ HydrAIDE 3.0 introduces the **V2 Storage Engine**, a completely redesigned appen
 | **Files per swamp** | 21-23 | 1 | **95% fewer** |
 | **Storage size** | 3.0 MB | 1.5 MB | **50% smaller** |
 
-## ⚠️ IMPORTANT: Backup Before Migration
+---
 
-> **Always create a complete backup of your HydrAIDE data directory before starting any migration!**
+## ⚠️ IMPORTANT: Migration Checklist
 
-```bash
-# Example backup command
-cp -r /path/to/hydraide/data /path/to/backup/hydraide-data-$(date +%Y%m%d)
-```
+Before migrating, ensure:
 
-The migration process modifies your data files. While the migrator includes verification steps, having a backup ensures you can recover if anything goes wrong.
+1. ✅ You have the latest `hydraidectl` installed
+2. ✅ You have the latest HydrAIDE server version
+3. ✅ You have created a backup of your data
+4. ✅ The HydrAIDE server is **STOPPED**
 
 ---
 
-## Migration Commands
+## Complete Migration Procedure
 
-### 1. Dry Run (Recommended First Step)
+Follow these steps in order for a safe and successful migration:
+
+### Step 1: Check for hydraidectl Updates
+
+First, make sure you have the latest hydraidectl:
+
+```bash
+hydraidectl version
+```
+
+If an update is available, update hydraidectl:
+
+```bash
+curl -sSfL https://raw.githubusercontent.com/hydraide/hydraide/main/scripts/install-hydraidectl.sh | bash
+```
+
+### Step 2: Stop the HydrAIDE Server
+
+Stop the instance to ensure no data is being written during migration:
+
+```bash
+sudo hydraidectl stop --instance <your-instance-name>
+```
+
+Example:
+```bash
+sudo hydraidectl stop --instance prod
+```
+
+Wait for the graceful shutdown to complete. This ensures all in-memory data is flushed to disk.
+
+### Step 3: Create a Backup
+
+**This step is critical!** Create a compressed backup of your data:
+
+```bash
+sudo hydraidectl backup --instance <your-instance-name> --output /path/to/backup --compress
+```
+
+Example:
+```bash
+sudo hydraidectl backup --instance prod --output /backup/hydraide --compress
+```
+
+This creates a compressed backup that can be restored if anything goes wrong.
+
+### Step 4: Update the HydrAIDE Server (Without Starting)
+
+Update to the latest server version, but do NOT start the server yet:
+
+```bash
+sudo hydraidectl update --instance <your-instance-name> --no-start
+```
+
+Example:
+```bash
+sudo hydraidectl update --instance prod --no-start
+```
+
+The `--no-start` flag ensures the server stays stopped so you can run the migration.
+
+### Step 5: Run the Migration
+
+Now run the actual migration with full mode:
+
+```bash
+sudo hydraidectl migrate --instance <your-instance-name> --full
+```
+
+Example:
+```bash
+sudo hydraidectl migrate --instance prod --full
+```
+
+The `--full` flag will:
+- ✅ Migrate all V1 swamps to V2 format
+- ✅ Verify data integrity after migration
+- ✅ Delete old V1 files (after successful migration)
+- ✅ Set the storage engine to V2
+
+**Note:** The server will NOT be started automatically after migration, giving you control over when to start it.
+
+### Step 6: Verify Migration Results
+
+Check the migration output for:
+- Number of swamps migrated
+- Any errors or warnings
+- Size savings achieved
+
+If there were any errors, check the specific swamps and fix the issues before continuing.
+
+### Step 7: Start the HydrAIDE Server
+
+Once you've verified the migration was successful, start the server:
+
+```bash
+sudo hydraidectl start --instance <your-instance-name>
+```
+
+Example:
+```bash
+sudo hydraidectl start --instance prod
+```
+
+### Step 8: Verify Server Health
+
+Check that the server is running correctly:
+
+```bash
+hydraidectl health --instance <your-instance-name>
+```
+
+Test your application to ensure everything works as expected.
+
+---
+
+## Quick Reference: Complete Command Sequence
+
+```bash
+# 1. Check for updates
+hydraidectl version
+
+# 2. Update hydraidectl if needed
+curl -sSfL https://raw.githubusercontent.com/hydraide/hydraide/main/scripts/install-hydraidectl.sh | bash
+
+# 3. Stop the server
+sudo hydraidectl stop --instance prod
+
+# 4. Create backup
+sudo hydraidectl backup --instance prod --output /backup/hydraide --compress
+
+# 5. Update server without starting
+sudo hydraidectl update --instance prod --no-start
+
+# 6. Run migration
+sudo hydraidectl migrate --instance prod --full
+
+# 7. Verify results (check output above)
+
+# 8. Start the server
+sudo hydraidectl start --instance prod
+
+# 9. Verify health
+hydraidectl health --instance prod
+```
+
+---
+
+## Migration Options
+
+### Dry Run (Recommended First Step)
 
 Run a dry-run to see what would be migrated without making any changes:
 
 ```bash
-hydraidectl migrate --source /path/to/hydraide/data --dry-run
+hydraidectl migrate --instance prod --dry-run
 ```
 
-This will:
-- Scan all directories for V1 swamps
-- Report how many swamps would be migrated
-- Show estimated size savings
-- **Not modify any files**
-
-### 2. Full Migration
-
-Once you've verified the dry-run results, run the actual migration:
-
-```bash
-hydraidectl migrate --source /path/to/hydraide/data
-```
-
-### 3. Parallel Migration (Faster)
+### Parallel Migration (Faster for Large Datasets)
 
 For large datasets, use multiple worker threads:
 
 ```bash
-hydraidectl migrate --source /path/to/hydraide/data --workers 8
+hydraidectl migrate --instance prod --full --parallel 8
 ```
 
-### 4. Migration with Verification
+### JSON Output
 
-Enable verification to ensure data integrity after migration:
-
-```bash
-hydraidectl migrate --source /path/to/hydraide/data --verify
-```
-
-### 5. Keep Original Files (Safe Mode)
-
-Keep original V1 files after migration (uses more disk space):
+For scripting or automation:
 
 ```bash
-hydraidectl migrate --source /path/to/hydraide/data --keep-original
+hydraidectl migrate --instance prod --full --json
 ```
 
 ---
 
-## Command Options
+## Command Options Reference
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `--source`, `-s` | Path to HydrAIDE data directory | **Required** |
-| `--dry-run`, `-d` | Simulate migration without changes | `false` |
-| `--workers`, `-w` | Number of parallel workers | `4` |
-| `--verify`, `-v` | Verify data after migration | `false` |
-| `--keep-original` | Don't delete original V1 files | `false` |
-
----
-
-## What the Migrator Does
-
-1. **Scans** the source directory recursively for V1 swamps
-2. **Detects** V1 format (multiple chunk files + meta.json)
-3. **Reads** all data from V1 chunks
-4. **Writes** data to new V2 `.hyd` file format
-5. **Verifies** (if enabled) that all data was migrated correctly
-6. **Removes** (unless `--keep-original`) old V1 files
-7. **Reports** statistics (swamps migrated, size saved, errors)
+| `--instance`, `-i` | Instance name | **Required** |
+| `--data-path` | Direct path to data directory (alternative to --instance) | - |
+| `--full` | Complete migration (migrate + set engine + cleanup) | `false` |
+| `--dry-run` | Simulate migration without changes | `false` |
+| `--parallel` | Number of parallel workers | `4` |
+| `--verify` | Verify data after migration | `true` (with --full) |
+| `--delete-old` | Delete original V1 files | `true` (with --full) |
+| `--json` | Output results as JSON | `false` |
 
 ---
 
@@ -106,8 +225,9 @@ hydraidectl migrate --source /path/to/hydraide/data --keep-original
 HydrAIDE V1 → V2 Migration
 ==========================
 
-Source: /data/hydraide
-Mode: Live Migration
+Instance: prod
+Data path: /var/hydraide/prod/data
+Mode: LIVE MIGRATION
 Workers: 4
 
 Scanning for V1 swamps...
@@ -124,18 +244,18 @@ Migration Complete!
 📁 Size after: 23.1 GB
 💾 Saved: 22.1 GB (49%)
 ⏱️ Duration: 4m 32s
+
+Setting engine to V2...
+✅ Engine set to V2
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🎉 Migration completed successfully!
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+The instance was NOT started automatically.
+Please verify the migration results above, then start the server manually:
+  sudo hydraidectl start --instance prod
 ```
-
----
-
-## Post-Migration
-
-After migration:
-
-1. **Verify your application works correctly** with the migrated data
-2. **Monitor performance** - you should see significant improvements
-3. **Update your configuration** to use `UseChroniclerV2: true` for new swamps
-4. **Remove backups** once you're confident the migration was successful
 
 ---
 
@@ -153,9 +273,19 @@ If migration fails partway through:
 
 If you need to rollback:
 
-1. Stop HydrAIDE
-2. Restore from your backup
-3. Restart HydrAIDE
+1. Stop HydrAIDE (if running)
+2. Restore from your backup:
+   ```bash
+   sudo hydraidectl restore --instance prod --source /backup/hydraide/prod-backup.tar.gz
+   ```
+3. Set engine back to V1:
+   ```bash
+   hydraidectl engine --instance prod --set v1
+   ```
+4. Start HydrAIDE:
+   ```bash
+   sudo hydraidectl start --instance prod
+   ```
 
 ### Verification Errors
 
@@ -164,6 +294,14 @@ If verification reports mismatches:
 1. Check the specific swamps reported
 2. Re-run migration for those swamps
 3. If issues persist, restore from backup and report the issue
+
+### Not Enough Disk Space
+
+The migration temporarily needs extra disk space. Solutions:
+
+1. Use `--delete-old` to delete V1 files immediately after each swamp migrates
+2. Free up disk space before migration
+3. Migrate in batches
 
 ---
 

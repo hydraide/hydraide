@@ -129,7 +129,7 @@ func runMigrateWithInstance() {
 	// Run migration
 	runMigrateWithDataPath()
 
-	// Full migration: set engine and restart
+	// Full migration: set engine to V2 (but do NOT auto-start)
 	if migrateFull && !migrateDryRun {
 		fmt.Println("\nSetting engine to V2...")
 		settings, _ := loadEngineSettings(settingsPath)
@@ -143,13 +143,15 @@ func runMigrateWithInstance() {
 			fmt.Println("✅ Engine set to V2")
 		}
 
-		fmt.Printf("\nStarting instance '%s'...\n", migrateInstanceName)
-		if err := runner.StartInstance(ctx, migrateInstanceName); err != nil {
-			fmt.Printf("⚠️  Warning: Could not start instance: %v\n", err)
-			fmt.Printf("   Start manually: sudo hydraidectl start --instance %s\n", migrateInstanceName)
-		} else {
-			fmt.Printf("✅ Instance '%s' started\n", migrateInstanceName)
-		}
+		fmt.Println("")
+		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Println("🎉 Migration completed successfully!")
+		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Println("")
+		fmt.Println("The instance was NOT started automatically.")
+		fmt.Println("Please verify the migration results above, then start the server manually:")
+		fmt.Printf("  sudo hydraidectl start --instance %s\n", migrateInstanceName)
+		fmt.Println("")
 	}
 }
 

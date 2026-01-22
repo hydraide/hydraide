@@ -531,11 +531,11 @@ hydraidectl cert
 Updates a HydrAIDE instance to the **latest available server binary**.
 If an update is available, the command performs the entire flow end‑to‑end:
 
-1. **Gracefully stop** the instance (only if it’s running)
-2. **Download** the latest server binary into the instance’s base path (with a progress bar)
+1. **Gracefully stop** the instance (only if it's running)
+2. **Download** the latest server binary into the instance's base path (with a progress bar)
 3. **Update metadata** and **(re)generate** the service definition
-4. **Start** the instance
-5. **Wait** until the instance reports **`healthy`** (or until the operation times out)
+4. **Optionally start** the instance (unless `--no-start` is used)
+5. **Wait** until the instance reports **`healthy`** (if started)
 
 If the instance is **already on the latest version**, this command is a **no‑op** (it **does not stop** the server).
 
@@ -547,21 +547,22 @@ If the instance is **already on the latest version**, this command is a **no‑o
 ### Synopsis
 
 ```bash
-hydraidectl update --instance <name>
+hydraidectl update --instance <name> [--no-start]
 ```
 
 ### Flags
 
 * `--instance` / `-i` **(required)** — the target instance name.
+* `--no-start` — update the binary without starting the server (useful before migration).
 
 ### Behavior & Timeouts
 
-* Version check: compares the instance’s recorded version with the **latest available** version.
+* Version check: compares the instance's recorded version with the **latest available** version.
 * Graceful stop: only if status is not `inactive`/`unknown`.
 * Progress: shows a **byte‑accurate progress bar** during download.
 * Service file: removes the old service definition and **generates a fresh one** for the updated binary.
-* Start: immediately starts the instance after updating.
-* Health wait: polls the instance until it becomes **`healthy`**.
+* Start: immediately starts the instance after updating (unless `--no-start` is set).
+* Health wait: polls the instance until it becomes **`healthy`** (if started).
 
     * Overall operation context timeout: **600s**
     * Controller command timeout: **20s**
@@ -570,8 +571,11 @@ hydraidectl update --instance <name>
 ### Examples
 
 ```bash
-# Update an instance named "prod"
+# Update an instance named "prod" and start it
 hydraidectl update --instance prod
+
+# Update without starting (for migration scenarios)
+sudo hydraidectl update --instance prod --no-start
 ```
 
 **Typical outputs**
@@ -589,6 +593,15 @@ hydraidectl update --instance prod
   Instance "prod" has been successfully updated to version X.Y.Z and started.
   Waiting for instance "prod" to become healthy...
   Instance "prod" is now healthy and ready for use. (Waited 7s)
+  ```
+* Successful update without start (--no-start):
+
+  ```
+  Instance "prod" stopped gracefully.
+  Downloading  45.2 MB / 45.2 MB
+  Instance "prod" has been successfully updated to version X.Y.Z.
+  The instance was NOT started (--no-start flag). Start it manually with:
+    sudo hydraidectl start --instance prod
   ```
 * Could not determine the latest version:
 
@@ -824,21 +837,53 @@ hydraidectl cleanup --instance prod --v2-files
 
 ## Complete V2 Migration Workflow
 
-Here's the recommended workflow for migrating to V2 storage:
+Here's the recommended step-by-step workflow for safely migrating to V2 storage:
+
+### Pre-Migration Checklist
+
+Before starting, ensure:
+- ✅ You have the latest `hydraidectl` installed
+- ✅ You have sufficient disk space for backup
+- ✅ No critical operations are running
+
+### Step-by-Step Migration
 
 ```bash
-# 1. Create backup
-hydraidectl backup --instance prod --target /backup/pre-migration --compress
+# 1. Check for hydraidectl updates
+hydraidectl version
 
-# 2. Run full migration (stops, migrates, sets V2, starts)
-hydraidectl migrate --instance prod --full
+# 2. Update hydraidectl if needed
+curl -sSfL https://raw.githubusercontent.com/hydraide/hydraide/main/scripts/install-hydraidectl.sh | bash
 
-# 3. Verify
+# 3. Stop the HydrAIDE server
+sudo hydraidectl stop --instance prod
+
+# 4. Create a compressed backup of your data
+sudo hydraidectl backup --instance prod --output /backup/pre-migration --compress
+
+# 5. Update the server WITHOUT starting it
+sudo hydraidectl update --instance prod --no-start
+
+# 6. Run the full migration
+sudo hydraidectl migrate --instance prod --full
+
+# 7. Verify migration results (check the output above for any errors)
 hydraidectl size --instance prod
 
-# 4. (Optional) If everything works, clean up old V1 files
-hydraidectl cleanup --instance prod --v1-files
+# 8. Start the server manually after verification
+sudo hydraidectl start --instance prod
+
+# 9. Check server health
+hydraidectl health --instance prod
 ```
+
+### Why This Order?
+
+1. **Stop first** - Ensures no data is being written during backup or migration
+2. **Backup before update** - Your backup contains the current working version
+3. **Update with --no-start** - Gets latest server binary without starting
+4. **Migrate** - Converts V1 data to V2 format
+5. **Manual start** - Gives you control to verify before starting
 
 **Rollback procedure:**
 

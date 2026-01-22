@@ -17,12 +17,15 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// CLI flag value: which instance should be updated.
-var updateInstance string
+// CLI flag values for update command
+var (
+	updateInstance string
+	updateNoStart  bool
+)
 
 // updateCmd defines the "update" subcommand for the CLI.
 // Flow: gracefully stop (if running) -> download latest binary -> save metadata
-// -> (re)generate service definition -> start instance -> wait for healthy.
+// -> (re)generate service definition -> optionally start instance -> wait for healthy.
 var updateCmd = &cobra.Command{
 	Use:   "update",
 	Short: "Update an instance to the latest HydrAIDE version",
@@ -30,8 +33,11 @@ var updateCmd = &cobra.Command{
 1) gracefully stops the instance if it is running,
 2) downloads the latest server binary,
 3) updates the service definition,
-4) starts the instance,
-5) waits until it becomes healthy.`,
+4) optionally starts the instance (unless --no-start is used),
+5) waits until it becomes healthy (if started).
+
+Use --no-start when you want to update the binary without starting the server,
+for example before running a migration.`,
 
 	Run: func(cmd *cobra.Command, args []string) {
 		// Initialize helpers
@@ -136,6 +142,16 @@ var updateCmd = &cobra.Command{
 		// (Re)create service definition for the updated binary
 		_ = serviceHelperInterface.RemoveService(updateInstance)
 		_ = serviceHelperInterface.GenerateServiceFile(updateInstance, instanceMeta.BasePath)
+
+		// If --no-start flag is set, skip starting the instance
+		if updateNoStart {
+			fmt.Printf("Instance %q has been successfully updated to version %s.\n", updateInstance, downloadedVersion)
+			fmt.Println("The instance was NOT started (--no-start flag). Start it manually with:")
+			fmt.Printf("  sudo hydraidectl start --instance %s\n", updateInstance)
+			return
+		}
+
+		// Start the instance
 		_ = instanceController.StartInstance(ctx, updateInstance)
 
 		fmt.Printf("Instance %q has been successfully updated to version %s and started.\n", updateInstance, downloadedVersion)
@@ -171,4 +187,5 @@ func init() {
 	// Register the "update" subcommand and its flags on the root command.
 	rootCmd.AddCommand(updateCmd)
 	updateCmd.Flags().StringVarP(&updateInstance, "instance", "i", "", "Name of the service instance")
+	updateCmd.Flags().BoolVar(&updateNoStart, "no-start", false, "Update without starting the instance (useful before migration)")
 }
