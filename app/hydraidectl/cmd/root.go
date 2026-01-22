@@ -44,6 +44,7 @@ DATA MANAGEMENT:
   restore     Restore instance data from backup
   cleanup     Remove orphaned/old storage files
   size        Show instance data storage size
+  stats       Show detailed swamp statistics and health report
 
 CERTIFICATES:
   cert        Generate TLS certificates (standalone)

@@ -31,6 +31,7 @@ Although `hydraidectl` is stable and production-tested, new features are under d
 * [`backup` – Create instance backup](#backup--create-instance-backup)
 * [`restore` – Restore instance from backup](#restore--restore-instance-from-backup)
 * [`size` – Show instance data size](#size--show-instance-data-size)
+* [`stats` – Show detailed swamp statistics and health report](#stats--show-detailed-swamp-statistics-and-health-report)
 * [`cleanup` – Remove old storage files](#cleanup--remove-old-storage-files)
 * [`version` – Display CLI and optional instance metadata](#version--display-cli-and-optional-instance-metadata)
 
@@ -821,6 +822,102 @@ Top 10 Largest Swamps:
    2. domains/metadata               8.45 MB
    ...
 ```
+
+---
+
+## `stats` – Show Detailed Swamp Statistics and Health Report
+
+Analyzes all V2 swamps in a HydrAIDE instance and provides comprehensive statistics including fragmentation levels, compaction recommendations, and size information.
+
+**Flags**
+- `--instance`, `-i` — Instance name (**required**)
+- `--json`, `-j` — Output as JSON format
+- `--latest`, `-l` — Show the last saved report instead of running a new scan
+- `--parallel`, `-p` — Number of parallel workers (default: 4)
+
+**Examples**
+
+```bash
+# Run a full scan and display report
+hydraidectl stats --instance prod
+
+# Output as JSON (useful for automation)
+hydraidectl stats --instance prod --json
+
+# Show the last saved report (no new scan)
+hydraidectl stats --instance prod --latest
+
+# Use 8 parallel workers for faster scanning
+hydraidectl stats --instance prod --parallel 8
+```
+
+**Output Example:**
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  💠 HydrAIDE Swamp Statistics - prod
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📊 SUMMARY
+────────────────────────────────────────────────────────────
+  Total Database Size              │ 1.25 GB
+  Total Swamps                     │ 1234
+  Total Live Records               │ 456.7K
+  Total Entries (incl. deleted)    │ 512.3K
+  Dead Entries                     │ 55.6K
+  Avg Records/Swamp                │ 370.1
+  Median Records/Swamp             │ 245
+  Avg Swamp Size                   │ 1.04 MB
+  Scan Duration                    │ 2.345s
+
+🔧 FRAGMENTATION & COMPACTION
+────────────────────────────────────────────────────────────
+  Average Fragmentation            │ ✅ 10.8%
+  Swamps Needing Compaction        │ 23 (>20% fragmented)
+  Estimated Reclaimable Space      │ 45.67 MB
+
+📅 TIMELINE
+────────────────────────────────────────────────────────────
+  Oldest Swamp                     │ words/common (2024-01-15 10:30)
+  Newest Swamp                     │ analytics/events (2026-01-22 14:45)
+
+📦 TOP 10 LARGEST SWAMPS
+────────────────────────────────────────────────────────────
+  #    Swamp                                Size       Records
+────────────────────────────────────────────────────────────
+  1    words/index                       15.32 MB      45.2K
+  2    domains/metadata                   8.45 MB      12.1K
+  ...
+
+⚡ TOP 10 MOST FRAGMENTED SWAMPS
+────────────────────────────────────────────────────────────
+  #    Swamp                          Frag%      Dead      Live  Compact?
+────────────────────────────────────────────────────────────
+  1    temp/cache                      65.2%      1234       567  ⚠️
+  2    sessions/expired                45.8%       890       321  ⚠️
+  ...
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Generated: 2026-01-22T15:30:45+01:00
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💡 RECOMMENDATIONS
+────────────────────────────────────────────────────────────
+   23 swamp(s) have >20% fragmentation.
+   Estimated 45.67 MB can be reclaimed with compaction.
+```
+
+**Report Storage:**
+
+The stats command automatically saves reports to `<instance_base_path>/.hydraide/stats-report-latest.json`. Use `--latest` to quickly view the last report without rescanning.
+
+**Understanding Fragmentation:**
+
+- **0-20%**: ✅ Healthy - No action needed
+- **20-50%**: ⚠️ Moderate - Consider compaction
+- **50%+**: 🔴 High - Compaction recommended
+
+Fragmentation occurs when records are updated or deleted. Dead entries remain in the file until compaction reclaims the space.
 
 ---
 
