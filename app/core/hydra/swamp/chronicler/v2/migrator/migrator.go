@@ -256,13 +256,12 @@ func (m *Migrator) migrateSwamp(folderPath string) {
 	}
 
 	// Step 1: Load V1 data (with deduplication)
-	entries, rawEntryCount, duplicateCount, oldSize, err := m.loadV1Swamp(folderPath)
+	entries, rawEntryCount, duplicateCount, err := m.loadV1Swamp(folderPath)
 	if err != nil {
 		m.recordFailure(folderPath, err.Error(), "load")
 		return
 	}
 
-	atomic.AddInt64(&m.result.OldSizeBytes, oldSize)
 	atomic.AddInt64(&m.result.TotalEntries, int64(len(entries)))
 	atomic.AddInt64(&m.result.TotalRawEntries, rawEntryCount)
 	atomic.AddInt64(&m.result.DuplicateKeys, duplicateCount)
@@ -304,13 +303,11 @@ func (m *Migrator) migrateSwamp(folderPath string) {
 
 	// Step 2: Write V2 file (including swamp name as metadata entry)
 	hydFilePath := folderPath + ".hyd"
-	newSize, err := m.writeV2File(hydFilePath, entries, swampName)
+	err = m.writeV2File(hydFilePath, entries, swampName)
 	if err != nil {
 		m.recordFailure(folderPath, err.Error(), "write")
 		return
 	}
-
-	atomic.AddInt64(&m.result.NewSizeBytes, newSize)
 
 	// Step 3: Verify (if enabled)
 	if m.config.Verify {
@@ -338,16 +335,15 @@ func (m *Migrator) migrateSwamp(folderPath string) {
 // loadV1Swamp loads all treasures from a V1 swamp folder.
 // It deduplicates entries by key - if the same key appears in multiple chunk files,
 // only the last encountered version is kept (matching V1 Load behavior).
-// Returns: deduplicated entries, raw entry count, duplicate count, total size, error
-func (m *Migrator) loadV1Swamp(folderPath string) ([]v2.Entry, int64, int64, int64, error) {
+// Returns: deduplicated entries, raw entry count, duplicate count, error
+func (m *Migrator) loadV1Swamp(folderPath string) ([]v2.Entry, int64, int64, error) {
 	// Use a map for deduplication - just like V1 Load did
 	entryMap := make(map[string]v2.Entry)
-	var totalSize int64
 	var rawEntryCount int64
 
 	files, err := os.ReadDir(folderPath)
 	if err != nil {
-		return nil, 0, 0, 0, err
+		return nil, 0, 0, err
 	}
 
 	for _, file := range files {
@@ -375,16 +371,11 @@ func (m *Migrator) loadV1Swamp(folderPath string) ([]v2.Entry, int64, int64, int
 		}
 
 		filePath := filepath.Join(folderPath, name)
-		fileInfo, err := os.Stat(filePath)
-		if err != nil {
-			return nil, 0, 0, 0, fmt.Errorf("stat %s: %w", filePath, err)
-		}
-		totalSize += fileInfo.Size()
 
 		// Read and decompress the file
 		fileEntries, err := m.loadV1File(filePath)
 		if err != nil {
-			return nil, 0, 0, 0, fmt.Errorf("load %s: %w", filePath, err)
+			return nil, 0, 0, fmt.Errorf("load %s: %w", filePath, err)
 		}
 
 		// Add to map - duplicates will be overwritten (last wins, like V1 Load)
@@ -403,7 +394,7 @@ func (m *Migrator) loadV1Swamp(folderPath string) ([]v2.Entry, int64, int64, int
 	// Calculate duplicate count
 	duplicateCount := rawEntryCount - int64(len(entries))
 
-	return entries, rawEntryCount, duplicateCount, totalSize, nil
+	return entries, rawEntryCount, duplicateCount, nil
 }
 
 // loadV1File reads a single V1 .dat file and returns entries
@@ -526,10 +517,10 @@ func (m *Migrator) loadSwampNameFromMeta(folderPath string) (string, error) {
 const MetadataEntryKey = "__swamp_meta__"
 
 // writeV2File writes entries to a new V2 .hyd file
-func (m *Migrator) writeV2File(filePath string, entries []v2.Entry, swampName string) (int64, error) {
+func (m *Migrator) writeV2File(filePath string, entries []v2.Entry, swampName string) error {
 	writer, err := v2.NewFileWriter(filePath, v2.DefaultMaxBlockSize)
 	if err != nil {
-		return 0, err
+		return err
 	}
 
 	// First, write swamp metadata entry if we have a swamp name
@@ -542,7 +533,7 @@ func (m *Migrator) writeV2File(filePath string, entries []v2.Entry, swampName st
 		if err := writer.WriteEntry(metaEntry); err != nil {
 			writer.Close()
 			os.Remove(filePath)
-			return 0, fmt.Errorf("write metadata entry: %w", err)
+			return fmt.Errorf("write metadata entry: %w", err)
 		}
 	}
 
@@ -551,21 +542,16 @@ func (m *Migrator) writeV2File(filePath string, entries []v2.Entry, swampName st
 		if err := writer.WriteEntry(entry); err != nil {
 			writer.Close()
 			os.Remove(filePath)
-			return 0, err
+			return err
 		}
 	}
 
 	if err := writer.Close(); err != nil {
 		os.Remove(filePath)
-		return 0, err
+		return err
 	}
 
-	info, err := os.Stat(filePath)
-	if err != nil {
-		return 0, err
-	}
-
-	return info.Size(), nil
+	return nil
 }
 
 // verifyMigration verifies that the V2 file contains all expected entries
@@ -695,17 +681,6 @@ func (r *Result) Summary() string {
 	sb.WriteString(fmt.Sprintf("  Failed:                 %d\n", len(r.FailedSwamps)))
 	sb.WriteString(fmt.Sprintf("  Duration:               %s\n", r.Duration.Round(time.Second)))
 	sb.WriteString("\n")
-
-	if !r.DryRun {
-		sb.WriteString("SIZE:\n")
-		sb.WriteString(fmt.Sprintf("  Old size (V1):          %s\n", formatBytes(r.OldSizeBytes)))
-		sb.WriteString(fmt.Sprintf("  New size (V2):          %s\n", formatBytes(r.NewSizeBytes)))
-		if r.OldSizeBytes > 0 {
-			savings := float64(r.OldSizeBytes-r.NewSizeBytes) / float64(r.OldSizeBytes) * 100
-			sb.WriteString(fmt.Sprintf("  Savings:                %.1f%%\n", savings))
-		}
-		sb.WriteString("\n")
-	}
 
 	sb.WriteString("ENTRIES:\n")
 	sb.WriteString(fmt.Sprintf("  Raw entries (before dedup): %d\n", r.TotalRawEntries))

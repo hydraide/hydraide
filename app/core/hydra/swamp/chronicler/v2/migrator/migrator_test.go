@@ -182,13 +182,14 @@ func TestMigrator_WriteAndVerify(t *testing.T) {
 	}
 
 	// Write V2 file with swamp name
-	size, err := m.writeV2File(hydFile, entries, "test/swamp/name")
+	err := m.writeV2File(hydFile, entries, "test/swamp/name")
 	if err != nil {
 		t.Fatalf("writeV2File failed: %v", err)
 	}
 
-	if size == 0 {
-		t.Error("expected non-zero file size")
+	// Verify the file exists
+	if _, err := os.Stat(hydFile); os.IsNotExist(err) {
+		t.Error("expected file to exist after write")
 	}
 
 	// Verify the file
