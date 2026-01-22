@@ -2,6 +2,7 @@ package e2etests
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
@@ -33,7 +34,7 @@ func TestV1ToV2FullMigration(t *testing.T) {
 	if os.Getenv("E2E_HYDRA_SERVER_CRT") == "" {
 		t.Skip("E2E test environment not configured - skipping full migration test")
 	}
-
+ 
 	// Use the standard data path
 	dataPath := "/hydraide/data"
 	settingsPath := "/hydraide/settings/settings.json"
@@ -73,7 +74,7 @@ func TestV1ToV2FullMigration(t *testing.T) {
 		UseV2Engine:         false, // V1 engine!
 	})
 
-	err := v1Server.Start()
+	err = v1Server.Start()
 	require.NoError(t, err, "Failed to start V1 server")
 
 	// Wait for server to start
@@ -677,4 +678,37 @@ func findHydFileInPath(t *testing.T, basePath string) string {
 		t.Logf("Warning: error walking path: %v", err)
 	}
 	return hydFile
+}
+
+// switchEngineInSettings modifies the settings.json to use the specified engine version.
+// This is necessary because the server reads the engine setting from settings.json,
+// not from the server Configuration struct.
+func switchEngineInSettings(settingsPath, engine string) error {
+	// Read current settings
+	data, err := os.ReadFile(settingsPath)
+	if err != nil {
+		return fmt.Errorf("failed to read settings file: %w", err)
+	}
+
+	// Parse JSON
+	var settings map[string]interface{}
+	if err := json.Unmarshal(data, &settings); err != nil {
+		return fmt.Errorf("failed to parse settings JSON: %w", err)
+	}
+
+	// Change engine
+	settings["engine"] = engine
+
+	// Write back
+	newData, err := json.MarshalIndent(settings, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal settings JSON: %w", err)
+	}
+
+	if err := os.WriteFile(settingsPath, newData, 0644); err != nil {
+		return fmt.Errorf("failed to write settings file: %w", err)
+	}
+
+	slog.Info("Engine switched in settings.json", "engine", engine)
+	return nil
 }
