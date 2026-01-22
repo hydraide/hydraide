@@ -52,3 +52,4 @@ app/core/hydra/settings/*/**
 app/core/zeus/settings/*/**
 sdk/go/hydraidego/settings/*/**
 */**/settings.json
+app/server/e2etests/data/
