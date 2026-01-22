@@ -393,13 +393,14 @@ func (m *Migrator) loadV1File(filePath string) ([]v2.Entry, error) {
 	return entries, nil
 }
 
-// parseV1Segments parses length-prefixed binary segments from V1 format
+// parseV1Segments parses length-prefixed binary segments from V1 format.
+// V1 format: [4-byte little-endian length][data][4-byte little-endian length][data]...
 func (m *Migrator) parseV1Segments(data []byte) ([][]byte, error) {
 	var segments [][]byte
 	reader := NewByteReader(data)
 
 	for reader.Remaining() > 0 {
-		// Read segment length (4 bytes, big-endian)
+		// Read segment length (4 bytes, little-endian - V1 filesystem format)
 		length, err := reader.ReadUint32()
 		if err != nil {
 			if err == io.EOF {

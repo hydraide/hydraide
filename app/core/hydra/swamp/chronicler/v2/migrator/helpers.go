@@ -19,13 +19,13 @@ func NewByteReader(data []byte) *ByteReader {
 	return &ByteReader{data: data}
 }
 
-// ReadUint32 reads a big-endian uint32
+// ReadUint32 reads a little-endian uint32 (V1 filesystem format)
 func (r *ByteReader) ReadUint32() (uint32, error) {
 	if r.offset+4 > len(r.data) {
 		return 0, io.EOF
 	}
 
-	value := binary.BigEndian.Uint32(r.data[r.offset : r.offset+4])
+	value := binary.LittleEndian.Uint32(r.data[r.offset : r.offset+4])
 	r.offset += 4
 	return value, nil
 }
