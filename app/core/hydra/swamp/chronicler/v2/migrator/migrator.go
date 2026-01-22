@@ -301,8 +301,15 @@ func (m *Migrator) loadV1Swamp(folderPath string) ([]v2.Entry, int64, error) {
 			continue
 		}
 
-		// Only process .dat files
-		if !strings.HasSuffix(name, ".dat") {
+		// V1 data files are UUID-named without extension (e.g., "550e8400-e29b-41d4-a716...")
+		// They have no extension and contain hex characters and dashes
+		// Skip files with extensions (like .hyd)
+		if filepath.Ext(name) != "" {
+			continue
+		}
+
+		// Verify it looks like a UUID or hex string (V1 data file)
+		if !isV1DataFileName(name) {
 			continue
 		}
 
@@ -647,4 +654,21 @@ func formatBytes(bytes int64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
+}
+
+// isV1DataFileName checks if a filename looks like a V1 data file.
+// V1 data files are UUID-like names containing only hex characters and dashes,
+// with no file extension.
+func isV1DataFileName(name string) bool {
+	if len(name) == 0 {
+		return false
+	}
+	// V1 data files are typically UUIDs: 550e8400-e29b-41d4-a716-446655440000
+	// They contain only hex characters (0-9, a-f, A-F) and dashes
+	for _, c := range name {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F') || c == '-') {
+			return false
+		}
+	}
+	return true
 }

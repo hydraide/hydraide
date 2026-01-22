@@ -34,7 +34,7 @@ func TestV1ToV2FullMigration(t *testing.T) {
 	if os.Getenv("E2E_HYDRA_SERVER_CRT") == "" {
 		t.Skip("E2E test environment not configured - skipping full migration test")
 	}
- 
+
 	// Use the standard data path
 	dataPath := "/hydraide/data"
 	settingsPath := "/hydraide/settings/settings.json"
@@ -43,6 +43,29 @@ func TestV1ToV2FullMigration(t *testing.T) {
 	testPort := 5560
 
 	slog.Info("=== FULL V1 TO V2 MIGRATION TEST ===")
+
+	// IMPORTANT: Clean up any existing test data from previous runs
+	// We need to start with a clean slate to test V1 → V2 migration properly
+	slog.Info("Step 0a: Cleaning up any existing test data...")
+	testSwampHash := "dab28f21c96898ea" // Hash of "migtest/full/complex"
+	existingV1Folder := filepath.Join(dataPath, "0", "dab", testSwampHash)
+	existingV2File := existingV1Folder + ".hyd"
+
+	// Remove existing V2 file if exists
+	if _, err := os.Stat(existingV2File); err == nil {
+		slog.Info("Removing existing V2 file", "path", existingV2File)
+		if err := os.Remove(existingV2File); err != nil {
+			slog.Warn("Failed to remove existing V2 file", "error", err)
+		}
+	}
+
+	// Remove existing V1 folder if exists
+	if _, err := os.Stat(existingV1Folder); err == nil {
+		slog.Info("Removing existing V1 folder", "path", existingV1Folder)
+		if err := os.RemoveAll(existingV1Folder); err != nil {
+			slog.Warn("Failed to remove existing V1 folder", "error", err)
+		}
+	}
 
 	// CRITICAL: Temporarily change the engine to V1 in settings.json
 	// The server reads engine setting from settings.json, not from Configuration
