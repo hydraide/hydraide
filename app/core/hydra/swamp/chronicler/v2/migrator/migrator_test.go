@@ -13,9 +13,9 @@ func TestByteReader(t *testing.T) {
 	// Segment 1: length=5, data="hello"
 	// Segment 2: length=5, data="world"
 	data := []byte{
-		0x00, 0x00, 0x00, 0x05, // length: 5
+		0x05, 0x00, 0x00, 0x00, // length: 5 (LittleEndian)
 		'h', 'e', 'l', 'l', 'o',
-		0x00, 0x00, 0x00, 0x05, // length: 5
+		0x05, 0x00, 0x00, 0x00, // length: 5 (LittleEndian)
 		'w', 'o', 'r', 'l', 'd',
 	}
 
@@ -66,9 +66,9 @@ func TestByteReader(t *testing.T) {
 func TestV1FileParser(t *testing.T) {
 	// Create test data with two segments
 	data := []byte{
-		0x00, 0x00, 0x00, 0x03, // length: 3
+		0x03, 0x00, 0x00, 0x00, // length: 3 (LittleEndian)
 		'a', 'b', 'c',
-		0x00, 0x00, 0x00, 0x02, // length: 2
+		0x02, 0x00, 0x00, 0x00, // length: 2 (LittleEndian)
 		'x', 'y',
 	}
 
@@ -108,8 +108,8 @@ func TestV1FileParser_Empty(t *testing.T) {
 func TestV1FileParser_ZeroLengthSegment(t *testing.T) {
 	// Zero-length segments should be skipped
 	data := []byte{
-		0x00, 0x00, 0x00, 0x00, // length: 0 (skip)
-		0x00, 0x00, 0x00, 0x02, // length: 2
+		0x00, 0x00, 0x00, 0x00, // length: 0 (LittleEndian) (skip)
+		0x02, 0x00, 0x00, 0x00, // length: 2 (LittleEndian)
 		'o', 'k',
 	}
 
@@ -181,8 +181,8 @@ func TestMigrator_WriteAndVerify(t *testing.T) {
 		{Operation: v2.OpInsert, Key: "key2", Data: []byte("data2")},
 	}
 
-	// Write V2 file
-	size, err := m.writeV2File(hydFile, entries)
+	// Write V2 file with swamp name
+	size, err := m.writeV2File(hydFile, entries, "test/swamp/name")
 	if err != nil {
 		t.Fatalf("writeV2File failed: %v", err)
 	}
