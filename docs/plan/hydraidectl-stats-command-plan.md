@@ -155,12 +155,12 @@ A következő adatokat fogjuk összegyűjteni és megjeleníteni:
 
 ### 8. Fázis: Commit, Push, Tag
 
-- [ ] Kód átnézés és tesztelés
-- [ ] Commit message: `feat(hydraidectl): add stats command for swamp analysis`
-- [ ] Push to remote
-- [ ] Tag létrehozása: `hydraidectl/v2.1.3`
+- [x] Kód átnézés és tesztelés
+- [x] Commit message: `feat(hydraidectl): add stats command for swamp analysis`
+- [x] Push to remote
+- [x] Tag létrehozása: `hydraidectl/v2.1.3`
 
-**Fázis státusz:** ⏳ Folyamatban
+**Fázis státusz:** ✅ Kész
 
 ---
 
