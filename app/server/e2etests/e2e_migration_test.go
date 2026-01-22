@@ -127,44 +127,33 @@ func TestV1ToV2FullMigration(t *testing.T) {
 
 	swampClient := v1Client.GetServiceClient(swampName)
 
-	// Create complex treasures with various data types
+	// Create treasures with various data types
+	// NOTE: HydrAIDE supports only ONE content type per treasure!
 	var keyValues []*hydraidepbgo.KeyValuePair
 
-	// Treasure 1: Full payload with all fields
+	// Treasure 1: String content
 	stringVal1 := "John Doe - Full User Profile"
-	int64Val1 := int64(12345)
-	float64Val1 := 99.99
-	boolVal1 := hydraidepbgo.Boolean_TRUE
-	bytesVal1 := []byte("binary data for user profile - complex payload test")
 	keyValues = append(keyValues, &hydraidepbgo.KeyValuePair{
-		Key:        "user-profile-001",
-		StringVal:  &stringVal1,
-		Int64Val:   &int64Val1,
-		Float64Val: &float64Val1,
-		BoolVal:    &boolVal1,
-		BytesVal:   bytesVal1,
-		CreatedAt:  timestamppb.Now(),
+		Key:       "user-profile-001",
+		StringVal: &stringVal1,
+		CreatedAt: timestamppb.Now(),
 	})
 
-	// Treasure 2: Another user profile
-	stringVal2 := "Jane Smith - Secondary Profile"
+	// Treasure 2: Integer content
 	int64Val2 := int64(67890)
 	keyValues = append(keyValues, &hydraidepbgo.KeyValuePair{
 		Key:       "user-profile-002",
-		StringVal: &stringVal2,
 		Int64Val:  &int64Val2,
 		CreatedAt: timestamppb.Now(),
 	})
 
-	// Treasure 3: Large binary data
+	// Treasure 3: Binary data content
 	largeBytes := make([]byte, 5000)
 	for i := range largeBytes {
 		largeBytes[i] = byte(i % 256)
 	}
-	stringVal3 := "Large binary attachment"
 	keyValues = append(keyValues, &hydraidepbgo.KeyValuePair{
 		Key:       "large-binary-data",
-		StringVal: &stringVal3,
 		BytesVal:  largeBytes,
 		CreatedAt: timestamppb.Now(),
 	})
@@ -177,14 +166,12 @@ func TestV1ToV2FullMigration(t *testing.T) {
 		CreatedAt: timestamppb.Now(),
 	})
 
-	// Treasure 5: Numeric extremes
+	// Treasure 5: Numeric maximum int64
 	int64Max := int64(9223372036854775807)
-	float64Pi := 3.14159265358979
 	keyValues = append(keyValues, &hydraidepbgo.KeyValuePair{
-		Key:        "numeric-values",
-		Int64Val:   &int64Max,
-		Float64Val: &float64Pi,
-		CreatedAt:  timestamppb.Now(),
+		Key:       "numeric-values",
+		Int64Val:  &int64Max,
+		CreatedAt: timestamppb.Now(),
 	})
 
 	// Insert all treasures
@@ -342,32 +329,32 @@ func TestV1ToV2FullMigration(t *testing.T) {
 	// Verify all entries exist and have correct values
 	foundKeys := make(map[string]bool)
 	for _, swampResp := range getResp.GetSwamps() {
-		for _, treasure := range swampResp.GetTreasures() {
-			if treasure.IsExist {
-				foundKeys[treasure.GetKey()] = true
+		for _, treasureItem := range swampResp.GetTreasures() {
+			if treasureItem.IsExist {
+				foundKeys[treasureItem.GetKey()] = true
 
-				switch treasure.GetKey() {
+				switch treasureItem.GetKey() {
 				case "user-profile-001":
-					assert.Equal(t, "John Doe - Full User Profile", treasure.GetStringVal())
-					assert.Equal(t, int64(12345), treasure.GetInt64Val())
-					assert.InDelta(t, 99.99, treasure.GetFloat64Val(), 0.01)
-					assert.Equal(t, hydraidepbgo.Boolean_TRUE, treasure.GetBoolVal())
+					// String content only
+					assert.Equal(t, "John Doe - Full User Profile", treasureItem.GetStringVal())
 				case "user-profile-002":
-					assert.Equal(t, "Jane Smith - Secondary Profile", treasure.GetStringVal())
-					assert.Equal(t, int64(67890), treasure.GetInt64Val())
+					// Int64 content only
+					assert.Equal(t, int64(67890), treasureItem.GetInt64Val())
 				case "large-binary-data":
-					assert.Equal(t, len(largeBytes), len(treasure.GetBytesVal()))
-					// Verify content is identical
+					// ByteArray content only
+					assert.Equal(t, len(largeBytes), len(treasureItem.GetBytesVal()))
+					// Verify first few bytes are correct
 					for i := 0; i < min(100, len(largeBytes)); i++ {
-						if largeBytes[i] != treasure.GetBytesVal()[i] {
+						if largeBytes[i] != treasureItem.GetBytesVal()[i] {
 							t.Fatalf("Binary data mismatch at index %d", i)
 						}
 					}
 				case "simple-string":
-					assert.Contains(t, treasure.GetStringVal(), "simple string value")
+					// String content only
+					assert.Contains(t, treasureItem.GetStringVal(), "simple string value")
 				case "numeric-values":
-					assert.Equal(t, int64(9223372036854775807), treasure.GetInt64Val())
-					assert.InDelta(t, 3.14159265358979, treasure.GetFloat64Val(), 0.0000001)
+					// Int64 content only
+					assert.Equal(t, int64(9223372036854775807), treasureItem.GetInt64Val())
 				}
 			}
 		}
