@@ -110,27 +110,13 @@ func runRestoreCmd(cmd *cobra.Command, args []string) {
 	} else if strings.HasSuffix(restoreSource, ".tar.gz") || strings.HasSuffix(restoreSource, ".tgz") {
 		// Tar.gz backup: the archive contains the instance folder (e.g., instance-name/data/...)
 		// We strip the first path component and extract directly into instance.BasePath
-		// 1. Backup the entire instance folder
-		// 2. Delete the instance folder
-		// 3. Create fresh instance folder
-		// 4. Extract content (stripping first path component) into it
+		// 1. Delete contents of instance folder (not the folder itself to avoid "device busy")
+		// 2. Extract content (stripping first path component) into it
 
-		oldInstancePath := instance.BasePath + ".old." + time.Now().Format("20060102150405")
-
-		// Backup current instance folder
-		if _, statErr := os.Stat(instance.BasePath); statErr == nil {
-			fmt.Printf("  Backing up current instance to %s\n", filepath.Base(oldInstancePath))
-			if renameErr := os.Rename(instance.BasePath, oldInstancePath); renameErr != nil {
-				fmt.Printf("Error: Failed to backup instance folder: %v\n", renameErr)
-				os.Exit(1)
-			}
-		}
-
-		// Create fresh instance folder
-		if mkErr := os.MkdirAll(instance.BasePath, 0755); mkErr != nil {
-			fmt.Printf("Error: Failed to create instance folder: %v\n", mkErr)
-			fmt.Println("Restoring previous instance...")
-			_ = os.Rename(oldInstancePath, instance.BasePath)
+		// Delete contents of instance folder (not the folder itself)
+		fmt.Printf("  Clearing instance folder contents...\n")
+		if clearErr := clearDirectoryContents(instance.BasePath); clearErr != nil {
+			fmt.Printf("Error: Failed to clear instance folder: %v\n", clearErr)
 			os.Exit(1)
 		}
 
@@ -138,14 +124,8 @@ func runRestoreCmd(cmd *cobra.Command, args []string) {
 		totalSize, fileCount, err = extractRestoreTarGz(restoreSource, instance.BasePath)
 		if err != nil {
 			fmt.Printf("Error: %v\n", err)
-			fmt.Println("Restoring previous instance...")
-			_ = os.RemoveAll(instance.BasePath)
-			_ = os.Rename(oldInstancePath, instance.BasePath)
 			os.Exit(1)
 		}
-
-		// Remove old backup
-		_ = os.RemoveAll(oldInstancePath)
 	} else {
 		fmt.Println("Error: Unknown backup format")
 		os.Exit(1)
@@ -222,4 +202,21 @@ func extractRestoreTarGz(src, instanceBasePath string) (int64, int, error) {
 		}
 	}
 	return totalSize, fileCount, nil
+}
+
+// clearDirectoryContents removes all files and subdirectories inside a directory
+// but keeps the directory itself. This avoids "device or resource busy" errors
+// when the directory is a mount point or otherwise locked.
+func clearDirectoryContents(dir string) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		entryPath := filepath.Join(dir, entry.Name())
+		if removeErr := os.RemoveAll(entryPath); removeErr != nil {
+			return fmt.Errorf("failed to remove %s: %w", entryPath, removeErr)
+		}
+	}
+	return nil
 }
