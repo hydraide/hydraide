@@ -348,6 +348,12 @@ func (c *chroniclerV2) ensureWriter() error {
 		return nil
 	}
 
+	// Check if this is a new file (doesn't exist yet)
+	isNewFile := false
+	if _, err := os.Stat(c.hydFilePath); os.IsNotExist(err) {
+		isNewFile = true
+	}
+
 	writer, err := v2.NewFileWriter(c.hydFilePath, c.maxBlockSize)
 	if err != nil {
 		return err
@@ -355,6 +361,23 @@ func (c *chroniclerV2) ensureWriter() error {
 
 	c.writer = writer
 	c.writerClosed = false
+
+	// If this is a new file and we have a swamp name, write metadata entry first
+	if isNewFile && c.swampName != "" {
+		metaEntry := v2.Entry{
+			Operation: v2.OpMetadata,
+			Key:       v2.MetadataEntryKey,
+			Data:      []byte(c.swampName),
+		}
+		if err := c.writer.WriteEntry(metaEntry); err != nil {
+			slog.Error("failed to write swamp name metadata",
+				"path", c.hydFilePath,
+				"swampName", c.swampName,
+				"error", err)
+			// Don't fail - the file is still usable without metadata
+		}
+	}
+
 	return nil
 }
 
