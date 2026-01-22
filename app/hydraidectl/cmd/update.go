@@ -141,18 +141,18 @@ for example before running a migration.`,
 
 		// (Re)create service definition for the updated binary
 		_ = serviceHelperInterface.RemoveService(updateInstance)
-		_ = serviceHelperInterface.GenerateServiceFile(updateInstance, instanceMeta.BasePath)
 
-		// If --no-start flag is set, skip starting the instance
+		// If --no-start flag is set, register service without starting
 		if updateNoStart {
+			_ = serviceHelperInterface.GenerateServiceFileNoStart(updateInstance, instanceMeta.BasePath)
 			fmt.Printf("Instance %q has been successfully updated to version %s.\n", updateInstance, downloadedVersion)
 			fmt.Println("The instance was NOT started (--no-start flag). Start it manually with:")
 			fmt.Printf("  sudo hydraidectl start --instance %s\n", updateInstance)
 			return
 		}
 
-		// Start the instance
-		_ = instanceController.StartInstance(ctx, updateInstance)
+		// Normal flow: generate service file (which also starts it)
+		_ = serviceHelperInterface.GenerateServiceFile(updateInstance, instanceMeta.BasePath)
 
 		fmt.Printf("Instance %q has been successfully updated to version %s and started.\n", updateInstance, downloadedVersion)
 

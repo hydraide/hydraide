@@ -64,15 +64,17 @@ Wait for the graceful shutdown to complete. This ensures all in-memory data is f
 **This step is critical!** Create a compressed backup of your data:
 
 ```bash
-sudo hydraidectl backup --instance <your-instance-name> --output /path/to/backup --compress
+sudo hydraidectl backup --instance <your-instance-name> --target /path/to/backup.tar.gz --compress
 ```
 
 Example:
 ```bash
-sudo hydraidectl backup --instance prod --output /backup/hydraide --compress
+sudo hydraidectl backup --instance prod --target /backup/hydraide/prod-backup.tar.gz --compress
 ```
 
 This creates a compressed backup that can be restored if anything goes wrong.
+
+**Note:** The backup command will stop the instance automatically. After backup completes, the instance will NOT be restarted automatically - you control when to start it.
 
 ### Step 4: Update the HydrAIDE Server (Without Starting)
 
@@ -156,8 +158,8 @@ curl -sSfL https://raw.githubusercontent.com/hydraide/hydraide/main/scripts/inst
 # 3. Stop the server
 sudo hydraidectl stop --instance prod
 
-# 4. Create backup
-sudo hydraidectl backup --instance prod --output /backup/hydraide --compress
+# 4. Create backup (instance stays stopped after backup)
+sudo hydraidectl backup --instance prod --target /backup/hydraide/prod-backup.tar.gz --compress
 
 # 5. Update server without starting
 sudo hydraidectl update --instance prod --no-start

@@ -82,10 +82,10 @@ func runBackupCmd(cmd *cobra.Command, args []string) {
 	fmt.Printf("Backup complete: %d files, %.2f MB, %s\n", fileCount, float64(totalSize)/(1024*1024), time.Since(startTime).Round(time.Second))
 
 	if !backupNoStop {
-		fmt.Printf("Starting instance...\n")
-		ctx := context.Background()
-		runner := instancerunner.NewInstanceController()
-		_ = runner.StartInstance(ctx, backupInstanceName)
+		fmt.Println("")
+		fmt.Println("The instance was stopped for backup and was NOT restarted automatically.")
+		fmt.Println("Start it manually with:")
+		fmt.Printf("  sudo hydraidectl start --instance %s\n", backupInstanceName)
 	}
 }
 

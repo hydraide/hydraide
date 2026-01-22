@@ -728,7 +728,10 @@ hydraidectl engine --instance prod --set V1
 
 Create a backup of HydrAIDE instance data.
 
-**⚠️ IMPORTANT:** Stop the instance before backup for data consistency!
+**Behavior:**
+- The instance is automatically stopped before backup (unless `--no-stop` is used)
+- After backup completes, the instance is **NOT** restarted automatically
+- You must manually start the instance when ready
 
 **Flags**
 - `--instance`, `-i` — Instance name (**required**)
@@ -740,10 +743,13 @@ Create a backup of HydrAIDE instance data.
 
 ```bash
 # Simple backup
-hydraidectl backup --instance prod --target /backup/hydraide-20260121
+sudo hydraidectl backup --instance prod --target /backup/hydraide-20260121
 
 # Compressed backup
-hydraidectl backup --instance prod --target /backup/hydraide.tar.gz --compress
+sudo hydraidectl backup --instance prod --target /backup/hydraide.tar.gz --compress
+
+# Start the instance after backup
+sudo hydraidectl start --instance prod
 ```
 
 ---
@@ -754,6 +760,11 @@ Restore HydrAIDE instance data from a backup.
 
 **⚠️ WARNING:** This will REPLACE all current data!
 
+**Behavior:**
+- The instance is automatically stopped before restore
+- After restore completes, the instance is **NOT** restarted automatically
+- You must manually start the instance when ready
+
 **Flags**
 - `--instance`, `-i` — Instance name (**required**)
 - `--source`, `-s` — Source backup path (**required**)
@@ -763,10 +774,13 @@ Restore HydrAIDE instance data from a backup.
 
 ```bash
 # Restore from directory
-hydraidectl restore --instance prod --source /backup/hydraide-20260121
+sudo hydraidectl restore --instance prod --source /backup/hydraide-20260121
 
 # Restore from tar.gz
-hydraidectl restore --instance prod --source /backup/hydraide.tar.gz
+sudo hydraidectl restore --instance prod --source /backup/hydraide.tar.gz
+
+# Start the instance after restore
+sudo hydraidectl start --instance prod
 ```
 
 ---
