@@ -36,11 +36,30 @@ func TestV1ToV2FullMigration(t *testing.T) {
 
 	// Use the standard data path
 	dataPath := "/hydraide/data"
+	settingsPath := "/hydraide/settings/settings.json"
 
 	// Test port (different from main E2E tests)
 	testPort := 5560
 
 	slog.Info("=== FULL V1 TO V2 MIGRATION TEST ===")
+
+	// CRITICAL: Temporarily change the engine to V1 in settings.json
+	// The server reads engine setting from settings.json, not from Configuration
+	slog.Info("Step 0: Temporarily switching engine to V1 in settings.json...")
+	originalSettingsBackup, err := os.ReadFile(settingsPath)
+	require.NoError(t, err, "Failed to read settings.json for backup")
+
+	// Modify settings to use V1 engine
+	err = switchEngineInSettings(settingsPath, "V1")
+	require.NoError(t, err, "Failed to switch engine to V1")
+
+	// Ensure we restore V2 at the end
+	defer func() {
+		slog.Info("Restoring original settings.json...")
+		if err := os.WriteFile(settingsPath, originalSettingsBackup, 0644); err != nil {
+			slog.Error("Failed to restore settings.json", "error", err)
+		}
+	}()
 
 	// Step 1: Start server with V1 engine
 	slog.Info("Step 1: Starting server with V1 engine...")
@@ -260,6 +279,10 @@ func TestV1ToV2FullMigration(t *testing.T) {
 	slog.Info("V2 .hyd file verified", "path", v2HydFile)
 
 	slog.Info("Step 7: Starting server with V2 engine and verifying data...")
+
+	// Switch engine to V2 in settings before starting V2 server
+	err = switchEngineInSettings(settingsPath, "V2")
+	require.NoError(t, err, "Failed to switch engine to V2")
 
 	// Start V2 server
 	v2Server := server.New(&server.Configuration{
@@ -595,9 +618,9 @@ func countV1DataFiles(t *testing.T, folderPath string) int {
 		if entry.IsDir() {
 			continue
 		}
-		name := entry.Name()
+		fileName := entry.Name()
 		// V1 data files: not 'meta', no extension, looks like UUID (hex characters)
-		if name != "meta" && filepath.Ext(name) == "" && isHexString(name) {
+		if fileName != "meta" && filepath.Ext(fileName) == "" && isHexString(fileName) {
 			count++
 		}
 	}
