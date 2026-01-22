@@ -109,13 +109,13 @@ func runRestoreCmd(cmd *cobra.Command, args []string) {
 		_ = os.RemoveAll(oldDataPath)
 	} else if strings.HasSuffix(restoreSource, ".tar.gz") || strings.HasSuffix(restoreSource, ".tgz") {
 		// Tar.gz backup: the archive contains the instance folder (e.g., instance-name/data/...)
-		// We need to:
+		// We strip the first path component and extract directly into instance.BasePath
 		// 1. Backup the entire instance folder
 		// 2. Delete the instance folder
-		// 3. Extract to the parent directory
+		// 3. Create fresh instance folder
+		// 4. Extract content (stripping first path component) into it
 
 		oldInstancePath := instance.BasePath + ".old." + time.Now().Format("20060102150405")
-		parentDir := filepath.Dir(instance.BasePath)
 
 		// Backup current instance folder
 		if _, statErr := os.Stat(instance.BasePath); statErr == nil {
@@ -126,8 +126,16 @@ func runRestoreCmd(cmd *cobra.Command, args []string) {
 			}
 		}
 
-		// Extract to parent directory (the archive will recreate the instance folder)
-		totalSize, fileCount, err = extractRestoreTarGz(restoreSource, parentDir)
+		// Create fresh instance folder
+		if mkErr := os.MkdirAll(instance.BasePath, 0755); mkErr != nil {
+			fmt.Printf("Error: Failed to create instance folder: %v\n", mkErr)
+			fmt.Println("Restoring previous instance...")
+			_ = os.Rename(oldInstancePath, instance.BasePath)
+			os.Exit(1)
+		}
+
+		// Extract directly to instance.BasePath (stripping first path component)
+		totalSize, fileCount, err = extractRestoreTarGz(restoreSource, instance.BasePath)
 		if err != nil {
 			fmt.Printf("Error: %v\n", err)
 			fmt.Println("Restoring previous instance...")
@@ -150,7 +158,10 @@ func runRestoreCmd(cmd *cobra.Command, args []string) {
 	fmt.Printf("  sudo hydraidectl start --instance %s\n", restoreInstanceName)
 }
 
-func extractRestoreTarGz(src, dst string) (int64, int, error) {
+// extractRestoreTarGz extracts the backup archive directly into the instance folder.
+// The archive contains paths like "instance-name/data/..." but we strip the first
+// path component and extract directly into the target instance folder.
+func extractRestoreTarGz(src, instanceBasePath string) (int64, int, error) {
 	var totalSize int64
 	var fileCount int
 
@@ -176,7 +187,19 @@ func extractRestoreTarGz(src, dst string) (int64, int, error) {
 			return totalSize, fileCount, err
 		}
 
-		targetPath := filepath.Join(dst, header.Name)
+		// Strip the first path component (the archive's root folder name)
+		// e.g., "trendizz-outbound-unittest/data/..." -> "data/..."
+		pathParts := strings.SplitN(header.Name, string(os.PathSeparator), 2)
+		if len(pathParts) < 2 {
+			// This is the root folder itself, skip it
+			continue
+		}
+		relativePath := pathParts[1]
+		if relativePath == "" {
+			continue
+		}
+
+		targetPath := filepath.Join(instanceBasePath, relativePath)
 		switch header.Typeflag {
 		case tar.TypeDir:
 			if mkErr := os.MkdirAll(targetPath, os.FileMode(header.Mode)); mkErr != nil {
