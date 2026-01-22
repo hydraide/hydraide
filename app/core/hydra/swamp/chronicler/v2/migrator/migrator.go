@@ -11,6 +11,7 @@
 package migrator
 
 import (
+	"encoding/gob"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -168,12 +169,15 @@ func (m *Migrator) findV1Swamps() ([]string, error) {
 	return swampFolders, err
 }
 
-// isV1SwampFolder checks if a folder is a V1 swamp (contains data files)
+// isV1SwampFolder checks if a folder is a V1 swamp (contains meta file and UUID data files)
 func (m *Migrator) isV1SwampFolder(folderPath string) bool {
 	entries, err := os.ReadDir(folderPath)
 	if err != nil {
 		return false
 	}
+
+	hasMeta := false
+	hasDataFile := false
 
 	for _, entry := range entries {
 		if entry.IsDir() {
@@ -181,13 +185,21 @@ func (m *Migrator) isV1SwampFolder(folderPath string) bool {
 		}
 
 		name := entry.Name()
-		// V1 swamps have .dat files or meta.json
-		if strings.HasSuffix(name, ".dat") || name == metadata.MetaFile {
-			return true
+
+		// V1 swamps have a 'meta' file
+		if name == metadata.MetaFile {
+			hasMeta = true
+			continue
+		}
+
+		// V1 data files are UUID-named without extension
+		if filepath.Ext(name) == "" && isV1DataFileName(name) {
+			hasDataFile = true
 		}
 	}
 
-	return false
+	// A valid V1 swamp has either a meta file or data files (or both)
+	return hasMeta || hasDataFile
 }
 
 // processSwamps migrates all swamps using a worker pool
@@ -230,6 +242,15 @@ func (m *Migrator) migrateSwamp(folderPath string) {
 	default:
 	}
 
+	// Step 0: Load swamp name from meta file
+	swampName, err := m.loadSwampNameFromMeta(folderPath)
+	if err != nil {
+		slog.Warn("Could not load swamp name from meta file",
+			"path", folderPath,
+			"error", err)
+		// Continue anyway - swamp name is optional for basic functionality
+	}
+
 	// Step 1: Load V1 data
 	entries, oldSize, err := m.loadV1Swamp(folderPath)
 	if err != nil {
@@ -246,9 +267,9 @@ func (m *Migrator) migrateSwamp(folderPath string) {
 		return
 	}
 
-	// Step 2: Write V2 file
+	// Step 2: Write V2 file (including swamp name as metadata entry)
 	hydFilePath := folderPath + ".hyd"
-	newSize, err := m.writeV2File(hydFilePath, entries)
+	newSize, err := m.writeV2File(hydFilePath, entries, swampName)
 	if err != nil {
 		m.recordFailure(folderPath, err.Error(), "write")
 		return
@@ -434,13 +455,57 @@ func (m *Migrator) extractKeyFromTreasure(data []byte) (string, error) {
 	return model.Key, nil
 }
 
+// loadSwampNameFromMeta loads the swamp name from the V1 meta file.
+// The meta file is GOB-encoded and contains SwampName field.
+func (m *Migrator) loadSwampNameFromMeta(folderPath string) (string, error) {
+	metaFilePath := filepath.Join(folderPath, metadata.MetaFile)
+
+	file, err := os.Open(metaFilePath)
+	if err != nil {
+		return "", fmt.Errorf("open meta file: %w", err)
+	}
+	defer file.Close()
+
+	// Decode the GOB-encoded meta file
+	// We only need the SwampName field
+	type MetaModel struct {
+		SwampName string
+	}
+
+	var meta MetaModel
+	gobDecoder := gob.NewDecoder(file)
+	if err := gobDecoder.Decode(&meta); err != nil {
+		return "", fmt.Errorf("decode meta file: %w", err)
+	}
+
+	return meta.SwampName, nil
+}
+
+// MetadataEntryKey is the special key used for storing swamp metadata in V2 files.
+const MetadataEntryKey = "__swamp_meta__"
+
 // writeV2File writes entries to a new V2 .hyd file
-func (m *Migrator) writeV2File(filePath string, entries []v2.Entry) (int64, error) {
+func (m *Migrator) writeV2File(filePath string, entries []v2.Entry, swampName string) (int64, error) {
 	writer, err := v2.NewFileWriter(filePath, v2.DefaultMaxBlockSize)
 	if err != nil {
 		return 0, err
 	}
 
+	// First, write swamp metadata entry if we have a swamp name
+	if swampName != "" {
+		metaEntry := v2.Entry{
+			Operation: v2.OpMetadata,
+			Key:       MetadataEntryKey,
+			Data:      []byte(swampName), // Simple encoding - just the swamp name string
+		}
+		if err := writer.WriteEntry(metaEntry); err != nil {
+			writer.Close()
+			os.Remove(filePath)
+			return 0, fmt.Errorf("write metadata entry: %w", err)
+		}
+	}
+
+	// Then write all data entries
 	for _, entry := range entries {
 		if err := writer.WriteEntry(entry); err != nil {
 			writer.Close()
@@ -470,7 +535,7 @@ func (m *Migrator) verifyMigration(hydFilePath string, originalEntries []v2.Entr
 	}
 	defer reader.Close()
 
-	index, totalRead, err := reader.LoadIndex()
+	index, _, err := reader.LoadIndex()
 	if err != nil {
 		return err
 	}
@@ -490,7 +555,7 @@ func (m *Migrator) verifyMigration(hydFilePath string, originalEntries []v2.Entr
 
 	slog.Debug("Verification passed",
 		"path", hydFilePath,
-		"entries", totalRead,
+		"entries", len(originalEntries),
 		"unique_keys", len(index))
 
 	return nil

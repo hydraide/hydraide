@@ -139,13 +139,18 @@ func (fr *FileReader) Close() error {
 	return nil
 }
 
+// MetadataEntryKey is the special key used for storing swamp metadata in V2 files.
+const MetadataEntryKey = "__swamp_meta__"
+
 // LoadIndex reads the file and builds an in-memory index.
 // The index maps key -> latest entry data.
 // DELETE entries remove keys from the index.
-// Returns: map of key to entry data, total entries processed, error
-func (fr *FileReader) LoadIndex() (map[string][]byte, int, error) {
+// Metadata entries (OpMetadata) store the swamp name and are not included in the index.
+// Returns: map of key to entry data, swamp name (if found), error
+func (fr *FileReader) LoadIndex() (map[string][]byte, string, error) {
 	index := make(map[string][]byte)
-	totalEntries, err := fr.ReadAllEntries(func(entry Entry) bool {
+	swampName := ""
+	_, err := fr.ReadAllEntries(func(entry Entry) bool {
 		switch entry.Operation {
 		case OpDelete:
 			delete(index, entry.Key)
@@ -154,13 +159,18 @@ func (fr *FileReader) LoadIndex() (map[string][]byte, int, error) {
 			dataCopy := make([]byte, len(entry.Data))
 			copy(dataCopy, entry.Data)
 			index[entry.Key] = dataCopy
+		case OpMetadata:
+			// Extract swamp name from metadata entry
+			if entry.Key == MetadataEntryKey && len(entry.Data) > 0 {
+				swampName = string(entry.Data)
+			}
 		}
 		return true // Continue reading
 	})
 	if err != nil {
-		return nil, totalEntries, err
+		return nil, swampName, err
 	}
-	return index, totalEntries, nil
+	return index, swampName, nil
 }
 
 // CalculateFragmentation reads the file and calculates fragmentation.

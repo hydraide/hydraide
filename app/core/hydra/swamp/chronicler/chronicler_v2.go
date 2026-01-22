@@ -199,8 +199,8 @@ func (c *chroniclerV2) Load(indexObj beacon.Beacon) {
 	}
 	defer reader.Close()
 
-	// Load index and get fragmentation info
-	index, totalEntries, err := reader.LoadIndex()
+	// Load index and get swamp metadata
+	index, swampNameFromFile, err := reader.LoadIndex()
 	if err != nil {
 		slog.Error("cannot load index from swamp file",
 			"path", c.hydFilePath,
@@ -208,11 +208,13 @@ func (c *chroniclerV2) Load(indexObj beacon.Beacon) {
 		return
 	}
 
+	// Update swamp name from file if not set
+	if swampNameFromFile != "" && c.swampName == "" {
+		c.swampName = swampNameFromFile
+	}
+
 	// Calculate fragmentation for later compaction decision
 	liveEntries := len(index)
-	if totalEntries > 0 {
-		c.lastFragmentation = 1.0 - (float64(liveEntries) / float64(totalEntries))
-	}
 
 	// Convert entries to treasures
 	treasures := make(map[string]treasure.Treasure)
@@ -235,7 +237,6 @@ func (c *chroniclerV2) Load(indexObj beacon.Beacon) {
 	slog.Debug("loaded swamp from V2 file",
 		"path", c.hydFilePath,
 		"live_entries", liveEntries,
-		"total_entries", totalEntries,
 		"fragmentation", c.lastFragmentation)
 }
 

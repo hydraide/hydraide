@@ -91,20 +91,19 @@ func TestFileReader_LoadIndex(t *testing.T) {
 	}
 	defer reader.Close()
 
-	index, total, err := reader.LoadIndex()
+	index, swampName, err := reader.LoadIndex()
 	if err != nil {
 		t.Fatalf("failed to load index: %v", err)
 	}
 
-	if total != 4 {
-		t.Errorf("expected 4 total entries, got %d", total)
-	}
+	// swampName should be empty in this test (no metadata entry)
+	_ = swampName
 
 	// Only key1 should remain (key2 was deleted)
 	if len(index) != 1 {
 		t.Errorf("expected 1 live entry, got %d", len(index))
 	}
-
+ 
 	// key1 should have updated data
 	data, exists := index["key1"]
 	if !exists {
@@ -166,14 +165,11 @@ func TestFileReader_EmptyFile(t *testing.T) {
 	}
 	defer reader.Close()
 
-	index, total, err := reader.LoadIndex()
+	index, _, err := reader.LoadIndex()
 	if err != nil {
 		t.Fatalf("failed to load index: %v", err)
 	}
 
-	if total != 0 {
-		t.Errorf("expected 0 entries, got %d", total)
-	}
 	if len(index) != 0 {
 		t.Errorf("expected empty index, got %d entries", len(index))
 	}

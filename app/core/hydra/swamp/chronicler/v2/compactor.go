@@ -120,8 +120,8 @@ func (c *Compactor) Compact() (*CompactionResult, error) {
 		return result, nil
 	}
 
-	// Load live entries index
-	index, _, err := reader.LoadIndex()
+	// Load live entries index and swamp name
+	index, swampName, err := reader.LoadIndex()
 	if err != nil {
 		reader.Close()
 		result.Error = err
@@ -135,6 +135,21 @@ func (c *Compactor) Compact() (*CompactionResult, error) {
 	if err != nil {
 		result.Error = err
 		return result, err
+	}
+
+	// Write swamp name metadata first (if present)
+	if swampName != "" {
+		metaEntry := Entry{
+			Operation: OpMetadata,
+			Key:       MetadataEntryKey,
+			Data:      []byte(swampName),
+		}
+		if err := writer.WriteEntry(metaEntry); err != nil {
+			writer.Close()
+			os.Remove(tempPath)
+			result.Error = err
+			return result, err
+		}
 	}
 
 	// Write all live entries to new file
