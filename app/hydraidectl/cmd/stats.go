@@ -73,6 +73,7 @@ func init() {
 type SwampStats struct {
 	Path            string    `json:"path"`
 	Name            string    `json:"name"`
+	SwampName       string    `json:"swamp_name,omitempty"` // Actual swamp name from metadata
 	SizeBytes       int64     `json:"size_bytes"`
 	LiveEntries     int       `json:"live_entries"`
 	TotalEntries    int       `json:"total_entries"`
@@ -320,17 +321,43 @@ func analyzeSwamp(filePath, dataPath string) *SwampStats {
 		stats.CreatedAt = time.Unix(0, header.CreatedAt)
 	}
 
-	// Calculate fragmentation
-	fragmentation, liveCount, totalCount, err := reader.CalculateFragmentation()
+	// Load index to get swamp name and calculate live entries
+	index, swampName, err := reader.LoadIndex()
 	if err != nil {
 		return stats
 	}
 
-	stats.LiveEntries = liveCount
+	// Set the actual swamp name from metadata
+	if swampName != "" {
+		stats.SwampName = swampName
+	}
+
+	// Calculate totals by reading all entries
+	// We need to re-read to count total entries (LoadIndex only gives us live keys)
+	// Reopen the reader for counting
+	reader2, err := v2.NewFileReader(filePath)
+	if err != nil {
+		stats.LiveEntries = len(index)
+		return stats
+	}
+	defer reader2.Close()
+
+	totalCount := 0
+	_, _ = reader2.ReadAllEntries(func(entry v2.Entry) bool {
+		// Skip metadata entries
+		if entry.Operation != v2.OpMetadata {
+			totalCount++
+		}
+		return true
+	})
+
+	stats.LiveEntries = len(index)
 	stats.TotalEntries = totalCount
-	stats.DeadEntries = totalCount - liveCount
-	stats.Fragmentation = fragmentation * 100 // Convert to percentage
-	stats.NeedsCompaction = fragmentation >= compactionThreshold
+	stats.DeadEntries = totalCount - len(index)
+	if totalCount > 0 {
+		stats.Fragmentation = float64(stats.DeadEntries) / float64(totalCount) * 100
+	}
+	stats.NeedsCompaction = stats.Fragmentation >= compactionThreshold*100
 
 	return stats
 }
@@ -513,14 +540,19 @@ func outputStatsTable(report *StatsReport) {
 	// Top 10 Largest
 	if len(report.LargestSwamps) > 0 {
 		fmt.Println("📦 TOP 10 LARGEST SWAMPS")
-		fmt.Println(strings.Repeat("─", 60))
-		fmt.Printf("  %-3s  %-35s  %10s  %10s\n", "#", "Swamp", "Size", "Records")
-		fmt.Println(strings.Repeat("─", 60))
+		fmt.Println(strings.Repeat("─", 80))
+		fmt.Printf("  %-3s  %-28s  %-25s  %10s  %10s\n", "#", "Path", "Swamp Name", "Size", "Records")
+		fmt.Println(strings.Repeat("─", 80))
 
 		for i, s := range report.LargestSwamps {
-			fmt.Printf("  %-3d  %-35s  %10s  %10s\n",
+			swampName := s.SwampName
+			if swampName == "" {
+				swampName = "-"
+			}
+			fmt.Printf("  %-3d  %-28s  %-25s  %10s  %10s\n",
 				i+1,
-				truncateName(s.Name, 35),
+				truncateName(s.Name, 28),
+				truncateName(swampName, 25),
 				formatBytes(s.SizeBytes),
 				formatNumber(int64(s.LiveEntries)),
 			)
@@ -531,18 +563,23 @@ func outputStatsTable(report *StatsReport) {
 	// Top 10 Most Fragmented
 	if len(report.MostFragmentedSwamps) > 0 {
 		fmt.Println("⚡ TOP 10 MOST FRAGMENTED SWAMPS")
-		fmt.Println(strings.Repeat("─", 60))
-		fmt.Printf("  %-3s  %-30s  %7s  %8s  %8s  %s\n", "#", "Swamp", "Frag%", "Dead", "Live", "Compact?")
-		fmt.Println(strings.Repeat("─", 60))
+		fmt.Println(strings.Repeat("─", 90))
+		fmt.Printf("  %-3s  %-25s  %-20s  %7s  %8s  %8s  %s\n", "#", "Path", "Swamp Name", "Frag%", "Dead", "Live", "Compact?")
+		fmt.Println(strings.Repeat("─", 90))
 
 		for i, s := range report.MostFragmentedSwamps {
 			compactIcon := "—"
 			if s.NeedsCompaction {
 				compactIcon = "⚠️"
 			}
-			fmt.Printf("  %-3d  %-30s  %6.1f%%  %8d  %8d  %s\n",
+			swampName := s.SwampName
+			if swampName == "" {
+				swampName = "-"
+			}
+			fmt.Printf("  %-3d  %-25s  %-20s  %6.1f%%  %8d  %8d  %s\n",
 				i+1,
-				truncateName(s.Name, 30),
+				truncateName(s.Name, 25),
+				truncateName(swampName, 20),
 				s.Fragmentation,
 				s.DeadEntries,
 				s.LiveEntries,
