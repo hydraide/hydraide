@@ -22,6 +22,7 @@ var restoreCmd = &cobra.Command{
 	Short: "Restore HydrAIDE instance data from a backup",
 	Run:   runRestoreCmd,
 }
+
 var (
 	restoreInstanceName string
 	restoreSource       string
@@ -36,6 +37,7 @@ func init() {
 	_ = restoreCmd.MarkFlagRequired("instance")
 	_ = restoreCmd.MarkFlagRequired("source")
 }
+
 func runRestoreCmd(cmd *cobra.Command, args []string) {
 	fs := filesystem.New()
 	store, err := buildmeta.New(fs)
@@ -43,16 +45,19 @@ func runRestoreCmd(cmd *cobra.Command, args []string) {
 		fmt.Printf("Error: %v\n", err)
 		os.Exit(1)
 	}
+
 	instance, err := store.GetInstance(restoreInstanceName)
 	if err != nil {
 		fmt.Printf("Error: Instance not found: %v\n", err)
 		os.Exit(1)
 	}
+
 	sourceInfo, err := os.Stat(restoreSource)
 	if os.IsNotExist(err) {
 		fmt.Printf("Error: Source not found: %s\n", restoreSource)
 		os.Exit(1)
 	}
+
 	if !restoreForce {
 		fmt.Println("\nWARNING: This will REPLACE all current data!")
 		fmt.Printf("  Instance: %s\n", restoreInstanceName)
@@ -66,58 +71,101 @@ func runRestoreCmd(cmd *cobra.Command, args []string) {
 			return
 		}
 	}
+
 	fmt.Printf("Stopping instance...\n")
 	ctx := context.Background()
 	runner := instancerunner.NewInstanceController()
 	_ = runner.StopInstance(ctx, restoreInstanceName)
+
 	startTime := time.Now()
 	fmt.Printf("Restoring from backup...\n")
-	dataPath := filepath.Join(instance.BasePath, "data")
-	oldDataPath := dataPath + ".old." + time.Now().Format("20060102150405")
-	if _, statErr := os.Stat(dataPath); statErr == nil {
-		fmt.Printf("  Backing up current data to %s\n", filepath.Base(oldDataPath))
-		if renameErr := os.Rename(dataPath, oldDataPath); renameErr != nil {
-			fmt.Printf("Error: %v\n", renameErr)
-			os.Exit(1)
-		}
-	}
+
+	// For tar.gz backups, we need to extract to the parent directory
+	// because the archive contains the instance folder itself (e.g., instance-name/data/...)
+	// For directory backups, we extract directly to instance.BasePath
+
 	var totalSize int64
 	var fileCount int
+
 	if sourceInfo.IsDir() {
+		// Directory backup: backup current data folder, then copy
+		dataPath := filepath.Join(instance.BasePath, "data")
+		oldDataPath := dataPath + ".old." + time.Now().Format("20060102150405")
+		if _, statErr := os.Stat(dataPath); statErr == nil {
+			fmt.Printf("  Backing up current data to %s\n", filepath.Base(oldDataPath))
+			if renameErr := os.Rename(dataPath, oldDataPath); renameErr != nil {
+				fmt.Printf("Error: %v\n", renameErr)
+				os.Exit(1)
+			}
+		}
 		totalSize, fileCount, err = copyBackupDir(restoreSource, instance.BasePath)
+		if err != nil {
+			fmt.Printf("Error: %v\n", err)
+			fmt.Println("Restoring previous data...")
+			_ = os.RemoveAll(dataPath)
+			_ = os.Rename(oldDataPath, dataPath)
+			os.Exit(1)
+		}
+		_ = os.RemoveAll(oldDataPath)
 	} else if strings.HasSuffix(restoreSource, ".tar.gz") || strings.HasSuffix(restoreSource, ".tgz") {
-		totalSize, fileCount, err = extractRestoreTarGz(restoreSource, instance.BasePath)
+		// Tar.gz backup: the archive contains the instance folder (e.g., instance-name/data/...)
+		// We need to:
+		// 1. Backup the entire instance folder
+		// 2. Delete the instance folder
+		// 3. Extract to the parent directory
+
+		oldInstancePath := instance.BasePath + ".old." + time.Now().Format("20060102150405")
+		parentDir := filepath.Dir(instance.BasePath)
+
+		// Backup current instance folder
+		if _, statErr := os.Stat(instance.BasePath); statErr == nil {
+			fmt.Printf("  Backing up current instance to %s\n", filepath.Base(oldInstancePath))
+			if renameErr := os.Rename(instance.BasePath, oldInstancePath); renameErr != nil {
+				fmt.Printf("Error: Failed to backup instance folder: %v\n", renameErr)
+				os.Exit(1)
+			}
+		}
+
+		// Extract to parent directory (the archive will recreate the instance folder)
+		totalSize, fileCount, err = extractRestoreTarGz(restoreSource, parentDir)
+		if err != nil {
+			fmt.Printf("Error: %v\n", err)
+			fmt.Println("Restoring previous instance...")
+			_ = os.RemoveAll(instance.BasePath)
+			_ = os.Rename(oldInstancePath, instance.BasePath)
+			os.Exit(1)
+		}
+
+		// Remove old backup
+		_ = os.RemoveAll(oldInstancePath)
 	} else {
 		fmt.Println("Error: Unknown backup format")
 		os.Exit(1)
 	}
-	if err != nil {
-		fmt.Printf("Error: %v\n", err)
-		fmt.Println("Restoring previous data...")
-		_ = os.RemoveAll(dataPath)
-		_ = os.Rename(oldDataPath, dataPath)
-		os.Exit(1)
-	}
-	_ = os.RemoveAll(oldDataPath)
+
 	fmt.Printf("Restore complete: %d files, %.2f MB, %s\n", fileCount, float64(totalSize)/(1024*1024), time.Since(startTime).Round(time.Second))
 	fmt.Println("")
 	fmt.Println("The instance was NOT restarted automatically after restore.")
 	fmt.Println("Start it manually with:")
 	fmt.Printf("  sudo hydraidectl start --instance %s\n", restoreInstanceName)
 }
+
 func extractRestoreTarGz(src, dst string) (int64, int, error) {
 	var totalSize int64
 	var fileCount int
+
 	file, err := os.Open(src)
 	if err != nil {
 		return 0, 0, err
 	}
 	defer file.Close()
+
 	gzReader, err := gzip.NewReader(file)
 	if err != nil {
 		return 0, 0, err
 	}
 	defer gzReader.Close()
+
 	tarReader := tar.NewReader(gzReader)
 	for {
 		header, err := tarReader.Next()
@@ -127,6 +175,7 @@ func extractRestoreTarGz(src, dst string) (int64, int, error) {
 		if err != nil {
 			return totalSize, fileCount, err
 		}
+
 		targetPath := filepath.Join(dst, header.Name)
 		switch header.Typeflag {
 		case tar.TypeDir:
