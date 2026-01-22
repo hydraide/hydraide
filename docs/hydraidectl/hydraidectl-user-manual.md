@@ -26,6 +26,12 @@ Although `hydraidectl` is stable and production-tested, new features are under d
 * [`destroy` – Fully delete an instance, optionally including all its data](#restart--restart-instance)
 * [`cert` – Generate TLS Certificates (without modifying instances)](#cert--generate-tls-certificates-without-modifying-instances)
 * [`update` – Update an Instance In‑Place](#update--update-an-instance-inplace-allinone)
+* [`migrate` – Migrate V1 storage to V2 format](#migrate--migrate-v1-storage-to-v2-format)
+* [`engine` – View or change storage engine version](#engine--view-or-change-storage-engine-version)
+* [`backup` – Create instance backup](#backup--create-instance-backup)
+* [`restore` – Restore instance from backup](#restore--restore-instance-from-backup)
+* [`size` – Show instance data size](#size--show-instance-data-size)
+* [`cleanup` – Remove old storage files](#cleanup--remove-old-storage-files)
 * [`version` – Display CLI and optional instance metadata](#version--display-cli-and-optional-instance-metadata)
 
 ---
@@ -634,3 +640,218 @@ Update: vX.Y.Z available → run:
 ```
 
 Use that command to reinstall the CLI with the latest stable binary.
+
+---
+
+## `migrate` – Migrate V1 Storage to V2 Format
+
+**⚠️ IMPORTANT: Always create a full backup before migration!**
+
+Migrates HydrAIDE data from the legacy V1 multi-chunk storage format to the new V2 append-only single-file format.
+
+The V2 storage engine provides:
+- **32-112x faster** write operations
+- **50% smaller** storage footprint
+- **95% fewer** files on disk
+- **100x longer** SSD lifespan
+
+**Flags**
+- `--instance`, `-i` — Instance name (recommended, auto-handles stop/start)
+- `--data-path` — Path to HydrAIDE data directory (manual mode)
+- `--full` — Complete migration: stop → migrate → set V2 → cleanup → start
+- `--dry-run` — Simulate migration without making changes
+- `--verify` — Verify data integrity after each swamp migration
+- `--delete-old` — Delete V1 files after successful migration
+- `--parallel` — Number of parallel workers (default: 4)
+- `--json` — Output result as JSON
+
+**Examples**
+
+```bash
+# Recommended: Full automated migration
+hydraidectl backup --instance prod --target /backup/pre-migration
+hydraidectl migrate --instance prod --full
+
+# Manual migration with data path
+hydraidectl migrate --data-path /path/to/data --verify --delete-old
+
+# Dry-run to see what would be migrated
+hydraidectl migrate --instance prod --dry-run
+```
+
+---
+
+## `engine` – View or Change Storage Engine Version
+
+View or change the storage engine version for a HydrAIDE instance.
+
+**Engine Versions:**
+- **V1** — Legacy multi-chunk file storage (default, backward compatible)
+- **V2** — New append-only single-file storage (32-112x faster, 50% smaller)
+
+**⚠️ IMPORTANT:** Before switching to V2, you MUST migrate your data first!
+
+**Flags**
+- `--instance`, `-i` — Instance name (**required**)
+- `--set` — Set engine version (`V1` or `V2`)
+- `--json`, `-j` — Output as JSON
+
+**Examples**
+
+```bash
+# View current engine
+hydraidectl engine --instance prod
+
+# Switch to V2 (after migration)
+hydraidectl engine --instance prod --set V2
+
+# Switch back to V1 (after restore)
+hydraidectl engine --instance prod --set V1
+```
+
+---
+
+## `backup` – Create Instance Backup
+
+Create a backup of HydrAIDE instance data.
+
+**⚠️ IMPORTANT:** Stop the instance before backup for data consistency!
+
+**Flags**
+- `--instance`, `-i` — Instance name (**required**)
+- `--target`, `-t` — Target backup path (**required**)
+- `--compress` — Compress backup as tar.gz
+- `--no-stop` — Don't stop instance (warning: data may be inconsistent)
+
+**Examples**
+
+```bash
+# Simple backup
+hydraidectl backup --instance prod --target /backup/hydraide-20260121
+
+# Compressed backup
+hydraidectl backup --instance prod --target /backup/hydraide.tar.gz --compress
+```
+
+---
+
+## `restore` – Restore Instance from Backup
+
+Restore HydrAIDE instance data from a backup.
+
+**⚠️ WARNING:** This will REPLACE all current data!
+
+**Flags**
+- `--instance`, `-i` — Instance name (**required**)
+- `--source`, `-s` — Source backup path (**required**)
+- `--force` — Skip confirmation prompt
+
+**Examples**
+
+```bash
+# Restore from directory
+hydraidectl restore --instance prod --source /backup/hydraide-20260121
+
+# Restore from tar.gz
+hydraidectl restore --instance prod --source /backup/hydraide.tar.gz
+```
+
+---
+
+## `size` – Show Instance Data Size
+
+Show size of HydrAIDE instance data with V1/V2 breakdown.
+
+**Flags**
+- `--instance`, `-i` — Instance name (**required**)
+- `--detailed` — Show top 10 largest swamps
+- `--json`, `-j` — Output as JSON
+
+**Examples**
+
+```bash
+# Basic size info
+hydraidectl size --instance prod
+
+# Detailed view with top swamps
+hydraidectl size --instance prod --detailed
+```
+
+**Output Example:**
+
+```
+HydrAIDE Instance: prod
+========================================
+Data Path:   /var/hydraide/data
+Total Size:  45.23 MB
+Total Files: 1234
+
+V1 Files:    0 (0.00 MB)
+V2 Files:    50 (45.23 MB)
+
+Top 10 Largest Swamps:
+   1. words/index                    15.32 MB
+   2. domains/metadata               8.45 MB
+   ...
+```
+
+---
+
+## `cleanup` – Remove Old Storage Files
+
+Remove old V1 or V2 files after migration or rollback.
+
+**Flags**
+- `--instance`, `-i` — Instance name (**required**)
+- `--v1-files` — Remove V1 chunk files/folders
+- `--v2-files` — Remove V2 .hyd files
+- `--dry-run` — Show what would be deleted without deleting
+
+**Examples**
+
+```bash
+# Dry-run to see what would be deleted
+hydraidectl cleanup --instance prod --v1-files --dry-run
+
+# Remove V1 files after V2 migration
+hydraidectl cleanup --instance prod --v1-files
+
+# Remove V2 files after rollback to V1
+hydraidectl cleanup --instance prod --v2-files
+```
+
+---
+
+## Complete V2 Migration Workflow
+
+Here's the recommended workflow for migrating to V2 storage:
+
+```bash
+# 1. Create backup
+hydraidectl backup --instance prod --target /backup/pre-migration --compress
+
+# 2. Run full migration (stops, migrates, sets V2, starts)
+hydraidectl migrate --instance prod --full
+
+# 3. Verify
+hydraidectl size --instance prod
+
+# 4. (Optional) If everything works, clean up old V1 files
+hydraidectl cleanup --instance prod --v1-files
+```
+
+**Rollback procedure:**
+
+```bash
+# 1. Stop instance
+hydraidectl stop --instance prod
+
+# 2. Restore from backup
+hydraidectl restore --instance prod --source /backup/pre-migration.tar.gz
+
+# 3. Set engine back to V1
+hydraidectl engine --instance prod --set V1
+
+# 4. Start instance
+hydraidectl start --instance prod
+```

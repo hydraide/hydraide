@@ -45,3 +45,11 @@ vendor/
 db/
 fallback.log
 .github/copilot-instructions.md
+app/core/hydra/data/*/**
+app/core/hydra/swamp/data/*/**
+sdk/go/hydraidego/data/*/**
+app/core/hydra/settings/*/**
+app/core/zeus/settings/*/**
+sdk/go/hydraidego/settings/*/**
+*/**/settings.json
+app/server/e2etests/data/

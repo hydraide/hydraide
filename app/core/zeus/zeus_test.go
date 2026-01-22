@@ -3,13 +3,14 @@ package zeus
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"testing"
+	"time"
+
 	"github.com/hydraide/hydraide/app/core/filesystem"
 	"github.com/hydraide/hydraide/app/core/hydra/swamp"
 	"github.com/hydraide/hydraide/app/core/settings"
 	"github.com/hydraide/hydraide/app/name"
-	"strconv"
-	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -60,7 +61,7 @@ func TestZeus_StartHydra(t *testing.T) {
 		fmt.Println("insert treasures elapsed time: ", elapsed)
 
 		// get treasures from the beacon
-		treasures, err := swampObject.GetTreasuresByBeacon(swamp.BeaconTypeValueInt64, swamp.IndexOrderAsc, 0, 3)
+		treasures, err := swampObject.GetTreasuresByBeacon(swamp.BeaconTypeValueInt64, swamp.IndexOrderAsc, 0, 3, nil, nil)
 		require.NoError(t, err)
 
 		for _, treasure := range treasures {

@@ -518,9 +518,13 @@ message RegisterSwampRequest {
 
   // MaxFileSize sets the maximum size (in bytes) for a single compressed file chunk.
   //
-  // Optional. Applies only when IsInMemorySwamp is false.
-  // Useful for optimizing SSD usage and controlling compaction behavior.
-  optional int64 MaxFileSize = 5;
+  // ⚠️ DEPRECATED: This field is only used by the legacy V1 storage engine.
+  // After migrating to V2 (using `hydraidectl migrate`), this field is ignored.
+  // The V2 engine uses a single append-only file per swamp with automatic block management.
+  //
+  // Optional. Applies only when IsInMemorySwamp is false and using V1 engine.
+  // New installations should not set this field.
+  optional int64 MaxFileSize = 5 [deprecated = true];
 }
 
 message RegisterSwampResponse {
