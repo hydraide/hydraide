@@ -81,7 +81,7 @@ func runObserve(cmd *cobra.Command, args []string) {
 
 	// Get paths from instance
 	settingsPath := filepath.Join(instance.BasePath, "settings", "settings.json")
-	certsPath := filepath.Join(instance.BasePath, "certs")
+	certsPath := filepath.Join(instance.BasePath, "certificate")
 
 	// Check if telemetry is enabled
 	settings, _ := loadEngineSettings(settingsPath)
