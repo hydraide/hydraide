@@ -169,12 +169,14 @@ func runObserve(cmd *cobra.Command, args []string) {
 }
 
 func runSimpleObserve(serverAddr, certFile, keyFile, caFile string) {
+	// Load client certificate (mTLS)
 	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
 	if err != nil {
 		fmt.Printf("Error loading client certificate: %v\n", err)
 		os.Exit(1)
 	}
 
+	// Load CA certificate
 	caCert, err := os.ReadFile(caFile)
 	if err != nil {
 		fmt.Printf("Error reading CA certificate: %v\n", err)
@@ -187,14 +189,21 @@ func runSimpleObserve(serverAddr, certFile, keyFile, caFile string) {
 		os.Exit(1)
 	}
 
+	// Extract hostname for SNI
+	hostOnly := strings.Split(serverAddr, ":")[0]
+
+	// Create TLS config with client cert, CA cert, and SNI
 	tlsConfig := &tls.Config{
 		Certificates: []tls.Certificate{cert},
 		RootCAs:      caCertPool,
+		ServerName:   hostOnly,
 		MinVersion:   tls.VersionTLS13,
 	}
 
 	creds := credentials.NewTLS(tlsConfig)
-	conn, err := grpc.Dial(serverAddr, grpc.WithTransportCredentials(creds))
+
+	// Use grpc.NewClient instead of deprecated grpc.Dial
+	conn, err := grpc.NewClient(serverAddr, grpc.WithTransportCredentials(creds))
 	if err != nil {
 		fmt.Printf("Error connecting to server: %v\n", err)
 		os.Exit(1)

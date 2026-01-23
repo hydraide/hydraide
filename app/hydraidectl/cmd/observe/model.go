@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/viewport"
@@ -137,14 +138,21 @@ func (m Model) connect() tea.Cmd {
 			return errorMsg{fmt.Errorf("failed to parse CA certificate")}
 		}
 
+		// Extract hostname for SNI
+		hostOnly := strings.Split(m.serverAddr, ":")[0]
+
+		// Create TLS config with client cert, CA cert, and SNI
 		tlsConfig := &tls.Config{
 			Certificates: []tls.Certificate{cert},
 			RootCAs:      caCertPool,
+			ServerName:   hostOnly,
 			MinVersion:   tls.VersionTLS13,
 		}
 
 		creds := credentials.NewTLS(tlsConfig)
-		conn, err := grpc.Dial(m.serverAddr, grpc.WithTransportCredentials(creds))
+
+		// Use grpc.NewClient instead of deprecated grpc.Dial
+		conn, err := grpc.NewClient(m.serverAddr, grpc.WithTransportCredentials(creds))
 		if err != nil {
 			return errorMsg{fmt.Errorf("failed to connect: %w", err)}
 		}
