@@ -17,132 +17,136 @@ var (
 var (
 	// Title bar style
 	titleStyle = lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("#FFFFFF")).
-		Background(primaryColor).
-		Padding(0, 1)
+			Bold(true).
+			Foreground(lipgloss.Color("#FFFFFF")).
+			Background(primaryColor).
+			Padding(0, 1)
 
 	// Tab styles
 	activeTabStyle = lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("#FFFFFF")).
-		Background(secondaryColor).
-		Padding(0, 2)
+			Bold(true).
+			Foreground(lipgloss.Color("#FFFFFF")).
+			Background(secondaryColor).
+			Padding(0, 2)
 
 	inactiveTabStyle = lipgloss.NewStyle().
-		Foreground(mutedColor).
-		Padding(0, 2)
+				Foreground(mutedColor).
+				Padding(0, 2)
 
 	// Panel styles
 	panelStyle = lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(mutedColor).
-		Padding(0, 1)
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(mutedColor).
+			Padding(0, 1)
 
 	activePanelStyle = lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(primaryColor).
-		Padding(0, 1)
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(primaryColor).
+				Padding(0, 1)
 
 	// Event row styles
 	eventRowStyle = lipgloss.NewStyle().
-		Padding(0, 1)
+			Padding(0, 1)
 
 	selectedRowStyle = lipgloss.NewStyle().
-		Background(lipgloss.Color("#2d2d3d")).
-		Padding(0, 1)
+				Background(lipgloss.Color("#2d2d3d")).
+				Padding(0, 1)
 
 	// Method styles - no fixed width to prevent line breaks
 	methodGetStyle = lipgloss.NewStyle().
-		Bold(true).
-		Foreground(successColor)
+			Bold(true).
+			Foreground(successColor)
 
 	methodSetStyle = lipgloss.NewStyle().
-		Bold(true).
-		Foreground(secondaryColor)
+			Bold(true).
+			Foreground(secondaryColor)
 
 	methodDeleteStyle = lipgloss.NewStyle().
-		Bold(true).
-		Foreground(errorColor)
+				Bold(true).
+				Foreground(errorColor)
 
 	methodOtherStyle = lipgloss.NewStyle().
-		Bold(true).
-		Foreground(warningColor)
+				Bold(true).
+				Foreground(warningColor)
 
 	// Status styles
 	successStyle = lipgloss.NewStyle().
-		Foreground(successColor)
+			Foreground(successColor)
 
 	errorStyle = lipgloss.NewStyle().
-		Foreground(errorColor)
+			Foreground(errorColor)
+
+	// Warning/Info style for FailedPrecondition (not a real error)
+	warningStyle = lipgloss.NewStyle().
+			Foreground(warningColor)
 
 	// Timestamp style - no fixed width
 	timestampStyle = lipgloss.NewStyle().
-		Foreground(mutedColor)
+			Foreground(mutedColor)
 
 	// Duration style - no fixed width
 	durationStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#AAAAAA"))
+			Foreground(lipgloss.Color("#AAAAAA"))
 
 	// Swamp name style
 	swampStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#FFFFFF"))
+			Foreground(lipgloss.Color("#FFFFFF"))
 
 	// Stats panel styles
 	statLabelStyle = lipgloss.NewStyle().
-		Foreground(mutedColor)
+			Foreground(mutedColor)
 
 	statValueStyle = lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("#FFFFFF"))
+			Bold(true).
+			Foreground(lipgloss.Color("#FFFFFF"))
 
 	// Error details styles
 	errorDetailHeaderStyle = lipgloss.NewStyle().
-		Bold(true).
-		Foreground(errorColor)
+				Bold(true).
+				Foreground(errorColor)
 
 	errorDetailLabelStyle = lipgloss.NewStyle().
-		Foreground(mutedColor).
-		Width(12)
+				Foreground(mutedColor).
+				Width(12)
 
 	errorDetailValueStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#FFFFFF"))
+				Foreground(lipgloss.Color("#FFFFFF"))
 
 	stackTraceStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#888888")).
-		MarginLeft(2)
+			Foreground(lipgloss.Color("#888888")).
+			MarginLeft(2)
 
 	// Help style
 	helpStyle = lipgloss.NewStyle().
-		Foreground(mutedColor).
-		MarginTop(1)
+			Foreground(mutedColor).
+			MarginTop(1)
 
 	// Paused indicator
 	pausedStyle = lipgloss.NewStyle().
-		Bold(true).
-		Foreground(warningColor).
-		Background(lipgloss.Color("#3d3d00")).
-		Padding(0, 1)
+			Bold(true).
+			Foreground(warningColor).
+			Background(lipgloss.Color("#3d3d00")).
+			Padding(0, 1)
 
 	// Replay mode indicator
 	replayStyle = lipgloss.NewStyle().
-		Bold(true).
-		Foreground(primaryColor).
-		Background(lipgloss.Color("#2d2d4d")).
-		Padding(0, 1)
+			Bold(true).
+			Foreground(primaryColor).
+			Background(lipgloss.Color("#2d2d4d")).
+			Padding(0, 1)
 
 	// Key bindings style
 	keyStyle = lipgloss.NewStyle().
-		Foreground(secondaryColor).
-		Bold(true)
+			Foreground(secondaryColor).
+			Bold(true)
 
 	keyDescStyle = lipgloss.NewStyle().
-		Foreground(mutedColor)
+			Foreground(mutedColor)
 
 	// Status bar
 	statusBarStyle = lipgloss.NewStyle().
-		Background(lipgloss.Color("#1e1e2e")).
-		Padding(0, 1)
+			Background(lipgloss.Color("#1e1e2e")).
+			Padding(0, 1)
 )
 
 // getMethodStyle returns the appropriate style for a method name.

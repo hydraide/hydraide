@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -581,6 +582,14 @@ func (m Model) renderEventRow(event Event, selected bool) string {
 	if swampName == "" {
 		swampName = "-"
 	}
+	// Strip island ID from the beginning (e.g., "193/queueService/..." -> "queueService/...")
+	if idx := strings.Index(swampName, "/"); idx != -1 {
+		// Check if the part before "/" is a number (island ID)
+		prefix := swampName[:idx]
+		if _, err := strconv.ParseUint(prefix, 10, 64); err == nil {
+			swampName = swampName[idx+1:]
+		}
+	}
 	if len(swampName) > swampWidth {
 		swampName = "…" + swampName[len(swampName)-swampWidth+1:]
 	}
@@ -590,10 +599,12 @@ func (m Model) renderEventRow(event Event, selected bool) string {
 	duration := formatDuration(event.DurationUs)
 	duration = fmt.Sprintf("%7s", duration)
 
-	// Status
+	// Status - FailedPrecondition is INFO (not a real error), others are errors
 	var status string
 	if event.Success {
 		status = successStyle.Render("OK")
+	} else if event.ErrorCode == "FailedPrecondition" {
+		status = warningStyle.Render("⚠ INFO")
 	} else {
 		errCode := event.ErrorCode
 		if len(errCode) > 18 {
@@ -622,11 +633,12 @@ func (m Model) renderEventRow(event Event, selected bool) string {
 	return row
 }
 
-// renderErrorsTab renders the errors tab
+// renderErrorsTab renders the errors tab (excludes FailedPrecondition - those are INFO, not errors)
 func (m Model) renderErrorsTab(maxHeight int) string {
 	var errorEvents []Event
 	for _, e := range m.events {
-		if !e.Success {
+		// Only real errors, not FailedPrecondition (which is just INFO)
+		if !e.Success && e.ErrorCode != "FailedPrecondition" {
 			errorEvents = append(errorEvents, e)
 		}
 	}
@@ -675,11 +687,28 @@ func (m Model) renderStatsTab() string {
 	}
 
 	s := m.stats
+
+	// Count precondition failures vs real errors from top errors
+	var preconditionCount int64
+	var realErrorCount int64
+	var preconditionErrors []*hydrapb.TelemetryErrorSummary
+	var realErrors []*hydrapb.TelemetryErrorSummary
+
+	for _, e := range s.TopErrors {
+		if e.ErrorCode == "FailedPrecondition" {
+			preconditionCount += e.Count
+			preconditionErrors = append(preconditionErrors, e)
+		} else {
+			realErrorCount += e.Count
+			realErrors = append(realErrors, e)
+		}
+	}
+
 	var result string
 
 	result += "  " + statLabelStyle.Render("Total Calls: ") + statValueStyle.Render(fmt.Sprintf("%d", s.TotalCalls)) + "\n"
-	result += "  " + statLabelStyle.Render("Errors: ") + statValueStyle.Render(fmt.Sprintf("%d", s.ErrorCount)) + "\n"
-	result += "  " + statLabelStyle.Render("Error Rate: ") + statValueStyle.Render(fmt.Sprintf("%.2f%%", s.ErrorRate)) + "\n"
+	result += "  " + statLabelStyle.Render("Real Errors: ") + errorStyle.Render(fmt.Sprintf("%d", realErrorCount)) + "\n"
+	result += "  " + statLabelStyle.Render("Precondition (INFO): ") + warningStyle.Render(fmt.Sprintf("%d", preconditionCount)) + "\n"
 	result += "  " + statLabelStyle.Render("Avg Duration: ") + statValueStyle.Render(formatDuration(int64(s.AvgDurationUs))) + "\n"
 	result += "  " + statLabelStyle.Render("Active Clients: ") + statValueStyle.Render(fmt.Sprintf("%d", s.ActiveClients)) + "\n"
 
@@ -690,14 +719,27 @@ func (m Model) renderStatsTab() string {
 		}
 	}
 
-	if len(s.TopErrors) > 0 {
+	// Show real errors first
+	if len(realErrors) > 0 {
 		result += "\n  " + errorDetailHeaderStyle.Render("Top Errors:") + "\n"
-		for i, e := range s.TopErrors {
+		for i, e := range realErrors {
 			swampInfo := ""
 			if e.LastSwamp != "" {
 				swampInfo = fmt.Sprintf(" → %s", e.LastSwamp)
 			}
 			result += fmt.Sprintf("    %d. [%dx] %s: %s%s\n", i+1, e.Count, e.ErrorCode, e.ErrorMessage, swampInfo)
+		}
+	}
+
+	// Show precondition failures separately (INFO, not errors)
+	if len(preconditionErrors) > 0 {
+		result += "\n  " + warningStyle.Render("Precondition Failures (INFO - not real errors):") + "\n"
+		for i, e := range preconditionErrors {
+			swampInfo := ""
+			if e.LastSwamp != "" {
+				swampInfo = fmt.Sprintf(" → %s", e.LastSwamp)
+			}
+			result += fmt.Sprintf("    %d. [%dx] %s%s\n", i+1, e.Count, e.ErrorMessage, swampInfo)
 		}
 	}
 
@@ -809,13 +851,27 @@ func (m Model) renderErrorDetail() string {
 func (m Model) renderStatusBar() string {
 	eventCount := fmt.Sprintf("%d events", len(m.events))
 
-	var errorCount int
+	var realErrorCount int
+	var preconditionCount int
 	for _, e := range m.events {
 		if !e.Success {
-			errorCount++
+			if e.ErrorCode == "FailedPrecondition" {
+				preconditionCount++
+			} else {
+				realErrorCount++
+			}
 		}
 	}
-	errors := fmt.Sprintf("%d errors", errorCount)
+
+	var statusInfo string
+	if realErrorCount > 0 {
+		statusInfo = errorStyle.Render(fmt.Sprintf("%d errors", realErrorCount))
+	} else {
+		statusInfo = successStyle.Render("0 errors")
+	}
+	if preconditionCount > 0 {
+		statusInfo += " | " + warningStyle.Render(fmt.Sprintf("%d info", preconditionCount))
+	}
 
 	pauseHint := "[P] Pause"
 	if m.paused {
@@ -827,7 +883,7 @@ func (m Model) renderStatusBar() string {
 		filter = " [Errors Only]"
 	}
 
-	left := statusBarStyle.Render(eventCount + " | " + errors + filter)
+	left := statusBarStyle.Render(eventCount + " | " + statusInfo + filter)
 	right := helpStyle.Render(pauseHint + "  [?] Help  [Q] Quit")
 
 	return left + "    " + right
