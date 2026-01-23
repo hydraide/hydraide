@@ -66,10 +66,12 @@ type Model struct {
 	caFile     string
 
 	// Filters
-	filterMethod string // Filter by method name (exact match)
-	filterSwamp  string // Filter by swamp name (partial match)
-	filterStatus string // Filter by status: "all", "ok", "error", "info"
-	showFilter   bool   // Show filter input mode
+	filterMethod    string // Filter by method name (exact match)
+	filterSwamp     string // Filter by swamp name (partial match)
+	filterStatus    string // Filter by status: "all", "ok", "error", "info"
+	showFilterInput bool   // Show filter input mode
+	filterInputMode string // Which filter we're editing: "method", "swamp", "status"
+	filterInputText string // Current input text for filter
 
 	// Inspect mode
 	showInspect        bool
@@ -81,6 +83,10 @@ type Model struct {
 	inspectLoading     bool
 	inspectError       string
 	inspectSelectedIdx int // Selected row in inspect view
+
+	// Treasure detail view
+	showTreasureDetail bool
+	selectedTreasure   *hydrapb.Treasure
 }
 
 // Event represents a telemetry event for display
@@ -292,6 +298,44 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // handleKeyPress handles keyboard input
 func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Handle text input for filter mode
+	if m.showFilterInput {
+		switch msg.Type {
+		case tea.KeyEnter:
+			// Apply filter and exit input mode
+			if m.filterInputMode == "swamp" {
+				m.filterSwamp = m.filterInputText
+			}
+			m.showFilterInput = false
+			m.filterInputMode = ""
+			m.selectedIdx = 0
+			return m, nil
+		case tea.KeyEsc:
+			m.showFilterInput = false
+			m.filterInputMode = ""
+			m.filterInputText = ""
+			return m, nil
+		case tea.KeyBackspace:
+			if len(m.filterInputText) > 0 {
+				m.filterInputText = m.filterInputText[:len(m.filterInputText)-1]
+				if m.filterInputMode == "swamp" {
+					m.filterSwamp = m.filterInputText
+				}
+				m.selectedIdx = 0
+			}
+			return m, nil
+		case tea.KeyRunes:
+			// Add typed character
+			m.filterInputText += string(msg.Runes)
+			if m.filterInputMode == "swamp" {
+				m.filterSwamp = m.filterInputText
+			}
+			m.selectedIdx = 0
+			return m, nil
+		}
+		return m, nil
+	}
+
 	switch msg.String() {
 	case "q", "ctrl+c":
 		if m.cancelFunc != nil {
@@ -438,10 +482,15 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 	case "enter":
+		if m.showTreasureDetail {
+			// Already showing treasure detail, do nothing
+			return m, nil
+		}
 		if m.showInspect {
 			// In inspect mode: show full value of selected treasure
 			if m.inspectSelectedIdx >= 0 && m.inspectSelectedIdx < len(m.inspectTreasures) {
-				// TODO: Show full value detail view
+				m.selectedTreasure = m.inspectTreasures[m.inspectSelectedIdx]
+				m.showTreasureDetail = true
 			}
 			return m, nil
 		}
@@ -461,6 +510,19 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 	case "esc":
+		if m.showTreasureDetail {
+			// Close treasure detail, go back to inspect
+			m.showTreasureDetail = false
+			m.selectedTreasure = nil
+			return m, nil
+		}
+		if m.showFilterInput {
+			// Close filter input
+			m.showFilterInput = false
+			m.filterInputMode = ""
+			m.filterInputText = ""
+			return m, nil
+		}
 		if m.showInspect {
 			// Close inspect mode
 			m.showInspect = false
@@ -473,6 +535,50 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.showErrorDetail = false
 		m.showHelp = false
 		m.selectedError = nil
+
+	// Filter shortcuts
+	case "f":
+		if !m.showInspect && !m.showFilterInput {
+			// Toggle filter mode
+			m.showFilterInput = true
+			m.filterInputMode = "swamp"
+			m.filterInputText = m.filterSwamp
+		}
+	case "m":
+		if !m.showInspect && !m.showFilterInput {
+			// Method filter - cycle through methods
+			methods := []string{"", "Get", "Set", "Delete", "GetByIndex", "GetByKeys", "GetAll", "Lock", "Unlock"}
+			currentIdx := 0
+			for i, method := range methods {
+				if method == m.filterMethod {
+					currentIdx = i
+					break
+				}
+			}
+			m.filterMethod = methods[(currentIdx+1)%len(methods)]
+		}
+	case "s":
+		if !m.showInspect && !m.showFilterInput {
+			// Status filter - cycle through statuses
+			statuses := []string{"all", "ok", "error", "info"}
+			currentIdx := 0
+			for i, status := range statuses {
+				if status == m.filterStatus {
+					currentIdx = i
+					break
+				}
+			}
+			m.filterStatus = statuses[(currentIdx+1)%len(statuses)]
+			m.selectedIdx = 0 // Reset selection when filter changes
+		}
+	case "backspace":
+		if m.showFilterInput && len(m.filterInputText) > 0 {
+			m.filterInputText = m.filterInputText[:len(m.filterInputText)-1]
+			if m.filterInputMode == "swamp" {
+				m.filterSwamp = m.filterInputText
+			}
+			m.selectedIdx = 0
+		}
 	}
 
 	return m, nil
@@ -628,6 +734,10 @@ func (m Model) View() string {
 
 	if m.showHelp {
 		return m.renderHelp()
+	}
+
+	if m.showTreasureDetail {
+		return m.renderTreasureDetail()
 	}
 
 	if m.showInspect {
@@ -1036,7 +1146,7 @@ func (m Model) renderStatsTab() string {
 		}
 	}
 
-	// Show precondition failures separately (INFO, not errors)
+	// Show precondition failures separately (INFO, not real errors)
 	if len(preconditionErrors) > 0 {
 		result += "\n  " + warningStyle.Render("Precondition Failures (INFO - not real errors):") + "\n"
 		for i, e := range preconditionErrors {
@@ -1245,9 +1355,135 @@ func (m Model) renderInspect() string {
 		s += row + "\n"
 	}
 
-	s += "\n  " + helpStyle.Render("[↑/↓] Navigate  [PgUp/PgDn] Page  [ESC] Back")
+	s += "\n  " + helpStyle.Render("[↑/↓] Navigate  [PgUp/PgDn] Page  [Enter] Details  [ESC] Back")
 
 	return s
+}
+
+// renderTreasureDetail renders the full treasure detail view
+func (m Model) renderTreasureDetail() string {
+	t := m.selectedTreasure
+	if t == nil {
+		return "No treasure selected"
+	}
+
+	var s string
+	s += titleStyle.Render(" 💎 Treasure Details ") + "\n\n"
+
+	// Key
+	s += "  " + lipgloss.NewStyle().Bold(true).Foreground(secondaryColor).Render("Key:") + "\n"
+	s += "  " + statValueStyle.Render(t.Key) + "\n\n"
+
+	// Type and Value
+	valueType, _ := getTreasureTypeAndValue(t)
+	s += "  " + lipgloss.NewStyle().Bold(true).Foreground(secondaryColor).Render("Type: ") + valueType + "\n\n"
+
+	s += "  " + lipgloss.NewStyle().Bold(true).Foreground(secondaryColor).Render("Value:") + "\n"
+	// Show full value, wrapped if needed
+	fullValue := getFullTreasureValue(t)
+	// Wrap long values
+	maxWidth := m.width - 6
+	if maxWidth < 40 {
+		maxWidth = 40
+	}
+	wrappedValue := wrapText(fullValue, maxWidth)
+	for _, line := range strings.Split(wrappedValue, "\n") {
+		s += "  " + line + "\n"
+	}
+
+	// Metadata
+	s += "\n  " + lipgloss.NewStyle().Bold(true).Foreground(secondaryColor).Render("Metadata:") + "\n"
+
+	if t.CreatedAt != nil {
+		s += "  " + statLabelStyle.Render("Created At:  ") + timestampStyle.Render(t.CreatedAt.AsTime().Format("2006-01-02 15:04:05")) + "\n"
+	}
+	if t.CreatedBy != nil {
+		s += "  " + statLabelStyle.Render("Created By:  ") + *t.CreatedBy + "\n"
+	}
+	if t.UpdatedAt != nil {
+		s += "  " + statLabelStyle.Render("Updated At:  ") + timestampStyle.Render(t.UpdatedAt.AsTime().Format("2006-01-02 15:04:05")) + "\n"
+	}
+	if t.UpdatedBy != nil {
+		s += "  " + statLabelStyle.Render("Updated By:  ") + *t.UpdatedBy + "\n"
+	}
+	if t.ExpiredAt != nil {
+		s += "  " + statLabelStyle.Render("Expires At:  ") + warningStyle.Render(t.ExpiredAt.AsTime().Format("2006-01-02 15:04:05")) + "\n"
+	}
+
+	s += "\n  " + lipgloss.NewStyle().Foreground(mutedColor).Italic(true).Render("Value type: "+valueType) + "\n"
+	s += "\n  " + helpStyle.Render("[ESC] Back to inspector")
+
+	return s
+}
+
+// getFullTreasureValue returns the complete value of a treasure as a string
+func getFullTreasureValue(t *hydrapb.Treasure) string {
+	if t.Int8Val != nil {
+		return fmt.Sprintf("%d", *t.Int8Val)
+	}
+	if t.Int16Val != nil {
+		return fmt.Sprintf("%d", *t.Int16Val)
+	}
+	if t.Int32Val != nil {
+		return fmt.Sprintf("%d", *t.Int32Val)
+	}
+	if t.Int64Val != nil {
+		return fmt.Sprintf("%d", *t.Int64Val)
+	}
+	if t.Uint8Val != nil {
+		return fmt.Sprintf("%d", *t.Uint8Val)
+	}
+	if t.Uint16Val != nil {
+		return fmt.Sprintf("%d", *t.Uint16Val)
+	}
+	if t.Uint32Val != nil {
+		return fmt.Sprintf("%d", *t.Uint32Val)
+	}
+	if t.Uint64Val != nil {
+		return fmt.Sprintf("%d", *t.Uint64Val)
+	}
+	if t.Float32Val != nil {
+		return fmt.Sprintf("%f", *t.Float32Val)
+	}
+	if t.Float64Val != nil {
+		return fmt.Sprintf("%f", *t.Float64Val)
+	}
+	if t.StringVal != nil {
+		return *t.StringVal
+	}
+	if t.BoolVal != nil {
+		if *t.BoolVal == hydrapb.Boolean_TRUE {
+			return "true"
+		}
+		return "false"
+	}
+	if t.BytesVal != nil {
+		return fmt.Sprintf("(binary data: %d bytes)", len(t.BytesVal))
+	}
+	if len(t.Uint32Slice) > 0 {
+		return fmt.Sprintf("%v", t.Uint32Slice)
+	}
+	return "-"
+}
+
+// wrapText wraps text to a maximum width
+func wrapText(text string, maxWidth int) string {
+	if len(text) <= maxWidth {
+		return text
+	}
+
+	var result strings.Builder
+	for i := 0; i < len(text); i += maxWidth {
+		end := i + maxWidth
+		if end > len(text) {
+			end = len(text)
+		}
+		if i > 0 {
+			result.WriteString("\n")
+		}
+		result.WriteString(text[i:end])
+	}
+	return result.String()
 }
 
 // calculateSwampPath generates the expected file path for a swamp
@@ -1390,18 +1626,50 @@ func (m Model) renderStatusBar() string {
 		statusInfo += " | " + warningStyle.Render(fmt.Sprintf("%d info", preconditionCount))
 	}
 
+	// Build filter info
+	var filterInfo string
+	if m.filterMethod != "" {
+		filterInfo += " " + lipgloss.NewStyle().Bold(true).Foreground(secondaryColor).Render("[M:"+m.filterMethod+"]")
+	}
+	if m.filterSwamp != "" {
+		filterInfo += " " + lipgloss.NewStyle().Bold(true).Foreground(secondaryColor).Render("[S:"+m.filterSwamp+"]")
+	}
+	if m.filterStatus != "all" {
+		statusLabel := m.filterStatus
+		var statusStyle lipgloss.Style
+		switch m.filterStatus {
+		case "ok":
+			statusStyle = successStyle
+		case "error":
+			statusStyle = errorStyle
+		case "info":
+			statusStyle = warningStyle
+		default:
+			statusStyle = lipgloss.NewStyle()
+		}
+		filterInfo += " " + statusStyle.Bold(true).Render("["+strings.ToUpper(statusLabel)+"]")
+	}
+
+	// Filter input mode
+	if m.showFilterInput {
+		filterInfo = " " + lipgloss.NewStyle().Bold(true).Foreground(primaryColor).Background(lipgloss.Color("#2d2d4d")).Padding(0, 1).
+			Render("Filter: "+m.filterInputText+"_")
+	}
+
 	pauseHint := "[P] Pause"
 	if m.paused {
 		pauseHint = "[P] Resume"
 	}
 
-	filter := ""
+	filter := filterInfo
 	if m.errorsOnly {
-		filter = " [Errors Only]"
+		filter += " [Errors Only]"
 	}
 
+	// Show filter shortcuts
+	filterHints := "[F] Filter  [M] Method  [S] Status"
 	left := statusBarStyle.Render(eventCount + " | " + statusInfo + filter)
-	right := helpStyle.Render(pauseHint + "  [?] Help  [Q] Quit")
+	right := helpStyle.Render(filterHints + "  " + pauseHint + "  [?] Help  [Q] Quit")
 
 	return left + "    " + right
 }
@@ -1429,6 +1697,12 @@ func (m Model) renderHelp() string {
 	s += "  " + keyStyle.Render("E") + keyDescStyle.Render("  Toggle errors only filter") + "\n"
 	s += "  " + keyStyle.Render("?/H") + keyDescStyle.Render("  Toggle this help") + "\n"
 	s += "  " + keyStyle.Render("Q") + keyDescStyle.Render("  Quit") + "\n"
+
+	s += "\n" + lipgloss.NewStyle().Bold(true).Render("  Filters:") + "\n"
+	s += "  " + keyStyle.Render("F") + keyDescStyle.Render("  Filter by swamp name (type to search)") + "\n"
+	s += "  " + keyStyle.Render("M") + keyDescStyle.Render("  Cycle through methods (Get, Set, Delete...)") + "\n"
+	s += "  " + keyStyle.Render("S") + keyDescStyle.Render("  Cycle through status (all, ok, error, info)") + "\n"
+	s += "  " + keyDescStyle.Render("  Active filters are shown in the status bar.") + "\n"
 
 	s += "\n" + lipgloss.NewStyle().Bold(true).Render("  Inspect Mode:") + "\n"
 	s += "  " + keyDescStyle.Render("  Select an event and press Enter to view swamp contents.") + "\n"
