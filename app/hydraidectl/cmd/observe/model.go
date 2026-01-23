@@ -1287,9 +1287,6 @@ func calculateSwampPath(swampName string, islandID uint64) string {
 }
 
 // getTreasureTypeAndValue returns the type and value of a treasure for display
-}
-
-// getTreasureTypeAndValue returns the type and value of a treasure for display
 func getTreasureTypeAndValue(t *hydrapb.Treasure) (string, string) {
 	// Check each possible value type
 	if t.Int8Val != nil {
