@@ -69,28 +69,27 @@ A szerver a swamp műveletek során tudja a tényleges fájl path-ot. Ezt hozzá
 Pause módban kiválasztott sorra Enter-t nyomva megnyílik a swamp tartalma egy új nézetben.
 
 ### Működés
-1. Felhasználó pausolja az observer-t (P)
-2. Nyilakkal kiválaszt egy sort
-3. Enter-rel megnyitja
-4. Új nézet: Swamp tartalom (GetAll gRPC hívás)
-5. ESC-kel visszalép az observer-be
+1. Felhasználó kiválaszt egy eseményt (nyilakkal)
+2. Enter-rel megnyitja
+3. Új nézet: Swamp tartalom (GetByIndex gRPC hívás, lapozással)
+4. ESC-kel visszalép az observer-be
 
-### Megjelenítendő adatok (GetAll válaszból)
+### Megjelenítendő adatok (GetByIndex válaszból)
 - Key
-- Value típus és érték (primitív) VAGY "bytes (X KB)" ha byte tömb
-- CreatedAt, CreatedBy
-- UpdatedAt, UpdatedBy
-- ExpiredAt
+- Value típus és érték (primitív) VAGY "bytes (X bytes)" ha byte tömb
+- CreatedAt
 
 ### Lépések
 
-- [ ] **model.go**: Új állapot `showSwampDetail bool` és `selectedSwampData []Treasure`
-- [ ] **model.go**: Enter key kezelése - gRPC `GetAll` hívás a kiválasztott swamp-ra
-- [ ] **model.go**: `renderSwampDetail()` függvény létrehozása
-- [ ] **model.go**: ESC kezelése - visszalépés a listához
-- [ ] **styles.go**: Swamp detail stílusok
+- [x] **model.go**: Új állapot mezők (showInspect, inspectTreasures, stb.)
+- [x] **model.go**: Enter key kezelése - gRPC `GetByIndex` hívás lapozással
+- [x] **model.go**: `renderInspect()` függvény - treasure lista megjelenítése
+- [x] **model.go**: ESC kezelése - visszalépés a listához
+- [x] **model.go**: ↑/↓ lapozás inspect módban
+- [x] **model.go**: `getTreasureTypeAndValue()` helper - érték típus detektálás
+- [x] **model.go**: Help frissítése inspect információkkal
 
-**Fázis státusz:** ❌ Még nem kezdődött
+**Fázis státusz:** ✅ Kész
 
 ---
 

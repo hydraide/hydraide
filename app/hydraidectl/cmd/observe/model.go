@@ -63,6 +63,16 @@ type Model struct {
 	certFile   string
 	keyFile    string
 	caFile     string
+
+	// Inspect mode
+	showInspect      bool
+	inspectEvent     *Event
+	inspectTreasures []*hydrapb.Treasure
+	inspectPage      int
+	inspectPerPage   int
+	inspectTotal     int
+	inspectLoading   bool
+	inspectError     string
 }
 
 // Event represents a telemetry event for display
@@ -102,17 +112,27 @@ type streamErrorMsg struct {
 	err error
 }
 
+type inspectDataMsg struct {
+	treasures []*hydrapb.Treasure
+	total     int
+}
+
+type inspectErrorMsg struct {
+	err error
+}
+
 // NewModel creates a new observe model
 func NewModel(serverAddr, certFile, keyFile, caFile string) Model {
 	return Model{
-		maxEvents:   500,
-		events:      make([]Event, 0, 500),
-		pauseBuffer: make([]Event, 0),
-		activeTab:   TabLive,
-		serverAddr:  serverAddr,
-		certFile:    certFile,
-		keyFile:     keyFile,
-		caFile:      caFile,
+		maxEvents:      500,
+		events:         make([]Event, 0, 500),
+		pauseBuffer:    make([]Event, 0),
+		activeTab:      TabLive,
+		serverAddr:     serverAddr,
+		certFile:       certFile,
+		keyFile:        keyFile,
+		caFile:         caFile,
+		inspectPerPage: 20,
 	}
 }
 
@@ -247,6 +267,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case streamErrorMsg:
 		m.connError = fmt.Sprintf("Stream error: %v", msg.err)
+
+	case inspectDataMsg:
+		m.inspectLoading = false
+		m.inspectTreasures = msg.treasures
+		m.inspectTotal = msg.total
+
+	case inspectErrorMsg:
+		m.inspectLoading = false
+		m.inspectError = msg.err.Error()
 	}
 
 	return m, tea.Batch(cmds...)
@@ -304,19 +333,52 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "up", "k":
-		if m.selectedIdx > 0 {
+		if m.showInspect {
+			// In inspect mode: scroll up in treasures or go to previous page
+			if m.inspectPage > 0 {
+				m.inspectPage--
+				return m, m.fetchInspectData()
+			}
+		} else if m.selectedIdx > 0 {
 			m.selectedIdx--
 		}
 	case "down", "j":
-		if m.selectedIdx < len(m.events)-1 {
+		if m.showInspect {
+			// In inspect mode: scroll down in treasures or go to next page
+			if (m.inspectPage+1)*m.inspectPerPage < m.inspectTotal {
+				m.inspectPage++
+				return m, m.fetchInspectData()
+			}
+		} else if m.selectedIdx < len(m.events)-1 {
 			m.selectedIdx++
 		}
 	case "enter":
+		if m.showInspect {
+			// Already in inspect mode, do nothing
+			return m, nil
+		}
+		// Open inspect for selected event (if it has a swamp name)
 		if m.selectedIdx >= 0 && m.selectedIdx < len(m.events) {
-			m.selectedError = &m.events[m.selectedIdx]
-			m.showErrorDetail = true
+			event := m.events[m.selectedIdx]
+			if event.SwampName != "" && event.SwampName != "-" {
+				m.inspectEvent = &event
+				m.showInspect = true
+				m.inspectLoading = true
+				m.inspectPage = 0
+				m.inspectTreasures = nil
+				m.inspectError = ""
+				return m, m.fetchInspectData()
+			}
 		}
 	case "esc":
+		if m.showInspect {
+			// Close inspect mode
+			m.showInspect = false
+			m.inspectEvent = nil
+			m.inspectTreasures = nil
+			m.inspectError = ""
+			return m, nil
+		}
 		m.showErrorDetail = false
 		m.showHelp = false
 		m.selectedError = nil
@@ -428,11 +490,70 @@ func (m Model) View() string {
 		return m.renderHelp()
 	}
 
+	if m.showInspect {
+		return m.renderInspect()
+	}
+
 	if m.showErrorDetail && m.selectedError != nil {
 		return m.renderErrorDetail()
 	}
 
 	return m.renderMain()
+}
+
+// fetchInspectData fetches treasure data for the selected swamp using GetByIndex
+func (m Model) fetchInspectData() tea.Cmd {
+	return func() tea.Msg {
+		if m.client == nil || m.inspectEvent == nil {
+			return inspectErrorMsg{err: fmt.Errorf("no client or event")}
+		}
+
+		// Parse island ID and swamp name from SwampName (format: "193/sanctuary/realm/swamp")
+		swampFullName := m.inspectEvent.SwampName
+		var islandID uint64
+		var swampName string
+
+		if idx := strings.Index(swampFullName, "/"); idx != -1 {
+			prefix := swampFullName[:idx]
+			if id, err := strconv.ParseUint(prefix, 10, 64); err == nil {
+				islandID = id
+				swampName = swampFullName[idx+1:]
+			} else {
+				swampName = swampFullName
+			}
+		} else {
+			swampName = swampFullName
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		resp, err := m.client.GetByIndex(ctx, &hydrapb.GetByIndexRequest{
+			IslandID:  islandID,
+			SwampName: swampName,
+			IndexType: hydrapb.IndexType_KEY,
+			OrderType: hydrapb.OrderType_ASC,
+			From:      int32(m.inspectPage * m.inspectPerPage),
+			Limit:     int32(m.inspectPerPage),
+		})
+		if err != nil {
+			return inspectErrorMsg{err: err}
+		}
+
+		// Get total count (we'll estimate from the response)
+		total := len(resp.Treasures)
+		if total == m.inspectPerPage {
+			// There might be more, estimate higher
+			total = (m.inspectPage + 2) * m.inspectPerPage
+		} else {
+			total = m.inspectPage*m.inspectPerPage + len(resp.Treasures)
+		}
+
+		return inspectDataMsg{
+			treasures: resp.Treasures,
+			total:     total,
+		}
+	}
 }
 
 // renderMain renders the main view with fixed header and footer
@@ -825,6 +946,140 @@ func (m Model) renderLongRunningTab() string {
 	return result
 }
 
+// renderInspect renders the swamp inspection view
+func (m Model) renderInspect() string {
+	if m.inspectEvent == nil {
+		return "No swamp selected"
+	}
+
+	// Strip island ID from display name
+	swampDisplayName := m.inspectEvent.SwampName
+	if idx := strings.Index(swampDisplayName, "/"); idx != -1 {
+		prefix := swampDisplayName[:idx]
+		if _, err := strconv.ParseUint(prefix, 10, 64); err == nil {
+			swampDisplayName = swampDisplayName[idx+1:]
+		}
+	}
+
+	var s string
+	s += titleStyle.Render(" 🔍 Swamp Inspector ") + "\n\n"
+	s += "  " + statLabelStyle.Render("Swamp: ") + statValueStyle.Render(swampDisplayName) + "\n"
+	s += "  " + statLabelStyle.Render("Method: ") + getMethodStyle(m.inspectEvent.Method).Render(m.inspectEvent.Method) + "\n"
+	s += "  " + statLabelStyle.Render("Time: ") + timestampStyle.Render(m.inspectEvent.Timestamp.Format("15:04:05.000")) + "\n\n"
+
+	if m.inspectLoading {
+		s += lipgloss.NewStyle().Foreground(mutedColor).Render("  Loading treasures...") + "\n"
+		s += "\n  " + helpStyle.Render("Press [ESC] to go back")
+		return s
+	}
+
+	if m.inspectError != "" {
+		s += errorStyle.Render("  ✗ Error: "+m.inspectError) + "\n"
+		s += "\n  " + helpStyle.Render("Press [ESC] to go back")
+		return s
+	}
+
+	if len(m.inspectTreasures) == 0 {
+		s += warningStyle.Render("  ⚠ No treasures found in this swamp") + "\n"
+		s += "\n  " + helpStyle.Render("Press [ESC] to go back")
+		return s
+	}
+
+	// Header
+	s += lipgloss.NewStyle().Bold(true).Render("  Treasures:") + "\n"
+	s += lipgloss.NewStyle().Foreground(mutedColor).Render(
+		fmt.Sprintf("  Page %d | Showing %d items | Use ↑/↓ to navigate pages", m.inspectPage+1, len(m.inspectTreasures))) + "\n\n"
+
+	// Treasure list
+	header := fmt.Sprintf("  %-30s %-15s %-20s %s", "KEY", "TYPE", "CREATED", "VALUE")
+	s += lipgloss.NewStyle().Foreground(mutedColor).Render(header) + "\n"
+	s += lipgloss.NewStyle().Foreground(mutedColor).Render("  "+strings.Repeat("─", 80)) + "\n"
+
+	for _, t := range m.inspectTreasures {
+		if !t.IsExist {
+			continue
+		}
+
+		key := t.Key
+		if len(key) > 28 {
+			key = key[:25] + "..."
+		}
+
+		valueType, valueStr := getTreasureTypeAndValue(t)
+
+		createdAt := "-"
+		if t.CreatedAt != nil {
+			createdAt = t.CreatedAt.AsTime().Format("2006-01-02 15:04")
+		}
+
+		s += fmt.Sprintf("  %-30s %-15s %-20s %s\n",
+			statValueStyle.Render(key),
+			lipgloss.NewStyle().Foreground(secondaryColor).Render(valueType),
+			timestampStyle.Render(createdAt),
+			valueStr)
+	}
+
+	s += "\n  " + helpStyle.Render("[↑/↓] Page navigation  [ESC] Back to observer")
+
+	return s
+}
+
+// getTreasureTypeAndValue returns the type and value of a treasure for display
+func getTreasureTypeAndValue(t *hydrapb.Treasure) (string, string) {
+	// Check each possible value type
+	if t.Int8Val != nil {
+		return "int8", fmt.Sprintf("%d", *t.Int8Val)
+	}
+	if t.Int16Val != nil {
+		return "int16", fmt.Sprintf("%d", *t.Int16Val)
+	}
+	if t.Int32Val != nil {
+		return "int32", fmt.Sprintf("%d", *t.Int32Val)
+	}
+	if t.Int64Val != nil {
+		return "int64", fmt.Sprintf("%d", *t.Int64Val)
+	}
+	if t.Uint8Val != nil {
+		return "uint8", fmt.Sprintf("%d", *t.Uint8Val)
+	}
+	if t.Uint16Val != nil {
+		return "uint16", fmt.Sprintf("%d", *t.Uint16Val)
+	}
+	if t.Uint32Val != nil {
+		return "uint32", fmt.Sprintf("%d", *t.Uint32Val)
+	}
+	if t.Uint64Val != nil {
+		return "uint64", fmt.Sprintf("%d", *t.Uint64Val)
+	}
+	if t.Float32Val != nil {
+		return "float32", fmt.Sprintf("%.4f", *t.Float32Val)
+	}
+	if t.Float64Val != nil {
+		return "float64", fmt.Sprintf("%.4f", *t.Float64Val)
+	}
+	if t.StringVal != nil {
+		val := *t.StringVal
+		if len(val) > 40 {
+			val = val[:37] + "..."
+		}
+		return "string", fmt.Sprintf("\"%s\"", val)
+	}
+	if t.BoolVal != nil {
+		if *t.BoolVal == hydrapb.Boolean_TRUE {
+			return "bool", "true"
+		}
+		return "bool", "false"
+	}
+	if t.BytesVal != nil {
+		return "bytes", fmt.Sprintf("(%d bytes)", len(t.BytesVal))
+	}
+	if len(t.Uint32Slice) > 0 {
+		return "uint32[]", fmt.Sprintf("[%d items]", len(t.Uint32Slice))
+	}
+
+	return "unknown", "-"
+}
+
 // renderErrorDetail renders the error detail view
 func (m Model) renderErrorDetail() string {
 	e := m.selectedError
@@ -895,8 +1150,8 @@ func (m Model) renderHelp() string {
 
 	s += lipgloss.NewStyle().Bold(true).Render("  Navigation:") + "\n"
 	s += "  " + keyStyle.Render("Up/k, Down/j") + keyDescStyle.Render("  Move selection up/down") + "\n"
-	s += "  " + keyStyle.Render("Enter") + keyDescStyle.Render("         View error details") + "\n"
-	s += "  " + keyStyle.Render("Esc") + keyDescStyle.Render("           Close detail view") + "\n"
+	s += "  " + keyStyle.Render("Enter") + keyDescStyle.Render("         Inspect swamp contents") + "\n"
+	s += "  " + keyStyle.Render("Esc") + keyDescStyle.Render("           Close inspect/detail view") + "\n"
 
 	s += "\n" + lipgloss.NewStyle().Bold(true).Render("  Tabs:") + "\n"
 	s += "  " + keyStyle.Render("1") + keyDescStyle.Render("  Live view") + "\n"
@@ -910,6 +1165,10 @@ func (m Model) renderHelp() string {
 	s += "  " + keyStyle.Render("E") + keyDescStyle.Render("  Toggle errors only filter") + "\n"
 	s += "  " + keyStyle.Render("?/H") + keyDescStyle.Render("  Toggle this help") + "\n"
 	s += "  " + keyStyle.Render("Q") + keyDescStyle.Render("  Quit") + "\n"
+
+	s += "\n" + lipgloss.NewStyle().Bold(true).Render("  Inspect Mode:") + "\n"
+	s += "  " + keyDescStyle.Render("  Select an event and press Enter to view swamp contents.") + "\n"
+	s += "  " + keyDescStyle.Render("  Use ↑/↓ to navigate pages, ESC to return.") + "\n"
 
 	s += "\n  " + helpStyle.Render("Press any key to close help")
 
