@@ -446,6 +446,15 @@ sudo hydraidectl health --instance test
 
 The `observe` command provides a real-time TUI (Terminal User Interface) dashboard for monitoring all gRPC calls, errors, and client activity on a HydrAIDE server. This is essential for debugging issues like failed logins, data corruption, or performance problems.
 
+**Quick Start:**
+```bash
+# 1. Enable telemetry (required for observe to work)
+hydraidectl telemetry --instance prod --enable
+
+# 2. Start the monitoring dashboard
+hydraidectl observe --instance prod
+```
+
 **Synopsis:**
 ```bash
 hydraidectl observe --instance <name> [flags]

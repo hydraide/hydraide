@@ -57,8 +57,8 @@ EXAMPLES:
   sudo hydraidectl start --instance prod
   sudo hydraidectl update --instance prod --no-start
   hydraidectl migrate --instance prod --full
-  hydraidectl observe --instance prod
   hydraidectl telemetry --instance prod --enable
+  hydraidectl observe --instance prod
 `,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		// Skip update check for version command itself
