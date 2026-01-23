@@ -2389,7 +2389,7 @@ func (g Gateway) SubscribeToTelemetry(req *hydrapb.TelemetrySubscribeRequest, st
 				Method:        event.Method,
 				SwampName:     event.SwampName,
 				Keys:          event.Keys,
-				DurationMs:    event.DurationMs,
+				DurationUs:    event.DurationUs,
 				Success:       event.Success,
 				ErrorCode:     event.ErrorCode,
 				ErrorMessage:  event.ErrorMsg,
@@ -2445,7 +2445,7 @@ func (g Gateway) GetTelemetryHistory(_ context.Context, req *hydrapb.TelemetryHi
 			Method:        event.Method,
 			SwampName:     event.SwampName,
 			Keys:          event.Keys,
-			DurationMs:    event.DurationMs,
+			DurationUs:    event.DurationUs,
 			Success:       event.Success,
 			ErrorCode:     event.ErrorCode,
 			ErrorMessage:  event.ErrorMsg,
@@ -2492,7 +2492,7 @@ func (g Gateway) GetErrorDetails(_ context.Context, req *hydrapb.ErrorDetailsReq
 				Method:        event.Method,
 				SwampName:     event.SwampName,
 				Keys:          event.Keys,
-				DurationMs:    event.DurationMs,
+				DurationUs:    event.DurationUs,
 				Success:       event.Success,
 				ErrorCode:     event.ErrorCode,
 				ErrorMessage:  event.ErrorMsg,
@@ -2509,7 +2509,7 @@ func (g Gateway) GetErrorDetails(_ context.Context, req *hydrapb.ErrorDetailsReq
 				Context: map[string]string{
 					"swamp":       event.SwampName,
 					"client_ip":   event.ClientIP,
-					"duration_ms": fmt.Sprintf("%d", event.DurationMs),
+					"duration_us": fmt.Sprintf("%d", event.DurationUs),
 				},
 			}, nil
 		}
@@ -2540,7 +2540,7 @@ func (g Gateway) GetTelemetryStats(_ context.Context, req *hydrapb.TelemetryStat
 			SwampName:     s.SwampName,
 			CallCount:     s.CallCount,
 			ErrorCount:    s.ErrorCount,
-			AvgDurationMs: s.AvgDurationMs,
+			AvgDurationUs: s.AvgDurationUs,
 		}
 	}
 
@@ -2560,7 +2560,7 @@ func (g Gateway) GetTelemetryStats(_ context.Context, req *hydrapb.TelemetryStat
 		TotalCalls:    stats.TotalCalls,
 		ErrorCount:    stats.ErrorCount,
 		ErrorRate:     stats.ErrorRate,
-		AvgDurationMs: stats.AvgDurationMs,
+		AvgDurationUs: stats.AvgDurationUs,
 		ActiveClients: int32(stats.ActiveClients),
 		TopSwamps:     topSwamps,
 		TopErrors:     topErrors,
@@ -2593,4 +2593,3 @@ func categorizeErrorCode(code, msg string) string {
 		return "unknown"
 	}
 }
- 

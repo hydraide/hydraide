@@ -1855,8 +1855,8 @@ message TelemetryEvent {
   // The keys involved in this operation.
   repeated string keys = 5;
 
-  // How long the call took in milliseconds.
-  int64 duration_ms = 6;
+  // How long the call took in microseconds (for sub-millisecond precision).
+  int64 duration_us = 6;
 
   // True if the call succeeded, false if it returned an error.
   bool success = 7;
@@ -1951,8 +1951,8 @@ message TelemetryStatsResponse {
   // Error rate as a percentage (0-100).
   double error_rate = 3;
 
-  // Average call duration in milliseconds.
-  double avg_duration_ms = 4;
+  // Average call duration in microseconds.
+  double avg_duration_us = 4;
 
   // Number of unique clients active in the window.
   int32 active_clients = 5;
@@ -1975,8 +1975,8 @@ message TelemetrySwampStats {
   // Number of errors for this swamp.
   int64 error_count = 3;
 
-  // Average call duration in milliseconds.
-  double avg_duration_ms = 4;
+  // Average call duration in microseconds.
+  double avg_duration_us = 4;
 }
 
 // TelemetryErrorSummary contains aggregated information about a specific error type.

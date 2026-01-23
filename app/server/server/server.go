@@ -157,7 +157,7 @@ func (s *server) Start() error {
 				Method:     extractMethodName(info.FullMethod),
 				SwampName:  extractSwampName(req),
 				Keys:       extractKeys(req),
-				DurationMs: duration.Milliseconds(),
+				DurationUs: duration.Microseconds(),
 				Success:    err == nil,
 				ClientIP:   clientIP,
 			}

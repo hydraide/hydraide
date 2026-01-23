@@ -284,7 +284,7 @@ func TestCollector_Stats(t *testing.T) {
 			Timestamp:  time.Now(),
 			Method:     "Get",
 			SwampName:  "test/swamp/" + string(rune('a'+i%5)),
-			DurationMs: int64(i * 10),
+			DurationUs: int64(i * 10),
 			Success:    i%4 != 0,
 			ClientIP:   "192.168.1." + string(rune('1'+i%3)),
 		}

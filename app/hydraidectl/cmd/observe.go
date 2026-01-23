@@ -266,7 +266,7 @@ func printObserveStats(stats *hydrapb.TelemetryStatsResponse) {
 	fmt.Printf("Total Calls:    %d\n", stats.TotalCalls)
 	fmt.Printf("Errors:         %d\n", stats.ErrorCount)
 	fmt.Printf("Error Rate:     %.2f%%\n", stats.ErrorRate)
-	fmt.Printf("Avg Duration:   %.2fms\n", stats.AvgDurationMs)
+	fmt.Printf("Avg Duration:   %s\n", formatDurationUs(int64(stats.AvgDurationUs)))
 	fmt.Printf("Active Clients: %d\n", stats.ActiveClients)
 
 	if len(stats.TopSwamps) > 0 {
@@ -299,14 +299,30 @@ func printObserveEvent(event *hydrapb.TelemetryEvent) {
 		swampName = swampName[:37] + "..."
 	}
 
-	fmt.Printf("%s | %-8s | %-40s | %4dms | %s\n",
+	fmt.Printf("%s | %-8s | %-40s | %7s | %s\n",
 		timestamp,
 		event.Method,
 		swampName,
-		event.DurationMs,
+		formatDurationUs(event.DurationUs),
 		status)
 
 	if !event.Success && event.ErrorMessage != "" {
 		fmt.Printf("         +-- %s\n", event.ErrorMessage)
+	}
+}
+
+// formatDurationUs formats duration in microseconds to a human-readable string
+func formatDurationUs(durationUs int64) string {
+	if durationUs < 1000 {
+		return fmt.Sprintf("%dµs", durationUs)
+	} else if durationUs < 1000000 {
+		ms := float64(durationUs) / 1000.0
+		if ms < 10 {
+			return fmt.Sprintf("%.1fms", ms)
+		}
+		return fmt.Sprintf("%.0fms", ms)
+	} else {
+		s := float64(durationUs) / 1000000.0
+		return fmt.Sprintf("%.2fs", s)
 	}
 }

@@ -60,7 +60,7 @@ func (es *ErrorStore) Store(event Event) {
 		details.Context["keys"] = formatKeys(event.Keys)
 	}
 	details.Context["client_ip"] = event.ClientIP
-	details.Context["duration_ms"] = formatInt64(event.DurationMs)
+	details.Context["duration_us"] = formatInt64(event.DurationUs)
 
 	// Store the error
 	es.errors[event.ID] = details

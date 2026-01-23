@@ -6573,8 +6573,8 @@ type TelemetryEvent struct {
 	SwampName string `protobuf:"bytes,4,opt,name=swamp_name,json=swampName,proto3" json:"swamp_name,omitempty"`
 	// The keys involved in this operation.
 	Keys []string `protobuf:"bytes,5,rep,name=keys,proto3" json:"keys,omitempty"`
-	// How long the call took in milliseconds.
-	DurationMs int64 `protobuf:"varint,6,opt,name=duration_ms,json=durationMs,proto3" json:"duration_ms,omitempty"`
+	// How long the call took in microseconds (for sub-millisecond precision).
+	DurationUs int64 `protobuf:"varint,6,opt,name=duration_us,json=durationUs,proto3" json:"duration_us,omitempty"`
 	// True if the call succeeded, false if it returned an error.
 	Success bool `protobuf:"varint,7,opt,name=success,proto3" json:"success,omitempty"`
 	// The gRPC error code (e.g., "Internal", "InvalidArgument"). Empty if successful.
@@ -6658,9 +6658,9 @@ func (x *TelemetryEvent) GetKeys() []string {
 	return nil
 }
 
-func (x *TelemetryEvent) GetDurationMs() int64 {
+func (x *TelemetryEvent) GetDurationUs() int64 {
 	if x != nil {
-		return x.DurationMs
+		return x.DurationUs
 	}
 	return 0
 }
@@ -7043,8 +7043,8 @@ type TelemetryStatsResponse struct {
 	ErrorCount int64 `protobuf:"varint,2,opt,name=error_count,json=errorCount,proto3" json:"error_count,omitempty"`
 	// Error rate as a percentage (0-100).
 	ErrorRate float64 `protobuf:"fixed64,3,opt,name=error_rate,json=errorRate,proto3" json:"error_rate,omitempty"`
-	// Average call duration in milliseconds.
-	AvgDurationMs float64 `protobuf:"fixed64,4,opt,name=avg_duration_ms,json=avgDurationMs,proto3" json:"avg_duration_ms,omitempty"`
+	// Average call duration in microseconds.
+	AvgDurationUs float64 `protobuf:"fixed64,4,opt,name=avg_duration_us,json=avgDurationUs,proto3" json:"avg_duration_us,omitempty"`
 	// Number of unique clients active in the window.
 	ActiveClients int32 `protobuf:"varint,5,opt,name=active_clients,json=activeClients,proto3" json:"active_clients,omitempty"`
 	// Top swamps by call count.
@@ -7106,9 +7106,9 @@ func (x *TelemetryStatsResponse) GetErrorRate() float64 {
 	return 0
 }
 
-func (x *TelemetryStatsResponse) GetAvgDurationMs() float64 {
+func (x *TelemetryStatsResponse) GetAvgDurationUs() float64 {
 	if x != nil {
-		return x.AvgDurationMs
+		return x.AvgDurationUs
 	}
 	return 0
 }
@@ -7143,8 +7143,8 @@ type TelemetrySwampStats struct {
 	CallCount int64 `protobuf:"varint,2,opt,name=call_count,json=callCount,proto3" json:"call_count,omitempty"`
 	// Number of errors for this swamp.
 	ErrorCount int64 `protobuf:"varint,3,opt,name=error_count,json=errorCount,proto3" json:"error_count,omitempty"`
-	// Average call duration in milliseconds.
-	AvgDurationMs float64 `protobuf:"fixed64,4,opt,name=avg_duration_ms,json=avgDurationMs,proto3" json:"avg_duration_ms,omitempty"`
+	// Average call duration in microseconds.
+	AvgDurationUs float64 `protobuf:"fixed64,4,opt,name=avg_duration_us,json=avgDurationUs,proto3" json:"avg_duration_us,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -7200,9 +7200,9 @@ func (x *TelemetrySwampStats) GetErrorCount() int64 {
 	return 0
 }
 
-func (x *TelemetrySwampStats) GetAvgDurationMs() float64 {
+func (x *TelemetrySwampStats) GetAvgDurationUs() float64 {
 	if x != nil {
-		return x.AvgDurationMs
+		return x.AvgDurationUs
 	}
 	return 0
 }
@@ -8054,8 +8054,8 @@ const file_hydraide_proto_rawDesc = "" +
 	"\n" +
 	"swamp_name\x18\x04 \x01(\tR\tswampName\x12\x12\n" +
 	"\x04keys\x18\x05 \x03(\tR\x04keys\x12\x1f\n" +
-	"\vduration_ms\x18\x06 \x01(\x03R\n" +
-	"durationMs\x12\x18\n" +
+	"\vduration_us\x18\x06 \x01(\x03R\n" +
+	"durationUs\x12\x18\n" +
 	"\asuccess\x18\a \x01(\bR\asuccess\x12\x1d\n" +
 	"\n" +
 	"error_code\x18\b \x01(\tR\terrorCode\x12#\n" +
@@ -8098,7 +8098,7 @@ const file_hydraide_proto_rawDesc = "" +
 	"errorCount\x12\x1d\n" +
 	"\n" +
 	"error_rate\x18\x03 \x01(\x01R\terrorRate\x12&\n" +
-	"\x0favg_duration_ms\x18\x04 \x01(\x01R\ravgDurationMs\x12%\n" +
+	"\x0favg_duration_us\x18\x04 \x01(\x01R\ravgDurationUs\x12%\n" +
 	"\x0eactive_clients\x18\x05 \x01(\x05R\ractiveClients\x12@\n" +
 	"\n" +
 	"top_swamps\x18\x06 \x03(\v2!.hydraidepbgo.TelemetrySwampStatsR\ttopSwamps\x12B\n" +
@@ -8111,7 +8111,7 @@ const file_hydraide_proto_rawDesc = "" +
 	"call_count\x18\x02 \x01(\x03R\tcallCount\x12\x1f\n" +
 	"\verror_count\x18\x03 \x01(\x03R\n" +
 	"errorCount\x12&\n" +
-	"\x0favg_duration_ms\x18\x04 \x01(\x01R\ravgDurationMs\"\xd5\x01\n" +
+	"\x0favg_duration_us\x18\x04 \x01(\x01R\ravgDurationUs\"\xd5\x01\n" +
 	"\x15TelemetryErrorSummary\x12\x1d\n" +
 	"\n" +
 	"error_code\x18\x01 \x01(\tR\terrorCode\x12#\n" +

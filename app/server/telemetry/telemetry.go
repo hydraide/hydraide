@@ -17,7 +17,7 @@ type Event struct {
 	Method       string    // gRPC method name (Get, Set, Delete, etc.)
 	SwampName    string    // Full swamp path (sanctuary/realm/swamp)
 	Keys         []string  // Affected keys
-	DurationMs   int64     // Call duration in milliseconds
+	DurationUs   int64     // Call duration in microseconds
 	Success      bool      // Was the call successful
 	ErrorCode    string    // gRPC error code (if error)
 	ErrorMsg     string    // Error message (if error)
@@ -70,7 +70,7 @@ type Stats struct {
 	TotalCalls    int64        // Total number of calls
 	ErrorCount    int64        // Number of errors
 	ErrorRate     float64      // Error percentage (0-100)
-	AvgDurationMs float64      // Average call duration
+	AvgDurationUs float64      // Average call duration in microseconds
 	ActiveClients int          // Number of unique clients
 	TopSwamps     []SwampStats // Top swamps by call count
 	TopErrors     []ErrorStats // Most frequent errors
@@ -81,7 +81,7 @@ type SwampStats struct {
 	SwampName     string  // Full swamp path
 	CallCount     int64   // Number of calls
 	ErrorCount    int64   // Number of errors
-	AvgDurationMs float64 // Average duration
+	AvgDurationUs float64 // Average duration in microseconds
 }
 
 // ErrorStats contains statistics for a specific error type.
@@ -303,7 +303,7 @@ func (c *collector) GetStats(windowMinutes int) Stats {
 		}
 
 		stats.TotalCalls++
-		totalDuration += event.DurationMs
+		totalDuration += event.DurationUs
 
 		if !event.Success {
 			stats.ErrorCount++
@@ -335,13 +335,13 @@ func (c *collector) GetStats(windowMinutes int) Stats {
 					ss.ErrorCount++
 				}
 				// Running average
-				ss.AvgDurationMs = (ss.AvgDurationMs*float64(ss.CallCount-1) + float64(event.DurationMs)) / float64(ss.CallCount)
+				ss.AvgDurationUs = (ss.AvgDurationUs*float64(ss.CallCount-1) + float64(event.DurationUs)) / float64(ss.CallCount)
 			} else {
 				swampCounts[event.SwampName] = &SwampStats{
 					SwampName:     event.SwampName,
 					CallCount:     1,
 					ErrorCount:    boolToInt(!event.Success),
-					AvgDurationMs: float64(event.DurationMs),
+					AvgDurationUs: float64(event.DurationUs),
 				}
 			}
 		}
@@ -354,7 +354,7 @@ func (c *collector) GetStats(windowMinutes int) Stats {
 
 	// Calculate averages and rates
 	if stats.TotalCalls > 0 {
-		stats.AvgDurationMs = float64(totalDuration) / float64(stats.TotalCalls)
+		stats.AvgDurationUs = float64(totalDuration) / float64(stats.TotalCalls)
 		stats.ErrorRate = float64(stats.ErrorCount) / float64(stats.TotalCalls) * 100
 	}
 

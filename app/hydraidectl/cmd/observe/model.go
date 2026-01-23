@@ -25,49 +25,39 @@ const (
 	TabLive Tab = iota
 	TabErrors
 	TabStats
+	TabLongRunning
 )
 
 // Model is the Bubbletea model for the observe TUI
 type Model struct {
-	// Connection
 	conn       *grpc.ClientConn
 	client     hydrapb.HydraideServiceClient
 	cancelFunc context.CancelFunc
 	connected  bool
 	connError  string
 
-	// Events
 	events      []Event
 	selectedIdx int
 	maxEvents   int
 	paused      bool
 	pauseBuffer []Event
 
-	// Tabs
-	activeTab Tab
-
-	// Viewport for scrolling
+	activeTab      Tab
 	eventsViewport viewport.Model
 
-	// Stats
 	stats *hydrapb.TelemetryStatsResponse
 
-	// Error details
 	selectedError   *Event
 	showErrorDetail bool
 
-	// Filters
 	errorsOnly  bool
 	swampFilter string
 
-	// Screen dimensions
 	width  int
 	height int
 
-	// Help
 	showHelp bool
 
-	// Config
 	serverAddr string
 	certFile   string
 	keyFile    string
@@ -81,7 +71,7 @@ type Event struct {
 	Method       string
 	SwampName    string
 	Keys         []string
-	DurationMs   int64
+	DurationUs   int64
 	Success      bool
 	ErrorCode    string
 	ErrorMessage string
@@ -99,17 +89,14 @@ type connectedMsg struct {
 }
 type errorMsg struct{ err error }
 
-// historyBatchMsg contains a batch of historical events
 type historyBatchMsg struct {
 	events []*hydrapb.TelemetryEvent
 }
 
-// streamEventMsg is a single event from the live stream
 type streamEventMsg struct {
 	event *hydrapb.TelemetryEvent
 }
 
-// streamErrorMsg indicates a stream error
 type streamErrorMsg struct {
 	err error
 }
@@ -224,7 +211,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				Method:       protoEvent.Method,
 				SwampName:    protoEvent.SwampName,
 				Keys:         protoEvent.Keys,
-				DurationMs:   protoEvent.DurationMs,
+				DurationUs:   protoEvent.DurationUs,
 				Success:      protoEvent.Success,
 				ErrorCode:    protoEvent.ErrorCode,
 				ErrorMessage: protoEvent.ErrorMessage,
@@ -243,7 +230,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			Method:       protoEvent.Method,
 			SwampName:    protoEvent.SwampName,
 			Keys:         protoEvent.Keys,
-			DurationMs:   protoEvent.DurationMs,
+			DurationUs:   protoEvent.DurationUs,
 			Success:      protoEvent.Success,
 			ErrorCode:    protoEvent.ErrorCode,
 			ErrorMessage: protoEvent.ErrorMessage,
@@ -290,6 +277,10 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "3":
 		m.activeTab = TabStats
+		return m, nil
+
+	case "4":
+		m.activeTab = TabLongRunning
 		return m, nil
 
 	case "p":
@@ -353,7 +344,7 @@ func (m *Model) addEvent(event Event) {
 	}
 }
 
-// subscribeToTelemetry starts the telemetry subscription and streams events
+// subscribeToTelemetry starts the telemetry subscription
 func (m Model) subscribeToTelemetry() tea.Cmd {
 	return func() tea.Msg {
 		if m.client == nil {
@@ -443,39 +434,58 @@ func (m Model) View() string {
 	return m.renderMain()
 }
 
-// renderMain renders the main view
+// renderMain renders the main view with fixed header and footer
 func (m Model) renderMain() string {
-	var s string
+	headerHeight := 4
+	footerHeight := 2
+	contentHeight := m.height - headerHeight - footerHeight
+	if contentHeight < 5 {
+		contentHeight = 5
+	}
 
+	// Header
+	var header string
 	title := titleStyle.Render(" HydrAIDE Observe ")
 	status := ""
 	if !m.connected {
 		if m.connError != "" {
-			status = errorStyle.Render(" X " + m.connError)
+			status = errorStyle.Render(" ✗ " + m.connError)
 		} else {
 			status = " Connecting..."
 		}
 	} else if m.paused {
-		status = pausedStyle.Render(" PAUSED ")
+		status = pausedStyle.Render(" ⏸ PAUSED ")
 	} else {
-		status = successStyle.Render(" LIVE ")
+		status = successStyle.Render(" ● LIVE ")
 	}
+	header += title + "  " + status + "\n\n"
+	header += m.renderTabs() + "\n"
+	header += lipgloss.NewStyle().Foreground(mutedColor).Render(strings.Repeat("─", min(m.width-2, 100))) + "\n"
 
-	s += title + "  " + status + "\n\n"
-	s += m.renderTabs() + "\n\n"
-
+	// Content
+	var content string
 	switch m.activeTab {
 	case TabLive:
-		s += m.renderLiveTab()
+		content = m.renderLiveTab(contentHeight)
 	case TabErrors:
-		s += m.renderErrorsTab()
+		content = m.renderErrorsTab(contentHeight)
 	case TabStats:
-		s += m.renderStatsTab()
+		content = m.renderStatsTab()
+	case TabLongRunning:
+		content = m.renderLongRunningTab()
 	}
 
-	s += "\n" + m.renderStatusBar()
+	contentLines := strings.Count(content, "\n")
+	for contentLines < contentHeight {
+		content += "\n"
+		contentLines++
+	}
 
-	return s
+	// Footer
+	footer := lipgloss.NewStyle().Foreground(mutedColor).Render(strings.Repeat("─", min(m.width-2, 100))) + "\n"
+	footer += m.renderStatusBar()
+
+	return header + content + footer
 }
 
 // renderTabs renders the tab bar
@@ -487,14 +497,15 @@ func (m Model) renderTabs() string {
 		{"[1] Live", TabLive},
 		{"[2] Errors", TabErrors},
 		{"[3] Stats", TabStats},
+		{"[4] Long", TabLongRunning},
 	}
 
 	var result string
 	for _, t := range tabs {
 		if t.tab == m.activeTab {
-			result += activeTabStyle.Render(t.name) + " "
+			result += activeTabStyle.Render(t.name) + "  "
 		} else {
-			result += inactiveTabStyle.Render(t.name) + " "
+			result += inactiveTabStyle.Render(t.name) + "  "
 		}
 	}
 
@@ -502,37 +513,37 @@ func (m Model) renderTabs() string {
 }
 
 // renderLiveTab renders the live events tab
-func (m Model) renderLiveTab() string {
-	if len(m.events) == 0 {
-		return lipgloss.NewStyle().Foreground(mutedColor).Render("No events yet. Waiting for activity...\n")
+func (m Model) renderLiveTab(maxHeight int) string {
+	var filteredEvents []Event
+	for _, e := range m.events {
+		if e.SwampName != "" || !e.Success {
+			filteredEvents = append(filteredEvents, e)
+		}
+	}
+
+	if len(filteredEvents) == 0 {
+		return lipgloss.NewStyle().Foreground(mutedColor).Render("  No events yet. Waiting for activity...")
 	}
 
 	var rows string
 
-	header := fmt.Sprintf("%-12s %-8s %-40s %8s %s",
-		"TIME", "METHOD", "SWAMP", "DURATION", "STATUS")
+	header := fmt.Sprintf("  %-12s %-10s %-40s %6s %s",
+		"TIME", "METHOD", "SWAMP", "MS", "STATUS")
 	rows += lipgloss.NewStyle().Foreground(mutedColor).Render(header) + "\n"
-	rows += lipgloss.NewStyle().Foreground(mutedColor).Render(
-		"-------------------------------------------------------------------") + "\n"
 
-	visibleCount := m.height - 15
-	if visibleCount < 5 {
-		visibleCount = 5
+	visibleCount := maxHeight - 2
+	if visibleCount < 3 {
+		visibleCount = 3
 	}
 
 	startIdx := 0
-	if m.selectedIdx >= visibleCount {
-		startIdx = m.selectedIdx - visibleCount + 1
+	if len(filteredEvents) > visibleCount {
+		startIdx = len(filteredEvents) - visibleCount
 	}
 
-	endIdx := startIdx + visibleCount
-	if endIdx > len(m.events) {
-		endIdx = len(m.events)
-	}
-
-	for i := startIdx; i < endIdx; i++ {
-		event := m.events[i]
-		row := m.renderEventRow(event, i == m.selectedIdx)
+	for i := startIdx; i < len(filteredEvents); i++ {
+		event := filteredEvents[i]
+		row := m.renderEventRow(event, false)
 		rows += row + "\n"
 	}
 
@@ -542,58 +553,82 @@ func (m Model) renderLiveTab() string {
 // renderEventRow renders a single event row
 func (m Model) renderEventRow(event Event, selected bool) string {
 	timeStr := event.Timestamp.Format("15:04:05.000")
-	methodStyle := getMethodStyle(event.Method)
-	method := methodStyle.Render(event.Method)
+
+	method := event.Method
+	if len(method) > 10 {
+		method = method[:10]
+	}
+	methodStyled := getMethodStyle(method).Render(fmt.Sprintf("%-10s", method))
 
 	swampName := event.SwampName
+	if swampName == "" {
+		swampName = "(system)"
+	}
 	if len(swampName) > 40 {
 		swampName = swampName[:37] + "..."
 	}
+	swampName = fmt.Sprintf("%-40s", swampName)
 
-	duration := fmt.Sprintf("%dms", event.DurationMs)
+	duration := formatDuration(event.DurationUs)
 
 	var status string
 	if event.Success {
 		status = successStyle.Render("OK")
 	} else {
-		status = errorStyle.Render("X " + event.ErrorCode)
+		errCode := event.ErrorCode
+		if len(errCode) > 18 {
+			errCode = errCode[:18]
+		}
+		status = errorStyle.Render("✗ " + errCode)
 	}
 
-	row := fmt.Sprintf("%s %s %-40s %8s %s",
+	row := fmt.Sprintf("%s %s %s %s %s",
 		timestampStyle.Render(timeStr),
-		method,
+		methodStyled,
 		swampStyle.Render(swampName),
 		durationStyle.Render(duration),
 		status)
 
 	if selected {
-		return selectedRowStyle.Render("> " + row)
+		return selectedRowStyle.Render("▶ " + row)
 	}
-	return eventRowStyle.Render("  " + row)
+	return "  " + row
 }
 
 // renderErrorsTab renders the errors tab
-func (m Model) renderErrorsTab() string {
-	var errorCount int
+func (m Model) renderErrorsTab(maxHeight int) string {
+	var errorEvents []Event
 	for _, e := range m.events {
 		if !e.Success {
-			errorCount++
+			errorEvents = append(errorEvents, e)
 		}
 	}
 
-	if errorCount == 0 {
-		return successStyle.Render("No errors recorded\n")
+	if len(errorEvents) == 0 {
+		return successStyle.Render("  ✓ No errors recorded")
 	}
 
 	var rows string
-	rows += errorStyle.Render(fmt.Sprintf("%d errors in current session\n\n", errorCount))
+	rows += errorStyle.Render(fmt.Sprintf("  %d errors in current session", len(errorEvents))) + "\n\n"
 
-	for i := len(m.events) - 1; i >= 0 && i > len(m.events)-50; i-- {
-		event := m.events[i]
-		if !event.Success {
-			row := m.renderEventRow(event, i == m.selectedIdx)
-			rows += row + "\n"
-		}
+	header := fmt.Sprintf("  %-12s %-10s %-40s %6s %s",
+		"TIME", "METHOD", "SWAMP", "MS", "ERROR")
+	rows += lipgloss.NewStyle().Foreground(mutedColor).Render(header) + "\n"
+
+	visibleCount := maxHeight - 4
+	if visibleCount < 3 {
+		visibleCount = 3
+	}
+
+	startIdx := 0
+	if len(errorEvents) > visibleCount {
+		startIdx = len(errorEvents) - visibleCount
+	}
+
+	for i := startIdx; i < len(errorEvents); i++ {
+		event := errorEvents[i]
+		row := m.renderEventRow(event, false)
+		rows += row + "\n"
 	}
 
 	return rows
@@ -602,35 +637,105 @@ func (m Model) renderErrorsTab() string {
 // renderStatsTab renders the stats tab
 func (m Model) renderStatsTab() string {
 	if m.stats == nil {
-		return lipgloss.NewStyle().Foreground(mutedColor).Render("Loading stats...\n")
+		return lipgloss.NewStyle().Foreground(mutedColor).Render("  Loading stats...")
 	}
 
 	s := m.stats
 	var result string
 
-	result += statLabelStyle.Render("Total Calls: ") + statValueStyle.Render(fmt.Sprintf("%d", s.TotalCalls)) + "\n"
-	result += statLabelStyle.Render("Errors: ") + statValueStyle.Render(fmt.Sprintf("%d", s.ErrorCount)) + "\n"
-	result += statLabelStyle.Render("Error Rate: ") + statValueStyle.Render(fmt.Sprintf("%.2f%%", s.ErrorRate)) + "\n"
-	result += statLabelStyle.Render("Avg Duration: ") + statValueStyle.Render(fmt.Sprintf("%.2fms", s.AvgDurationMs)) + "\n"
-	result += statLabelStyle.Render("Active Clients: ") + statValueStyle.Render(fmt.Sprintf("%d", s.ActiveClients)) + "\n"
+	result += "  " + statLabelStyle.Render("Total Calls: ") + statValueStyle.Render(fmt.Sprintf("%d", s.TotalCalls)) + "\n"
+	result += "  " + statLabelStyle.Render("Errors: ") + statValueStyle.Render(fmt.Sprintf("%d", s.ErrorCount)) + "\n"
+	result += "  " + statLabelStyle.Render("Error Rate: ") + statValueStyle.Render(fmt.Sprintf("%.2f%%", s.ErrorRate)) + "\n"
+	result += "  " + statLabelStyle.Render("Avg Duration: ") + statValueStyle.Render(formatDuration(int64(s.AvgDurationUs))) + "\n"
+	result += "  " + statLabelStyle.Render("Active Clients: ") + statValueStyle.Render(fmt.Sprintf("%d", s.ActiveClients)) + "\n"
 
 	if len(s.TopSwamps) > 0 {
-		result += "\n" + lipgloss.NewStyle().Bold(true).Render("Top Swamps:") + "\n"
+		result += "\n  " + lipgloss.NewStyle().Bold(true).Render("Top Swamps:") + "\n"
 		for i, swamp := range s.TopSwamps {
-			result += fmt.Sprintf("  %d. %s (%d calls)\n", i+1, swamp.SwampName, swamp.CallCount)
+			result += fmt.Sprintf("    %d. %s (%d calls)\n", i+1, swamp.SwampName, swamp.CallCount)
 		}
 	}
 
 	if len(s.TopErrors) > 0 {
-		result += "\n" + errorDetailHeaderStyle.Render("Top Errors:") + "\n"
+		result += "\n  " + errorDetailHeaderStyle.Render("Top Errors:") + "\n"
 		for i, e := range s.TopErrors {
 			swampInfo := ""
 			if e.LastSwamp != "" {
-				swampInfo = fmt.Sprintf(" -> %s", e.LastSwamp)
+				swampInfo = fmt.Sprintf(" → %s", e.LastSwamp)
 			}
-			result += fmt.Sprintf("  %d. [%dx] %s: %s%s\n", i+1, e.Count, e.ErrorCode, e.ErrorMessage, swampInfo)
+			result += fmt.Sprintf("    %d. [%dx] %s: %s%s\n", i+1, e.Count, e.ErrorCode, e.ErrorMessage, swampInfo)
 		}
 	}
+
+	return result
+}
+
+// renderLongRunningTab renders the long running operations tab
+func (m Model) renderLongRunningTab() string {
+	threshold := int64(5000000) // 5 seconds in microseconds
+
+	var longRunning []Event
+	for _, e := range m.events {
+		if e.DurationUs >= threshold {
+			longRunning = append(longRunning, e)
+		}
+	}
+
+	var result string
+	result += lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("214")).Render("  ⏱ Long Running Operations (≥5s)") + "\n\n"
+
+	if len(longRunning) == 0 {
+		result += successStyle.Render("  ✓ No long running operations detected")
+		return result
+	}
+
+	header := fmt.Sprintf("  %-12s %-10s %-35s %10s %s",
+		"TIME", "METHOD", "SWAMP", "DURATION", "CLIENT")
+	result += lipgloss.NewStyle().Foreground(mutedColor).Render(header) + "\n"
+
+	startIdx := 0
+	if len(longRunning) > 20 {
+		startIdx = len(longRunning) - 20
+	}
+
+	for i := startIdx; i < len(longRunning); i++ {
+		e := longRunning[i]
+		timeStr := e.Timestamp.Format("15:04:05.000")
+
+		method := e.Method
+		if len(method) > 10 {
+			method = method[:10]
+		}
+
+		swamp := e.SwampName
+		if len(swamp) > 35 {
+			swamp = swamp[:32] + "..."
+		}
+
+		durationStr := formatDuration(e.DurationUs)
+
+		clientIP := e.ClientIP
+		if len(clientIP) > 15 {
+			clientIP = clientIP[:15]
+		}
+
+		var durationStyled string
+		if e.DurationUs >= 10000000 { // 10s in µs
+			durationStyled = errorStyle.Render(fmt.Sprintf("%10s", durationStr))
+		} else {
+			durationStyled = lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Render(fmt.Sprintf("%10s", durationStr))
+		}
+
+		result += fmt.Sprintf("  %s %-10s %-35s %s %s\n",
+			timestampStyle.Render(timeStr),
+			getMethodStyle(method).Render(fmt.Sprintf("%-10s", method)),
+			swampStyle.Render(fmt.Sprintf("%-35s", swamp)),
+			durationStyled,
+			clientIP)
+	}
+
+	result += "\n" + lipgloss.NewStyle().Foreground(mutedColor).Italic(true).Render(
+		fmt.Sprintf("  Showing %d operations with duration ≥5s", len(longRunning)))
 
 	return result
 }
@@ -643,16 +748,16 @@ func (m Model) renderErrorDetail() string {
 	}
 
 	var s string
-	s += errorDetailHeaderStyle.Render("Error Details") + "\n\n"
-	s += errorDetailLabelStyle.Render("Time:") + " " + errorDetailValueStyle.Render(e.Timestamp.Format("2006-01-02 15:04:05.000")) + "\n"
-	s += errorDetailLabelStyle.Render("Method:") + " " + errorDetailValueStyle.Render(e.Method) + "\n"
-	s += errorDetailLabelStyle.Render("Swamp:") + " " + errorDetailValueStyle.Render(e.SwampName) + "\n"
-	s += errorDetailLabelStyle.Render("Keys:") + " " + errorDetailValueStyle.Render(fmt.Sprintf("%v", e.Keys)) + "\n"
-	s += errorDetailLabelStyle.Render("Duration:") + " " + errorDetailValueStyle.Render(fmt.Sprintf("%dms", e.DurationMs)) + "\n"
-	s += errorDetailLabelStyle.Render("Client IP:") + " " + errorDetailValueStyle.Render(e.ClientIP) + "\n"
-	s += "\n" + errorStyle.Render("Error Code: "+e.ErrorCode) + "\n"
-	s += errorStyle.Render("Message: "+e.ErrorMessage) + "\n"
-	s += "\n" + helpStyle.Render("Press [ESC] to go back")
+	s += errorDetailHeaderStyle.Render("  🔍 Error Details") + "\n\n"
+	s += "  " + errorDetailLabelStyle.Render("Time:") + " " + errorDetailValueStyle.Render(e.Timestamp.Format("2006-01-02 15:04:05.000")) + "\n"
+	s += "  " + errorDetailLabelStyle.Render("Method:") + " " + errorDetailValueStyle.Render(e.Method) + "\n"
+	s += "  " + errorDetailLabelStyle.Render("Swamp:") + " " + errorDetailValueStyle.Render(e.SwampName) + "\n"
+	s += "  " + errorDetailLabelStyle.Render("Keys:") + " " + errorDetailValueStyle.Render(fmt.Sprintf("%v", e.Keys)) + "\n"
+	s += "  " + errorDetailLabelStyle.Render("Duration:") + " " + errorDetailValueStyle.Render(formatDuration(e.DurationUs)) + "\n"
+	s += "  " + errorDetailLabelStyle.Render("Client IP:") + " " + errorDetailValueStyle.Render(e.ClientIP) + "\n"
+	s += "\n  " + errorStyle.Render("Error Code: "+e.ErrorCode) + "\n"
+	s += "  " + errorStyle.Render("Message: "+e.ErrorMessage) + "\n"
+	s += "\n  " + helpStyle.Render("Press [ESC] to go back")
 
 	return s
 }
@@ -669,41 +774,72 @@ func (m Model) renderStatusBar() string {
 	}
 	errors := fmt.Sprintf("%d errors", errorCount)
 
+	pauseHint := "[P] Pause"
+	if m.paused {
+		pauseHint = "[P] Resume"
+	}
+
 	filter := ""
 	if m.errorsOnly {
 		filter = " [Errors Only]"
 	}
 
-	help := "Press [?] for help  [Q] to quit"
-
 	left := statusBarStyle.Render(eventCount + " | " + errors + filter)
-	right := helpStyle.Render(help)
+	right := helpStyle.Render(pauseHint + "  [?] Help  [Q] Quit")
 
-	return left + "  " + right
+	return left + "    " + right
 }
 
 // renderHelp renders the help screen
 func (m Model) renderHelp() string {
 	s := titleStyle.Render(" HydrAIDE Observe - Help ") + "\n\n"
 
-	s += lipgloss.NewStyle().Bold(true).Render("Navigation:") + "\n"
-	s += keyStyle.Render("  Up/k, Down/j") + keyDescStyle.Render("  Move selection up/down") + "\n"
-	s += keyStyle.Render("  Enter") + keyDescStyle.Render("    View error details") + "\n"
-	s += keyStyle.Render("  Esc") + keyDescStyle.Render("      Close detail view") + "\n"
+	s += lipgloss.NewStyle().Bold(true).Render("  Navigation:") + "\n"
+	s += "  " + keyStyle.Render("Up/k, Down/j") + keyDescStyle.Render("  Move selection up/down") + "\n"
+	s += "  " + keyStyle.Render("Enter") + keyDescStyle.Render("         View error details") + "\n"
+	s += "  " + keyStyle.Render("Esc") + keyDescStyle.Render("           Close detail view") + "\n"
 
-	s += "\n" + lipgloss.NewStyle().Bold(true).Render("Tabs:") + "\n"
-	s += keyStyle.Render("  1") + keyDescStyle.Render("  Live view") + "\n"
-	s += keyStyle.Render("  2") + keyDescStyle.Render("  Errors only") + "\n"
-	s += keyStyle.Render("  3") + keyDescStyle.Render("  Statistics") + "\n"
+	s += "\n" + lipgloss.NewStyle().Bold(true).Render("  Tabs:") + "\n"
+	s += "  " + keyStyle.Render("1") + keyDescStyle.Render("  Live view") + "\n"
+	s += "  " + keyStyle.Render("2") + keyDescStyle.Render("  Errors only") + "\n"
+	s += "  " + keyStyle.Render("3") + keyDescStyle.Render("  Statistics") + "\n"
+	s += "  " + keyStyle.Render("4") + keyDescStyle.Render("  Long running operations") + "\n"
 
-	s += "\n" + lipgloss.NewStyle().Bold(true).Render("Actions:") + "\n"
-	s += keyStyle.Render("  P") + keyDescStyle.Render("  Pause/Resume stream") + "\n"
-	s += keyStyle.Render("  C") + keyDescStyle.Render("  Clear events") + "\n"
-	s += keyStyle.Render("  E") + keyDescStyle.Render("  Toggle errors only filter") + "\n"
-	s += keyStyle.Render("  ?/H") + keyDescStyle.Render("  Toggle this help") + "\n"
-	s += keyStyle.Render("  Q") + keyDescStyle.Render("  Quit") + "\n"
+	s += "\n" + lipgloss.NewStyle().Bold(true).Render("  Actions:") + "\n"
+	s += "  " + keyStyle.Render("P") + keyDescStyle.Render("  Pause/Resume live stream") + "\n"
+	s += "  " + keyStyle.Render("C") + keyDescStyle.Render("  Clear events") + "\n"
+	s += "  " + keyStyle.Render("E") + keyDescStyle.Render("  Toggle errors only filter") + "\n"
+	s += "  " + keyStyle.Render("?/H") + keyDescStyle.Render("  Toggle this help") + "\n"
+	s += "  " + keyStyle.Render("Q") + keyDescStyle.Render("  Quit") + "\n"
 
-	s += "\n" + helpStyle.Render("Press any key to close help")
+	s += "\n  " + helpStyle.Render("Press any key to close help")
 
 	return s
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+// formatDuration formats duration in microseconds to a human-readable string
+// Shows µs for <1ms, ms for <1s, s for >=1s
+func formatDuration(durationUs int64) string {
+	if durationUs < 1000 {
+		// Less than 1ms, show microseconds
+		return fmt.Sprintf("%5dµs", durationUs)
+	} else if durationUs < 1000000 {
+		// Less than 1s, show milliseconds with one decimal
+		ms := float64(durationUs) / 1000.0
+		if ms < 10 {
+			return fmt.Sprintf("%5.1fms", ms)
+		}
+		return fmt.Sprintf("%5.0fms", ms)
+	} else {
+		// 1s or more, show seconds with two decimals
+		s := float64(durationUs) / 1000000.0
+		return fmt.Sprintf("%5.2fs", s)
+	}
 }
