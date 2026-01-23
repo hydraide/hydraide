@@ -637,9 +637,11 @@ func (m Model) renderTabs() string {
 // renderLiveTab renders the live events tab
 func (m Model) renderLiveTab(maxHeight int) string {
 	var filteredEvents []Event
-	for _, e := range m.events {
+	var filteredIndices []int // Track original indices
+	for i, e := range m.events {
 		if e.SwampName != "" || !e.Success {
 			filteredEvents = append(filteredEvents, e)
+			filteredIndices = append(filteredIndices, i)
 		}
 	}
 
@@ -666,14 +668,44 @@ func (m Model) renderLiveTab(maxHeight int) string {
 		visibleCount = 3
 	}
 
-	startIdx := 0
-	if len(filteredEvents) > visibleCount {
-		startIdx = len(filteredEvents) - visibleCount
+	// Find which filtered index corresponds to selectedIdx
+	selectedFilteredIdx := -1
+	for fi, origIdx := range filteredIndices {
+		if origIdx == m.selectedIdx {
+			selectedFilteredIdx = fi
+			break
+		}
 	}
 
-	for i := startIdx; i < len(filteredEvents); i++ {
+	// Calculate visible window around selection
+	startIdx := 0
+	endIdx := len(filteredEvents)
+
+	if len(filteredEvents) > visibleCount {
+		if selectedFilteredIdx >= 0 {
+			// Center the selection in the visible area
+			startIdx = selectedFilteredIdx - visibleCount/2
+			if startIdx < 0 {
+				startIdx = 0
+			}
+			endIdx = startIdx + visibleCount
+			if endIdx > len(filteredEvents) {
+				endIdx = len(filteredEvents)
+				startIdx = endIdx - visibleCount
+				if startIdx < 0 {
+					startIdx = 0
+				}
+			}
+		} else {
+			// No selection in filtered list, show last events
+			startIdx = len(filteredEvents) - visibleCount
+		}
+	}
+
+	for i := startIdx; i < endIdx; i++ {
 		event := filteredEvents[i]
-		row := m.renderEventRow(event, false)
+		isSelected := filteredIndices[i] == m.selectedIdx
+		row := m.renderEventRow(event, isSelected)
 		rows += row + "\n"
 	}
 
@@ -751,16 +783,23 @@ func (m Model) renderEventRow(event Event, selected bool) string {
 		durationStyle.Render(duration),
 		status)
 
+	// Highlight selected row with background
+	if selected {
+		row = selectedRowStyle.Render(row)
+	}
+
 	return row
 }
 
 // renderErrorsTab renders the errors tab (excludes FailedPrecondition - those are INFO, not errors)
 func (m Model) renderErrorsTab(maxHeight int) string {
 	var errorEvents []Event
-	for _, e := range m.events {
+	var errorIndices []int // Track original indices
+	for i, e := range m.events {
 		// Only real errors, not FailedPrecondition (which is just INFO)
 		if !e.Success && e.ErrorCode != "FailedPrecondition" {
 			errorEvents = append(errorEvents, e)
+			errorIndices = append(errorIndices, i)
 		}
 	}
 
@@ -787,14 +826,42 @@ func (m Model) renderErrorsTab(maxHeight int) string {
 		visibleCount = 3
 	}
 
-	startIdx := 0
-	if len(errorEvents) > visibleCount {
-		startIdx = len(errorEvents) - visibleCount
+	// Find which error index corresponds to selectedIdx
+	selectedErrorIdx := -1
+	for ei, origIdx := range errorIndices {
+		if origIdx == m.selectedIdx {
+			selectedErrorIdx = ei
+			break
+		}
 	}
 
-	for i := startIdx; i < len(errorEvents); i++ {
+	// Calculate visible window
+	startIdx := 0
+	endIdx := len(errorEvents)
+
+	if len(errorEvents) > visibleCount {
+		if selectedErrorIdx >= 0 {
+			startIdx = selectedErrorIdx - visibleCount/2
+			if startIdx < 0 {
+				startIdx = 0
+			}
+			endIdx = startIdx + visibleCount
+			if endIdx > len(errorEvents) {
+				endIdx = len(errorEvents)
+				startIdx = endIdx - visibleCount
+				if startIdx < 0 {
+					startIdx = 0
+				}
+			}
+		} else {
+			startIdx = len(errorEvents) - visibleCount
+		}
+	}
+
+	for i := startIdx; i < endIdx; i++ {
 		event := errorEvents[i]
-		row := m.renderEventRow(event, false)
+		isSelected := errorIndices[i] == m.selectedIdx
+		row := m.renderEventRow(event, isSelected)
 		rows += row + "\n"
 	}
 
