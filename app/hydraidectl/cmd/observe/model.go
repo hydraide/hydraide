@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cespare/xxhash/v2"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -38,7 +39,7 @@ type Model struct {
 	connError  string
 
 	events      []Event
-	selectedIdx int
+	selectedIdx int // Index in the FILTERED list, not the original events
 	maxEvents   int
 	paused      bool
 	pauseBuffer []Event
@@ -64,15 +65,22 @@ type Model struct {
 	keyFile    string
 	caFile     string
 
+	// Filters
+	filterMethod string // Filter by method name (exact match)
+	filterSwamp  string // Filter by swamp name (partial match)
+	filterStatus string // Filter by status: "all", "ok", "error", "info"
+	showFilter   bool   // Show filter input mode
+
 	// Inspect mode
-	showInspect      bool
-	inspectEvent     *Event
-	inspectTreasures []*hydrapb.Treasure
-	inspectPage      int
-	inspectPerPage   int
-	inspectTotal     int
-	inspectLoading   bool
-	inspectError     string
+	showInspect        bool
+	inspectEvent       *Event
+	inspectTreasures   []*hydrapb.Treasure
+	inspectPage        int
+	inspectPerPage     int
+	inspectTotal       int
+	inspectLoading     bool
+	inspectError       string
+	inspectSelectedIdx int // Selected row in inspect view
 }
 
 // Event represents a telemetry event for display
@@ -133,6 +141,7 @@ func NewModel(serverAddr, certFile, keyFile, caFile string) Model {
 		keyFile:        keyFile,
 		caFile:         caFile,
 		inspectPerPage: 20,
+		filterStatus:   "all",
 	}
 }
 
@@ -334,37 +343,118 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "up", "k":
 		if m.showInspect {
-			// In inspect mode: scroll up in treasures or go to previous page
-			if m.inspectPage > 0 {
+			// In inspect mode: navigate rows or pages
+			if m.inspectSelectedIdx > 0 {
+				m.inspectSelectedIdx--
+			} else if m.inspectPage > 0 {
 				m.inspectPage--
+				m.inspectSelectedIdx = m.inspectPerPage - 1
 				return m, m.fetchInspectData()
 			}
-		} else if m.selectedIdx > 0 {
-			m.selectedIdx--
+		} else {
+			// Navigate in filtered events list
+			if m.selectedIdx > 0 {
+				m.selectedIdx--
+			}
 		}
 	case "down", "j":
 		if m.showInspect {
-			// In inspect mode: scroll down in treasures or go to next page
-			if (m.inspectPage+1)*m.inspectPerPage < m.inspectTotal {
+			// In inspect mode: navigate rows or pages
+			if m.inspectSelectedIdx < len(m.inspectTreasures)-1 {
+				m.inspectSelectedIdx++
+			} else if (m.inspectPage+1)*m.inspectPerPage < m.inspectTotal {
 				m.inspectPage++
+				m.inspectSelectedIdx = 0
 				return m, m.fetchInspectData()
 			}
-		} else if m.selectedIdx < len(m.events)-1 {
-			m.selectedIdx++
+		} else {
+			// Navigate in filtered events list
+			filtered := m.getFilteredEvents()
+			if m.selectedIdx < len(filtered)-1 {
+				m.selectedIdx++
+			}
+		}
+	case "pgup":
+		if m.showInspect {
+			if m.inspectPage > 0 {
+				m.inspectPage--
+				m.inspectSelectedIdx = 0
+				return m, m.fetchInspectData()
+			}
+		} else {
+			// Page up in events - jump by visible count
+			pageSize := m.height - 10
+			if pageSize < 5 {
+				pageSize = 5
+			}
+			m.selectedIdx -= pageSize
+			if m.selectedIdx < 0 {
+				m.selectedIdx = 0
+			}
+		}
+	case "pgdown":
+		if m.showInspect {
+			if (m.inspectPage+1)*m.inspectPerPage < m.inspectTotal {
+				m.inspectPage++
+				m.inspectSelectedIdx = 0
+				return m, m.fetchInspectData()
+			}
+		} else {
+			// Page down in events
+			filtered := m.getFilteredEvents()
+			pageSize := m.height - 10
+			if pageSize < 5 {
+				pageSize = 5
+			}
+			m.selectedIdx += pageSize
+			if m.selectedIdx >= len(filtered) {
+				m.selectedIdx = len(filtered) - 1
+			}
+			if m.selectedIdx < 0 {
+				m.selectedIdx = 0
+			}
+		}
+	case "home":
+		m.selectedIdx = 0
+		m.inspectSelectedIdx = 0
+		if m.showInspect && m.inspectPage > 0 {
+			m.inspectPage = 0
+			return m, m.fetchInspectData()
+		}
+	case "end":
+		if m.showInspect {
+			// Go to last page
+			lastPage := (m.inspectTotal - 1) / m.inspectPerPage
+			if m.inspectPage != lastPage {
+				m.inspectPage = lastPage
+				return m, m.fetchInspectData()
+			}
+			m.inspectSelectedIdx = len(m.inspectTreasures) - 1
+		} else {
+			filtered := m.getFilteredEvents()
+			m.selectedIdx = len(filtered) - 1
+			if m.selectedIdx < 0 {
+				m.selectedIdx = 0
+			}
 		}
 	case "enter":
 		if m.showInspect {
-			// Already in inspect mode, do nothing
+			// In inspect mode: show full value of selected treasure
+			if m.inspectSelectedIdx >= 0 && m.inspectSelectedIdx < len(m.inspectTreasures) {
+				// TODO: Show full value detail view
+			}
 			return m, nil
 		}
 		// Open inspect for selected event (if it has a swamp name)
-		if m.selectedIdx >= 0 && m.selectedIdx < len(m.events) {
-			event := m.events[m.selectedIdx]
+		filtered := m.getFilteredEvents()
+		if m.selectedIdx >= 0 && m.selectedIdx < len(filtered) {
+			event := filtered[m.selectedIdx]
 			if event.SwampName != "" && event.SwampName != "-" {
 				m.inspectEvent = &event
 				m.showInspect = true
 				m.inspectLoading = true
 				m.inspectPage = 0
+				m.inspectSelectedIdx = 0
 				m.inspectTreasures = nil
 				m.inspectError = ""
 				return m, m.fetchInspectData()
@@ -377,6 +467,7 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.inspectEvent = nil
 			m.inspectTreasures = nil
 			m.inspectError = ""
+			m.inspectSelectedIdx = 0
 			return m, nil
 		}
 		m.showErrorDetail = false
@@ -397,14 +488,63 @@ func (m *Model) addEvent(event Event) {
 
 	if len(m.events) > m.maxEvents {
 		m.events = m.events[1:]
-		if m.selectedIdx > 0 {
-			m.selectedIdx--
-		}
 	}
 
+	// Auto-scroll to bottom when not paused
 	if !m.paused {
-		m.selectedIdx = len(m.events) - 1
+		filtered := m.getFilteredEvents()
+		m.selectedIdx = len(filtered) - 1
+		if m.selectedIdx < 0 {
+			m.selectedIdx = 0
+		}
 	}
+}
+
+// getFilteredEvents returns events filtered by current filters
+func (m *Model) getFilteredEvents() []Event {
+	var filtered []Event
+	for _, e := range m.events {
+		// Skip events without swamp name in Live tab (unless it's an error)
+		if m.activeTab == TabLive && e.SwampName == "" && e.Success {
+			continue
+		}
+
+		// Apply method filter
+		if m.filterMethod != "" && e.Method != m.filterMethod {
+			continue
+		}
+
+		// Apply swamp filter (partial match, case-insensitive)
+		if m.filterSwamp != "" && !strings.Contains(strings.ToLower(e.SwampName), strings.ToLower(m.filterSwamp)) {
+			continue
+		}
+
+		// Apply status filter
+		switch m.filterStatus {
+		case "ok":
+			if !e.Success {
+				continue
+			}
+		case "error":
+			if e.Success || e.ErrorCode == "FailedPrecondition" {
+				continue
+			}
+		case "info":
+			if e.ErrorCode != "FailedPrecondition" {
+				continue
+			}
+		}
+
+		// For errors tab, only show real errors
+		if m.activeTab == TabErrors {
+			if e.Success || e.ErrorCode == "FailedPrecondition" {
+				continue
+			}
+		}
+
+		filtered = append(filtered, e)
+	}
+	return filtered
 }
 
 // subscribeToTelemetry starts the telemetry subscription
@@ -636,14 +776,7 @@ func (m Model) renderTabs() string {
 
 // renderLiveTab renders the live events tab
 func (m Model) renderLiveTab(maxHeight int) string {
-	var filteredEvents []Event
-	var filteredIndices []int // Track original indices
-	for i, e := range m.events {
-		if e.SwampName != "" || !e.Success {
-			filteredEvents = append(filteredEvents, e)
-			filteredIndices = append(filteredIndices, i)
-		}
-	}
+	filteredEvents := m.getFilteredEvents()
 
 	if len(filteredEvents) == 0 {
 		return lipgloss.NewStyle().Foreground(mutedColor).Render("  No events yet. Waiting for activity...")
@@ -668,13 +801,13 @@ func (m Model) renderLiveTab(maxHeight int) string {
 		visibleCount = 3
 	}
 
-	// Find which filtered index corresponds to selectedIdx
-	selectedFilteredIdx := -1
-	for fi, origIdx := range filteredIndices {
-		if origIdx == m.selectedIdx {
-			selectedFilteredIdx = fi
-			break
-		}
+	// selectedIdx is now the index in the filtered list directly
+	selectedIdx := m.selectedIdx
+	if selectedIdx >= len(filteredEvents) {
+		selectedIdx = len(filteredEvents) - 1
+	}
+	if selectedIdx < 0 {
+		selectedIdx = 0
 	}
 
 	// Calculate visible window around selection
@@ -682,29 +815,24 @@ func (m Model) renderLiveTab(maxHeight int) string {
 	endIdx := len(filteredEvents)
 
 	if len(filteredEvents) > visibleCount {
-		if selectedFilteredIdx >= 0 {
-			// Center the selection in the visible area
-			startIdx = selectedFilteredIdx - visibleCount/2
+		// Center the selection in the visible area
+		startIdx = selectedIdx - visibleCount/2
+		if startIdx < 0 {
+			startIdx = 0
+		}
+		endIdx = startIdx + visibleCount
+		if endIdx > len(filteredEvents) {
+			endIdx = len(filteredEvents)
+			startIdx = endIdx - visibleCount
 			if startIdx < 0 {
 				startIdx = 0
 			}
-			endIdx = startIdx + visibleCount
-			if endIdx > len(filteredEvents) {
-				endIdx = len(filteredEvents)
-				startIdx = endIdx - visibleCount
-				if startIdx < 0 {
-					startIdx = 0
-				}
-			}
-		} else {
-			// No selection in filtered list, show last events
-			startIdx = len(filteredEvents) - visibleCount
 		}
 	}
 
 	for i := startIdx; i < endIdx; i++ {
 		event := filteredEvents[i]
-		isSelected := filteredIndices[i] == m.selectedIdx
+		isSelected := i == selectedIdx
 		row := m.renderEventRow(event, isSelected)
 		rows += row + "\n"
 	}
@@ -793,15 +921,8 @@ func (m Model) renderEventRow(event Event, selected bool) string {
 
 // renderErrorsTab renders the errors tab (excludes FailedPrecondition - those are INFO, not errors)
 func (m Model) renderErrorsTab(maxHeight int) string {
-	var errorEvents []Event
-	var errorIndices []int // Track original indices
-	for i, e := range m.events {
-		// Only real errors, not FailedPrecondition (which is just INFO)
-		if !e.Success && e.ErrorCode != "FailedPrecondition" {
-			errorEvents = append(errorEvents, e)
-			errorIndices = append(errorIndices, i)
-		}
-	}
+	// getFilteredEvents already filters for errors when activeTab == TabErrors
+	errorEvents := m.getFilteredEvents()
 
 	if len(errorEvents) == 0 {
 		return successStyle.Render("  ✓ No errors recorded")
@@ -826,13 +947,13 @@ func (m Model) renderErrorsTab(maxHeight int) string {
 		visibleCount = 3
 	}
 
-	// Find which error index corresponds to selectedIdx
-	selectedErrorIdx := -1
-	for ei, origIdx := range errorIndices {
-		if origIdx == m.selectedIdx {
-			selectedErrorIdx = ei
-			break
-		}
+	// selectedIdx is now the index in the filtered list
+	selectedIdx := m.selectedIdx
+	if selectedIdx >= len(errorEvents) {
+		selectedIdx = len(errorEvents) - 1
+	}
+	if selectedIdx < 0 {
+		selectedIdx = 0
 	}
 
 	// Calculate visible window
@@ -840,27 +961,23 @@ func (m Model) renderErrorsTab(maxHeight int) string {
 	endIdx := len(errorEvents)
 
 	if len(errorEvents) > visibleCount {
-		if selectedErrorIdx >= 0 {
-			startIdx = selectedErrorIdx - visibleCount/2
+		startIdx = selectedIdx - visibleCount/2
+		if startIdx < 0 {
+			startIdx = 0
+		}
+		endIdx = startIdx + visibleCount
+		if endIdx > len(errorEvents) {
+			endIdx = len(errorEvents)
+			startIdx = endIdx - visibleCount
 			if startIdx < 0 {
 				startIdx = 0
 			}
-			endIdx = startIdx + visibleCount
-			if endIdx > len(errorEvents) {
-				endIdx = len(errorEvents)
-				startIdx = endIdx - visibleCount
-				if startIdx < 0 {
-					startIdx = 0
-				}
-			}
-		} else {
-			startIdx = len(errorEvents) - visibleCount
 		}
 	}
 
 	for i := startIdx; i < endIdx; i++ {
 		event := errorEvents[i]
-		isSelected := errorIndices[i] == m.selectedIdx
+		isSelected := i == selectedIdx
 		row := m.renderEventRow(event, isSelected)
 		rows += row + "\n"
 	}
@@ -1019,18 +1136,27 @@ func (m Model) renderInspect() string {
 		return "No swamp selected"
 	}
 
-	// Strip island ID from display name
-	swampDisplayName := m.inspectEvent.SwampName
-	if idx := strings.Index(swampDisplayName, "/"); idx != -1 {
-		prefix := swampDisplayName[:idx]
-		if _, err := strconv.ParseUint(prefix, 10, 64); err == nil {
-			swampDisplayName = swampDisplayName[idx+1:]
+	// Parse island ID and swamp name from SwampName (format: "193/sanctuary/realm/swamp")
+	swampFullName := m.inspectEvent.SwampName
+	var islandID uint64
+	swampDisplayName := swampFullName
+
+	if idx := strings.Index(swampFullName, "/"); idx != -1 {
+		prefix := swampFullName[:idx]
+		if id, err := strconv.ParseUint(prefix, 10, 64); err == nil {
+			islandID = id
+			swampDisplayName = swampFullName[idx+1:]
 		}
 	}
+
+	// Calculate swamp path using name package logic
+	// Path format: islandID/hash1/hash2/swampHash.hyd
+	swampPath := calculateSwampPath(swampDisplayName, islandID)
 
 	var s string
 	s += titleStyle.Render(" 🔍 Swamp Inspector ") + "\n\n"
 	s += "  " + statLabelStyle.Render("Swamp: ") + statValueStyle.Render(swampDisplayName) + "\n"
+	s += "  " + statLabelStyle.Render("Path:  ") + lipgloss.NewStyle().Foreground(mutedColor).Render(swampPath) + "\n"
 	s += "  " + statLabelStyle.Render("Method: ") + getMethodStyle(m.inspectEvent.Method).Render(m.inspectEvent.Method) + "\n"
 	s += "  " + statLabelStyle.Render("Time: ") + timestampStyle.Render(m.inspectEvent.Timestamp.Format("15:04:05.000")) + "\n\n"
 
@@ -1052,43 +1178,108 @@ func (m Model) renderInspect() string {
 		return s
 	}
 
-	// Header
+	// Header with page info
 	s += lipgloss.NewStyle().Bold(true).Render("  Treasures:") + "\n"
 	s += lipgloss.NewStyle().Foreground(mutedColor).Render(
-		fmt.Sprintf("  Page %d | Showing %d items | Use ↑/↓ to navigate pages", m.inspectPage+1, len(m.inspectTreasures))) + "\n\n"
+		fmt.Sprintf("  Page %d | Showing %d items | Use ↑/↓ to navigate", m.inspectPage+1, len(m.inspectTreasures))) + "\n\n"
 
-	// Treasure list
-	header := fmt.Sprintf("  %-30s %-15s %-20s %s", "KEY", "TYPE", "CREATED", "VALUE")
+	// Dynamic column widths based on terminal width
+	// Layout: prefix(2) + key(X) + space(1) + type(10) + space(1) + created(17) + space(1) + value(rest)
+	fixedWidth := 35 // prefix + type + spaces + created
+	keyWidth := (m.width - fixedWidth) / 3
+	if keyWidth < 15 {
+		keyWidth = 15
+	}
+	if keyWidth > 40 {
+		keyWidth = 40
+	}
+	valueWidth := m.width - fixedWidth - keyWidth - 5
+	if valueWidth < 20 {
+		valueWidth = 20
+	}
+
+	// Table header
+	header := fmt.Sprintf("  %-*s %-10s %-17s %s", keyWidth, "KEY", "TYPE", "CREATED", "VALUE")
 	s += lipgloss.NewStyle().Foreground(mutedColor).Render(header) + "\n"
-	s += lipgloss.NewStyle().Foreground(mutedColor).Render("  "+strings.Repeat("─", 80)) + "\n"
+	s += lipgloss.NewStyle().Foreground(mutedColor).Render("  "+strings.Repeat("─", min(m.width-4, 100))) + "\n"
 
-	for _, t := range m.inspectTreasures {
+	// Treasure list with selection
+	for i, t := range m.inspectTreasures {
 		if !t.IsExist {
 			continue
 		}
 
+		isSelected := i == m.inspectSelectedIdx
+
 		key := t.Key
-		if len(key) > 28 {
-			key = key[:25] + "..."
+		if len(key) > keyWidth-2 {
+			key = key[:keyWidth-5] + "..."
 		}
+		key = fmt.Sprintf("%-*s", keyWidth, key)
 
 		valueType, valueStr := getTreasureTypeAndValue(t)
+		if len(valueStr) > valueWidth {
+			valueStr = valueStr[:valueWidth-3] + "..."
+		}
 
 		createdAt := "-"
 		if t.CreatedAt != nil {
 			createdAt = t.CreatedAt.AsTime().Format("2006-01-02 15:04")
 		}
 
-		s += fmt.Sprintf("  %-30s %-15s %-20s %s\n",
+		prefix := "  "
+		if isSelected {
+			prefix = "▶ "
+		}
+
+		row := fmt.Sprintf("%s%s %-10s %-17s %s",
+			prefix,
 			statValueStyle.Render(key),
 			lipgloss.NewStyle().Foreground(secondaryColor).Render(valueType),
 			timestampStyle.Render(createdAt),
 			valueStr)
+
+		if isSelected {
+			row = selectedRowStyle.Render(row)
+		}
+		s += row + "\n"
 	}
 
-	s += "\n  " + helpStyle.Render("[↑/↓] Page navigation  [ESC] Back to observer")
+	s += "\n  " + helpStyle.Render("[↑/↓] Navigate  [PgUp/PgDn] Page  [ESC] Back")
 
 	return s
+}
+
+// calculateSwampPath generates the expected file path for a swamp
+// Using the same hash algorithm as the name package
+func calculateSwampPath(swampName string, islandID uint64) string {
+	// Default depth and maxFoldersPerLevel (common settings)
+	depth := 2
+	maxFoldersPerLevel := 256
+
+	// Generate hash for directory path
+	hash := xxhash.Sum64String(swampName)
+	hashHex := fmt.Sprintf("%x", hash)
+
+	charsPerLevel := 2 // For 256 folders
+
+	parts := make([]string, depth)
+	for i := 0; i < depth; i++ {
+		start := i * charsPerLevel
+		end := start + charsPerLevel
+		if end > len(hashHex) {
+			end = len(hashHex)
+		}
+		if start < len(hashHex) {
+			parts[i] = hashHex[start:end]
+		}
+	}
+
+	// Generate swamp folder name (hash of full name)
+	swampHash := fmt.Sprintf("%x", xxhash.Sum64([]byte(swampName)))
+
+	// Combine: islandID/hash1/hash2/swampHash.hyd
+	return fmt.Sprintf("%d/%s/%s.hyd", islandID, strings.Join(parts, "/"), swampHash)
 }
 
 // getTreasureTypeAndValue returns the type and value of a treasure for display
@@ -1216,7 +1407,9 @@ func (m Model) renderHelp() string {
 	s := titleStyle.Render(" HydrAIDE Observe - Help ") + "\n\n"
 
 	s += lipgloss.NewStyle().Bold(true).Render("  Navigation:") + "\n"
-	s += "  " + keyStyle.Render("Up/k, Down/j") + keyDescStyle.Render("  Move selection up/down") + "\n"
+	s += "  " + keyStyle.Render("↑/k, ↓/j") + keyDescStyle.Render("      Move selection up/down") + "\n"
+	s += "  " + keyStyle.Render("PgUp/PgDn") + keyDescStyle.Render("     Jump one page up/down") + "\n"
+	s += "  " + keyStyle.Render("Home/End") + keyDescStyle.Render("      Jump to first/last item") + "\n"
 	s += "  " + keyStyle.Render("Enter") + keyDescStyle.Render("         Inspect swamp contents") + "\n"
 	s += "  " + keyStyle.Render("Esc") + keyDescStyle.Render("           Close inspect/detail view") + "\n"
 
@@ -1235,7 +1428,8 @@ func (m Model) renderHelp() string {
 
 	s += "\n" + lipgloss.NewStyle().Bold(true).Render("  Inspect Mode:") + "\n"
 	s += "  " + keyDescStyle.Render("  Select an event and press Enter to view swamp contents.") + "\n"
-	s += "  " + keyDescStyle.Render("  Use ↑/↓ to navigate pages, ESC to return.") + "\n"
+	s += "  " + keyDescStyle.Render("  Use ↑/↓ to navigate rows, PgUp/PgDn for pages.") + "\n"
+	s += "  " + keyDescStyle.Render("  The swamp path is shown for debugging.") + "\n"
 
 	s += "\n  " + helpStyle.Render("Press any key to close help")
 
