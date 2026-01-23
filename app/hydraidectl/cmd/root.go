@@ -32,6 +32,8 @@ INSTANCE LIFECYCLE:
 MONITORING & STATUS:
   list        Show all registered instances with status
   health      Check health status of an instance
+  observe     Real-time monitoring dashboard (TUI) for debugging
+  telemetry   Enable/disable telemetry collection for observe
   version     Display CLI and instance version information
 
 UPDATES & MIGRATION:
@@ -55,6 +57,8 @@ EXAMPLES:
   sudo hydraidectl start --instance prod
   sudo hydraidectl update --instance prod --no-start
   hydraidectl migrate --instance prod --full
+  hydraidectl observe --instance prod
+  hydraidectl telemetry --instance prod --enable
 `,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		// Skip update check for version command itself

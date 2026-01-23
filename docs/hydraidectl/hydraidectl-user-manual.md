@@ -23,6 +23,8 @@ Although `hydraidectl` is stable and production-tested, new features are under d
 * [`restart` – Restart a running or stopped instance](#restart--restart-instance)
 * [`list` – Show all registered HydrAIDE instances on the host](#list--show-all-instances)
 * [`health`– Display health of an instance](#health--instance-health)
+* [`observe` – Real-time monitoring dashboard for debugging](#observe--real-time-monitoring-dashboard)
+* [`telemetry` – Enable/disable telemetry collection](#telemetry--enabledisable-telemetry-collection)
 * [`destroy` – Fully delete an instance, optionally including all its data](#restart--restart-instance)
 * [`cert` – Generate TLS Certificates (without modifying instances)](#cert--generate-tls-certificates-without-modifying-instances)
 * [`update` – Update an Instance In‑Place](#update--update-an-instance-inplace-allinone)
@@ -437,6 +439,175 @@ sudo hydraidectl health --instance dev-local
 sudo hydraidectl health --instance test
 # unhealthy
 ```
+
+---
+
+## `observe` – Real-time Monitoring Dashboard
+
+The `observe` command provides a real-time TUI (Terminal User Interface) dashboard for monitoring all gRPC calls, errors, and client activity on a HydrAIDE server. This is essential for debugging issues like failed logins, data corruption, or performance problems.
+
+**Synopsis:**
+```bash
+hydraidectl observe --instance <name> [flags]
+```
+
+**Requirements:**
+* Telemetry must be enabled on the instance
+* If telemetry is not enabled, the command will prompt you to enable it and restart the instance
+
+**Flags:**
+| Flag | Description |
+|------|-------------|
+| `--instance, -i` | Instance name (required) |
+| `--errors-only` | Only show error events |
+| `--filter` | Filter by swamp pattern (e.g., `auth/*`) |
+| `--simple` | Simple text output instead of TUI |
+| `--stats` | Show statistics only (no streaming) |
+
+**TUI Features:**
+* **Live Tab** - Real-time stream of all gRPC calls with timing and status
+* **Errors Tab** - Filtered view showing only errors
+* **Stats Tab** - Aggregated statistics (total calls, error rate, top swamps)
+* **Pause/Resume** - Press `P` to pause the stream and examine events
+* **Error Details** - Press `Enter` on any event to see full details
+
+**TUI Keyboard Shortcuts:**
+| Key | Action |
+|-----|--------|
+| `1` | Switch to Live view |
+| `2` | Switch to Errors view |
+| `3` | Switch to Stats view |
+| `P` | Pause/Resume stream |
+| `C` | Clear all events |
+| `E` | Toggle errors-only filter |
+| `↑/↓` or `j/k` | Navigate events |
+| `Enter` | View error details |
+| `Esc` | Close detail view |
+| `?` or `H` | Show help |
+| `Q` | Quit |
+
+**Examples:**
+
+Start the TUI dashboard:
+```bash
+hydraidectl observe --instance prod
+```
+
+Simple text output (for scripting or logging):
+```bash
+hydraidectl observe --instance prod --simple
+```
+
+Show only errors:
+```bash
+hydraidectl observe --instance prod --errors-only
+```
+
+Get statistics snapshot:
+```bash
+hydraidectl observe --instance prod --stats
+```
+
+Filter by swamp pattern:
+```bash
+hydraidectl observe --instance prod --filter "auth/*"
+```
+
+**Automatic Telemetry Enable:**
+
+If telemetry is not enabled, the command will prompt:
+```
+⚠️  Telemetry is not enabled on this instance.
+
+To use observe, telemetry must be enabled and the instance must be restarted.
+Enable telemetry and restart now? [y/N]: y
+✅ Telemetry enabled
+🔄 Restarting instance 'prod'...
+✅ Instance restarted
+⏳ Waiting for server to be ready...
+```
+
+**Example Output (Simple Mode):**
+```
+HydrAIDE Observe - Simple Mode
+==============================
+Streaming events... (Press Ctrl+C to stop)
+
+14:23:01.234 | Get      | user/sessions/abc123               |    2ms | OK
+14:23:01.456 | Set      | cache/products/item-x              |    1ms | OK
+14:23:01.789 | Get      | auth/tokens/xyz                    |    5ms | ERR FailedPrecondition
+         +-- decompression failed: invalid data format
+14:23:02.012 | Delete   | temp/uploads/file                  |    0ms | OK
+```
+
+---
+
+## `telemetry` – Enable/Disable Telemetry Collection
+
+The `telemetry` command controls real-time monitoring data collection on the HydrAIDE server. When enabled, the server collects detailed information about all gRPC calls, which is required for the `observe` command.
+
+**Synopsis:**
+```bash
+hydraidectl telemetry --instance <name> [--enable | --disable]
+```
+
+**What Telemetry Collects:**
+* All gRPC call details (method, swamp, duration, status)
+* Error information with categorization
+* Client connection statistics
+* Timing metrics for performance analysis
+
+**Flags:**
+| Flag | Description |
+|------|-------------|
+| `--instance, -i` | Instance name (required) |
+| `--enable` | Enable telemetry collection |
+| `--disable` | Disable telemetry collection |
+| `--json, -j` | Output as JSON |
+
+**Examples:**
+
+Check current telemetry status:
+```bash
+hydraidectl telemetry --instance prod
+# Instance:  prod
+# Telemetry: disabled
+#
+# Enable with: hydraidectl telemetry --instance prod --enable
+```
+
+Enable telemetry:
+```bash
+hydraidectl telemetry --instance prod --enable
+# ✅ Telemetry enabled
+# Restart instance now for changes to take effect? [Y/n]: y
+# 🔄 Restarting instance 'prod'...
+# ✅ Instance 'prod' restarted successfully
+```
+
+Disable telemetry:
+```bash
+hydraidectl telemetry --instance prod --disable
+# ✅ Telemetry disabled
+# Restart instance now for changes to take effect? [Y/n]: y
+# 🔄 Restarting instance 'prod'...
+# ✅ Instance 'prod' restarted successfully
+```
+
+JSON output (for scripting):
+```bash
+hydraidectl telemetry --instance prod --json
+# {
+#   "instance": "prod",
+#   "telemetry_enabled": true
+# }
+```
+
+**Performance Considerations:**
+* Telemetry has minimal performance impact (< 1% overhead)
+* Data is stored in a ring buffer (last 30 minutes)
+* No data is persisted to disk - telemetry is memory-only
+* Recommended to enable only when debugging
 
 ---
 
