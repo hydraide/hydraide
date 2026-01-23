@@ -1261,7 +1261,11 @@ func calculateSwampPath(swampName string, islandID uint64) string {
 	hash := xxhash.Sum64String(swampName)
 	hashHex := fmt.Sprintf("%x", hash)
 
-	charsPerLevel := 2 // For 256 folders
+	// Calculate characters per level based on maxFoldersPerLevel
+	charsPerLevel := len(fmt.Sprintf("%x", maxFoldersPerLevel-1))
+	if charsPerLevel < 2 {
+		charsPerLevel = 2
+	}
 
 	parts := make([]string, depth)
 	for i := 0; i < depth; i++ {
@@ -1280,6 +1284,9 @@ func calculateSwampPath(swampName string, islandID uint64) string {
 
 	// Combine: islandID/hash1/hash2/swampHash.hyd
 	return fmt.Sprintf("%d/%s/%s.hyd", islandID, strings.Join(parts, "/"), swampHash)
+}
+
+// getTreasureTypeAndValue returns the type and value of a treasure for display
 }
 
 // getTreasureTypeAndValue returns the type and value of a treasure for display
