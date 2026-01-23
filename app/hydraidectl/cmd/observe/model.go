@@ -527,8 +527,13 @@ func (m Model) renderLiveTab(maxHeight int) string {
 
 	var rows string
 
-	header := fmt.Sprintf("  %-12s %-10s %-40s %6s %s",
-		"TIME", "METHOD", "SWAMP", "MS", "STATUS")
+	// Dynamic header based on width
+	swampWidth := m.width - 60
+	if swampWidth < 30 {
+		swampWidth = 30
+	}
+	header := fmt.Sprintf("  %-12s %-12s %-*s %7s %s",
+		"TIME", "METHOD", swampWidth, "SWAMP", "DURATION", "STATUS")
 	rows += lipgloss.NewStyle().Foreground(mutedColor).Render(header) + "\n"
 
 	visibleCount := maxHeight - 2
@@ -550,24 +555,33 @@ func (m Model) renderLiveTab(maxHeight int) string {
 	return rows
 }
 
-// renderEventRow renders a single event row
+// renderEventRow renders a single event row - must fit in single line
 func (m Model) renderEventRow(event Event, selected bool) string {
 	timeStr := event.Timestamp.Format("15:04:05.000")
 
+	// Use full method name with fixed width (longest is "GetByIndex" = 10 chars)
 	method := event.Method
-	if len(method) > 10 {
-		method = method[:10]
+	methodStyled := getMethodStyle(event.Method).Render(fmt.Sprintf("%-12s", method))
+
+	// Calculate available width for swamp name dynamically
+	// Layout: prefix(2) + time(12) + space(1) + method(12) + space(1) + swamp(X) + space(1) + duration(7) + space(1) + status(20)
+	// Fixed: 2 + 12 + 1 + 12 + 1 + 1 + 7 + 1 + 20 = 57
+	fixedWidth := 60
+	availableWidth := m.width - fixedWidth
+	if availableWidth < 30 {
+		availableWidth = 30
 	}
-	methodStyled := getMethodStyle(method).Render(fmt.Sprintf("%-10s", method))
+	// No upper limit - use all available space
 
 	swampName := event.SwampName
 	if swampName == "" {
-		swampName = "(system)"
+		swampName = "-"
 	}
-	if len(swampName) > 40 {
-		swampName = swampName[:37] + "..."
+	if len(swampName) > availableWidth {
+		// Show end of path (more useful than beginning)
+		swampName = "…" + swampName[len(swampName)-availableWidth+1:]
 	}
-	swampName = fmt.Sprintf("%-40s", swampName)
+	swampName = fmt.Sprintf("%-*s", availableWidth, swampName)
 
 	duration := formatDuration(event.DurationUs)
 
@@ -595,6 +609,35 @@ func (m Model) renderEventRow(event Event, selected bool) string {
 	return "  " + row
 }
 
+// shortenMethod shortens method names to fit in 8 characters
+func shortenMethod(method string) string {
+	switch method {
+	case "GetByIndex":
+		return "GetIdx"
+	case "GetByKeys":
+		return "GetKeys"
+	case "GetAll":
+		return "GetAll"
+	case "Delete":
+		return "Delete"
+	case "Destroy":
+		return "Destroy"
+	case "Lock":
+		return "Lock"
+	case "Unlock":
+		return "Unlock"
+	case "Get":
+		return "Get"
+	case "Set":
+		return "Set"
+	default:
+		if len(method) > 8 {
+			return method[:8]
+		}
+		return method
+	}
+}
+
 // renderErrorsTab renders the errors tab
 func (m Model) renderErrorsTab(maxHeight int) string {
 	var errorEvents []Event
@@ -611,8 +654,13 @@ func (m Model) renderErrorsTab(maxHeight int) string {
 	var rows string
 	rows += errorStyle.Render(fmt.Sprintf("  %d errors in current session", len(errorEvents))) + "\n\n"
 
-	header := fmt.Sprintf("  %-12s %-10s %-40s %6s %s",
-		"TIME", "METHOD", "SWAMP", "MS", "ERROR")
+	// Dynamic header based on width
+	swampWidth := m.width - 60
+	if swampWidth < 30 {
+		swampWidth = 30
+	}
+	header := fmt.Sprintf("  %-12s %-12s %-*s %7s %s",
+		"TIME", "METHOD", swampWidth, "SWAMP", "DURATION", "ERROR")
 	rows += lipgloss.NewStyle().Foreground(mutedColor).Render(header) + "\n"
 
 	visibleCount := maxHeight - 4
@@ -689,8 +737,13 @@ func (m Model) renderLongRunningTab() string {
 		return result
 	}
 
-	header := fmt.Sprintf("  %-12s %-10s %-35s %10s %s",
-		"TIME", "METHOD", "SWAMP", "DURATION", "CLIENT")
+	// Dynamic header based on width
+	swampWidth := m.width - 70
+	if swampWidth < 30 {
+		swampWidth = 30
+	}
+	header := fmt.Sprintf("  %-12s %-12s %-*s %10s %s",
+		"TIME", "METHOD", swampWidth, "SWAMP", "DURATION", "CLIENT")
 	result += lipgloss.NewStyle().Foreground(mutedColor).Render(header) + "\n"
 
 	startIdx := 0
@@ -703,13 +756,13 @@ func (m Model) renderLongRunningTab() string {
 		timeStr := e.Timestamp.Format("15:04:05.000")
 
 		method := e.Method
-		if len(method) > 10 {
-			method = method[:10]
+		if len(method) > 12 {
+			method = method[:12]
 		}
 
 		swamp := e.SwampName
-		if len(swamp) > 35 {
-			swamp = swamp[:32] + "..."
+		if len(swamp) > swampWidth {
+			swamp = "…" + swamp[len(swamp)-swampWidth+1:]
 		}
 
 		durationStr := formatDuration(e.DurationUs)
@@ -726,10 +779,10 @@ func (m Model) renderLongRunningTab() string {
 			durationStyled = lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Render(fmt.Sprintf("%10s", durationStr))
 		}
 
-		result += fmt.Sprintf("  %s %-10s %-35s %s %s\n",
+		result += fmt.Sprintf("  %s %-12s %-*s %s %s\n",
 			timestampStyle.Render(timeStr),
-			getMethodStyle(method).Render(fmt.Sprintf("%-10s", method)),
-			swampStyle.Render(fmt.Sprintf("%-35s", swamp)),
+			getMethodStyle(method).Render(fmt.Sprintf("%-12s", method)),
+			swampWidth, swampStyle.Render(swamp),
 			durationStyled,
 			clientIP)
 	}
