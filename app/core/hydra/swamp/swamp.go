@@ -2133,6 +2133,15 @@ func (s *swamp) Close() {
 		s.fileWriterHandler(true)
 		// save metadata to the filesystem if there is any changes
 		s.metadataInterface.SaveToFile()
+
+		// Close the chronicler to flush any remaining buffered data and close file handles.
+		// This is CRITICAL for V2 engine which uses a persistent writer.
+		// For V1 engine, this is a no-op.
+		if err := s.chroniclerInterface.Close(); err != nil {
+			slog.Error("failed to close chronicler",
+				"swamp", s.name.Get(),
+				"error", err)
+		}
 	}
 
 	// megvárjuk a bezárás előtt, hogy a chronicler minden adatot kiírjon a filerendszerbe, különben lehet olyan, hogy

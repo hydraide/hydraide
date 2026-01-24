@@ -363,6 +363,62 @@ service HydraideService {
   // IncrementFloat64 same logic as IncrementInt8 but for float64 values
   rpc IncrementFloat64(IncrementFloat64Request) returns (IncrementFloat64Response) {}
 
+  // ============ TELEMETRY ENDPOINTS ============
+  //
+  // These endpoints provide real-time observability into the HydrAIDE server.
+  // Use these for debugging, monitoring, and understanding system behavior.
+
+  // SubscribeToTelemetry opens a real-time stream of all gRPC calls and their results.
+  //
+  // Each event includes:
+  // - Timestamp and duration
+  // - Method name (Get, Set, Delete, etc.)
+  // - Swamp name and affected keys
+  // - Success/failure status with error details
+  // - Client IP address
+  //
+  // Use this to:
+  // - Debug live issues (e.g., why login isn't working)
+  // - Monitor system health in real-time
+  // - Track client activity
+  //
+  // ⚠️ This endpoint is for administrative/debugging purposes only.
+  // It should be restricted to trusted clients in production.
+  rpc SubscribeToTelemetry(TelemetrySubscribeRequest) returns (stream TelemetryEvent) {}
+
+  // GetTelemetryHistory retrieves historical telemetry events within a time range.
+  //
+  // Use this for:
+  // - Replaying events from the last X minutes
+  // - Investigating issues that happened in the past
+  // - Analyzing patterns in system usage
+  //
+  // The server keeps a rolling window of events (default: 30 minutes).
+  rpc GetTelemetryHistory(TelemetryHistoryRequest) returns (TelemetryHistoryResponse) {}
+
+  // GetErrorDetails retrieves detailed information about a specific error event.
+  //
+  // This includes:
+  // - Full stack trace (if available)
+  // - Error category (compression, validation, permission, etc.)
+  // - Additional context (request details, affected resources)
+  //
+  // Use this to drill down into specific errors for debugging.
+  rpc GetErrorDetails(ErrorDetailsRequest) returns (ErrorDetailsResponse) {}
+
+  // GetTelemetryStats returns aggregated statistics for a given time window.
+  //
+  // Statistics include:
+  // - Total calls and error count
+  // - Error rate percentage
+  // - Average response time
+  // - Active client count
+  // - Top swamps by usage
+  // - Most frequent errors
+  //
+  // Useful for dashboards and quick health checks.
+  rpc GetTelemetryStats(TelemetryStatsRequest) returns (TelemetryStatsResponse) {}
+
 }
 
 message HeartbeatRequest {
@@ -518,9 +574,13 @@ message RegisterSwampRequest {
 
   // MaxFileSize sets the maximum size (in bytes) for a single compressed file chunk.
   //
-  // Optional. Applies only when IsInMemorySwamp is false.
-  // Useful for optimizing SSD usage and controlling compaction behavior.
-  optional int64 MaxFileSize = 5;
+  // ⚠️ DEPRECATED: This field is only used by the legacy V1 storage engine.
+  // After migrating to V2 (using `hydraidectl migrate`), this field is ignored.
+  // The V2 engine uses a single append-only file per swamp with automatic block management.
+  //
+  // Optional. Applies only when IsInMemorySwamp is false and using V1 engine.
+  // New installations should not set this field.
+  optional int64 MaxFileSize = 5 [deprecated = true];
 }
 
 message RegisterSwampResponse {
@@ -1759,4 +1819,180 @@ message IsKeyExistRequest {
 message IsKeyExistResponse {
   // IsExist will be true if the key is present in the swamp, false otherwise.
   bool IsExist = 1;
+}
+
+// ============ TELEMETRY MESSAGES ============
+
+// TelemetrySubscribeRequest configures the real-time telemetry stream.
+message TelemetrySubscribeRequest {
+  // If true, only error events are streamed (successful calls are filtered out).
+  bool errors_only = 1;
+
+  // Filter by specific method names (e.g., ["Get", "Set"]). Empty means all methods.
+  repeated string filter_methods = 2;
+
+  // Filter by swamp name pattern (e.g., "auth/*" matches all swamps starting with "auth/").
+  string filter_swamp_pattern = 3;
+
+  // If false, successful calls are excluded from the stream.
+  bool include_successes = 4;
+}
+
+// TelemetryEvent represents a single gRPC call and its result.
+message TelemetryEvent {
+  // Unique identifier for this event (used for GetErrorDetails).
+  string id = 1;
+
+  // When the call started.
+  google.protobuf.Timestamp timestamp = 2;
+
+  // The gRPC method name (e.g., "Get", "Set", "Delete").
+  string method = 3;
+
+  // The full swamp path (e.g., "123/users/sessions").
+  string swamp_name = 4;
+
+  // The keys involved in this operation.
+  repeated string keys = 5;
+
+  // How long the call took in microseconds (for sub-millisecond precision).
+  int64 duration_us = 6;
+
+  // True if the call succeeded, false if it returned an error.
+  bool success = 7;
+
+  // The gRPC error code (e.g., "Internal", "InvalidArgument"). Empty if successful.
+  string error_code = 8;
+
+  // The error message. Empty if successful.
+  string error_message = 9;
+
+  // The client's IP address.
+  string client_ip = 10;
+
+  // Request payload size in bytes.
+  int64 request_size = 11;
+
+  // Response payload size in bytes.
+  int64 response_size = 12;
+
+  // True if detailed error information (stack trace) is available via GetErrorDetails.
+  bool has_stack_trace = 13;
+}
+
+// TelemetryHistoryRequest queries historical events within a time range.
+message TelemetryHistoryRequest {
+  // Start of the time range (inclusive).
+  google.protobuf.Timestamp from_time = 1;
+
+  // End of the time range (inclusive).
+  google.protobuf.Timestamp to_time = 2;
+
+  // If true, only return error events.
+  bool errors_only = 3;
+
+  // Filter by swamp name pattern.
+  string filter_swamp_pattern = 4;
+
+  // Filter by specific method names.
+  repeated string filter_methods = 5;
+
+  // Maximum number of events to return (default: 1000).
+  int32 limit = 6;
+}
+
+// TelemetryHistoryResponse contains the historical events.
+message TelemetryHistoryResponse {
+  // The events matching the query.
+  repeated TelemetryEvent events = 1;
+
+  // Total number of matching events (may be more than returned if limit was applied).
+  int32 total_count = 2;
+
+  // True if there are more events available beyond the limit.
+  bool has_more = 3;
+}
+
+// ErrorDetailsRequest retrieves detailed information about a specific error.
+message ErrorDetailsRequest {
+  // The event ID from TelemetryEvent.
+  string event_id = 1;
+}
+
+// ErrorDetailsResponse contains detailed error information.
+message ErrorDetailsResponse {
+  // The original telemetry event.
+  TelemetryEvent event = 1;
+
+  // The full stack trace (if captured).
+  string stack_trace = 2;
+
+  // The categorized error type (e.g., "compression", "validation", "permission").
+  string error_category = 3;
+
+  // Additional context as key-value pairs.
+  map<string, string> context = 4;
+}
+
+// TelemetryStatsRequest queries aggregated statistics.
+message TelemetryStatsRequest {
+  // Time window in minutes (e.g., 1, 5, 15).
+  int32 window_minutes = 1;
+}
+
+// TelemetryStatsResponse contains aggregated statistics.
+message TelemetryStatsResponse {
+  // Total number of calls in the window.
+  int64 total_calls = 1;
+
+  // Number of failed calls.
+  int64 error_count = 2;
+
+  // Error rate as a percentage (0-100).
+  double error_rate = 3;
+
+  // Average call duration in microseconds.
+  double avg_duration_us = 4;
+
+  // Number of unique clients active in the window.
+  int32 active_clients = 5;
+
+  // Top swamps by call count.
+  repeated TelemetrySwampStats top_swamps = 6;
+
+  // Most frequent errors.
+  repeated TelemetryErrorSummary top_errors = 7;
+}
+
+// TelemetrySwampStats contains statistics for a specific swamp.
+message TelemetrySwampStats {
+  // The swamp name.
+  string swamp_name = 1;
+
+  // Number of calls to this swamp.
+  int64 call_count = 2;
+
+  // Number of errors for this swamp.
+  int64 error_count = 3;
+
+  // Average call duration in microseconds.
+  double avg_duration_us = 4;
+}
+
+// TelemetryErrorSummary contains aggregated information about a specific error type.
+message TelemetryErrorSummary {
+  // The gRPC error code.
+  string error_code = 1;
+
+  // The error message (truncated if too long).
+  string error_message = 2;
+
+  // Number of occurrences.
+  int64 count = 3;
+
+  // The last swamp that had this error.
+  string last_swamp = 4;
+
+  // When this error last occurred.
+  google.protobuf.Timestamp last_occurrence = 5;
 }

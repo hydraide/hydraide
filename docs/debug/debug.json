@@ -1,0 +1,714 @@
+{
+  "file_path": "/mnt/hydra/trendizz-outbound-test/data/968/f08/f088c2994f45127f.hyd",
+  "swamp_name": "tags/tagEmailIndex/boommarketing-hu:72202f29-d23d-4800-b18a-187007b6e286:emailNotSetYet",
+  "file_size_bytes": 2913,
+  "created_at": "2026-01-22T13:35:05+01:00",
+  "modified_at": "2026-01-22T13:35:05+01:00",
+  "block_count": 2,
+  "total_entries": 50,
+  "live_entries": 25,
+  "dead_entries": 25,
+  "fragmentation_percent": 50,
+  "entries": [
+    {
+      "index": 2,
+      "operation": "INSERT",
+      "key": "vendvidekipihenohazak.hu",
+      "data_size_bytes": 463,
+      "is_live": false,
+      "treasure_meta": {
+        "key": "vendvidekipihenohazak.hu",
+        "created_at": "2025-11-06T19:58:24+01:00",
+        "created_by": "migrator",
+        "payload_size_bytes": 463,
+        "content_type": "VOID"
+      }
+    },
+    {
+      "index": 3,
+      "operation": "INSERT",
+      "key": "zugolyerdeihaz.hu",
+      "data_size_bytes": 456,
+      "is_live": false,
+      "treasure_meta": {
+        "key": "zugolyerdeihaz.hu",
+        "created_at": "2025-11-06T19:58:24+01:00",
+        "created_by": "migrator",
+        "payload_size_bytes": 456,
+        "content_type": "VOID"
+      }
+    },
+    {
+      "index": 4,
+      "operation": "INSERT",
+      "key": "khs.hu",
+      "data_size_bytes": 445,
+      "is_live": false,
+      "treasure_meta": {
+        "key": "khs.hu",
+        "created_at": "2025-11-06T19:58:24+01:00",
+        "created_by": "migrator",
+        "payload_size_bytes": 445,
+        "content_type": "VOID"
+      }
+    },
+    {
+      "index": 5,
+      "operation": "INSERT",
+      "key": "thermalcamping.com",
+      "data_size_bytes": 457,
+      "is_live": false,
+      "treasure_meta": {
+        "key": "thermalcamping.com",
+        "created_at": "2025-11-06T19:58:24+01:00",
+        "created_by": "migrator",
+        "payload_size_bytes": 457,
+        "content_type": "VOID"
+      }
+    },
+    {
+      "index": 6,
+      "operation": "INSERT",
+      "key": "rajnaapartman.hu",
+      "data_size_bytes": 455,
+      "is_live": false,
+      "treasure_meta": {
+        "key": "rajnaapartman.hu",
+        "created_at": "2025-11-06T19:58:24+01:00",
+        "created_by": "migrator",
+        "payload_size_bytes": 455,
+        "content_type": "VOID"
+      }
+    },
+    {
+      "index": 7,
+      "operation": "INSERT",
+      "key": "vinifera.hu",
+      "data_size_bytes": 450,
+      "is_live": false,
+      "treasure_meta": {
+        "key": "vinifera.hu",
+        "created_at": "2025-11-06T19:58:24+01:00",
+        "created_by": "migrator",
+        "payload_size_bytes": 450,
+        "content_type": "VOID"
+      }
+    },
+    {
+      "index": 8,
+      "operation": "INSERT",
+      "key": "harmoniahotel.hu",
+      "data_size_bytes": 455,
+      "is_live": false,
+      "treasure_meta": {
+        "key": "harmoniahotel.hu",
+        "created_at": "2025-11-06T19:58:24+01:00",
+        "created_by": "migrator",
+        "payload_size_bytes": 455,
+        "content_type": "VOID"
+      }
+    },
+    {
+      "index": 9,
+      "operation": "INSERT",
+      "key": "evergreen.hu",
+      "data_size_bytes": 451,
+      "is_live": false,
+      "treasure_meta": {
+        "key": "evergreen.hu",
+        "created_at": "2025-11-06T19:58:24+01:00",
+        "created_by": "migrator",
+        "payload_size_bytes": 451,
+        "content_type": "VOID"
+      }
+    },
+    {
+      "index": 10,
+      "operation": "INSERT",
+      "key": "solhotel.hu",
+      "data_size_bytes": 450,
+      "is_live": false,
+      "treasure_meta": {
+        "key": "solhotel.hu",
+        "created_at": "2025-11-06T19:58:24+01:00",
+        "created_by": "migrator",
+        "payload_size_bytes": 450,
+        "content_type": "VOID"
+      }
+    },
+    {
+      "index": 11,
+      "operation": "INSERT",
+      "key": "gunaras.hu",
+      "data_size_bytes": 449,
+      "is_live": false,
+      "treasure_meta": {
+        "key": "gunaras.hu",
+        "created_at": "2025-11-06T19:58:24+01:00",
+        "created_by": "migrator",
+        "payload_size_bytes": 449,
+        "content_type": "VOID"
+      }
+    },
+    {
+      "index": 12,
+      "operation": "INSERT",
+      "key": "andreaapartmanheviz.hu",
+      "data_size_bytes": 461,
+      "is_live": false,
+      "treasure_meta": {
+        "key": "andreaapartmanheviz.hu",
+        "created_at": "2025-11-06T19:58:24+01:00",
+        "created_by": "migrator",
+        "payload_size_bytes": 461,
+        "content_type": "VOID"
+      }
+    },
+    {
+      "index": 13,
+      "operation": "INSERT",
+      "key": "nadastoparkhotel.hu",
+      "data_size_bytes": 458,
+      "is_live": false,
+      "treasure_meta": {
+        "key": "nadastoparkhotel.hu",
+        "created_at": "2025-11-06T19:58:24+01:00",
+        "created_by": "migrator",
+        "payload_size_bytes": 458,
+        "content_type": "VOID"
+      }
+    },
+    {
+      "index": 14,
+      "operation": "INSERT",
+      "key": "villavolgy.hu",
+      "data_size_bytes": 452,
+      "is_live": false,
+      "treasure_meta": {
+        "key": "villavolgy.hu",
+        "created_at": "2025-11-06T19:58:24+01:00",
+        "created_by": "migrator",
+        "payload_size_bytes": 452,
+        "content_type": "VOID"
+      }
+    },
+    {
+      "index": 15,
+      "operation": "INSERT",
+      "key": "clubmendan.hu",
+      "data_size_bytes": 452,
+      "is_live": false,
+      "treasure_meta": {
+        "key": "clubmendan.hu",
+        "created_at": "2025-11-06T19:58:24+01:00",
+        "created_by": "migrator",
+        "payload_size_bytes": 452,
+        "content_type": "VOID"
+      }
+    },
+    {
+      "index": 16,
+      "operation": "INSERT",
+      "key": "hotelpagony.hu",
+      "data_size_bytes": 453,
+      "is_live": false,
+      "treasure_meta": {
+        "key": "hotelpagony.hu",
+        "created_at": "2025-11-06T19:58:24+01:00",
+        "created_by": "migrator",
+        "payload_size_bytes": 453,
+        "content_type": "VOID"
+      }
+    },
+    {
+      "index": 17,
+      "operation": "INSERT",
+      "key": "calimbrawellnesshotel.hu",
+      "data_size_bytes": 463,
+      "is_live": false,
+      "treasure_meta": {
+        "key": "calimbrawellnesshotel.hu",
+        "created_at": "2025-11-06T19:58:24+01:00",
+        "created_by": "migrator",
+        "payload_size_bytes": 463,
+        "content_type": "VOID"
+      }
+    },
+    {
+      "index": 18,
+      "operation": "INSERT",
+      "key": "borostyankert.hu",
+      "data_size_bytes": 455,
+      "is_live": false,
+      "treasure_meta": {
+        "key": "borostyankert.hu",
+        "created_at": "2025-11-06T19:58:24+01:00",
+        "created_by": "migrator",
+        "payload_size_bytes": 455,
+        "content_type": "VOID"
+      }
+    },
+    {
+      "index": 19,
+      "operation": "INSERT",
+      "key": "thermalhotelmovar.hu",
+      "data_size_bytes": 459,
+      "is_live": false,
+      "treasure_meta": {
+        "key": "thermalhotelmovar.hu",
+        "created_at": "2025-11-06T19:58:24+01:00",
+        "created_by": "migrator",
+        "payload_size_bytes": 459,
+        "content_type": "VOID"
+      }
+    },
+    {
+      "index": 20,
+      "operation": "INSERT",
+      "key": "angelinavendeghaz.hu",
+      "data_size_bytes": 459,
+      "is_live": false,
+      "treasure_meta": {
+        "key": "angelinavendeghaz.hu",
+        "created_at": "2025-11-06T19:58:24+01:00",
+        "created_by": "migrator",
+        "payload_size_bytes": 459,
+        "content_type": "VOID"
+      }
+    },
+    {
+      "index": 21,
+      "operation": "INSERT",
+      "key": "levendulasarvar.hu",
+      "data_size_bytes": 457,
+      "is_live": false,
+      "treasure_meta": {
+        "key": "levendulasarvar.hu",
+        "created_at": "2025-11-06T19:58:24+01:00",
+        "created_by": "migrator",
+        "payload_size_bytes": 457,
+        "content_type": "VOID"
+      }
+    },
+    {
+      "index": 22,
+      "operation": "INSERT",
+      "key": "margaretaapartman.hu",
+      "data_size_bytes": 459,
+      "is_live": false,
+      "treasure_meta": {
+        "key": "margaretaapartman.hu",
+        "created_at": "2025-11-06T19:58:24+01:00",
+        "created_by": "migrator",
+        "payload_size_bytes": 459,
+        "content_type": "VOID"
+      }
+    },
+    {
+      "index": 23,
+      "operation": "INSERT",
+      "key": "szindbad.hu",
+      "data_size_bytes": 450,
+      "is_live": false,
+      "treasure_meta": {
+        "key": "szindbad.hu",
+        "created_at": "2025-11-06T19:58:24+01:00",
+        "created_by": "migrator",
+        "payload_size_bytes": 450,
+        "content_type": "VOID"
+      }
+    },
+    {
+      "index": 24,
+      "operation": "INSERT",
+      "key": "city-home.hu",
+      "data_size_bytes": 451,
+      "is_live": false,
+      "treasure_meta": {
+        "key": "city-home.hu",
+        "created_at": "2025-11-06T19:58:24+01:00",
+        "created_by": "migrator",
+        "payload_size_bytes": 451,
+        "content_type": "VOID"
+      }
+    },
+    {
+      "index": 25,
+      "operation": "INSERT",
+      "key": "corvinahotel.hu",
+      "data_size_bytes": 454,
+      "is_live": false,
+      "treasure_meta": {
+        "key": "corvinahotel.hu",
+        "created_at": "2025-11-06T19:58:24+01:00",
+        "created_by": "migrator",
+        "payload_size_bytes": 454,
+        "content_type": "VOID"
+      }
+    },
+    {
+      "index": 26,
+      "operation": "INSERT",
+      "key": "amstelhattyu.hu",
+      "data_size_bytes": 454,
+      "is_live": false,
+      "treasure_meta": {
+        "key": "amstelhattyu.hu",
+        "created_at": "2025-11-06T19:58:24+01:00",
+        "created_by": "migrator",
+        "payload_size_bytes": 454,
+        "content_type": "VOID"
+      }
+    },
+    {
+      "index": 27,
+      "operation": "INSERT",
+      "key": "szindbad.hu",
+      "data_size_bytes": 450,
+      "is_live": true,
+      "treasure_meta": {
+        "key": "szindbad.hu",
+        "created_at": "2025-11-06T19:58:24+01:00",
+        "created_by": "migrator",
+        "payload_size_bytes": 450,
+        "content_type": "VOID"
+      }
+    },
+    {
+      "index": 28,
+      "operation": "INSERT",
+      "key": "harmoniahotel.hu",
+      "data_size_bytes": 455,
+      "is_live": true,
+      "treasure_meta": {
+        "key": "harmoniahotel.hu",
+        "created_at": "2025-11-06T19:58:24+01:00",
+        "created_by": "migrator",
+        "payload_size_bytes": 455,
+        "content_type": "VOID"
+      }
+    },
+    {
+      "index": 29,
+      "operation": "INSERT",
+      "key": "borostyankert.hu",
+      "data_size_bytes": 455,
+      "is_live": true,
+      "treasure_meta": {
+        "key": "borostyankert.hu",
+        "created_at": "2025-11-06T19:58:24+01:00",
+        "created_by": "migrator",
+        "payload_size_bytes": 455,
+        "content_type": "VOID"
+      }
+    },
+    {
+      "index": 30,
+      "operation": "INSERT",
+      "key": "evergreen.hu",
+      "data_size_bytes": 451,
+      "is_live": true,
+      "treasure_meta": {
+        "key": "evergreen.hu",
+        "created_at": "2025-11-06T19:58:24+01:00",
+        "created_by": "migrator",
+        "payload_size_bytes": 451,
+        "content_type": "VOID"
+      }
+    },
+    {
+      "index": 31,
+      "operation": "INSERT",
+      "key": "nadastoparkhotel.hu",
+      "data_size_bytes": 458,
+      "is_live": true,
+      "treasure_meta": {
+        "key": "nadastoparkhotel.hu",
+        "created_at": "2025-11-06T19:58:24+01:00",
+        "created_by": "migrator",
+        "payload_size_bytes": 458,
+        "content_type": "VOID"
+      }
+    },
+    {
+      "index": 32,
+      "operation": "INSERT",
+      "key": "thermalhotelmovar.hu",
+      "data_size_bytes": 459,
+      "is_live": true,
+      "treasure_meta": {
+        "key": "thermalhotelmovar.hu",
+        "created_at": "2025-11-06T19:58:24+01:00",
+        "created_by": "migrator",
+        "payload_size_bytes": 459,
+        "content_type": "VOID"
+      }
+    },
+    {
+      "index": 33,
+      "operation": "INSERT",
+      "key": "angelinavendeghaz.hu",
+      "data_size_bytes": 459,
+      "is_live": true,
+      "treasure_meta": {
+        "key": "angelinavendeghaz.hu",
+        "created_at": "2025-11-06T19:58:24+01:00",
+        "created_by": "migrator",
+        "payload_size_bytes": 459,
+        "content_type": "VOID"
+      }
+    },
+    {
+      "index": 34,
+      "operation": "INSERT",
+      "key": "zugolyerdeihaz.hu",
+      "data_size_bytes": 456,
+      "is_live": true,
+      "treasure_meta": {
+        "key": "zugolyerdeihaz.hu",
+        "created_at": "2025-11-06T19:58:24+01:00",
+        "created_by": "migrator",
+        "payload_size_bytes": 456,
+        "content_type": "VOID"
+      }
+    },
+    {
+      "index": 35,
+      "operation": "INSERT",
+      "key": "khs.hu",
+      "data_size_bytes": 445,
+      "is_live": true,
+      "treasure_meta": {
+        "key": "khs.hu",
+        "created_at": "2025-11-06T19:58:24+01:00",
+        "created_by": "migrator",
+        "payload_size_bytes": 445,
+        "content_type": "VOID"
+      }
+    },
+    {
+      "index": 36,
+      "operation": "INSERT",
+      "key": "gunaras.hu",
+      "data_size_bytes": 449,
+      "is_live": true,
+      "treasure_meta": {
+        "key": "gunaras.hu",
+        "created_at": "2025-11-06T19:58:24+01:00",
+        "created_by": "migrator",
+        "payload_size_bytes": 449,
+        "content_type": "VOID"
+      }
+    },
+    {
+      "index": 37,
+      "operation": "INSERT",
+      "key": "solhotel.hu",
+      "data_size_bytes": 450,
+      "is_live": true,
+      "treasure_meta": {
+        "key": "solhotel.hu",
+        "created_at": "2025-11-06T19:58:24+01:00",
+        "created_by": "migrator",
+        "payload_size_bytes": 450,
+        "content_type": "VOID"
+      }
+    },
+    {
+      "index": 38,
+      "operation": "INSERT",
+      "key": "margaretaapartman.hu",
+      "data_size_bytes": 459,
+      "is_live": true,
+      "treasure_meta": {
+        "key": "margaretaapartman.hu",
+        "created_at": "2025-11-06T19:58:24+01:00",
+        "created_by": "migrator",
+        "payload_size_bytes": 459,
+        "content_type": "VOID"
+      }
+    },
+    {
+      "index": 39,
+      "operation": "INSERT",
+      "key": "thermalcamping.com",
+      "data_size_bytes": 457,
+      "is_live": true,
+      "treasure_meta": {
+        "key": "thermalcamping.com",
+        "created_at": "2025-11-06T19:58:24+01:00",
+        "created_by": "migrator",
+        "payload_size_bytes": 457,
+        "content_type": "VOID"
+      }
+    },
+    {
+      "index": 40,
+      "operation": "INSERT",
+      "key": "calimbrawellnesshotel.hu",
+      "data_size_bytes": 463,
+      "is_live": true,
+      "treasure_meta": {
+        "key": "calimbrawellnesshotel.hu",
+        "created_at": "2025-11-06T19:58:24+01:00",
+        "created_by": "migrator",
+        "payload_size_bytes": 463,
+        "content_type": "VOID"
+      }
+    },
+    {
+      "index": 41,
+      "operation": "INSERT",
+      "key": "vendvidekipihenohazak.hu",
+      "data_size_bytes": 463,
+      "is_live": true,
+      "treasure_meta": {
+        "key": "vendvidekipihenohazak.hu",
+        "created_at": "2025-11-06T19:58:24+01:00",
+        "created_by": "migrator",
+        "payload_size_bytes": 463,
+        "content_type": "VOID"
+      }
+    },
+    {
+      "index": 42,
+      "operation": "INSERT",
+      "key": "city-home.hu",
+      "data_size_bytes": 451,
+      "is_live": true,
+      "treasure_meta": {
+        "key": "city-home.hu",
+        "created_at": "2025-11-06T19:58:24+01:00",
+        "created_by": "migrator",
+        "payload_size_bytes": 451,
+        "content_type": "VOID"
+      }
+    },
+    {
+      "index": 43,
+      "operation": "INSERT",
+      "key": "corvinahotel.hu",
+      "data_size_bytes": 454,
+      "is_live": true,
+      "treasure_meta": {
+        "key": "corvinahotel.hu",
+        "created_at": "2025-11-06T19:58:24+01:00",
+        "created_by": "migrator",
+        "payload_size_bytes": 454,
+        "content_type": "VOID"
+      }
+    },
+    {
+      "index": 44,
+      "operation": "INSERT",
+      "key": "clubmendan.hu",
+      "data_size_bytes": 452,
+      "is_live": true,
+      "treasure_meta": {
+        "key": "clubmendan.hu",
+        "created_at": "2025-11-06T19:58:24+01:00",
+        "created_by": "migrator",
+        "payload_size_bytes": 452,
+        "content_type": "VOID"
+      }
+    },
+    {
+      "index": 45,
+      "operation": "INSERT",
+      "key": "hotelpagony.hu",
+      "data_size_bytes": 453,
+      "is_live": true,
+      "treasure_meta": {
+        "key": "hotelpagony.hu",
+        "created_at": "2025-11-06T19:58:24+01:00",
+        "created_by": "migrator",
+        "payload_size_bytes": 453,
+        "content_type": "VOID"
+      }
+    },
+    {
+      "index": 46,
+      "operation": "INSERT",
+      "key": "andreaapartmanheviz.hu",
+      "data_size_bytes": 461,
+      "is_live": true,
+      "treasure_meta": {
+        "key": "andreaapartmanheviz.hu",
+        "created_at": "2025-11-06T19:58:24+01:00",
+        "created_by": "migrator",
+        "payload_size_bytes": 461,
+        "content_type": "VOID"
+      }
+    },
+    {
+      "index": 47,
+      "operation": "INSERT",
+      "key": "rajnaapartman.hu",
+      "data_size_bytes": 455,
+      "is_live": true,
+      "treasure_meta": {
+        "key": "rajnaapartman.hu",
+        "created_at": "2025-11-06T19:58:24+01:00",
+        "created_by": "migrator",
+        "payload_size_bytes": 455,
+        "content_type": "VOID"
+      }
+    },
+    {
+      "index": 48,
+      "operation": "INSERT",
+      "key": "vinifera.hu",
+      "data_size_bytes": 450,
+      "is_live": true,
+      "treasure_meta": {
+        "key": "vinifera.hu",
+        "created_at": "2025-11-06T19:58:24+01:00",
+        "created_by": "migrator",
+        "payload_size_bytes": 450,
+        "content_type": "VOID"
+      }
+    },
+    {
+      "index": 49,
+      "operation": "INSERT",
+      "key": "amstelhattyu.hu",
+      "data_size_bytes": 454,
+      "is_live": true,
+      "treasure_meta": {
+        "key": "amstelhattyu.hu",
+        "created_at": "2025-11-06T19:58:24+01:00",
+        "created_by": "migrator",
+        "payload_size_bytes": 454,
+        "content_type": "VOID"
+      }
+    },
+    {
+      "index": 50,
+      "operation": "INSERT",
+      "key": "villavolgy.hu",
+      "data_size_bytes": 452,
+      "is_live": true,
+      "treasure_meta": {
+        "key": "villavolgy.hu",
+        "created_at": "2025-11-06T19:58:24+01:00",
+        "created_by": "migrator",
+        "payload_size_bytes": 452,
+        "content_type": "VOID"
+      }
+    },
+    {
+      "index": 51,
+      "operation": "INSERT",
+      "key": "levendulasarvar.hu",
+      "data_size_bytes": 457,
+      "is_live": true,
+      "treasure_meta": {
+        "key": "levendulasarvar.hu",
+        "created_at": "2025-11-06T19:58:24+01:00",
+        "created_by": "migrator",
+        "payload_size_bytes": 457,
+        "content_type": "VOID"
+      }
+    }
+  ]
+}

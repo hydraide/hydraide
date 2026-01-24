@@ -19,6 +19,7 @@ import (
 	"github.com/hydraide/hydraide/app/panichandler"
 	"github.com/hydraide/hydraide/app/server/gateway"
 	"github.com/hydraide/hydraide/app/server/observer"
+	"github.com/hydraide/hydraide/app/server/telemetry"
 	hydrapb "github.com/hydraide/hydraide/generated/hydraidepbgo"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -44,6 +45,11 @@ type Configuration struct {
 	DefaultWriteInterval  int64 // the default write interval time in seconds
 	DefaultFileSize       int64 // the default file size in bytes
 	SystemResourceLogging bool  // if true, the system resource usage is logged
+	// UseV2Engine enables the new append-only V2 storage engine.
+	// V2 is significantly faster (32-112x) and uses less storage (50%).
+	UseV2Engine bool
+	// TelemetryEnabled enables real-time telemetry collection for the observe command.
+	TelemetryEnabled bool
 }
 
 type Server interface {
@@ -63,6 +69,7 @@ type server struct {
 	grpcServer         *grpc.Server
 	zeusInterface      zeus.Zeus
 	observerInterface  observer.Observer
+	telemetryCollector telemetry.Collector
 }
 
 func New(configuration *Configuration) Server {
@@ -90,12 +97,28 @@ func (s *server) Start() error {
 	s.mu.Unlock()
 
 	settingsInterface := settings.New(maxDepth, foldersPerLevel)
+
+	// Enable V2 engine if configured
+	if s.configuration.UseV2Engine {
+		if err := settingsInterface.SetEngine(settings.EngineV2); err != nil {
+			slog.Warn("failed to set V2 engine, using V1", "error", err)
+		} else {
+			slog.Info("V2 append-only storage engine enabled")
+		}
+	}
+
 	s.zeusInterface = zeus.New(settingsInterface, filesystem.New())
 	s.zeusInterface.StartHydra()
 
 	var ctx context.Context
 	ctx, s.observerCancelFunc = context.WithCancel(context.Background())
 	s.observerInterface = observer.New(ctx, s.configuration.SystemResourceLogging)
+
+	// Initialize telemetry collector if enabled
+	if s.configuration.TelemetryEnabled {
+		s.telemetryCollector = telemetry.New(telemetry.DefaultConfig())
+		slog.Info("Telemetry collection enabled")
+	}
 
 	grpcServer := gateway.Gateway{
 		ObserverInterface:     s.observerInterface,
@@ -104,6 +127,7 @@ func (s *server) Start() error {
 		DefaultCloseAfterIdle: s.configuration.DefaultCloseAfterIdle,
 		DefaultWriteInterval:  s.configuration.DefaultWriteInterval,
 		DefaultFileSize:       s.configuration.DefaultFileSize,
+		TelemetryCollector:    s.telemetryCollector,
 	}
 
 	unaryInterceptor := func(
@@ -112,6 +136,8 @@ func (s *server) Start() error {
 		info *grpc.UnaryServerInfo,
 		handler grpc.UnaryHandler,
 	) (interface{}, error) {
+
+		startTime := time.Now()
 
 		// Get the client's IP address
 		clientIP := "unknown"
@@ -122,6 +148,33 @@ func (s *server) Start() error {
 		}
 
 		resp, err := handler(ctx, req)
+
+		// Record telemetry if enabled
+		if s.telemetryCollector != nil {
+			duration := time.Since(startTime)
+			event := telemetry.Event{
+				Timestamp:  startTime,
+				Method:     extractMethodName(info.FullMethod),
+				SwampName:  extractSwampName(req),
+				Keys:       extractKeys(req),
+				DurationUs: duration.Microseconds(),
+				Success:    err == nil,
+				ClientIP:   clientIP,
+			}
+
+			if err != nil {
+				if grpcErr, ok := status.FromError(err); ok {
+					event.ErrorCode = grpcErr.Code().String()
+					event.ErrorMsg = grpcErr.Message()
+				} else {
+					event.ErrorCode = "Unknown"
+					event.ErrorMsg = err.Error()
+				}
+			}
+
+			s.telemetryCollector.Record(event)
+		}
+
 		if err != nil {
 			// Logging GRPC Server error
 			if os.Getenv("GRPC_SERVER_ERROR_LOGGING") == "true" {
@@ -297,7 +350,87 @@ func (s *server) Stop() {
 		slog.Info("HydrAIDE server stopped gracefully. Program is exiting...")
 	}
 
+	// Close telemetry collector
+	if s.telemetryCollector != nil {
+		s.telemetryCollector.Close()
+	}
+
 	// stop the observer's monitoring process
 	s.observerCancelFunc()
 
+}
+
+// extractMethodName extracts the short method name from the full gRPC method path.
+// e.g., "/hydraidepbgo.HydraideService/Get" -> "Get"
+func extractMethodName(fullMethod string) string {
+	for i := len(fullMethod) - 1; i >= 0; i-- {
+		if fullMethod[i] == '/' {
+			return fullMethod[i+1:]
+		}
+	}
+	return fullMethod
+}
+
+// extractSwampName extracts the swamp name from various request types.
+func extractSwampName(req interface{}) string {
+	// Try common request types that have swamp information
+	switch r := req.(type) {
+	case *hydrapb.GetRequest:
+		if len(r.GetSwamps()) > 0 {
+			return formatSwampPath(r.GetSwamps()[0].GetIslandID(), r.GetSwamps()[0].GetSwampName())
+		}
+	case *hydrapb.SetRequest:
+		if len(r.GetSwamps()) > 0 {
+			return formatSwampPath(r.GetSwamps()[0].GetIslandID(), r.GetSwamps()[0].GetSwampName())
+		}
+	case *hydrapb.GetAllRequest:
+		return formatSwampPath(r.GetIslandID(), r.GetSwampName())
+	case *hydrapb.GetByIndexRequest:
+		return formatSwampPath(r.GetIslandID(), r.GetSwampName())
+	case *hydrapb.GetByKeysRequest:
+		return formatSwampPath(r.GetIslandID(), r.GetSwampName())
+	case *hydrapb.DeleteRequest:
+		if len(r.GetSwamps()) > 0 {
+			return formatSwampPath(r.GetSwamps()[0].GetIslandID(), r.GetSwamps()[0].GetSwampName())
+		}
+	case *hydrapb.RegisterSwampRequest:
+		return r.GetSwampPattern()
+	case *hydrapb.DeRegisterSwampRequest:
+		return r.GetSwampPattern()
+	}
+	return ""
+}
+
+// formatSwampPath formats the island ID and swamp name into a full path.
+func formatSwampPath(islandID uint64, swampName string) string {
+	if islandID == 0 {
+		return swampName
+	}
+	return fmt.Sprintf("%d/%s", islandID, swampName)
+}
+
+// extractKeys extracts the keys from various request types.
+func extractKeys(req interface{}) []string {
+	switch r := req.(type) {
+	case *hydrapb.GetRequest:
+		if len(r.GetSwamps()) > 0 {
+			return r.GetSwamps()[0].GetKeys()
+		}
+	case *hydrapb.SetRequest:
+		if len(r.GetSwamps()) > 0 {
+			kv := r.GetSwamps()[0].GetKeyValues()
+			keys := make([]string, 0, len(kv))
+			for _, item := range kv {
+				keys = append(keys, item.GetKey())
+			}
+			return keys
+		}
+	case *hydrapb.GetByKeysRequest:
+		return r.GetKeys()
+	case *hydrapb.DeleteRequest:
+		if len(r.GetSwamps()) > 0 {
+			return r.GetSwamps()[0].GetKeys()
+		}
+	}
+	return nil
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net"
@@ -35,6 +36,7 @@ var (
 	defaultWriteInterval  = int64(10)   // 10 seconds
 	defaultFileSize       = int64(8192) // 8 KB
 	systemResourceLogging = false
+	telemetryEnabled      = false
 	serverCrtPath         = ""
 	serverKeyPath         = ""
 	clientCaCrtPath       = ""
@@ -152,6 +154,22 @@ func init() {
 		defaultFileSize = int64(dfs)
 	}
 
+	// Telemetry is enabled via environment variable or settings.json (set by hydraidectl)
+	if os.Getenv("HYDRAIDE_TELEMETRY_ENABLED") == "true" {
+		telemetryEnabled = true
+	} else {
+		// Try to load from settings.json
+		settingsPath := filepath.Join(os.Getenv("HYDRAIDE_ROOT_PATH"), "settings", "settings.json")
+		if data, err := os.ReadFile(settingsPath); err == nil {
+			var settings struct {
+				TelemetryEnabled bool `json:"telemetry_enabled"`
+			}
+			if json.Unmarshal(data, &settings) == nil {
+				telemetryEnabled = settings.TelemetryEnabled
+			}
+		}
+	}
+
 }
 
 func main() {
@@ -254,6 +272,7 @@ func main() {
 		DefaultWriteInterval:  defaultWriteInterval,
 		DefaultFileSize:       defaultFileSize,
 		SystemResourceLogging: systemResourceLogging,
+		TelemetryEnabled:      telemetryEnabled,
 	})
 
 	if err := serverInterface.Start(); err != nil {

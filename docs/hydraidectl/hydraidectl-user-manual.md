@@ -23,9 +23,18 @@ Although `hydraidectl` is stable and production-tested, new features are under d
 * [`restart` – Restart a running or stopped instance](#restart--restart-instance)
 * [`list` – Show all registered HydrAIDE instances on the host](#list--show-all-instances)
 * [`health`– Display health of an instance](#health--instance-health)
+* [`observe` – Real-time monitoring dashboard for debugging](#observe--real-time-monitoring-dashboard)
+* [`telemetry` – Enable/disable telemetry collection](#telemetry--enabledisable-telemetry-collection)
 * [`destroy` – Fully delete an instance, optionally including all its data](#restart--restart-instance)
 * [`cert` – Generate TLS Certificates (without modifying instances)](#cert--generate-tls-certificates-without-modifying-instances)
 * [`update` – Update an Instance In‑Place](#update--update-an-instance-inplace-allinone)
+* [`migrate` – Migrate V1 storage to V2 format](#migrate--migrate-v1-storage-to-v2-format)
+* [`engine` – View or change storage engine version](#engine--view-or-change-storage-engine-version)
+* [`backup` – Create instance backup](#backup--create-instance-backup)
+* [`restore` – Restore instance from backup](#restore--restore-instance-from-backup)
+* [`size` – Show instance data size](#size--show-instance-data-size)
+* [`stats` – Show detailed swamp statistics and health report](#stats--show-detailed-swamp-statistics-and-health-report)
+* [`cleanup` – Remove old storage files](#cleanup--remove-old-storage-files)
 * [`version` – Display CLI and optional instance metadata](#version--display-cli-and-optional-instance-metadata)
 
 ---
@@ -433,6 +442,184 @@ sudo hydraidectl health --instance test
 
 ---
 
+## `observe` – Real-time Monitoring Dashboard
+
+The `observe` command provides a real-time TUI (Terminal User Interface) dashboard for monitoring all gRPC calls, errors, and client activity on a HydrAIDE server. This is essential for debugging issues like failed logins, data corruption, or performance problems.
+
+**Quick Start:**
+```bash
+# 1. Enable telemetry (required for observe to work)
+hydraidectl telemetry --instance prod --enable
+
+# 2. Start the monitoring dashboard
+hydraidectl observe --instance prod
+```
+
+**Synopsis:**
+```bash
+hydraidectl observe --instance <name> [flags]
+```
+
+**Requirements:**
+* Telemetry must be enabled on the instance
+* If telemetry is not enabled, the command will prompt you to enable it and restart the instance
+
+**Flags:**
+| Flag | Description |
+|------|-------------|
+| `--instance, -i` | Instance name (required) |
+| `--errors-only` | Only show error events |
+| `--filter` | Filter by swamp pattern (e.g., `auth/*`) |
+| `--simple` | Simple text output instead of TUI |
+| `--stats` | Show statistics only (no streaming) |
+
+**TUI Features:**
+* **Live Tab** - Real-time stream of all gRPC calls with timing and status
+* **Errors Tab** - Filtered view showing only errors
+* **Stats Tab** - Aggregated statistics (total calls, error rate, top swamps)
+* **Pause/Resume** - Press `P` to pause the stream and examine events
+* **Error Details** - Press `Enter` on any event to see full details
+
+**TUI Keyboard Shortcuts:**
+| Key | Action |
+|-----|--------|
+| `1` | Switch to Live view |
+| `2` | Switch to Errors view |
+| `3` | Switch to Stats view |
+| `P` | Pause/Resume stream |
+| `C` | Clear all events |
+| `E` | Toggle errors-only filter |
+| `↑/↓` or `j/k` | Navigate events |
+| `Enter` | View error details |
+| `Esc` | Close detail view |
+| `?` or `H` | Show help |
+| `Q` | Quit |
+
+**Examples:**
+
+Start the TUI dashboard:
+```bash
+hydraidectl observe --instance prod
+```
+
+Simple text output (for scripting or logging):
+```bash
+hydraidectl observe --instance prod --simple
+```
+
+Show only errors:
+```bash
+hydraidectl observe --instance prod --errors-only
+```
+
+Get statistics snapshot:
+```bash
+hydraidectl observe --instance prod --stats
+```
+
+Filter by swamp pattern:
+```bash
+hydraidectl observe --instance prod --filter "auth/*"
+```
+
+**Automatic Telemetry Enable:**
+
+If telemetry is not enabled, the command will prompt:
+```
+⚠️  Telemetry is not enabled on this instance.
+
+To use observe, telemetry must be enabled and the instance must be restarted.
+Enable telemetry and restart now? [y/N]: y
+✅ Telemetry enabled
+🔄 Restarting instance 'prod'...
+✅ Instance restarted
+⏳ Waiting for server to be ready...
+```
+
+**Example Output (Simple Mode):**
+```
+HydrAIDE Observe - Simple Mode
+==============================
+Streaming events... (Press Ctrl+C to stop)
+
+14:23:01.234 | Get      | user/sessions/abc123               |    2ms | OK
+14:23:01.456 | Set      | cache/products/item-x              |    1ms | OK
+14:23:01.789 | Get      | auth/tokens/xyz                    |    5ms | ERR FailedPrecondition
+         +-- decompression failed: invalid data format
+14:23:02.012 | Delete   | temp/uploads/file                  |    0ms | OK
+```
+
+---
+
+## `telemetry` – Enable/Disable Telemetry Collection
+
+The `telemetry` command controls real-time monitoring data collection on the HydrAIDE server. When enabled, the server collects detailed information about all gRPC calls, which is required for the `observe` command.
+
+**Synopsis:**
+```bash
+hydraidectl telemetry --instance <name> [--enable | --disable]
+```
+
+**What Telemetry Collects:**
+* All gRPC call details (method, swamp, duration, status)
+* Error information with categorization
+* Client connection statistics
+* Timing metrics for performance analysis
+
+**Flags:**
+| Flag | Description |
+|------|-------------|
+| `--instance, -i` | Instance name (required) |
+| `--enable` | Enable telemetry collection |
+| `--disable` | Disable telemetry collection |
+| `--json, -j` | Output as JSON |
+
+**Examples:**
+
+Check current telemetry status:
+```bash
+hydraidectl telemetry --instance prod
+# Instance:  prod
+# Telemetry: disabled
+#
+# Enable with: hydraidectl telemetry --instance prod --enable
+```
+
+Enable telemetry:
+```bash
+hydraidectl telemetry --instance prod --enable
+# ✅ Telemetry enabled
+# Restart instance now for changes to take effect? [Y/n]: y
+# 🔄 Restarting instance 'prod'...
+# ✅ Instance 'prod' restarted successfully
+```
+
+Disable telemetry:
+```bash
+hydraidectl telemetry --instance prod --disable
+# ✅ Telemetry disabled
+# Restart instance now for changes to take effect? [Y/n]: y
+# 🔄 Restarting instance 'prod'...
+# ✅ Instance 'prod' restarted successfully
+```
+
+JSON output (for scripting):
+```bash
+hydraidectl telemetry --instance prod --json
+# {
+#   "instance": "prod",
+#   "telemetry_enabled": true
+# }
+```
+
+**Performance Considerations:**
+* Telemetry has minimal performance impact (< 1% overhead)
+* Data is stored in a ring buffer (last 30 minutes)
+* No data is persisted to disk - telemetry is memory-only
+* Recommended to enable only when debugging
+
+---
+
 ## `destroy` – Remove Instance
 
 Destroys the selected instance and optionally purges its data.
@@ -525,11 +712,11 @@ hydraidectl cert
 Updates a HydrAIDE instance to the **latest available server binary**.
 If an update is available, the command performs the entire flow end‑to‑end:
 
-1. **Gracefully stop** the instance (only if it’s running)
-2. **Download** the latest server binary into the instance’s base path (with a progress bar)
+1. **Gracefully stop** the instance (only if it's running)
+2. **Download** the latest server binary into the instance's base path (with a progress bar)
 3. **Update metadata** and **(re)generate** the service definition
-4. **Start** the instance
-5. **Wait** until the instance reports **`healthy`** (or until the operation times out)
+4. **Optionally start** the instance (unless `--no-start` is used)
+5. **Wait** until the instance reports **`healthy`** (if started)
 
 If the instance is **already on the latest version**, this command is a **no‑op** (it **does not stop** the server).
 
@@ -541,21 +728,22 @@ If the instance is **already on the latest version**, this command is a **no‑o
 ### Synopsis
 
 ```bash
-hydraidectl update --instance <name>
+hydraidectl update --instance <name> [--no-start]
 ```
 
 ### Flags
 
 * `--instance` / `-i` **(required)** — the target instance name.
+* `--no-start` — update the binary without starting the server (useful before migration).
 
 ### Behavior & Timeouts
 
-* Version check: compares the instance’s recorded version with the **latest available** version.
+* Version check: compares the instance's recorded version with the **latest available** version.
 * Graceful stop: only if status is not `inactive`/`unknown`.
 * Progress: shows a **byte‑accurate progress bar** during download.
 * Service file: removes the old service definition and **generates a fresh one** for the updated binary.
-* Start: immediately starts the instance after updating.
-* Health wait: polls the instance until it becomes **`healthy`**.
+* Start: immediately starts the instance after updating (unless `--no-start` is set).
+* Health wait: polls the instance until it becomes **`healthy`** (if started).
 
     * Overall operation context timeout: **600s**
     * Controller command timeout: **20s**
@@ -564,8 +752,11 @@ hydraidectl update --instance <name>
 ### Examples
 
 ```bash
-# Update an instance named "prod"
+# Update an instance named "prod" and start it
 hydraidectl update --instance prod
+
+# Update without starting (for migration scenarios)
+sudo hydraidectl update --instance prod --no-start
 ```
 
 **Typical outputs**
@@ -583,6 +774,15 @@ hydraidectl update --instance prod
   Instance "prod" has been successfully updated to version X.Y.Z and started.
   Waiting for instance "prod" to become healthy...
   Instance "prod" is now healthy and ready for use. (Waited 7s)
+  ```
+* Successful update without start (--no-start):
+
+  ```
+  Instance "prod" stopped gracefully.
+  Downloading  45.2 MB / 45.2 MB
+  Instance "prod" has been successfully updated to version X.Y.Z.
+  The instance was NOT started (--no-start flag). Start it manually with:
+    sudo hydraidectl start --instance prod
   ```
 * Could not determine the latest version:
 
@@ -634,3 +834,360 @@ Update: vX.Y.Z available → run:
 ```
 
 Use that command to reinstall the CLI with the latest stable binary.
+
+---
+
+## `migrate` – Migrate V1 Storage to V2 Format
+
+**⚠️ IMPORTANT: Always create a full backup before migration!**
+
+Migrates HydrAIDE data from the legacy V1 multi-chunk storage format to the new V2 append-only single-file format.
+
+The V2 storage engine provides:
+- **32-112x faster** write operations
+- **50% smaller** storage footprint
+- **95% fewer** files on disk
+- **100x longer** SSD lifespan
+
+**Flags**
+- `--instance`, `-i` — Instance name (recommended, auto-handles stop/start)
+- `--data-path` — Path to HydrAIDE data directory (manual mode)
+- `--full` — Complete migration: stop → migrate → set V2 → cleanup → start
+- `--dry-run` — Simulate migration without making changes
+- `--verify` — Verify data integrity after each swamp migration
+- `--delete-old` — Delete V1 files after successful migration
+- `--parallel` — Number of parallel workers (default: 4)
+- `--json` — Output result as JSON
+
+**Examples**
+
+```bash
+# Recommended: Full automated migration
+hydraidectl backup --instance prod --target /backup/pre-migration
+hydraidectl migrate --instance prod --full
+
+# Manual migration with data path
+hydraidectl migrate --data-path /path/to/data --verify --delete-old
+
+# Dry-run to see what would be migrated
+hydraidectl migrate --instance prod --dry-run
+```
+
+---
+
+## `engine` – View or Change Storage Engine Version
+
+View or change the storage engine version for a HydrAIDE instance.
+
+**Engine Versions:**
+- **V1** — Legacy multi-chunk file storage (default, backward compatible)
+- **V2** — New append-only single-file storage (32-112x faster, 50% smaller)
+
+**⚠️ IMPORTANT:** Before switching to V2, you MUST migrate your data first!
+
+**Flags**
+- `--instance`, `-i` — Instance name (**required**)
+- `--set` — Set engine version (`V1` or `V2`)
+- `--json`, `-j` — Output as JSON
+
+**Examples**
+
+```bash
+# View current engine
+hydraidectl engine --instance prod
+
+# Switch to V2 (after migration)
+hydraidectl engine --instance prod --set V2
+
+# Switch back to V1 (after restore)
+hydraidectl engine --instance prod --set V1
+```
+
+---
+
+## `backup` – Create Instance Backup
+
+Create a backup of HydrAIDE instance data.
+
+**Behavior:**
+- The instance is automatically stopped before backup (unless `--no-stop` is used)
+- After backup completes, the instance is **NOT** restarted automatically
+- You must manually start the instance when ready
+
+**Flags**
+- `--instance`, `-i` — Instance name (**required**)
+- `--target`, `-t` — Target backup path (**required**)
+- `--compress` — Compress backup as tar.gz
+- `--no-stop` — Don't stop instance (warning: data may be inconsistent)
+
+**Examples**
+
+```bash
+# Simple backup
+sudo hydraidectl backup --instance prod --target /backup/hydraide-20260121
+
+# Compressed backup
+sudo hydraidectl backup --instance prod --target /backup/hydraide.tar.gz --compress
+
+# Start the instance after backup
+sudo hydraidectl start --instance prod
+```
+
+---
+
+## `restore` – Restore Instance from Backup
+
+Restore HydrAIDE instance data from a backup.
+
+**⚠️ WARNING:** This will REPLACE all current data!
+
+**Behavior:**
+- The instance is automatically stopped before restore
+- After restore completes, the instance is **NOT** restarted automatically
+- You must manually start the instance when ready
+
+**Flags**
+- `--instance`, `-i` — Instance name (**required**)
+- `--source`, `-s` — Source backup path (**required**)
+- `--force` — Skip confirmation prompt
+
+**Examples**
+
+```bash
+# Restore from directory
+sudo hydraidectl restore --instance prod --source /backup/hydraide-20260121
+
+# Restore from tar.gz
+sudo hydraidectl restore --instance prod --source /backup/hydraide.tar.gz
+
+# Start the instance after restore
+sudo hydraidectl start --instance prod
+```
+
+---
+
+## `size` – Show Instance Data Size
+
+Show size of HydrAIDE instance data with V1/V2 breakdown.
+
+**Flags**
+- `--instance`, `-i` — Instance name (**required**)
+- `--detailed` — Show top 10 largest swamps
+- `--json`, `-j` — Output as JSON
+
+**Examples**
+
+```bash
+# Basic size info
+hydraidectl size --instance prod
+
+# Detailed view with top swamps
+hydraidectl size --instance prod --detailed
+```
+
+**Output Example:**
+
+```
+HydrAIDE Instance: prod
+========================================
+Data Path:   /var/hydraide/data
+Total Size:  45.23 MB
+Total Files: 1234
+
+V1 Files:    0 (0.00 MB)
+V2 Files:    50 (45.23 MB)
+
+Top 10 Largest Swamps:
+   1. words/index                    15.32 MB
+   2. domains/metadata               8.45 MB
+   ...
+```
+
+---
+
+## `stats` – Show Detailed Swamp Statistics and Health Report
+
+Analyzes all V2 swamps in a HydrAIDE instance and provides comprehensive statistics including fragmentation levels, compaction recommendations, and size information.
+
+**Flags**
+- `--instance`, `-i` — Instance name (**required**)
+- `--json`, `-j` — Output as JSON format
+- `--latest`, `-l` — Show the last saved report instead of running a new scan
+- `--parallel`, `-p` — Number of parallel workers (default: 4)
+
+**Examples**
+
+```bash
+# Run a full scan and display report
+hydraidectl stats --instance prod
+
+# Output as JSON (useful for automation)
+hydraidectl stats --instance prod --json
+
+# Show the last saved report (no new scan)
+hydraidectl stats --instance prod --latest
+
+# Use 8 parallel workers for faster scanning
+hydraidectl stats --instance prod --parallel 8
+```
+
+**Output Example:**
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  💠 HydrAIDE Swamp Statistics - prod
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📊 SUMMARY
+────────────────────────────────────────────────────────────
+  Total Database Size              │ 1.25 GB
+  Total Swamps                     │ 1234
+  Total Live Records               │ 456.7K
+  Total Entries (incl. deleted)    │ 512.3K
+  Dead Entries                     │ 55.6K
+  Avg Records/Swamp                │ 370.1
+  Median Records/Swamp             │ 245
+  Avg Swamp Size                   │ 1.04 MB
+  Scan Duration                    │ 2.345s
+
+🔧 FRAGMENTATION & COMPACTION
+────────────────────────────────────────────────────────────
+  Average Fragmentation            │ ✅ 10.8%
+  Swamps Needing Compaction        │ 23 (>20% fragmented)
+  Estimated Reclaimable Space      │ 45.67 MB
+
+📅 TIMELINE
+────────────────────────────────────────────────────────────
+  Oldest Swamp                     │ words/common (2024-01-15 10:30)
+  Newest Swamp                     │ analytics/events (2026-01-22 14:45)
+
+📦 TOP 10 LARGEST SWAMPS
+────────────────────────────────────────────────────────────
+  #    Swamp                                Size       Records
+────────────────────────────────────────────────────────────
+  1    words/index                       15.32 MB      45.2K
+  2    domains/metadata                   8.45 MB      12.1K
+  ...
+
+⚡ TOP 10 MOST FRAGMENTED SWAMPS
+────────────────────────────────────────────────────────────
+  #    Swamp                          Frag%      Dead      Live  Compact?
+────────────────────────────────────────────────────────────
+  1    temp/cache                      65.2%      1234       567  ⚠️
+  2    sessions/expired                45.8%       890       321  ⚠️
+  ...
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Generated: 2026-01-22T15:30:45+01:00
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💡 RECOMMENDATIONS
+────────────────────────────────────────────────────────────
+   23 swamp(s) have >20% fragmentation.
+   Estimated 45.67 MB can be reclaimed with compaction.
+```
+
+**Report Storage:**
+
+The stats command automatically saves reports to `<instance_base_path>/.hydraide/stats-report-latest.json`. Use `--latest` to quickly view the last report without rescanning.
+
+**Understanding Fragmentation:**
+
+- **0-20%**: ✅ Healthy - No action needed
+- **20-50%**: ⚠️ Moderate - Consider compaction
+- **50%+**: 🔴 High - Compaction recommended
+
+Fragmentation occurs when records are updated or deleted. Dead entries remain in the file until compaction reclaims the space.
+
+---
+
+## `cleanup` – Remove Old Storage Files
+
+Remove old V1 or V2 files after migration or rollback.
+
+**Flags**
+- `--instance`, `-i` — Instance name (**required**)
+- `--v1-files` — Remove V1 chunk files/folders
+- `--v2-files` — Remove V2 .hyd files
+- `--dry-run` — Show what would be deleted without deleting
+
+**Examples**
+
+```bash
+# Dry-run to see what would be deleted
+hydraidectl cleanup --instance prod --v1-files --dry-run
+
+# Remove V1 files after V2 migration
+hydraidectl cleanup --instance prod --v1-files
+
+# Remove V2 files after rollback to V1
+hydraidectl cleanup --instance prod --v2-files
+```
+
+---
+
+## Complete V2 Migration Workflow
+
+Here's the recommended step-by-step workflow for safely migrating to V2 storage:
+
+### Pre-Migration Checklist
+
+Before starting, ensure:
+- ✅ You have the latest `hydraidectl` installed
+- ✅ You have sufficient disk space for backup
+- ✅ No critical operations are running
+
+### Step-by-Step Migration
+
+```bash
+# 1. Check for hydraidectl updates
+hydraidectl version
+
+# 2. Update hydraidectl if needed
+curl -sSfL https://raw.githubusercontent.com/hydraide/hydraide/main/scripts/install-hydraidectl.sh | bash
+
+# 3. Stop the HydrAIDE server
+sudo hydraidectl stop --instance prod
+
+# 4. Create a compressed backup of your data
+sudo hydraidectl backup --instance prod --output /backup/pre-migration --compress
+
+# 5. Update the server WITHOUT starting it
+sudo hydraidectl update --instance prod --no-start
+
+# 6. Run the full migration
+sudo hydraidectl migrate --instance prod --full
+
+# 7. Verify migration results (check the output above for any errors)
+hydraidectl size --instance prod
+
+# 8. Start the server manually after verification
+sudo hydraidectl start --instance prod
+
+# 9. Check server health
+hydraidectl health --instance prod
+```
+
+### Why This Order?
+
+1. **Stop first** - Ensures no data is being written during backup or migration
+2. **Backup before update** - Your backup contains the current working version
+3. **Update with --no-start** - Gets latest server binary without starting
+4. **Migrate** - Converts V1 data to V2 format
+5. **Manual start** - Gives you control to verify before starting
+
+**Rollback procedure:**
+
+```bash
+# 1. Stop instance
+hydraidectl stop --instance prod
+
+# 2. Restore from backup
+hydraidectl restore --instance prod --source /backup/pre-migration.tar.gz
+
+# 3. Set engine back to V1
+hydraidectl engine --instance prod --set V1
+
+# 4. Start instance
+hydraidectl start --instance prod
+```

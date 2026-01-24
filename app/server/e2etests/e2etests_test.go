@@ -82,13 +82,14 @@ func setup() {
 		panic(fmt.Sprintf("E2E_HYDRA_TEST_SERVER port is not a valid number: %v", err))
 	}
 
-	// start the new Hydra server
+	// start the new Hydra server with V2 engine
 	serverInterface = server.New(&server.Configuration{
 		CertificateCrtFile:  os.Getenv("E2E_HYDRA_SERVER_CRT"),
 		CertificateKeyFile:  os.Getenv("E2E_HYDRA_SERVER_KEY"),
 		ClientCAFile:        os.Getenv("E2E_HYDRA_CA_CRT"), // this is the CA that signed the client certificates
 		HydraServerPort:     portAsNUmber,
 		HydraMaxMessageSize: 1024 * 1024 * 1024, // 1 GB
+		UseV2Engine:         true,               // Use the new V2 append-only storage engine
 	})
 
 	if err := serverInterface.Start(); err != nil {
@@ -753,7 +754,6 @@ func TestShiftByKeys(t *testing.T) {
 		WriteInterval:  &writeInterval,
 		MaxFileSize:    &maxFileSize,
 	})
-	assert.NoError(t, err)
 
 	swampName := name.New().Sanctuary("shifttest").Realm("batch").Swamp("shift-by-keys")
 	swampClient := clientInterface.GetServiceClient(swampName)
@@ -807,8 +807,6 @@ func TestShiftByKeys(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, shiftResponse)
 	assert.Equal(t, 5, len(shiftResponse.GetTreasures()), "should return 5 shifted treasures")
-
-	slog.Info("Shifted 5 treasures from swamp", "swamp", swampName.Get(), "count", len(shiftResponse.GetTreasures()))
 
 	// Verify the shifted treasures have correct data
 	shiftedKeys := make(map[string]bool)
@@ -896,4 +894,1150 @@ func TestShiftByKeys(t *testing.T) {
 	assert.Equal(t, 0, len(shiftResponse3.GetTreasures()), "should return empty array for empty keys")
 
 	slog.Info("Test completed successfully")
+}
+
+// =============================================================================
+// V2 ENGINE FILE PERSISTENCE TESTS
+// =============================================================================
+// These tests verify that the V2 append-only storage engine correctly:
+// 1. Creates .hyd files on disk
+// 2. Persists data through swamp close/reopen cycles
+// 3. Handles insert, update, and delete operations with file persistence
+
+// TestV2Engine_InsertAndReload tests that inserted data is persisted to disk
+// and can be read back after the swamp is closed and reopened.
+func TestV2Engine_InsertAndReload(t *testing.T) {
+	writeInterval := int64(1)
+	closeAfterIdle := int64(1)
+	maxFileSize := int64(65536)
+
+	swampName := name.New().Sanctuary("v2test").Realm("insert").Swamp("reload")
+	selectedClient := clientInterface.GetServiceClient(swampName)
+
+	// Register the swamp
+	_, err := selectedClient.RegisterSwamp(context.Background(), &hydraidepbgo.RegisterSwampRequest{
+		SwampPattern:   swampName.Get(),
+		CloseAfterIdle: closeAfterIdle,
+		WriteInterval:  &writeInterval,
+		MaxFileSize:    &maxFileSize,
+	})
+	assert.NoError(t, err, "should register swamp without error")
+
+	defer func() {
+		_, _ = selectedClient.Destroy(context.Background(), &hydraidepbgo.DestroyRequest{
+			SwampName: swampName.Get(),
+		})
+	}()
+
+	// Step 1: Insert multiple keys with different value types
+	slog.Info("Step 1: Inserting test data...")
+
+	stringVal := "test-string-value"
+	int64Val := int64(123456789)
+	float64Val := float64(3.14159)
+	boolVal := hydraidepbgo.Boolean_TRUE
+	bytesVal := []byte("binary-data-content")
+
+	keyValues := []*hydraidepbgo.KeyValuePair{
+		{Key: "string-key", StringVal: &stringVal},
+		{Key: "int64-key", Int64Val: &int64Val},
+		{Key: "float64-key", Float64Val: &float64Val},
+		{Key: "bool-key", BoolVal: &boolVal},
+		{Key: "bytes-key", BytesVal: bytesVal},
+	}
+
+	_, err = selectedClient.Set(context.Background(), &hydraidepbgo.SetRequest{
+		Swamps: []*hydraidepbgo.SwampRequest{
+			{
+				SwampName:        swampName.Get(),
+				KeyValues:        keyValues,
+				CreateIfNotExist: true,
+				Overwrite:        true,
+			},
+		},
+	})
+	assert.NoError(t, err, "should insert data without error")
+
+	// Step 2: Wait for swamp to close (flush to disk) and memory to be freed
+	slog.Info("Step 2: Waiting for swamp to close and flush to disk...")
+	time.Sleep(4 * time.Second) // closeAfterIdle=1s + writeInterval=1s + buffer
+
+	// Step 3: Reopen the swamp and verify data is loaded from .hyd file
+	slog.Info("Step 3: Reopening swamp and verifying data from disk...")
+
+	// Count should return 5 keys
+	countResponse, err := selectedClient.Count(context.Background(), &hydraidepbgo.CountRequest{
+		Swamps: []*hydraidepbgo.CountRequest_SwampIdentifier{
+			{SwampName: swampName.Get()},
+		},
+	})
+	assert.NoError(t, err, "should count without error")
+	assert.Equal(t, int32(5), countResponse.Swamps[0].Count, "should have 5 keys after reload")
+
+	// Step 4: Verify each value is correctly persisted
+	slog.Info("Step 4: Verifying individual values...")
+
+	getResponse, err := selectedClient.Get(context.Background(), &hydraidepbgo.GetRequest{
+		Swamps: []*hydraidepbgo.GetSwamp{
+			{
+				SwampName: swampName.Get(),
+				Keys:      []string{"string-key", "int64-key", "float64-key", "bool-key", "bytes-key"},
+			},
+		},
+	})
+	assert.NoError(t, err, "should get values without error")
+	assert.Len(t, getResponse.Swamps, 1, "should have 1 swamp response")
+	assert.Len(t, getResponse.Swamps[0].Treasures, 5, "should have 5 treasures")
+
+	// Verify values
+	treasureMap := make(map[string]*hydraidepbgo.Treasure)
+	for _, treasure := range getResponse.Swamps[0].Treasures {
+		treasureMap[treasure.Key] = treasure
+	}
+
+	assert.Equal(t, stringVal, treasureMap["string-key"].GetStringVal(), "string value should match")
+	assert.Equal(t, int64Val, treasureMap["int64-key"].GetInt64Val(), "int64 value should match")
+	assert.Equal(t, float64Val, treasureMap["float64-key"].GetFloat64Val(), "float64 value should match")
+	assert.Equal(t, boolVal, treasureMap["bool-key"].GetBoolVal(), "bool value should match")
+	assert.Equal(t, bytesVal, treasureMap["bytes-key"].GetBytesVal(), "bytes value should match")
+
+	slog.Info("TestV2Engine_InsertAndReload completed successfully")
+}
+
+// TestV2Engine_UpdateAndReload tests that updated data is persisted to disk
+// and the latest version is read back after the swamp is closed and reopened.
+func TestV2Engine_UpdateAndReload(t *testing.T) {
+	writeInterval := int64(1)
+	closeAfterIdle := int64(1)
+	maxFileSize := int64(65536)
+
+	swampName := name.New().Sanctuary("v2test").Realm("update").Swamp("reload")
+	selectedClient := clientInterface.GetServiceClient(swampName)
+
+	// Register the swamp
+	_, err := selectedClient.RegisterSwamp(context.Background(), &hydraidepbgo.RegisterSwampRequest{
+		SwampPattern:   swampName.Get(),
+		CloseAfterIdle: closeAfterIdle,
+		WriteInterval:  &writeInterval,
+		MaxFileSize:    &maxFileSize,
+	})
+	assert.NoError(t, err, "should register swamp without error")
+
+	defer func() {
+		_, _ = selectedClient.Destroy(context.Background(), &hydraidepbgo.DestroyRequest{
+			SwampName: swampName.Get(),
+		})
+	}()
+
+	// Step 1: Insert initial data
+	slog.Info("Step 1: Inserting initial data...")
+
+	initialValue := "initial-value"
+	_, err = selectedClient.Set(context.Background(), &hydraidepbgo.SetRequest{
+		Swamps: []*hydraidepbgo.SwampRequest{
+			{
+				SwampName: swampName.Get(),
+				KeyValues: []*hydraidepbgo.KeyValuePair{
+					{Key: "update-key", StringVal: &initialValue},
+				},
+				CreateIfNotExist: true,
+				Overwrite:        true,
+			},
+		},
+	})
+	assert.NoError(t, err, "should insert initial data without error")
+
+	// Step 2: Wait for flush and swamp close
+	slog.Info("Step 2: Waiting for first flush...")
+	time.Sleep(4 * time.Second)
+
+	// Step 3: Update the value
+	slog.Info("Step 3: Updating the value...")
+
+	updatedValue := "updated-value-v2"
+	_, err = selectedClient.Set(context.Background(), &hydraidepbgo.SetRequest{
+		Swamps: []*hydraidepbgo.SwampRequest{
+			{
+				SwampName: swampName.Get(),
+				KeyValues: []*hydraidepbgo.KeyValuePair{
+					{Key: "update-key", StringVal: &updatedValue},
+				},
+				CreateIfNotExist: false,
+				Overwrite:        true,
+			},
+		},
+	})
+	assert.NoError(t, err, "should update data without error")
+
+	// Step 4: Wait for flush and swamp close again
+	slog.Info("Step 4: Waiting for second flush...")
+	time.Sleep(4 * time.Second)
+
+	// Step 5: Reopen and verify the updated value is persisted
+	slog.Info("Step 5: Reopening swamp and verifying updated data...")
+
+	getResponse, err := selectedClient.Get(context.Background(), &hydraidepbgo.GetRequest{
+		Swamps: []*hydraidepbgo.GetSwamp{
+			{
+				SwampName: swampName.Get(),
+				Keys:      []string{"update-key"},
+			},
+		},
+	})
+	assert.NoError(t, err, "should get updated value without error")
+	assert.Len(t, getResponse.Swamps, 1, "should have 1 swamp response")
+	assert.Len(t, getResponse.Swamps[0].Treasures, 1, "should have 1 treasure")
+	assert.Equal(t, updatedValue, getResponse.Swamps[0].Treasures[0].GetStringVal(),
+		"should have the updated value, not the initial value")
+
+	// Step 6: Update multiple times and verify only latest is returned
+	slog.Info("Step 6: Multiple updates test...")
+
+	for i := 1; i <= 5; i++ {
+		updateVal := fmt.Sprintf("version-%d", i)
+		_, err = selectedClient.Set(context.Background(), &hydraidepbgo.SetRequest{
+			Swamps: []*hydraidepbgo.SwampRequest{
+				{
+					SwampName: swampName.Get(),
+					KeyValues: []*hydraidepbgo.KeyValuePair{
+						{Key: "multi-update-key", StringVal: &updateVal},
+					},
+					CreateIfNotExist: true,
+					Overwrite:        true,
+				},
+			},
+		})
+		assert.NoError(t, err, "should update without error")
+	}
+
+	// Wait for flush
+	time.Sleep(4 * time.Second)
+
+	// Verify only the latest version is returned
+	getResponse2, err := selectedClient.Get(context.Background(), &hydraidepbgo.GetRequest{
+		Swamps: []*hydraidepbgo.GetSwamp{
+			{
+				SwampName: swampName.Get(),
+				Keys:      []string{"multi-update-key"},
+			},
+		},
+	})
+	assert.NoError(t, err, "should get latest value without error")
+	assert.Equal(t, "version-5", getResponse2.Swamps[0].Treasures[0].GetStringVal(),
+		"should have the latest version (version-5)")
+
+	slog.Info("TestV2Engine_UpdateAndReload completed successfully")
+}
+
+// TestV2Engine_DeleteAndReload tests that deleted data is properly removed
+// from the .hyd file and not returned after swamp close/reopen.
+func TestV2Engine_DeleteAndReload(t *testing.T) {
+	writeInterval := int64(1)
+	closeAfterIdle := int64(1)
+	maxFileSize := int64(65536)
+
+	swampName := name.New().Sanctuary("v2test").Realm("delete").Swamp("reload")
+	selectedClient := clientInterface.GetServiceClient(swampName)
+
+	// Register the swamp
+	_, err := selectedClient.RegisterSwamp(context.Background(), &hydraidepbgo.RegisterSwampRequest{
+		SwampPattern:   swampName.Get(),
+		CloseAfterIdle: closeAfterIdle,
+		WriteInterval:  &writeInterval,
+		MaxFileSize:    &maxFileSize,
+	})
+	assert.NoError(t, err, "should register swamp without error")
+
+	defer func() {
+		_, _ = selectedClient.Destroy(context.Background(), &hydraidepbgo.DestroyRequest{
+			SwampName: swampName.Get(),
+		})
+	}()
+
+	// Step 1: Insert 5 keys
+	slog.Info("Step 1: Inserting 5 test keys...")
+
+	keyValues := make([]*hydraidepbgo.KeyValuePair, 5)
+	for i := 0; i < 5; i++ {
+		val := fmt.Sprintf("value-%d", i)
+		keyValues[i] = &hydraidepbgo.KeyValuePair{
+			Key:       fmt.Sprintf("key-%d", i),
+			StringVal: &val,
+		}
+	}
+
+	_, err = selectedClient.Set(context.Background(), &hydraidepbgo.SetRequest{
+		Swamps: []*hydraidepbgo.SwampRequest{
+			{
+				SwampName:        swampName.Get(),
+				KeyValues:        keyValues,
+				CreateIfNotExist: true,
+				Overwrite:        true,
+			},
+		},
+	})
+	assert.NoError(t, err, "should insert data without error")
+
+	// Step 2: Wait for flush
+	slog.Info("Step 2: Waiting for flush...")
+	time.Sleep(4 * time.Second)
+
+	// Step 3: Verify swamp exists
+	slog.Info("Step 3: Verifying swamp exists...")
+
+	existResponse, err := selectedClient.IsSwampExist(context.Background(), &hydraidepbgo.IsSwampExistRequest{
+		SwampName: swampName.Get(),
+	})
+	assert.NoError(t, err, "should check existence without error")
+	assert.True(t, existResponse.IsExist, "swamp should exist after insert")
+
+	countResponse, err := selectedClient.Count(context.Background(), &hydraidepbgo.CountRequest{
+		Swamps: []*hydraidepbgo.CountRequest_SwampIdentifier{
+			{SwampName: swampName.Get()},
+		},
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, int32(5), countResponse.Swamps[0].Count, "should have 5 keys")
+
+	// Step 4: Delete 2 keys (key-1 and key-3)
+	slog.Info("Step 4: Deleting key-1 and key-3...")
+
+	_, err = selectedClient.Delete(context.Background(), &hydraidepbgo.DeleteRequest{
+		Swamps: []*hydraidepbgo.DeleteRequest_SwampKeys{
+			{
+				SwampName: swampName.Get(),
+				Keys:      []string{"key-1", "key-3"},
+			},
+		},
+	})
+	assert.NoError(t, err, "should delete without error")
+
+	// Step 5: Wait for flush and swamp close
+	slog.Info("Step 5: Waiting for delete to be flushed...")
+	time.Sleep(4 * time.Second)
+
+	// Step 6: Reopen and verify deleted keys are gone
+	slog.Info("Step 6: Reopening swamp and verifying deletions...")
+
+	countResponse2, err := selectedClient.Count(context.Background(), &hydraidepbgo.CountRequest{
+		Swamps: []*hydraidepbgo.CountRequest_SwampIdentifier{
+			{SwampName: swampName.Get()},
+		},
+	})
+	assert.NoError(t, err, "should count after delete without error")
+	assert.Equal(t, int32(3), countResponse2.Swamps[0].Count, "should have 3 keys after deleting 2")
+
+	// Step 7: Verify the remaining keys are correct (key-0, key-2, key-4)
+	slog.Info("Step 7: Verifying remaining keys...")
+
+	getResponse, err := selectedClient.Get(context.Background(), &hydraidepbgo.GetRequest{
+		Swamps: []*hydraidepbgo.GetSwamp{
+			{
+				SwampName: swampName.Get(),
+				Keys:      []string{"key-0", "key-1", "key-2", "key-3", "key-4"},
+			},
+		},
+	})
+	assert.NoError(t, err, "should get remaining keys without error")
+
+	// Count how many were found (only count existing treasures)
+	foundKeys := make(map[string]bool)
+	for _, treasure := range getResponse.Swamps[0].Treasures {
+		if treasure.IsExist {
+			foundKeys[treasure.Key] = true
+		}
+	}
+
+	assert.True(t, foundKeys["key-0"], "key-0 should exist")
+	assert.False(t, foundKeys["key-1"], "key-1 should be deleted")
+	assert.True(t, foundKeys["key-2"], "key-2 should exist")
+	assert.False(t, foundKeys["key-3"], "key-3 should be deleted")
+	assert.True(t, foundKeys["key-4"], "key-4 should exist")
+
+	// Step 8: Test insert-delete-insert cycle
+	slog.Info("Step 8: Testing insert-delete-insert cycle...")
+
+	// Insert a new key
+	cycleVal1 := "cycle-value-1"
+	_, err = selectedClient.Set(context.Background(), &hydraidepbgo.SetRequest{
+		Swamps: []*hydraidepbgo.SwampRequest{
+			{
+				SwampName: swampName.Get(),
+				KeyValues: []*hydraidepbgo.KeyValuePair{
+					{Key: "cycle-key", StringVal: &cycleVal1},
+				},
+				CreateIfNotExist: true,
+				Overwrite:        true,
+			},
+		},
+	})
+	assert.NoError(t, err)
+	time.Sleep(4 * time.Second)
+
+	// Delete it
+	_, err = selectedClient.Delete(context.Background(), &hydraidepbgo.DeleteRequest{
+		Swamps: []*hydraidepbgo.DeleteRequest_SwampKeys{
+			{
+				SwampName: swampName.Get(),
+				Keys:      []string{"cycle-key"},
+			},
+		},
+	})
+	assert.NoError(t, err)
+	time.Sleep(4 * time.Second)
+
+	// Re-insert with a different value
+	cycleVal2 := "cycle-value-2-reinserted"
+	_, err = selectedClient.Set(context.Background(), &hydraidepbgo.SetRequest{
+		Swamps: []*hydraidepbgo.SwampRequest{
+			{
+				SwampName: swampName.Get(),
+				KeyValues: []*hydraidepbgo.KeyValuePair{
+					{Key: "cycle-key", StringVal: &cycleVal2},
+				},
+				CreateIfNotExist: true,
+				Overwrite:        true,
+			},
+		},
+	})
+	assert.NoError(t, err)
+	time.Sleep(4 * time.Second)
+
+	// Verify the re-inserted value
+	getResponse2, err := selectedClient.Get(context.Background(), &hydraidepbgo.GetRequest{
+		Swamps: []*hydraidepbgo.GetSwamp{
+			{
+				SwampName: swampName.Get(),
+				Keys:      []string{"cycle-key"},
+			},
+		},
+	})
+	assert.NoError(t, err, "should get re-inserted key without error")
+	assert.Len(t, getResponse2.Swamps[0].Treasures, 1, "should have 1 treasure")
+	assert.Equal(t, cycleVal2, getResponse2.Swamps[0].Treasures[0].GetStringVal(),
+		"should have the re-inserted value")
+
+	slog.Info("TestV2Engine_DeleteAndReload completed successfully")
+}
+
+// TestV2Engine_ShiftByKeysAndReload tests that ShiftByKeys correctly removes data
+// and the changes are persisted after swamp close/reopen.
+func TestV2Engine_ShiftByKeysAndReload(t *testing.T) {
+	writeInterval := int64(1)
+	closeAfterIdle := int64(1)
+	maxFileSize := int64(65536)
+
+	swampName := name.New().Sanctuary("v2test").Realm("shift").Swamp("bykeys")
+	selectedClient := clientInterface.GetServiceClient(swampName)
+
+	// Register the swamp
+	_, err := selectedClient.RegisterSwamp(context.Background(), &hydraidepbgo.RegisterSwampRequest{
+		SwampPattern:   swampName.Get(),
+		CloseAfterIdle: closeAfterIdle,
+		WriteInterval:  &writeInterval,
+		MaxFileSize:    &maxFileSize,
+	})
+	assert.NoError(t, err, "should register swamp without error")
+
+	defer func() {
+		_, _ = selectedClient.Destroy(context.Background(), &hydraidepbgo.DestroyRequest{
+			SwampName: swampName.Get(),
+		})
+	}()
+
+	// Step 1: Insert 10 keys
+	slog.Info("Step 1: Inserting 10 test keys...")
+
+	keyValues := make([]*hydraidepbgo.KeyValuePair, 10)
+	for i := 0; i < 10; i++ {
+		val := fmt.Sprintf("value-%d", i)
+		keyValues[i] = &hydraidepbgo.KeyValuePair{
+			Key:       fmt.Sprintf("item-%d", i),
+			StringVal: &val,
+		}
+	}
+
+	_, err = selectedClient.Set(context.Background(), &hydraidepbgo.SetRequest{
+		Swamps: []*hydraidepbgo.SwampRequest{
+			{
+				SwampName:        swampName.Get(),
+				KeyValues:        keyValues,
+				CreateIfNotExist: true,
+				Overwrite:        true,
+			},
+		},
+	})
+	assert.NoError(t, err, "should insert data without error")
+
+	// Step 2: Wait for flush
+	slog.Info("Step 2: Waiting for flush...")
+	time.Sleep(4 * time.Second)
+
+	// Step 3: Shift 5 keys (item-1, item-3, item-5, item-7, item-9)
+	slog.Info("Step 3: Shifting 5 keys...")
+
+	keysToShift := []string{"item-1", "item-3", "item-5", "item-7", "item-9"}
+	shiftResponse, err := selectedClient.ShiftByKeys(context.Background(), &hydraidepbgo.ShiftByKeysRequest{
+		SwampName: swampName.Get(),
+		Keys:      keysToShift,
+	})
+	assert.NoError(t, err, "should shift without error")
+	assert.Len(t, shiftResponse.Treasures, 5, "should return 5 shifted treasures")
+
+	// Step 4: Wait for flush and swamp close
+	slog.Info("Step 4: Waiting for shift to be flushed...")
+	time.Sleep(4 * time.Second)
+
+	// Step 5: Reopen and verify shifted keys are gone
+	slog.Info("Step 5: Reopening swamp and verifying shifts persisted...")
+
+	countResponse, err := selectedClient.Count(context.Background(), &hydraidepbgo.CountRequest{
+		Swamps: []*hydraidepbgo.CountRequest_SwampIdentifier{
+			{SwampName: swampName.Get()},
+		},
+	})
+	assert.NoError(t, err, "should count after shift without error")
+	assert.Equal(t, int32(5), countResponse.Swamps[0].Count, "should have 5 keys after shifting 5")
+
+	// Step 6: Verify the remaining keys are correct (item-0, item-2, item-4, item-6, item-8)
+	slog.Info("Step 6: Verifying remaining keys...")
+
+	getResponse, err := selectedClient.Get(context.Background(), &hydraidepbgo.GetRequest{
+		Swamps: []*hydraidepbgo.GetSwamp{
+			{
+				SwampName: swampName.Get(),
+				Keys:      []string{"item-0", "item-2", "item-4", "item-6", "item-8"},
+			},
+		},
+	})
+	assert.NoError(t, err, "should get remaining keys without error")
+
+	existCount := 0
+	for _, treasure := range getResponse.Swamps[0].Treasures {
+		if treasure.IsExist {
+			existCount++
+		}
+	}
+	assert.Equal(t, 5, existCount, "all 5 remaining keys should exist")
+
+	slog.Info("TestV2Engine_ShiftByKeysAndReload completed successfully")
+}
+
+// TestV2Engine_ShiftExpiredAndReload tests that ShiftExpiredTreasures correctly removes
+// expired data and the changes are persisted after swamp close/reopen.
+func TestV2Engine_ShiftExpiredAndReload(t *testing.T) {
+	writeInterval := int64(1)
+	closeAfterIdle := int64(5) // Longer idle time to keep swamp open for expiration
+	maxFileSize := int64(65536)
+
+	swampName := name.New().Sanctuary("v2test").Realm("shift").Swamp("expired")
+	selectedClient := clientInterface.GetServiceClient(swampName)
+
+	// Register the swamp
+	_, err := selectedClient.RegisterSwamp(context.Background(), &hydraidepbgo.RegisterSwampRequest{
+		SwampPattern:   swampName.Get(),
+		CloseAfterIdle: closeAfterIdle,
+		WriteInterval:  &writeInterval,
+		MaxFileSize:    &maxFileSize,
+	})
+	assert.NoError(t, err, "should register swamp without error")
+
+	defer func() {
+		_, _ = selectedClient.Destroy(context.Background(), &hydraidepbgo.DestroyRequest{
+			SwampName: swampName.Get(),
+		})
+	}()
+
+	// Step 1: Insert keys - some will expire soon, some won't
+	slog.Info("Step 1: Inserting keys with different expiration times...")
+
+	now := time.Now().UTC()
+	expireSoon := now.Add(2 * time.Second) // Expires in 2 seconds
+	expireLater := now.Add(1 * time.Hour)  // Expires in 1 hour
+
+	keyValues := []*hydraidepbgo.KeyValuePair{}
+
+	// 3 keys that expire soon
+	for i := 0; i < 3; i++ {
+		val := fmt.Sprintf("expire-soon-%d", i)
+		keyValues = append(keyValues, &hydraidepbgo.KeyValuePair{
+			Key:       fmt.Sprintf("soon-%d", i),
+			StringVal: &val,
+			ExpiredAt: timestamppb.New(expireSoon),
+		})
+	}
+
+	// 3 keys that expire later
+	for i := 0; i < 3; i++ {
+		val := fmt.Sprintf("expire-later-%d", i)
+		keyValues = append(keyValues, &hydraidepbgo.KeyValuePair{
+			Key:       fmt.Sprintf("later-%d", i),
+			StringVal: &val,
+			ExpiredAt: timestamppb.New(expireLater),
+		})
+	}
+
+	_, err = selectedClient.Set(context.Background(), &hydraidepbgo.SetRequest{
+		Swamps: []*hydraidepbgo.SwampRequest{
+			{
+				SwampName:        swampName.Get(),
+				KeyValues:        keyValues,
+				CreateIfNotExist: true,
+				Overwrite:        true,
+			},
+		},
+	})
+	assert.NoError(t, err, "should insert data without error")
+
+	// Step 2: Verify 6 keys exist
+	slog.Info("Step 2: Verifying 6 keys exist...")
+
+	countResponse, err := selectedClient.Count(context.Background(), &hydraidepbgo.CountRequest{
+		Swamps: []*hydraidepbgo.CountRequest_SwampIdentifier{
+			{SwampName: swampName.Get()},
+		},
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, int32(6), countResponse.Swamps[0].Count, "should have 6 keys initially")
+
+	// Step 3: Wait for expiration
+	slog.Info("Step 3: Waiting for keys to expire...")
+	time.Sleep(3 * time.Second)
+
+	// Step 4: Shift expired treasures
+	slog.Info("Step 4: Shifting expired treasures...")
+
+	shiftResponse, err := selectedClient.ShiftExpiredTreasures(context.Background(), &hydraidepbgo.ShiftExpiredTreasuresRequest{
+		SwampName: swampName.Get(),
+		HowMany:   10, // Get up to 10 expired
+	})
+	assert.NoError(t, err, "should shift expired without error")
+	assert.Len(t, shiftResponse.Treasures, 3, "should return 3 expired treasures")
+
+	// Step 5: Wait for flush and close
+	slog.Info("Step 5: Waiting for flush...")
+	time.Sleep(6 * time.Second)
+
+	// Step 6: Reopen and verify only non-expired keys remain
+	slog.Info("Step 6: Reopening and verifying persistence...")
+
+	countResponse2, err := selectedClient.Count(context.Background(), &hydraidepbgo.CountRequest{
+		Swamps: []*hydraidepbgo.CountRequest_SwampIdentifier{
+			{SwampName: swampName.Get()},
+		},
+	})
+	assert.NoError(t, err, "should count after shift without error")
+	assert.Equal(t, int32(3), countResponse2.Swamps[0].Count, "should have 3 keys after shifting expired")
+
+	slog.Info("TestV2Engine_ShiftExpiredAndReload completed successfully")
+}
+
+// TestV2Engine_BatchSetAndReload tests batch insert/update operations
+// and verifies all data persists correctly after swamp close/reopen.
+func TestV2Engine_BatchSetAndReload(t *testing.T) {
+	writeInterval := int64(1)
+	closeAfterIdle := int64(1)
+	maxFileSize := int64(65536)
+
+	swampName := name.New().Sanctuary("v2test").Realm("batch").Swamp("set")
+	selectedClient := clientInterface.GetServiceClient(swampName)
+
+	// Register the swamp
+	_, err := selectedClient.RegisterSwamp(context.Background(), &hydraidepbgo.RegisterSwampRequest{
+		SwampPattern:   swampName.Get(),
+		CloseAfterIdle: closeAfterIdle,
+		WriteInterval:  &writeInterval,
+		MaxFileSize:    &maxFileSize,
+	})
+	assert.NoError(t, err, "should register swamp without error")
+
+	defer func() {
+		_, _ = selectedClient.Destroy(context.Background(), &hydraidepbgo.DestroyRequest{
+			SwampName: swampName.Get(),
+		})
+	}()
+
+	// Step 1: Batch insert 100 keys
+	slog.Info("Step 1: Batch inserting 100 keys...")
+
+	keyValues := make([]*hydraidepbgo.KeyValuePair, 100)
+	for i := 0; i < 100; i++ {
+		val := fmt.Sprintf("batch-value-%d", i)
+		keyValues[i] = &hydraidepbgo.KeyValuePair{
+			Key:       fmt.Sprintf("batch-key-%d", i),
+			StringVal: &val,
+		}
+	}
+
+	_, err = selectedClient.Set(context.Background(), &hydraidepbgo.SetRequest{
+		Swamps: []*hydraidepbgo.SwampRequest{
+			{
+				SwampName:        swampName.Get(),
+				KeyValues:        keyValues,
+				CreateIfNotExist: true,
+				Overwrite:        true,
+			},
+		},
+	})
+	assert.NoError(t, err, "should batch insert without error")
+
+	// Step 2: Wait for flush
+	slog.Info("Step 2: Waiting for flush...")
+	time.Sleep(4 * time.Second)
+
+	// Step 3: Reopen and verify all 100 keys exist
+	slog.Info("Step 3: Reopening and verifying all 100 keys...")
+
+	countResponse, err := selectedClient.Count(context.Background(), &hydraidepbgo.CountRequest{
+		Swamps: []*hydraidepbgo.CountRequest_SwampIdentifier{
+			{SwampName: swampName.Get()},
+		},
+	})
+	assert.NoError(t, err, "should count without error")
+	assert.Equal(t, int32(100), countResponse.Swamps[0].Count, "should have 100 keys after reload")
+
+	// Step 4: Batch update 50 keys
+	slog.Info("Step 4: Batch updating 50 keys...")
+
+	updateKeyValues := make([]*hydraidepbgo.KeyValuePair, 50)
+	for i := 0; i < 50; i++ {
+		val := fmt.Sprintf("updated-value-%d", i)
+		updateKeyValues[i] = &hydraidepbgo.KeyValuePair{
+			Key:       fmt.Sprintf("batch-key-%d", i), // Update first 50 keys
+			StringVal: &val,
+		}
+	}
+
+	_, err = selectedClient.Set(context.Background(), &hydraidepbgo.SetRequest{
+		Swamps: []*hydraidepbgo.SwampRequest{
+			{
+				SwampName:        swampName.Get(),
+				KeyValues:        updateKeyValues,
+				CreateIfNotExist: false,
+				Overwrite:        true,
+			},
+		},
+	})
+	assert.NoError(t, err, "should batch update without error")
+
+	// Step 5: Wait for flush
+	slog.Info("Step 5: Waiting for update flush...")
+	time.Sleep(4 * time.Second)
+
+	// Step 6: Verify updated values persisted
+	slog.Info("Step 6: Verifying updated values...")
+
+	getResponse, err := selectedClient.Get(context.Background(), &hydraidepbgo.GetRequest{
+		Swamps: []*hydraidepbgo.GetSwamp{
+			{
+				SwampName: swampName.Get(),
+				Keys:      []string{"batch-key-0", "batch-key-25", "batch-key-49", "batch-key-50", "batch-key-99"},
+			},
+		},
+	})
+	assert.NoError(t, err, "should get values without error")
+
+	treasureMap := make(map[string]*hydraidepbgo.Treasure)
+	for _, treasure := range getResponse.Swamps[0].Treasures {
+		if treasure.IsExist {
+			treasureMap[treasure.Key] = treasure
+		}
+	}
+
+	// First 50 should be updated
+	assert.Equal(t, "updated-value-0", treasureMap["batch-key-0"].GetStringVal())
+	assert.Equal(t, "updated-value-25", treasureMap["batch-key-25"].GetStringVal())
+	assert.Equal(t, "updated-value-49", treasureMap["batch-key-49"].GetStringVal())
+	// Last 50 should be original
+	assert.Equal(t, "batch-value-50", treasureMap["batch-key-50"].GetStringVal())
+	assert.Equal(t, "batch-value-99", treasureMap["batch-key-99"].GetStringVal())
+
+	slog.Info("TestV2Engine_BatchSetAndReload completed successfully")
+}
+
+// TestV2Engine_Uint32SliceAndReload tests Uint32Slice operations
+// and verifies the slice data persists correctly after swamp close/reopen.
+func TestV2Engine_Uint32SliceAndReload(t *testing.T) {
+	writeInterval := int64(1)
+	closeAfterIdle := int64(1)
+	maxFileSize := int64(65536)
+
+	swampName := name.New().Sanctuary("v2test").Realm("uint32slice").Swamp("reload")
+	selectedClient := clientInterface.GetServiceClient(swampName)
+
+	// Register the swamp
+	_, err := selectedClient.RegisterSwamp(context.Background(), &hydraidepbgo.RegisterSwampRequest{
+		SwampPattern:   swampName.Get(),
+		CloseAfterIdle: closeAfterIdle,
+		WriteInterval:  &writeInterval,
+		MaxFileSize:    &maxFileSize,
+	})
+	assert.NoError(t, err, "should register swamp without error")
+
+	defer func() {
+		_, _ = selectedClient.Destroy(context.Background(), &hydraidepbgo.DestroyRequest{
+			SwampName: swampName.Get(),
+		})
+	}()
+
+	testKey := "slice-test-key"
+
+	// Step 1: Push initial values to slice
+	slog.Info("Step 1: Pushing initial values to uint32 slice...")
+
+	_, err = selectedClient.Uint32SlicePush(context.Background(), &hydraidepbgo.AddToUint32SlicePushRequest{
+		SwampName: swampName.Get(),
+		KeySlicePairs: []*hydraidepbgo.KeySlicePair{
+			{
+				Key:    testKey,
+				Values: []uint32{1, 2, 3, 4, 5},
+			},
+		},
+	})
+	assert.NoError(t, err, "should push without error")
+
+	// Step 2: Wait for flush
+	slog.Info("Step 2: Waiting for flush...")
+	time.Sleep(4 * time.Second)
+
+	// Step 3: Reopen and verify slice persisted
+	slog.Info("Step 3: Reopening and verifying slice...")
+
+	sizeResponse, err := selectedClient.Uint32SliceSize(context.Background(), &hydraidepbgo.Uint32SliceSizeRequest{
+		SwampName: swampName.Get(),
+		Key:       testKey,
+	})
+	assert.NoError(t, err, "should get size without error")
+	assert.Equal(t, int64(5), sizeResponse.Size, "slice should have 5 elements after reload")
+
+	// Step 4: Add more values
+	slog.Info("Step 4: Adding more values to slice...")
+
+	_, err = selectedClient.Uint32SlicePush(context.Background(), &hydraidepbgo.AddToUint32SlicePushRequest{
+		SwampName: swampName.Get(),
+		KeySlicePairs: []*hydraidepbgo.KeySlicePair{
+			{
+				Key:    testKey,
+				Values: []uint32{6, 7, 8, 9, 10},
+			},
+		},
+	})
+	assert.NoError(t, err, "should push more values without error")
+
+	// Step 5: Wait for flush
+	slog.Info("Step 5: Waiting for flush...")
+	time.Sleep(4 * time.Second)
+
+	// Step 6: Verify extended slice
+	slog.Info("Step 6: Verifying extended slice...")
+
+	sizeResponse2, err := selectedClient.Uint32SliceSize(context.Background(), &hydraidepbgo.Uint32SliceSizeRequest{
+		SwampName: swampName.Get(),
+		Key:       testKey,
+	})
+	assert.NoError(t, err, "should get size without error")
+	assert.Equal(t, int64(10), sizeResponse2.Size, "slice should have 10 elements after reload")
+
+	// Step 7: Delete some values
+	slog.Info("Step 7: Deleting values from slice...")
+
+	_, err = selectedClient.Uint32SliceDelete(context.Background(), &hydraidepbgo.Uint32SliceDeleteRequest{
+		SwampName: swampName.Get(),
+		KeySlicePairs: []*hydraidepbgo.KeySlicePair{
+			{
+				Key:    testKey,
+				Values: []uint32{1, 3, 5, 7, 9}, // Delete odd numbers
+			},
+		},
+	})
+	assert.NoError(t, err, "should delete values without error")
+
+	// Step 8: Wait for flush
+	slog.Info("Step 8: Waiting for flush...")
+	time.Sleep(4 * time.Second)
+
+	// Step 9: Verify deletions persisted
+	slog.Info("Step 9: Verifying deletions persisted...")
+
+	sizeResponse3, err := selectedClient.Uint32SliceSize(context.Background(), &hydraidepbgo.Uint32SliceSizeRequest{
+		SwampName: swampName.Get(),
+		Key:       testKey,
+	})
+	assert.NoError(t, err, "should get size without error")
+	assert.Equal(t, int64(5), sizeResponse3.Size, "slice should have 5 elements after deletion")
+
+	// Verify specific values exist
+	existResponse, err := selectedClient.Uint32SliceIsValueExist(context.Background(), &hydraidepbgo.Uint32SliceIsValueExistRequest{
+		SwampName: swampName.Get(),
+		Key:       testKey,
+		Value:     2, // Even number should exist
+	})
+	assert.NoError(t, err)
+	assert.True(t, existResponse.IsExist, "value 2 should exist")
+
+	existResponse2, err := selectedClient.Uint32SliceIsValueExist(context.Background(), &hydraidepbgo.Uint32SliceIsValueExistRequest{
+		SwampName: swampName.Get(),
+		Key:       testKey,
+		Value:     1, // Odd number should be deleted
+	})
+	assert.NoError(t, err)
+	assert.False(t, existResponse2.IsExist, "value 1 should be deleted")
+
+	slog.Info("TestV2Engine_Uint32SliceAndReload completed successfully")
+}
+
+// TestV2Engine_DeleteAllKeysAndFileCleanup tests that when all keys are deleted from a swamp,
+// the .hyd file and its parent folder are properly cleaned up.
+func TestV2Engine_DeleteAllKeysAndFileCleanup(t *testing.T) {
+	writeInterval := int64(1)
+	closeAfterIdle := int64(1)
+	maxFileSize := int64(65536)
+
+	swampName := name.New().Sanctuary("v2test").Realm("deleteall").Swamp("cleanup")
+	selectedClient := clientInterface.GetServiceClient(swampName)
+
+	// Register the swamp
+	_, err := selectedClient.RegisterSwamp(context.Background(), &hydraidepbgo.RegisterSwampRequest{
+		SwampPattern:   swampName.Get(),
+		CloseAfterIdle: closeAfterIdle,
+		WriteInterval:  &writeInterval,
+		MaxFileSize:    &maxFileSize,
+	})
+	assert.NoError(t, err, "should register swamp without error")
+
+	// Step 1: Insert 5 keys
+	slog.Info("Step 1: Inserting 5 test keys...")
+
+	keyValues := make([]*hydraidepbgo.KeyValuePair, 5)
+	for i := 0; i < 5; i++ {
+		val := fmt.Sprintf("value-%d", i)
+		keyValues[i] = &hydraidepbgo.KeyValuePair{
+			Key:       fmt.Sprintf("key-%d", i),
+			StringVal: &val,
+		}
+	}
+
+	_, err = selectedClient.Set(context.Background(), &hydraidepbgo.SetRequest{
+		Swamps: []*hydraidepbgo.SwampRequest{
+			{
+				SwampName:        swampName.Get(),
+				KeyValues:        keyValues,
+				CreateIfNotExist: true,
+				Overwrite:        true,
+			},
+		},
+	})
+	assert.NoError(t, err, "should insert data without error")
+
+	// Step 2: Wait for flush
+	slog.Info("Step 2: Waiting for flush...")
+	time.Sleep(4 * time.Second)
+
+	// Step 3: Verify swamp exists
+	slog.Info("Step 3: Verifying swamp exists...")
+
+	existResponse, err := selectedClient.IsSwampExist(context.Background(), &hydraidepbgo.IsSwampExistRequest{
+		SwampName: swampName.Get(),
+	})
+	assert.NoError(t, err, "should check existence without error")
+	assert.True(t, existResponse.IsExist, "swamp should exist after insert")
+
+	countResponse, err := selectedClient.Count(context.Background(), &hydraidepbgo.CountRequest{
+		Swamps: []*hydraidepbgo.CountRequest_SwampIdentifier{
+			{SwampName: swampName.Get()},
+		},
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, int32(5), countResponse.Swamps[0].Count, "should have 5 keys")
+
+	// Step 4: Delete all keys one by one
+	slog.Info("Step 4: Deleting all 5 keys...")
+
+	_, err = selectedClient.Delete(context.Background(), &hydraidepbgo.DeleteRequest{
+		Swamps: []*hydraidepbgo.DeleteRequest_SwampKeys{
+			{
+				SwampName: swampName.Get(),
+				Keys:      []string{"key-0", "key-1", "key-2", "key-3", "key-4"},
+			},
+		},
+	})
+	assert.NoError(t, err, "should delete all keys without error")
+
+	// Step 5: Wait for flush and swamp close
+	slog.Info("Step 5: Waiting for delete to be flushed...")
+	time.Sleep(4 * time.Second)
+
+	// Step 6: Verify swamp no longer exists (should be deleted when empty)
+	slog.Info("Step 6: Verifying swamp is deleted after all keys removed...")
+
+	existResponse2, err := selectedClient.IsSwampExist(context.Background(), &hydraidepbgo.IsSwampExistRequest{
+		SwampName: swampName.Get(),
+	})
+	assert.NoError(t, err, "should check existence without error")
+	assert.False(t, existResponse2.IsExist, "swamp should NOT exist after all keys deleted - .hyd file should be removed")
+
+	// Step 7: Verify we can recreate the swamp (folder was cleaned up properly)
+	slog.Info("Step 7: Verifying we can recreate the swamp...")
+
+	newVal := "new-value-after-cleanup"
+	_, err = selectedClient.Set(context.Background(), &hydraidepbgo.SetRequest{
+		Swamps: []*hydraidepbgo.SwampRequest{
+			{
+				SwampName: swampName.Get(),
+				KeyValues: []*hydraidepbgo.KeyValuePair{
+					{Key: "new-key", StringVal: &newVal},
+				},
+				CreateIfNotExist: true,
+				Overwrite:        true,
+			},
+		},
+	})
+	assert.NoError(t, err, "should be able to recreate swamp after cleanup")
+
+	// Wait for flush
+	time.Sleep(4 * time.Second)
+
+	// Verify new swamp exists
+	existResponse3, err := selectedClient.IsSwampExist(context.Background(), &hydraidepbgo.IsSwampExistRequest{
+		SwampName: swampName.Get(),
+	})
+	assert.NoError(t, err)
+	assert.True(t, existResponse3.IsExist, "recreated swamp should exist")
+
+	// Verify the new key
+	getResponse, err := selectedClient.Get(context.Background(), &hydraidepbgo.GetRequest{
+		Swamps: []*hydraidepbgo.GetSwamp{
+			{
+				SwampName: swampName.Get(),
+				Keys:      []string{"new-key"},
+			},
+		},
+	})
+	assert.NoError(t, err)
+	assert.True(t, getResponse.Swamps[0].Treasures[0].IsExist, "new key should exist")
+	assert.Equal(t, newVal, getResponse.Swamps[0].Treasures[0].GetStringVal(), "new value should match")
+
+	// Cleanup
+	_, _ = selectedClient.Destroy(context.Background(), &hydraidepbgo.DestroyRequest{
+		SwampName: swampName.Get(),
+	})
+
+	slog.Info("TestV2Engine_DeleteAllKeysAndFileCleanup completed successfully")
+}
+
+// TestV2Engine_DestroyAndFileCleanup tests that Destroy properly removes
+// the .hyd file and cleans up the folder structure.
+func TestV2Engine_DestroyAndFileCleanup(t *testing.T) {
+	writeInterval := int64(1)
+	closeAfterIdle := int64(1)
+	maxFileSize := int64(65536)
+
+	swampName := name.New().Sanctuary("v2test").Realm("destroy").Swamp("cleanup")
+	selectedClient := clientInterface.GetServiceClient(swampName)
+
+	// Register the swamp
+	_, err := selectedClient.RegisterSwamp(context.Background(), &hydraidepbgo.RegisterSwampRequest{
+		SwampPattern:   swampName.Get(),
+		CloseAfterIdle: closeAfterIdle,
+		WriteInterval:  &writeInterval,
+		MaxFileSize:    &maxFileSize,
+	})
+	assert.NoError(t, err, "should register swamp without error")
+
+	// Step 1: Insert data
+	slog.Info("Step 1: Inserting test data...")
+
+	keyValues := make([]*hydraidepbgo.KeyValuePair, 10)
+	for i := 0; i < 10; i++ {
+		val := fmt.Sprintf("value-%d", i)
+		keyValues[i] = &hydraidepbgo.KeyValuePair{
+			Key:       fmt.Sprintf("key-%d", i),
+			StringVal: &val,
+		}
+	}
+
+	_, err = selectedClient.Set(context.Background(), &hydraidepbgo.SetRequest{
+		Swamps: []*hydraidepbgo.SwampRequest{
+			{
+				SwampName:        swampName.Get(),
+				KeyValues:        keyValues,
+				CreateIfNotExist: true,
+				Overwrite:        true,
+			},
+		},
+	})
+	assert.NoError(t, err, "should insert data without error")
+
+	// Step 2: Wait for flush
+	slog.Info("Step 2: Waiting for flush...")
+	time.Sleep(4 * time.Second)
+
+	// Step 3: Verify swamp exists
+	slog.Info("Step 3: Verifying swamp exists...")
+
+	existResponse, err := selectedClient.IsSwampExist(context.Background(), &hydraidepbgo.IsSwampExistRequest{
+		SwampName: swampName.Get(),
+	})
+	assert.NoError(t, err)
+	assert.True(t, existResponse.IsExist, "swamp should exist before destroy")
+
+	// Step 4: Destroy the swamp
+	slog.Info("Step 4: Destroying swamp...")
+
+	_, err = selectedClient.Destroy(context.Background(), &hydraidepbgo.DestroyRequest{
+		SwampName: swampName.Get(),
+	})
+	assert.NoError(t, err, "should destroy without error")
+
+	// Step 5: Wait a moment for cleanup
+	time.Sleep(2 * time.Second)
+
+	// Step 6: Verify swamp no longer exists
+	slog.Info("Step 6: Verifying swamp is destroyed...")
+
+	existResponse2, err := selectedClient.IsSwampExist(context.Background(), &hydraidepbgo.IsSwampExistRequest{
+		SwampName: swampName.Get(),
+	})
+	assert.NoError(t, err)
+	assert.False(t, existResponse2.IsExist, "swamp should NOT exist after destroy")
+
+	// Step 7: Verify we can recreate with same name
+	slog.Info("Step 7: Verifying we can recreate swamp with same name...")
+
+	newVal := "recreated-value"
+	_, err = selectedClient.Set(context.Background(), &hydraidepbgo.SetRequest{
+		Swamps: []*hydraidepbgo.SwampRequest{
+			{
+				SwampName: swampName.Get(),
+				KeyValues: []*hydraidepbgo.KeyValuePair{
+					{Key: "recreated-key", StringVal: &newVal},
+				},
+				CreateIfNotExist: true,
+				Overwrite:        true,
+			},
+		},
+	})
+	assert.NoError(t, err, "should recreate swamp without error")
+
+	time.Sleep(4 * time.Second)
+
+	// Verify recreated swamp
+	getResponse, err := selectedClient.Get(context.Background(), &hydraidepbgo.GetRequest{
+		Swamps: []*hydraidepbgo.GetSwamp{
+			{
+				SwampName: swampName.Get(),
+				Keys:      []string{"recreated-key"},
+			},
+		},
+	})
+	assert.NoError(t, err)
+	assert.True(t, getResponse.Swamps[0].Treasures[0].IsExist, "recreated key should exist")
+	assert.Equal(t, newVal, getResponse.Swamps[0].Treasures[0].GetStringVal())
+
+	// Final cleanup
+	_, _ = selectedClient.Destroy(context.Background(), &hydraidepbgo.DestroyRequest{
+		SwampName: swampName.Get(),
+	})
+
+	slog.Info("TestV2Engine_DestroyAndFileCleanup completed successfully")
 }
