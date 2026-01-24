@@ -34,6 +34,11 @@ type Chronicler interface {
 	DontSendFilePointer() // if we don't want to send the file pointer to the swamp, because it will be closed soon
 	// RegisterFilePointerFunction egy filepointer callback funkciót regisztrálhat a swamp
 	RegisterFilePointerFunction(filePointerFunction func(event []*FileNameEvent) error)
+	// Close flushes all pending writes and closes any open file handles.
+	// This method MUST be called when the swamp is closing to ensure all data is persisted.
+	// For V1: no-op (writes are atomic)
+	// For V2: flushes buffer, syncs to disk, closes file handle, optionally runs compaction
+	Close() error
 }
 
 type FileNameEvent struct {
@@ -465,4 +470,13 @@ func (c *chronicler) createActualFile() (filePath string) {
 func calculateOverloadSize(maxFileSizeBytes int64) int {
 	overloadedSize := float64(maxFileSizeBytes) / SnappyCompressionPercent
 	return int(math.Floor(overloadedSize*1) / 1)
+}
+
+// Close flushes all pending writes and closes any open file handles.
+// For V1 chronicler, this is a no-op since V1 writes are atomic and
+// don't keep file handles open between Write() calls.
+func (c *chronicler) Close() error {
+	// V1 chronicler writes are atomic - each Write() opens, writes, and closes the file.
+	// There are no persistent file handles to close.
+	return nil
 }

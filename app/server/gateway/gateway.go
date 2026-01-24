@@ -17,6 +17,7 @@ import (
 	"github.com/hydraide/hydraide/app/core/zeus"
 	"github.com/hydraide/hydraide/app/name"
 	"github.com/hydraide/hydraide/app/server/observer"
+	"github.com/hydraide/hydraide/app/server/telemetry"
 	hydrapb "github.com/hydraide/hydraide/generated/hydraidepbgo"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -31,6 +32,7 @@ type Gateway struct {
 	DefaultCloseAfterIdle int64
 	DefaultWriteInterval  int64
 	DefaultFileSize       int64
+	TelemetryCollector    telemetry.Collector
 }
 
 func (g Gateway) Heartbeat(_ context.Context, in *hydrapb.HeartbeatRequest) (*hydrapb.HeartbeatResponse, error) {
@@ -790,7 +792,6 @@ func (g Gateway) Delete(ctx context.Context, in *hydrapb.DeleteRequest) (*hydrap
 			responses = append(responses, sr)
 
 		}()
-
 	}
 
 	return &hydrapb.DeleteResponse{
@@ -2343,5 +2344,252 @@ func relationalOperatorToSwampRelationalOperator(operator hydrapb.Relational_Ope
 		return swamp.RelationalOperatorNotEqual
 	default:
 		return swamp.RelationalOperatorEqual
+	}
+}
+
+// ============ TELEMETRY ENDPOINTS ============
+
+// SubscribeToTelemetry streams real-time telemetry events to the client.
+func (g Gateway) SubscribeToTelemetry(req *hydrapb.TelemetrySubscribeRequest, stream hydrapb.HydraideService_SubscribeToTelemetryServer) error {
+	// Check if telemetry is enabled
+	if g.TelemetryCollector == nil {
+		return status.Error(codes.Unavailable, "telemetry collection is not enabled on this server")
+	}
+
+	// Build the subscription filter
+	filter := telemetry.SubscribeFilter{
+		ErrorsOnly:       req.GetErrorsOnly(),
+		Methods:          req.GetFilterMethods(),
+		SwampPattern:     req.GetFilterSwampPattern(),
+		IncludeSuccesses: req.GetIncludeSuccesses(),
+	}
+
+	// Default to including successes if not specified
+	if !req.GetErrorsOnly() && !req.GetIncludeSuccesses() {
+		filter.IncludeSuccesses = true
+	}
+
+	// Subscribe to telemetry events
+	ch, unsubscribe := g.TelemetryCollector.Subscribe(filter)
+	defer unsubscribe()
+
+	// Stream events to the client
+	for {
+		select {
+		case event, ok := <-ch:
+			if !ok {
+				// Channel closed, telemetry collector is shutting down
+				return nil
+			}
+
+			// Convert to proto message
+			protoEvent := &hydrapb.TelemetryEvent{
+				Id:            event.ID,
+				Timestamp:     timestamppb.New(event.Timestamp),
+				Method:        event.Method,
+				SwampName:     event.SwampName,
+				Keys:          event.Keys,
+				DurationUs:    event.DurationUs,
+				Success:       event.Success,
+				ErrorCode:     event.ErrorCode,
+				ErrorMessage:  event.ErrorMsg,
+				ClientIp:      event.ClientIP,
+				RequestSize:   event.RequestSize,
+				ResponseSize:  event.ResponseSize,
+				HasStackTrace: event.HasDetails,
+			}
+
+			if err := stream.Send(protoEvent); err != nil {
+				return err
+			}
+
+		case <-stream.Context().Done():
+			// Client disconnected
+			return stream.Context().Err()
+		}
+	}
+}
+
+// GetTelemetryHistory retrieves historical telemetry events within a time range.
+func (g Gateway) GetTelemetryHistory(_ context.Context, req *hydrapb.TelemetryHistoryRequest) (*hydrapb.TelemetryHistoryResponse, error) {
+	// Check if telemetry is enabled
+	if g.TelemetryCollector == nil {
+		return nil, status.Error(codes.Unavailable, "telemetry collection is not enabled on this server")
+	}
+
+	// Parse time range
+	fromTime := req.GetFromTime().AsTime()
+	toTime := req.GetToTime().AsTime()
+
+	// Build the filter
+	filter := telemetry.HistoryFilter{
+		ErrorsOnly:   req.GetErrorsOnly(),
+		Methods:      req.GetFilterMethods(),
+		SwampPattern: req.GetFilterSwampPattern(),
+		Limit:        int(req.GetLimit()),
+	}
+
+	if filter.Limit <= 0 {
+		filter.Limit = 1000 // Default limit
+	}
+
+	// Get historical events
+	events := g.TelemetryCollector.GetHistory(fromTime, toTime, filter)
+
+	// Convert to proto messages
+	protoEvents := make([]*hydrapb.TelemetryEvent, len(events))
+	for i, event := range events {
+		protoEvents[i] = &hydrapb.TelemetryEvent{
+			Id:            event.ID,
+			Timestamp:     timestamppb.New(event.Timestamp),
+			Method:        event.Method,
+			SwampName:     event.SwampName,
+			Keys:          event.Keys,
+			DurationUs:    event.DurationUs,
+			Success:       event.Success,
+			ErrorCode:     event.ErrorCode,
+			ErrorMessage:  event.ErrorMsg,
+			ClientIp:      event.ClientIP,
+			RequestSize:   event.RequestSize,
+			ResponseSize:  event.ResponseSize,
+			HasStackTrace: event.HasDetails,
+		}
+	}
+
+	return &hydrapb.TelemetryHistoryResponse{
+		Events:     protoEvents,
+		TotalCount: int32(len(protoEvents)),
+		HasMore:    len(protoEvents) >= filter.Limit,
+	}, nil
+}
+
+// GetErrorDetails retrieves detailed information about a specific error event.
+func (g Gateway) GetErrorDetails(_ context.Context, req *hydrapb.ErrorDetailsRequest) (*hydrapb.ErrorDetailsResponse, error) {
+	// Check if telemetry is enabled
+	if g.TelemetryCollector == nil {
+		return nil, status.Error(codes.Unavailable, "telemetry collection is not enabled on this server")
+	}
+
+	// Get the error store from collector (type assert to access internal ErrorStore)
+	// Since we can't access internal fields directly, we'll need to expose this via the Collector interface
+	// For now, return a basic response indicating the feature needs the ErrorStore to be exposed
+
+	// Try to get the event from history as a fallback
+	// This is a simplified implementation - the full implementation would need ErrorStore access
+	filter := telemetry.HistoryFilter{
+		Limit: 10000,
+	}
+
+	// Search through recent history for the event
+	now := time.Now()
+	events := g.TelemetryCollector.GetHistory(now.Add(-30*time.Minute), now, filter)
+
+	for _, event := range events {
+		if event.ID == req.GetEventId() {
+			protoEvent := &hydrapb.TelemetryEvent{
+				Id:            event.ID,
+				Timestamp:     timestamppb.New(event.Timestamp),
+				Method:        event.Method,
+				SwampName:     event.SwampName,
+				Keys:          event.Keys,
+				DurationUs:    event.DurationUs,
+				Success:       event.Success,
+				ErrorCode:     event.ErrorCode,
+				ErrorMessage:  event.ErrorMsg,
+				ClientIp:      event.ClientIP,
+				RequestSize:   event.RequestSize,
+				ResponseSize:  event.ResponseSize,
+				HasStackTrace: event.HasDetails,
+			}
+
+			return &hydrapb.ErrorDetailsResponse{
+				Event:         protoEvent,
+				StackTrace:    "", // Would need ErrorStore access for full stack trace
+				ErrorCategory: categorizeErrorCode(event.ErrorCode, event.ErrorMsg),
+				Context: map[string]string{
+					"swamp":       event.SwampName,
+					"client_ip":   event.ClientIP,
+					"duration_us": fmt.Sprintf("%d", event.DurationUs),
+				},
+			}, nil
+		}
+	}
+
+	return nil, status.Error(codes.NotFound, "error event not found")
+}
+
+// GetTelemetryStats returns aggregated statistics for a given time window.
+func (g Gateway) GetTelemetryStats(_ context.Context, req *hydrapb.TelemetryStatsRequest) (*hydrapb.TelemetryStatsResponse, error) {
+	// Check if telemetry is enabled
+	if g.TelemetryCollector == nil {
+		return nil, status.Error(codes.Unavailable, "telemetry collection is not enabled on this server")
+	}
+
+	windowMinutes := int(req.GetWindowMinutes())
+	if windowMinutes <= 0 {
+		windowMinutes = 5 // Default to 5 minutes
+	}
+
+	// Get stats from collector
+	stats := g.TelemetryCollector.GetStats(windowMinutes)
+
+	// Convert top swamps
+	topSwamps := make([]*hydrapb.TelemetrySwampStats, len(stats.TopSwamps))
+	for i, s := range stats.TopSwamps {
+		topSwamps[i] = &hydrapb.TelemetrySwampStats{
+			SwampName:     s.SwampName,
+			CallCount:     s.CallCount,
+			ErrorCount:    s.ErrorCount,
+			AvgDurationUs: s.AvgDurationUs,
+		}
+	}
+
+	// Convert top errors
+	topErrors := make([]*hydrapb.TelemetryErrorSummary, len(stats.TopErrors))
+	for i, e := range stats.TopErrors {
+		topErrors[i] = &hydrapb.TelemetryErrorSummary{
+			ErrorCode:      e.ErrorCode,
+			ErrorMessage:   e.ErrorMessage,
+			Count:          e.Count,
+			LastSwamp:      e.LastSwamp,
+			LastOccurrence: timestamppb.New(e.LastOccurrence),
+		}
+	}
+
+	return &hydrapb.TelemetryStatsResponse{
+		TotalCalls:    stats.TotalCalls,
+		ErrorCount:    stats.ErrorCount,
+		ErrorRate:     stats.ErrorRate,
+		AvgDurationUs: stats.AvgDurationUs,
+		ActiveClients: int32(stats.ActiveClients),
+		TopSwamps:     topSwamps,
+		TopErrors:     topErrors,
+	}, nil
+}
+
+// categorizeErrorCode categorizes an error based on its code and message.
+func categorizeErrorCode(code, msg string) string {
+	msgLower := strings.ToLower(msg)
+
+	if strings.Contains(msgLower, "decompress") || strings.Contains(msgLower, "decompression") {
+		return "decompression"
+	}
+	if strings.Contains(msgLower, "compress") || strings.Contains(msgLower, "compression") {
+		return "compression"
+	}
+
+	switch code {
+	case "InvalidArgument":
+		return "validation"
+	case "NotFound":
+		return "not_found"
+	case "PermissionDenied", "Unauthenticated":
+		return "permission"
+	case "DeadlineExceeded":
+		return "timeout"
+	case "Internal":
+		return "internal"
+	default:
+		return "unknown"
 	}
 }

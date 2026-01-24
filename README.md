@@ -3,11 +3,51 @@
 # HydrAIDE - The Adaptive, Intelligent Data Engine
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue?style=for-the-badge)](http://www.apache.org/licenses/LICENSE-2.0)
-![Version](https://img.shields.io/badge/version-2.0-informational?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-3.0-informational?style=for-the-badge)
 ![Status](https://img.shields.io/badge/status-Production%20Ready-brightgreen?style=for-the-badge)
 ![Speed](https://img.shields.io/badge/Access-O(1)%20Always-ff69b4?style=for-the-badge)
 ![Go](https://img.shields.io/badge/built%20with-Go-00ADD8?style=for-the-badge&logo=go)
 [![Join Discord](https://img.shields.io/discord/1355863821125681193?label=Join%20us%20on%20Discord&logo=discord&style=for-the-badge)](https://discord.gg/xE2YSkzFRm)
+
+---
+
+## 🚀 Major Update: V2 Storage Engine (Version 3.0)
+
+**HydrAIDE 3.0 introduces a completely redesigned storage engine** that delivers:
+
+| Improvement | Gain |
+|-------------|------|
+| **Write Speed** | 32-112x faster |
+| **Storage Size** | 50% smaller |
+| **File Count** | 95% fewer files |
+| **SSD Lifespan** | 100x longer |
+
+### ✅ Backward Compatible
+
+The V2 engine is **fully backward compatible** with existing V1 data. Both engines work side-by-side:
+- **V1 Engine**: Multi-chunk file storage (legacy)
+- **V2 Engine**: Single-file append-only storage (recommended)
+
+### ⚠️ Migration Strongly Recommended
+
+While V1 continues to work, we **strongly recommend migrating to V2** for optimal performance.
+
+> **⚡ IMPORTANT: Always create a full backup before migration!**
+
+Use `hydraidectl` to migrate your data:
+
+```bash
+# 1. Create a backup first!
+# 2. Dry-run to verify (no changes made)
+hydraidectl migrate --source /path/to/hydraide/data --dry-run
+
+# 3. Run actual migration
+hydraidectl migrate --source /path/to/hydraide/data --workers 4
+```
+
+👉 See full migration guide: [hydraidectl Migration Guide](docs/hydraidectl/hydraidectl-migration.md)
+
+---
 
 ## 🧠 What is HydrAIDE?
 

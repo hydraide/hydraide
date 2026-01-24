@@ -26,7 +26,7 @@ repos:
 
   # pre-commit hooks for the Python SDK
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.4
+    rev: v0.14.13
     hooks:
       - id: ruff-check
         files: ^sdk/python/hydraidepy
@@ -35,7 +35,7 @@ repos:
         files: ^sdk/python/hydraidepy
         args: [--config, sdk/python/hydraidepy/pyproject.toml]
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.18.2
+    rev: v1.19.1
     hooks:
       - id: mypy
         pass_filenames: false

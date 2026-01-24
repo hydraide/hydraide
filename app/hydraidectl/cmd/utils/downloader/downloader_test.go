@@ -15,6 +15,9 @@ import (
 // TestGetLatestVersionFlexible checks that we can fetch a latest tag
 // without hard-coding an exact version string.
 func TestGetLatestVersionFlexible(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping network test in short mode")
+	}
 	t.Parallel()
 	d := New()
 	v, err := d.GetLatestVersion()
@@ -44,7 +47,7 @@ func TestDownloadHydraServerLatest(t *testing.T) {
 		progCalled = true
 	})
 
-	err := d.DownloadHydraServer("latest", basePath)
+	_, err := d.DownloadHydraServer("latest", basePath)
 	assert.NoError(t, err)
 
 	bin := "hydraide"
@@ -117,7 +120,7 @@ func TestTargetTriplet(t *testing.T) {
 // Example-style doc test for readability (does not assert network).
 func ExampleDefaultDownloader() {
 	d := New()
-	_ = d.DownloadHydraServer("latest", filepath.Join(os.TempDir(), "HydraideExample"))
+	_, _ = d.DownloadHydraServer("latest", filepath.Join(os.TempDir(), "HydraideExample"))
 	fmt.Println("ok")
 	// Output: ok
 }
