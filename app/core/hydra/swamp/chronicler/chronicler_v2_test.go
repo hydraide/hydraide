@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/hydraide/hydraide/app/core/hydra/swamp/beacon"
+	v2 "github.com/hydraide/hydraide/app/core/hydra/swamp/chronicler/v2"
 	"github.com/hydraide/hydraide/app/core/hydra/swamp/treasure"
 	"github.com/hydraide/hydraide/app/core/hydra/swamp/treasure/guard"
 )
@@ -301,4 +302,74 @@ func TestChroniclerV2_InterfaceCompatibility(t *testing.T) {
 
 	// Verify that chroniclerV2 implements Chronicler interface
 	var _ Chronicler = NewV2(swampPath, 10)
+}
+
+func TestChroniclerV2_MetadataRepair(t *testing.T) {
+	tmpDir := t.TempDir()
+	swampPath := filepath.Join(tmpDir, "001", "test-swamp")
+	hydFilePath := swampPath + ".hyd"
+
+	// Step 1: Create a file WITHOUT metadata using plain NewV2 (simulates old files)
+	chron1 := NewV2(swampPath, 10)
+	chron1.CreateDirectoryIfNotExists()
+
+	// Write a treasure (this creates the .hyd file but without swamp name metadata)
+	tr := treasure.New(nil)
+	guardID := tr.StartTreasureGuard(false, guard.BodyAuthID)
+	tr.BodySetKey(guardID, "test-key")
+	tr.SetContentString(guardID, "test-content")
+	tr.ReleaseTreasureGuard(guardID)
+	chron1.Write([]treasure.Treasure{tr})
+	if err := chron1.Close(); err != nil {
+		t.Fatalf("failed to close first chronicler: %v", err)
+	}
+
+	// Verify file exists but has no metadata
+	reader1, err := v2.NewFileReader(hydFilePath)
+	if err != nil {
+		t.Fatalf("failed to open .hyd file: %v", err)
+	}
+	_, swampName1, err := reader1.LoadIndex()
+	reader1.Close()
+	if err != nil {
+		t.Fatalf("failed to load index: %v", err)
+	}
+	if swampName1 != "" {
+		t.Errorf("expected no swamp name in initial file, got: %s", swampName1)
+	}
+
+	// Step 2: Create a new chronicler WITH swamp name and write to existing file
+	expectedSwampName := "test/realm/swampname"
+	chron2 := NewV2WithName(swampPath, 10, expectedSwampName)
+
+	// Write another treasure - this should trigger metadata repair
+	tr2 := treasure.New(nil)
+	guardID2 := tr2.StartTreasureGuard(false, guard.BodyAuthID)
+	tr2.BodySetKey(guardID2, "test-key-2")
+	tr2.SetContentString(guardID2, "test-content-2")
+	tr2.ReleaseTreasureGuard(guardID2)
+	chron2.Write([]treasure.Treasure{tr2})
+	if err := chron2.Close(); err != nil {
+		t.Fatalf("failed to close second chronicler: %v", err)
+	}
+
+	// Step 3: Verify the file now has metadata
+	reader2, err := v2.NewFileReader(hydFilePath)
+	if err != nil {
+		t.Fatalf("failed to open .hyd file after repair: %v", err)
+	}
+	index, swampName2, err := reader2.LoadIndex()
+	reader2.Close()
+	if err != nil {
+		t.Fatalf("failed to load index after repair: %v", err)
+	}
+
+	if swampName2 != expectedSwampName {
+		t.Errorf("expected swamp name %q after repair, got: %q", expectedSwampName, swampName2)
+	}
+
+	// Also verify both treasures are still present
+	if len(index) != 2 {
+		t.Errorf("expected 2 entries in index, got: %d", len(index))
+	}
 }

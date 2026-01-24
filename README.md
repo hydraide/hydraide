@@ -22,6 +22,8 @@
 | **File Count** | 95% fewer files |
 | **SSD Lifespan** | 100x longer |
 
+👉 **[Read the full V2 Storage Engine documentation](docs/features/v2-storage-engine.md)** to understand how it works under the hood.
+
 ### ✅ Backward Compatible
 
 The V2 engine is **fully backward compatible** with existing V1 data. Both engines work side-by-side:
@@ -73,6 +75,7 @@ With HydrAIDE, you don’t adapt to the database — **the database adapts to yo
 | Feature                                         | Description                                                                                                                                                                                                                                                                         |
 |-------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | 🗂️ **Database Engine**                         | A NoSQL-like, structure-first data store — no schemas, no query language. Just save your Go structs. [👉 read more](docs/features/database-engine.md)                                                                                                                               |
+| 💾 **V2 Storage Engine**                        | Append-only, single-file-per-Swamp storage with 32-112x faster writes, 50% smaller files, and automatic compaction. [👉 read more](docs/features/v2-storage-engine.md)                                                                                                              |
 | 🔄 **Built-in Reactivity & Subscription logic** | Native real-time subscriptions on every write/update/delete. Like Redis Pub/Sub, but smarter. [👉 read more](docs/features/reactivity-and-subscription-logic.md)                                                                                                                    |
 | ⚡️ **O(1) access**                              | Deterministic, constant-time O(1) access to data — every Swamp name maps directly to a fixed folder location, ensuring instant lookup without indexing or scanning. [👉 read more](docs/features/o1-access.md) |
 | 🔐 **Concurrency-Safe**                         | Per-object locking with deadlock-free critical sections. Easy and safe for business rules. [👉 read more](docs/features/concurrency-safe.md)                                                                                                                                        |
