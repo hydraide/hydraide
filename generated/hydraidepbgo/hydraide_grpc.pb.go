@@ -52,6 +52,10 @@ const (
 	HydraideService_IncrementUint64_FullMethodName         = "/hydraidepbgo.HydraideService/IncrementUint64"
 	HydraideService_IncrementFloat32_FullMethodName        = "/hydraidepbgo.HydraideService/IncrementFloat32"
 	HydraideService_IncrementFloat64_FullMethodName        = "/hydraidepbgo.HydraideService/IncrementFloat64"
+	HydraideService_SubscribeToTelemetry_FullMethodName    = "/hydraidepbgo.HydraideService/SubscribeToTelemetry"
+	HydraideService_GetTelemetryHistory_FullMethodName     = "/hydraidepbgo.HydraideService/GetTelemetryHistory"
+	HydraideService_GetErrorDetails_FullMethodName         = "/hydraidepbgo.HydraideService/GetErrorDetails"
+	HydraideService_GetTelemetryStats_FullMethodName       = "/hydraidepbgo.HydraideService/GetTelemetryStats"
 )
 
 // HydraideServiceClient is the client API for HydraideService service.
@@ -389,6 +393,53 @@ type HydraideServiceClient interface {
 	IncrementFloat32(ctx context.Context, in *IncrementFloat32Request, opts ...grpc.CallOption) (*IncrementFloat32Response, error)
 	// IncrementFloat64 same logic as IncrementInt8 but for float64 values
 	IncrementFloat64(ctx context.Context, in *IncrementFloat64Request, opts ...grpc.CallOption) (*IncrementFloat64Response, error)
+	// SubscribeToTelemetry opens a real-time stream of all gRPC calls and their results.
+	//
+	// Each event includes:
+	// - Timestamp and duration
+	// - Method name (Get, Set, Delete, etc.)
+	// - Swamp name and affected keys
+	// - Success/failure status with error details
+	// - Client IP address
+	//
+	// Use this to:
+	// - Debug live issues (e.g., why login isn't working)
+	// - Monitor system health in real-time
+	// - Track client activity
+	//
+	// ⚠️ This endpoint is for administrative/debugging purposes only.
+	// It should be restricted to trusted clients in production.
+	SubscribeToTelemetry(ctx context.Context, in *TelemetrySubscribeRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[TelemetryEvent], error)
+	// GetTelemetryHistory retrieves historical telemetry events within a time range.
+	//
+	// Use this for:
+	// - Replaying events from the last X minutes
+	// - Investigating issues that happened in the past
+	// - Analyzing patterns in system usage
+	//
+	// The server keeps a rolling window of events (default: 30 minutes).
+	GetTelemetryHistory(ctx context.Context, in *TelemetryHistoryRequest, opts ...grpc.CallOption) (*TelemetryHistoryResponse, error)
+	// GetErrorDetails retrieves detailed information about a specific error event.
+	//
+	// This includes:
+	// - Full stack trace (if available)
+	// - Error category (compression, validation, permission, etc.)
+	// - Additional context (request details, affected resources)
+	//
+	// Use this to drill down into specific errors for debugging.
+	GetErrorDetails(ctx context.Context, in *ErrorDetailsRequest, opts ...grpc.CallOption) (*ErrorDetailsResponse, error)
+	// GetTelemetryStats returns aggregated statistics for a given time window.
+	//
+	// Statistics include:
+	// - Total calls and error count
+	// - Error rate percentage
+	// - Average response time
+	// - Active client count
+	// - Top swamps by usage
+	// - Most frequent errors
+	//
+	// Useful for dashboards and quick health checks.
+	GetTelemetryStats(ctx context.Context, in *TelemetryStatsRequest, opts ...grpc.CallOption) (*TelemetryStatsResponse, error)
 }
 
 type hydraideServiceClient struct {
@@ -747,6 +798,55 @@ func (c *hydraideServiceClient) IncrementFloat64(ctx context.Context, in *Increm
 	return out, nil
 }
 
+func (c *hydraideServiceClient) SubscribeToTelemetry(ctx context.Context, in *TelemetrySubscribeRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[TelemetryEvent], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &HydraideService_ServiceDesc.Streams[2], HydraideService_SubscribeToTelemetry_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[TelemetrySubscribeRequest, TelemetryEvent]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type HydraideService_SubscribeToTelemetryClient = grpc.ServerStreamingClient[TelemetryEvent]
+
+func (c *hydraideServiceClient) GetTelemetryHistory(ctx context.Context, in *TelemetryHistoryRequest, opts ...grpc.CallOption) (*TelemetryHistoryResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(TelemetryHistoryResponse)
+	err := c.cc.Invoke(ctx, HydraideService_GetTelemetryHistory_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *hydraideServiceClient) GetErrorDetails(ctx context.Context, in *ErrorDetailsRequest, opts ...grpc.CallOption) (*ErrorDetailsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ErrorDetailsResponse)
+	err := c.cc.Invoke(ctx, HydraideService_GetErrorDetails_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *hydraideServiceClient) GetTelemetryStats(ctx context.Context, in *TelemetryStatsRequest, opts ...grpc.CallOption) (*TelemetryStatsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(TelemetryStatsResponse)
+	err := c.cc.Invoke(ctx, HydraideService_GetTelemetryStats_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // HydraideServiceServer is the server API for HydraideService service.
 // All implementations must embed UnimplementedHydraideServiceServer
 // for forward compatibility.
@@ -1082,6 +1182,53 @@ type HydraideServiceServer interface {
 	IncrementFloat32(context.Context, *IncrementFloat32Request) (*IncrementFloat32Response, error)
 	// IncrementFloat64 same logic as IncrementInt8 but for float64 values
 	IncrementFloat64(context.Context, *IncrementFloat64Request) (*IncrementFloat64Response, error)
+	// SubscribeToTelemetry opens a real-time stream of all gRPC calls and their results.
+	//
+	// Each event includes:
+	// - Timestamp and duration
+	// - Method name (Get, Set, Delete, etc.)
+	// - Swamp name and affected keys
+	// - Success/failure status with error details
+	// - Client IP address
+	//
+	// Use this to:
+	// - Debug live issues (e.g., why login isn't working)
+	// - Monitor system health in real-time
+	// - Track client activity
+	//
+	// ⚠️ This endpoint is for administrative/debugging purposes only.
+	// It should be restricted to trusted clients in production.
+	SubscribeToTelemetry(*TelemetrySubscribeRequest, grpc.ServerStreamingServer[TelemetryEvent]) error
+	// GetTelemetryHistory retrieves historical telemetry events within a time range.
+	//
+	// Use this for:
+	// - Replaying events from the last X minutes
+	// - Investigating issues that happened in the past
+	// - Analyzing patterns in system usage
+	//
+	// The server keeps a rolling window of events (default: 30 minutes).
+	GetTelemetryHistory(context.Context, *TelemetryHistoryRequest) (*TelemetryHistoryResponse, error)
+	// GetErrorDetails retrieves detailed information about a specific error event.
+	//
+	// This includes:
+	// - Full stack trace (if available)
+	// - Error category (compression, validation, permission, etc.)
+	// - Additional context (request details, affected resources)
+	//
+	// Use this to drill down into specific errors for debugging.
+	GetErrorDetails(context.Context, *ErrorDetailsRequest) (*ErrorDetailsResponse, error)
+	// GetTelemetryStats returns aggregated statistics for a given time window.
+	//
+	// Statistics include:
+	// - Total calls and error count
+	// - Error rate percentage
+	// - Average response time
+	// - Active client count
+	// - Top swamps by usage
+	// - Most frequent errors
+	//
+	// Useful for dashboards and quick health checks.
+	GetTelemetryStats(context.Context, *TelemetryStatsRequest) (*TelemetryStatsResponse, error)
 	mustEmbedUnimplementedHydraideServiceServer()
 }
 
@@ -1190,6 +1337,18 @@ func (UnimplementedHydraideServiceServer) IncrementFloat32(context.Context, *Inc
 }
 func (UnimplementedHydraideServiceServer) IncrementFloat64(context.Context, *IncrementFloat64Request) (*IncrementFloat64Response, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method IncrementFloat64 not implemented")
+}
+func (UnimplementedHydraideServiceServer) SubscribeToTelemetry(*TelemetrySubscribeRequest, grpc.ServerStreamingServer[TelemetryEvent]) error {
+	return status.Errorf(codes.Unimplemented, "method SubscribeToTelemetry not implemented")
+}
+func (UnimplementedHydraideServiceServer) GetTelemetryHistory(context.Context, *TelemetryHistoryRequest) (*TelemetryHistoryResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetTelemetryHistory not implemented")
+}
+func (UnimplementedHydraideServiceServer) GetErrorDetails(context.Context, *ErrorDetailsRequest) (*ErrorDetailsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetErrorDetails not implemented")
+}
+func (UnimplementedHydraideServiceServer) GetTelemetryStats(context.Context, *TelemetryStatsRequest) (*TelemetryStatsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetTelemetryStats not implemented")
 }
 func (UnimplementedHydraideServiceServer) mustEmbedUnimplementedHydraideServiceServer() {}
 func (UnimplementedHydraideServiceServer) testEmbeddedByValue()                         {}
@@ -1792,6 +1951,71 @@ func _HydraideService_IncrementFloat64_Handler(srv interface{}, ctx context.Cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _HydraideService_SubscribeToTelemetry_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(TelemetrySubscribeRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(HydraideServiceServer).SubscribeToTelemetry(m, &grpc.GenericServerStream[TelemetrySubscribeRequest, TelemetryEvent]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type HydraideService_SubscribeToTelemetryServer = grpc.ServerStreamingServer[TelemetryEvent]
+
+func _HydraideService_GetTelemetryHistory_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(TelemetryHistoryRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HydraideServiceServer).GetTelemetryHistory(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HydraideService_GetTelemetryHistory_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HydraideServiceServer).GetTelemetryHistory(ctx, req.(*TelemetryHistoryRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _HydraideService_GetErrorDetails_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ErrorDetailsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HydraideServiceServer).GetErrorDetails(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HydraideService_GetErrorDetails_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HydraideServiceServer).GetErrorDetails(ctx, req.(*ErrorDetailsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _HydraideService_GetTelemetryStats_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(TelemetryStatsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HydraideServiceServer).GetTelemetryStats(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HydraideService_GetTelemetryStats_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HydraideServiceServer).GetTelemetryStats(ctx, req.(*TelemetryStatsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // HydraideService_ServiceDesc is the grpc.ServiceDesc for HydraideService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1923,6 +2147,18 @@ var HydraideService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "IncrementFloat64",
 			Handler:    _HydraideService_IncrementFloat64_Handler,
 		},
+		{
+			MethodName: "GetTelemetryHistory",
+			Handler:    _HydraideService_GetTelemetryHistory_Handler,
+		},
+		{
+			MethodName: "GetErrorDetails",
+			Handler:    _HydraideService_GetErrorDetails_Handler,
+		},
+		{
+			MethodName: "GetTelemetryStats",
+			Handler:    _HydraideService_GetTelemetryStats_Handler,
+		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
@@ -1933,6 +2169,11 @@ var HydraideService_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "SubscribeToInfo",
 			Handler:       _HydraideService_SubscribeToInfo_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "SubscribeToTelemetry",
+			Handler:       _HydraideService_SubscribeToTelemetry_Handler,
 			ServerStreams: true,
 		},
 	},

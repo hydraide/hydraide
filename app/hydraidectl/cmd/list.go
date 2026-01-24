@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -30,6 +31,7 @@ type instance struct {
 	Name            string `json:"name"`
 	ServerPort      string `json:"server_port,omitempty"`
 	ServerVersion   string `json:"server_version,omitempty"`
+	Engine          string `json:"engine,omitempty"`
 	UpdateAvailable string `json:"update_available,omitempty"`
 	Status          string `json:"status"`
 	Health          string `json:"health,omitempty"`
@@ -120,10 +122,18 @@ var listCmd = &cobra.Command{
 				continue
 			}
 
+			// Read engine version from settings.json (default V1 if not set)
+			engineVersion := "V1"
+			settingsPath := filepath.Join(meta.BasePath, "settings", "settings.json")
+			if settings, err := loadEngineSettings(settingsPath); err == nil && settings.Engine != "" {
+				engineVersion = string(settings.Engine)
+			}
+
 			ins := instance{
 				Name:          name,
 				ServerPort:    loadedEnv.HydrAIDEGRPCPort,
 				ServerVersion: meta.Version,
+				Engine:        engineVersion,
 				Status:        status,
 				BasePath:      meta.BasePath,
 			}
@@ -179,14 +189,14 @@ var listCmd = &cobra.Command{
 			const colWidth = 20
 
 			// Print headers.
-			headerFormat := fmt.Sprintf("%%-%ds %%-%ds %%-%ds %%-%ds %%-%ds %%-%ds\n", colWidth, colWidth, colWidth, colWidth, colWidth, colWidth)
+			headerFormat := fmt.Sprintf("%%-%ds %%-%ds %%-%ds %%-%ds %%-%ds %%-%ds %%-%ds\n", colWidth, colWidth, colWidth, colWidth, colWidth, colWidth, colWidth)
 			if !noHealth {
-				headerFormat = fmt.Sprintf("%%-%ds %%-%ds %%-%ds %%-%ds %%-%ds %%-%ds %%-%ds\n", colWidth, colWidth, colWidth, colWidth, colWidth, colWidth, colWidth)
-				fmt.Printf(headerFormat, "Name", "Server Port", "Server Version", "Update Available", "Service Status", "Health", "Base Path")
-				fmt.Printf("%s\n", strings.Repeat("-", colWidth*8+2))
+				headerFormat = fmt.Sprintf("%%-%ds %%-%ds %%-%ds %%-%ds %%-%ds %%-%ds %%-%ds %%-%ds\n", colWidth, colWidth, colWidth, colWidth, colWidth, colWidth, colWidth, colWidth)
+				fmt.Printf(headerFormat, "Name", "Server Port", "Server Version", "Engine", "Update Available", "Service Status", "Health", "Base Path")
+				fmt.Printf("%s\n", strings.Repeat("-", colWidth*9+2))
 			} else {
-				fmt.Printf(headerFormat, "Name", "Server Port", "Server Version", "Update Available", "Service Status", "Base Path")
-				fmt.Printf("%s\n", strings.Repeat("-", colWidth*7+1))
+				fmt.Printf(headerFormat, "Name", "Server Port", "Server Version", "Engine", "Update Available", "Service Status", "Base Path")
+				fmt.Printf("%s\n", strings.Repeat("-", colWidth*8+1))
 			}
 
 			// Print data rows.
@@ -199,9 +209,9 @@ var listCmd = &cobra.Command{
 				}
 
 				if !noHealth {
-					fmt.Printf("%-*s %-*s %-*s %-*s %-*s %-*s %-*s %s\n", colWidth, inst.Name, colWidth, inst.ServerPort, colWidth, inst.ServerVersion, colWidth, inst.UpdateAvailable, colWidth, inst.Status, colWidth, inst.Health, colWidth, inst.BasePath, warning)
+					fmt.Printf("%-*s %-*s %-*s %-*s %-*s %-*s %-*s %-*s %s\n", colWidth, inst.Name, colWidth, inst.ServerPort, colWidth, inst.ServerVersion, colWidth, inst.Engine, colWidth, inst.UpdateAvailable, colWidth, inst.Status, colWidth, inst.Health, colWidth, inst.BasePath, warning)
 				} else {
-					fmt.Printf("%-*s %-*s %-*s %-*s %-*s %-*s %s\n", colWidth, inst.Name, colWidth, inst.ServerPort, colWidth, inst.ServerVersion, colWidth, inst.UpdateAvailable, colWidth, inst.Status, colWidth, inst.BasePath, warning)
+					fmt.Printf("%-*s %-*s %-*s %-*s %-*s %-*s %-*s %s\n", colWidth, inst.Name, colWidth, inst.ServerPort, colWidth, inst.ServerVersion, colWidth, inst.Engine, colWidth, inst.UpdateAvailable, colWidth, inst.Status, colWidth, inst.BasePath, warning)
 				}
 
 			}

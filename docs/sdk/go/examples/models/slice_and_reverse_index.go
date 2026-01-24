@@ -490,7 +490,7 @@ func (m *ModelTagProductViewers) hashTagName(tag string) string {
 	_, err := h.Write([]byte(tag))
 	if err != nil {
 		// If hashing fails, return a default value to avoid panics
-		slog.Error("Failed to hash tag name:", err)
+		slog.Error("Failed to hash tag name", "error", err)
 		return ""
 	}
 	return fmt.Sprintf("%x", h.Sum32()) // pl: "a3d93bcf"

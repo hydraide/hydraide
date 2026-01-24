@@ -103,12 +103,14 @@ func defaultDeps() deps {
 // - Windows (planned / WSL)
 //
 // ✅ Methods:
-// - GenerateServiceFile → writes service definition (unit/plist/etc.)
+// - GenerateServiceFile → writes service definition (unit/plist/etc.) and starts it
+// - GenerateServiceFileNoStart → writes service definition without starting
 // - ServiceExists       → checks if the service is already installed
 // - EnableAndStartService → enables auto-start and runs the service
 // - RemoveService       → disables and deletes the service
 type ServiceManager interface {
 	GenerateServiceFile(instanceName, basePath string) error
+	GenerateServiceFileNoStart(instanceName, basePath string) error
 	ServiceExists(instanceName string) (bool, error)
 	EnableAndStartService(instanceName, basePath string) error
 	RemoveService(instanceName string) error
@@ -183,6 +185,23 @@ func (s *serviceManagerImpl) GenerateServiceFile(instanceName, basePath string) 
 		return s.generateLaunchdService(instanceName, basePath)
 	case WINDOWS_OS:
 		return s.generateWindowsNSSMService(instanceName, basePath)
+	default:
+		return fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
+	}
+}
+
+// GenerateServiceFileNoStart writes the service definition without starting the service.
+// Use this when you want to register the service but not start it immediately
+// (e.g., during update with --no-start flag).
+func (s *serviceManagerImpl) GenerateServiceFileNoStart(instanceName, basePath string) error {
+	slog.Info("Generating service file (no start)", "instance", instanceName, "os", runtime.GOOS)
+	switch runtime.GOOS {
+	case LINUX_OS:
+		return s.generateSystemdServiceNoStart(instanceName, basePath)
+	case MAC_OS:
+		return s.generateLaunchdServiceNoStart(instanceName, basePath)
+	case WINDOWS_OS:
+		return s.generateWindowsNSSMServiceNoStart(instanceName, basePath)
 	default:
 		return fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
 	}
@@ -290,6 +309,67 @@ WantedBy=multi-user.target
 	}
 
 	slog.Info("Service file created successfully", "path", serviceFilePath)
+	slog.Info("Logs will be available via journald", "command", fmt.Sprintf("journalctl -u %s -f", serviceName))
+	return nil
+}
+
+// generateSystemdServiceNoStart creates and installs a systemd unit file without starting it.
+// This is used when updating with --no-start flag.
+func (s *serviceManagerImpl) generateSystemdServiceNoStart(instanceName, basePath string) error {
+	slog.Info("Creating systemd service for Linux (no start)")
+	serviceName := fmt.Sprintf("%s-%s", BASE_SERVICE_NAME, instanceName)
+
+	run := func(name string, args ...string) error {
+		out, err := s.d.runner.Run(name, args...)
+		if len(out) > 0 {
+			if _, werr := fmt.Fprint(os.Stdout, string(out)); werr != nil {
+				return werr
+			}
+		}
+		return err
+	}
+
+	serviceFilePath := filepath.Join(s.d.paths.SystemdDir, serviceName+".service")
+	executablePath := filepath.Join(basePath, LINUX_MAC_BINARY_NAME)
+
+	serviceContent := fmt.Sprintf(`[Unit]
+Description=HydrAIDE Service - %s
+After=network.target
+
+[Service]
+ExecStart=%s
+WorkingDirectory=%s
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+`, instanceName, executablePath, basePath)
+
+	if err := os.MkdirAll(filepath.Dir(serviceFilePath), 0o755); err != nil {
+		return fmt.Errorf("failed to create directories for service file: %v", err)
+	}
+
+	if _, err := os.Stat(serviceFilePath); err == nil {
+		slog.Warn("Service file already exists", "path", serviceFilePath)
+		return fmt.Errorf("service file '%s' already exists", serviceFilePath)
+	}
+
+	if err := os.WriteFile(serviceFilePath, []byte(serviceContent), 0o644); err != nil {
+		return fmt.Errorf("failed to write service file: %v", err)
+	}
+
+	// Only reload and enable, but do NOT start
+	if err := run("systemctl", "daemon-reload"); err != nil {
+		return fmt.Errorf("failed to reload systemd daemon: %v", err)
+	}
+	if err := run("systemctl", "enable", serviceName+".service"); err != nil {
+		return fmt.Errorf("failed to enable service: %v", err)
+	}
+
+	slog.Info("Service file created successfully (not started)", "path", serviceFilePath)
 	slog.Info("Logs will be available via journald", "command", fmt.Sprintf("journalctl -u %s -f", serviceName))
 	return nil
 }
@@ -405,6 +485,63 @@ func (s *serviceManagerImpl) generateLaunchdService(instanceName, basePath strin
 	}
 
 	slog.Info("Plist file created successfully", "path", plistPath)
+	slog.Info("Logs will be available via macOS Unified Logging", "command", "log stream --predicate 'processImagePath contains \"hydraide\"'")
+	return nil
+}
+
+// generateLaunchdServiceNoStart creates and installs a launchd service without starting it.
+func (s *serviceManagerImpl) generateLaunchdServiceNoStart(instanceName, basePath string) error {
+	slog.Info("Creating launchd service for macOS (no start)")
+
+	label := fmt.Sprintf("com.hydraide.%s-%s", BASE_SERVICE_NAME, instanceName)
+	plistPath := filepath.Join(s.d.paths.LaunchDaemonsDir, label+".plist")
+	executablePath := filepath.Join(basePath, LINUX_MAC_BINARY_NAME)
+
+	if fi, err := os.Stat(executablePath); err != nil || fi.IsDir() {
+		return fmt.Errorf("executable not found at: %s", executablePath)
+	} else {
+		_ = os.Chmod(executablePath, 0o755)
+	}
+
+	plistContent := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key><string>%s</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>%s</string>
+	</array>
+	<key>WorkingDirectory</key><string>%s</string>
+	<key>RunAtLoad</key><true/>
+	<key>KeepAlive</key>
+	<dict>
+		<key>SuccessfulExit</key><false/>
+	</dict>
+	<key>ProcessType</key><string>Background</string>
+</dict>
+</plist>
+`, label, executablePath, basePath)
+
+	if err := os.WriteFile(plistPath, []byte(plistContent), 0o644); err != nil {
+		return fmt.Errorf("failed to write plist: %v", err)
+	}
+	_, _ = s.d.runner.Run("chown", "root:wheel", plistPath)
+	_, _ = s.d.runner.Run("chmod", "644", plistPath)
+
+	// Load but do NOT kickstart (start)
+	if out, err := s.d.runner.Run("launchctl", "bootstrap", "system", plistPath); err != nil {
+		slog.Warn("bootstrap failed, trying bootout+bootstrap", "error", err, "output", string(out))
+		_, _ = s.d.runner.Run("launchctl", "bootout", "system", label)
+		if out2, err2 := s.d.runner.Run("launchctl", "bootstrap", "system", plistPath); err2 != nil {
+			return fmt.Errorf("launchctl bootstrap failed: %v; output: %s", err2, string(out2))
+		}
+	}
+
+	// Enable service but do NOT start
+	_, _ = s.d.runner.Run("launchctl", "enable", "system/"+label)
+
+	slog.Info("Plist file created successfully (not started)", "path", plistPath)
 	slog.Info("Logs will be available via macOS Unified Logging", "command", "log stream --predicate 'processImagePath contains \"hydraide\"'")
 	return nil
 }
@@ -825,4 +962,10 @@ func (s *serviceManagerImpl) generateWindowsNSSMService(instanceName, basePath s
 	slog.Info("NSSM service configured successfully", "service", serviceName)
 	slog.Info("Logs will be available in Windows Event Viewer", "location", "Windows Logs > Application")
 	return nil
+}
+
+// generateWindowsNSSMServiceNoStart creates a Windows service without starting it.
+// Windows NSSM services don't auto-start on install, so this is the same as the regular version.
+func (s *serviceManagerImpl) generateWindowsNSSMServiceNoStart(instanceName, basePath string) error {
+	return s.generateWindowsNSSMService(instanceName, basePath)
 }

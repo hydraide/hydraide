@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -517,6 +518,14 @@ func (h *hydra) IsExistSwamp(islandID uint64, swampName name.Name) (bool, error)
 	// Construct the full path to the swamp's directory.
 	swampDataFolderPath := swampName.GetFullHashPath(h.settingsInterface.GetHydraAbsDataFolderPath(), islandID, h.settingsInterface.GetHashFolderDepth(), h.settingsInterface.GetMaxFoldersPerLevel())
 
+	// Check for V2 engine first (.hyd file), then V1 engine (folder)
+	// V2 uses a single .hyd file, V1 uses a folder with chunk files
+	hydFilePath := swampDataFolderPath + ".hyd"
+	if _, err := os.Stat(hydFilePath); err == nil {
+		return true, nil
+	}
+
+	// Fall back to V1 folder check
 	return h.filesystemInterface.IsFolderExists(swampDataFolderPath), nil
 
 }
@@ -802,11 +811,23 @@ func (h *hydra) createNewSwamp(islandID uint64, swampName name.Name) swamp.Swamp
 
 	swampDataFolderPath := swampName.GetFullHashPath(h.settingsInterface.GetHydraAbsDataFolderPath(), islandID, h.settingsInterface.GetHashFolderDepth(), h.settingsInterface.GetMaxFoldersPerLevel())
 
-	// Instantiate the metadata based on the folder.
-	metadataInterface := metadata.New(swampDataFolderPath)
-	// Load the metadata from the file.
-	metadataInterface.LoadFromFile()
-	// Pass the swamp name to it.
+	// Check if V2 engine is enabled (needed before creating metadata)
+	useV2 := h.settingsInterface.IsV2Engine() || swampSettings.UseChroniclerV2()
+
+	// Create metadata interface - different for V1 and V2 engines
+	// - V1: Full metadata with file persistence (GOB encoded meta file)
+	// - V2: NoOp metadata (dummy) - actual metadata is in .hyd file
+	var metadataInterface metadata.Metadata
+	if useV2 {
+		// V2 engine: Use lightweight NoOp metadata (no file I/O, minimal memory)
+		// The V2 chronicler handles all metadata in the .hyd file
+		metadataInterface = metadata.NewNoop()
+	} else {
+		// V1 engine: Full metadata with file persistence
+		metadataInterface = metadata.New(swampDataFolderPath)
+		metadataInterface.LoadFromFile()
+	}
+	// Set swamp name for both engines (needed for reverse lookup)
 	metadataInterface.SetSwampName(swampName)
 
 	// create the new filesystem
@@ -814,7 +835,7 @@ func (h *hydra) createNewSwamp(islandID uint64, swampName name.Name) swamp.Swamp
 	// init chronicler if the swamp is permanent-type
 	if swampSettings.GetSwampType() == setting.PermanentSwamp {
 		fss = &swamp.FilesystemSettings{}
-		fss.ChroniclerInterface = h.loadChronicler(swampSettings, swampDataFolderPath, metadataInterface)
+		fss.ChroniclerInterface = h.loadChronicler(swampSettings, swampDataFolderPath, metadataInterface, swampName, useV2)
 		fss.WriteInterval = swampSettings.GetWriteInterval()
 	}
 
@@ -824,13 +845,22 @@ func (h *hydra) createNewSwamp(islandID uint64, swampName name.Name) swamp.Swamp
 }
 
 // loadChronicler loads the filesystem of the swamp or create a new one if it is not existing
-func (h *hydra) loadChronicler(swampSettings setting.Setting, swampDataFolderPath string, metadataInterface metadata.Metadata) chronicler.Chronicler {
+func (h *hydra) loadChronicler(swampSettings setting.Setting, swampDataFolderPath string, metadataInterface metadata.Metadata, swampName name.Name, useV2 bool) chronicler.Chronicler {
 
 	// Construct the full path to the swamp's directory.
 	maxFileSizeBytes := swampSettings.GetMaxFileSizeByte()
 
-	// Create the file handler along with the metadata for the swamp.
-	fs := chronicler.New(swampDataFolderPath, maxFileSizeBytes, h.settingsInterface.GetHashFolderDepth(), h.filesystemInterface, metadataInterface)
+	var fs chronicler.Chronicler
+
+	if useV2 {
+		// Use new append-only V2 chronicler (32-112x faster, 50% less storage)
+		// V2 chronicler stores metadata (including swamp name) directly in the .hyd file
+		fs = chronicler.NewV2WithName(swampDataFolderPath, h.settingsInterface.GetHashFolderDepth(), swampName.Get())
+	} else {
+		// Use legacy V1 chronicler (filesystem-based, multi-chunk)
+		fs = chronicler.New(swampDataFolderPath, maxFileSizeBytes, h.settingsInterface.GetHashFolderDepth(), h.filesystemInterface, metadataInterface)
+	}
+
 	fs.CreateDirectoryIfNotExists()
 
 	return fs

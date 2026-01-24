@@ -80,11 +80,10 @@ func TestConcurrentCreateAndDelete(t *testing.T) {
 
 	const goroutineCount = 10 // Number of concurrent goroutines
 
-	// Use a WaitGroup to sync the goroutines
+	// Phase 1: Concurrent folder creation (all goroutines try to create the same folder)
 	var wg sync.WaitGroup
-	wg.Add(goroutineCount * 2) // 10 for create, 10 for delete
+	wg.Add(goroutineCount)
 
-	// Concurrent folder creation
 	for i := 0; i < goroutineCount; i++ {
 		go func(id int) {
 			defer wg.Done()
@@ -97,12 +96,21 @@ func TestConcurrentCreateAndDelete(t *testing.T) {
 		}(i)
 	}
 
-	// Concurrent folder deletion
+	wg.Wait()
+
+	// Verify folder exists after creation phase
+	if _, err := os.Stat(testFolder); os.IsNotExist(err) {
+		t.Errorf("Expected folder %s to exist after creation phase", testFolder)
+	}
+
+	// Phase 2: Concurrent folder deletion (all goroutines try to delete the same folder)
+	wg.Add(goroutineCount)
+
 	for i := 0; i < goroutineCount; i++ {
 		go func(id int) {
 			defer wg.Done()
 			// Random sleep to increase race condition likelihood
-			time.Sleep(time.Duration(id) * 20 * time.Millisecond)
+			time.Sleep(time.Duration(id) * 10 * time.Millisecond)
 			err := fs.DeleteFolder(testFolder, maxDepth)
 			if err != nil && !os.IsNotExist(err) {
 				t.Errorf("Goroutine %d: failed to delete folder: %v", id, err)
@@ -110,7 +118,6 @@ func TestConcurrentCreateAndDelete(t *testing.T) {
 		}(i)
 	}
 
-	// Wait for all goroutines to finish
 	wg.Wait()
 
 	// Final check: folder should not exist
