@@ -318,8 +318,8 @@ func (g Gateway) Get(ctx context.Context, in *hydrapb.GetRequest) (*hydrapb.GetR
 
 	// validate all the requests
 	for _, swampRequest := range in.GetSwamps() {
-		// check if the swamp name is valid and exist or not
-		if _, err := checkSwampName(g.ZeusInterface, swampRequest.GetIslandID(), swampRequest.SwampName, true); err != nil {
+		// check if the swamp name is valid (format check only, not existence)
+		if _, err := checkSwampName(g.ZeusInterface, swampRequest.GetIslandID(), swampRequest.SwampName, false); err != nil {
 			return nil, err
 		}
 		if swampRequest.GetKeys() == nil || swampRequest.GetKeys()[0] == "" {
@@ -355,6 +355,9 @@ func (g Gateway) Get(ctx context.Context, in *hydrapb.GetRequest) (*hydrapb.GetR
 				swampResponse.IsExist = false // override the default value
 				return
 			}
+
+			// Swamp exists - set the flag explicitly
+			swampResponse.IsExist = true
 
 			swampInterface, err := hydraInterface.SummonSwamp(ctx, swampRequest.GetIslandID(), swampName)
 			if err != nil {

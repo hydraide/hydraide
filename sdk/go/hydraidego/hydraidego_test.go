@@ -1674,7 +1674,7 @@ func TestProfileReadBatch(t *testing.T) {
 	type UserProfile struct {
 		Username      string    `hydraide:"Username"`
 		Email         string    `hydraide:"Email"`
-		Age           int       `hydraide:"Age"`
+		Age           int64     `hydraide:"Age"`
 		IsActive      bool      `hydraide:"IsActive"`
 		LastLoginTime time.Time `hydraide:"LastLoginTime"`
 	}
@@ -1685,7 +1685,7 @@ func TestProfileReadBatch(t *testing.T) {
 			swampID  string
 			username string
 			email    string
-			age      int
+			age      int64
 			active   bool
 		}{
 			{"user-alice", "alice", "alice@example.com", 25, true},
@@ -1739,7 +1739,7 @@ func TestProfileReadBatch(t *testing.T) {
 		// Verify each profile
 		expectedUsers := map[string]struct {
 			email    string
-			age      int
+			age      int64
 			isActive bool
 		}{
 			"alice":   {"alice@example.com", 25, true},
@@ -1819,7 +1819,7 @@ func TestProfileSaveBatch(t *testing.T) {
 	type UserProfile struct {
 		Username      string    `hydraide:"Username"`
 		Email         string    `hydraide:"Email"`
-		Age           int       `hydraide:"Age"`
+		Age           int64     `hydraide:"Age"`
 		IsActive      bool      `hydraide:"IsActive"`
 		LastLoginTime time.Time `hydraide:"LastLoginTime"`
 		Score         float64   `hydraide:"Score,omitempty,deletable"`
@@ -1886,7 +1886,7 @@ func TestProfileSaveBatch(t *testing.T) {
 		// Verify specific values
 		expectedUsers := map[string]struct {
 			email    string
-			age      int
+			age      int64
 			isActive bool
 			score    float64
 		}{
@@ -1945,12 +1945,12 @@ func TestProfileSaveBatch(t *testing.T) {
 		for _, profile := range results {
 			if profile.Username == "alice" {
 				assert.Equal(t, "alice_updated@test.com", profile.Email)
-				assert.Equal(t, 26, profile.Age)
+				assert.Equal(t, int64(26), profile.Age)
 				assert.True(t, profile.IsActive)
 				assert.Equal(t, 0.0, profile.Score, "Score should be 0 (deleted due to deletable)")
 			} else if profile.Username == "bob" {
 				assert.Equal(t, "bob_updated@test.com", profile.Email)
-				assert.Equal(t, 31, profile.Age)
+				assert.Equal(t, int64(31), profile.Age)
 				assert.False(t, profile.IsActive)
 				assert.Equal(t, 0.0, profile.Score, "Score should be 0 (deleted due to deletable)")
 			}

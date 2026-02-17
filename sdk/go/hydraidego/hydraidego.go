@@ -6125,7 +6125,7 @@ func convertFieldToKvPair(value reflect.Value, kvPair *hydraidepbgo.KeyValuePair
 	case reflect.Int32:
 		val := int32(value.Int())
 		kvPair.Int32Val = &val
-	case reflect.Int, reflect.Int64:
+	case reflect.Int64:
 		intVal := value.Int()
 		kvPair.Int64Val = &intVal
 	// 🔬 Floating point numbers
