@@ -317,9 +317,13 @@ func (g Gateway) Get(ctx context.Context, in *hydrapb.GetRequest) (*hydrapb.GetR
 	defer handlePanic()
 
 	// validate all the requests
+	// For single swamp requests, we validate existence upfront (fail-fast)
+	// For batch requests (multiple swamps), we handle existence per-swamp in the response
+	checkExistence := len(in.GetSwamps()) == 1
+
 	for _, swampRequest := range in.GetSwamps() {
-		// check if the swamp name is valid (format check only, not existence)
-		if _, err := checkSwampName(g.ZeusInterface, swampRequest.GetIslandID(), swampRequest.SwampName, false); err != nil {
+		// check if the swamp name is valid (and exists if single request)
+		if _, err := checkSwampName(g.ZeusInterface, swampRequest.GetIslandID(), swampRequest.SwampName, checkExistence); err != nil {
 			return nil, err
 		}
 		if swampRequest.GetKeys() == nil || swampRequest.GetKeys()[0] == "" {
