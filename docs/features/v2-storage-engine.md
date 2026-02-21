@@ -219,10 +219,23 @@ V2 engine settings can be configured per-Swamp:
 ```go
 h.RegisterSwamp(ctx, &hydraidego.RegisterSwampRequest{
     SwampPattern:   "users/profiles/*",
+
+    // CloseAfterIdle controls how long the Swamp stays loaded in memory after the last access.
+    // Once this idle period expires with no active reads or writes, the Swamp is automatically
+    // closed and any remaining in-memory changes are flushed to disk.
+    // This setting is fully active in V2 — the client controls memory lifetime per Swamp.
     CloseAfterIdle: 6 * time.Hour,
+
     FilesystemSettings: &hydraidego.SwampFilesystemSettings{
-        WriteInterval: 10 * time.Second,  // Buffer flush interval
-        // V2 engine is used automatically for new Swamps
+        // WriteInterval controls how often the V2 engine flushes in-memory changes to the .hyd file.
+        // This setting is fully active in V2 — the client controls flush frequency per Swamp.
+        // Lower values = more durable (more frequent disk writes).
+        // Higher values = better throughput (fewer disk writes, but more data at risk on crash).
+        WriteInterval: 10 * time.Second,
+
+        // MaxFileSize is a V1-only field. Do NOT set this for V2 Swamps — it is ignored.
+        // The V2 engine uses a single append-only .hyd file with automatic internal block
+        // management. There is no concept of a configurable max file size in V2.
     },
 })
 ```

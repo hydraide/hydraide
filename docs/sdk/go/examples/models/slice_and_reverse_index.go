@@ -386,7 +386,7 @@ func (m *ModelTagProductViewers) IsValueExist(r repo.Repo, tagName string, key s
 //   - **IsInMemorySwamp**: Set to `false`, meaning the Swamp is persisted to disk.
 //   - **FilesystemSettings**:
 //   - Changes are flushed every 10 seconds.
-//   - Each chunk file is limited to 8 KB.
+//   - MaxFileSize is a legacy V1 field — ignored by the V2 engine (default for new installations).
 //
 // 🧠 Notes:
 //
@@ -437,7 +437,7 @@ func (m *ModelTagProductViewers) RegisterPattern(r repo.Repo, tagName string) er
 		// Configure file writing: frequent small chunks
 		FilesystemSettings: &hydraidego.SwampFilesystemSettings{
 			WriteInterval: time.Second * 10, // flush changes every 10s
-			MaxFileSize:   8192,             // 8 KB max chunk size
+			MaxFileSize:   8192,             // Deprecated: V1 only — ignored by V2 engine (default for new installs)
 		},
 	})
 

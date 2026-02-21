@@ -53,8 +53,10 @@ SwampPattern:    c.createCatalogName(), // e.g., users/catalog/all
 CloseAfterIdle:  6 * time.Hour,         // Keep in RAM for 6 hours of inactivity
 IsInMemorySwamp: false,                 // Persist to disk as well
 FilesystemSettings: &hydraidego.SwampFilesystemSettings{
-WriteInterval: 10 * time.Second,
-MaxFileSize:   8 * 1024,
+WriteInterval: 10 * time.Second, // How often to flush changes from memory to disk
+// MaxFileSize is a legacy V1 field and is ignored by the V2 engine (default for new installations).
+// You can safely omit it. See SwampFilesystemSettings.MaxFileSize for details.
+// MaxFileSize: 8 * 1024,
 },
 })
 

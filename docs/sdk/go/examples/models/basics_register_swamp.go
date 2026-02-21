@@ -147,6 +147,18 @@ func (m *BasicsRegisterSwamp) RegisterPattern(repo repo.Repo) error {
 
 			// 💾 MaxFileSize — Controls how large each chunk file can grow on disk.
 			//
+			// ⚠️ DEPRECATED: This field is only used by the legacy V1 storage engine.
+			// If your HydrAIDE instance uses the V2 engine (the default for all new installations),
+			// this field is completely ignored. You can safely omit it from your code.
+			//
+			// The V2 engine replaces the multi-chunk approach with a single append-only .hyd file
+			// per Swamp, with automatic internal block management. There is no concept of a "max
+			// file size" in V2 — the engine handles storage growth automatically.
+			//
+			// ─────────────────────────────────────────────────────────────
+			// 🕹️ V1 LEGACY BEHAVIOR (only relevant if V2 is not yet enabled)
+			// ─────────────────────────────────────────────────────────────
+			//
 			// 🔒 IMPORTANT:
 			// → MaxFileSize should **NEVER** be smaller than your OS filesystem's minimum block size.
 			//
@@ -180,7 +192,9 @@ func (m *BasicsRegisterSwamp) RegisterPattern(repo repo.Repo) error {
 			// ⬆️ You may increase to **64 KB** for large sequential Swamps (e.g. on NTFS)
 			//
 			// ❌ Never go below your OS filesystem's block size
-			MaxFileSize: 8192, // 8 KB
+			//
+			// Deprecated: Use V2 storage engine instead. Migrate with `hydraidectl migrate`.
+			MaxFileSize: 8192, // 8 KB — V1 only, ignored by V2 engine
 		},
 	})
 

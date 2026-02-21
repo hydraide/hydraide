@@ -165,7 +165,7 @@ func (c *CatalogModelGamePlayer) RegisterPattern(r repo.Repo, gameID string) err
 		// Configure file writing: frequent small chunks
 		FilesystemSettings: &hydraidego.SwampFilesystemSettings{
 			WriteInterval: time.Second * 10, // flush changes every 10s
-			MaxFileSize:   8192,             // 8 KB max chunk size
+			MaxFileSize:   8192,             // Deprecated: V1 only — ignored by V2 engine (default for new installs)
 		},
 	})
 

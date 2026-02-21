@@ -193,7 +193,7 @@ func (c *CatalogModelTagReference) RegisterPattern(repo repo.Repo) error {
 		// ⚙️ File flush settings: write small changes often to disk
 		FilesystemSettings: &hydraidego.SwampFilesystemSettings{
 			WriteInterval: time.Second * 10, // flush every 10 seconds
-			MaxFileSize:   8192,             // max chunk size = 8 KB
+			MaxFileSize:   8192,             // Deprecated: V1 only — ignored by V2 engine (default for new installs)
 		},
 	})
 

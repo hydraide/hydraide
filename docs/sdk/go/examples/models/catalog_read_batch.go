@@ -48,7 +48,7 @@ func (c *CatalogModelUserBasic) RegisterPattern(r repo.Repo) error {
 		IsInMemorySwamp: false,
 		FilesystemSettings: &hydraidego.SwampFilesystemSettings{
 			WriteInterval: 10 * time.Second,
-			MaxFileSize:   8192,
+			MaxFileSize:   8192, // Deprecated: V1 only — ignored by V2 engine (default for new installs)
 		},
 	})
 	if errs != nil {

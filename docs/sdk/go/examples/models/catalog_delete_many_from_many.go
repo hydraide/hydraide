@@ -192,7 +192,7 @@ func (c *CatalogModelPostMention) RegisterPattern(repo repo.Repo) error {
 		// Set up frequent disk flushing for low-latency persistence
 		FilesystemSettings: &hydraidego.SwampFilesystemSettings{
 			WriteInterval: time.Second * 10, // flush every 10 seconds
-			MaxFileSize:   8192,             // 8 KB file chunk size
+			MaxFileSize:   8192,             // Deprecated: V1 only — ignored by V2 engine (default for new installs)
 		},
 	})
 

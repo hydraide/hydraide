@@ -181,7 +181,7 @@ func (m *ModelCatalogQueue) RegisterPattern(repo repo.Repo) error {
 
 			// Max file size for binary chunks — small size minimizes SSD wear
 			// 8KB ensures fast, compressible, delta-efficient chunking
-			MaxFileSize: 8192, // 8 KB
+			MaxFileSize: 8192, // Deprecated: V1 only — ignored by V2 engine (default for new installs)
 		},
 	})
 

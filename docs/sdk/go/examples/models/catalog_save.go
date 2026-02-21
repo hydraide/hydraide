@@ -137,7 +137,7 @@ func (c *CatalogModelUserSaveExample) Save(r repo.Repo) error {
 // This method defines how the Swamp behaves in terms of:
 // - memory lifetime (CloseAfterIdle)
 // - write behavior (WriteInterval)
-// - storage limits (MaxFileSize)
+// - storage limits (MaxFileSize — V1 only, deprecated; ignored by V2 engine)
 // - persistence model (disk-backed)
 //
 // This setup is ideal for high-read catalogs that need occasional writes.
@@ -177,7 +177,7 @@ func (c *CatalogModelUserSaveExample) RegisterPattern(r repo.Repo) error {
 		// Configure file writing: frequent small chunks
 		FilesystemSettings: &hydraidego.SwampFilesystemSettings{
 			WriteInterval: time.Second * 10, // flush changes every 10s
-			MaxFileSize:   8192,             // 8 KB max chunk size
+			MaxFileSize:   8192,             // Deprecated: V1 only — ignored by V2 engine (default for new installs)
 		},
 	})
 

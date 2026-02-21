@@ -170,7 +170,7 @@ func (c *CatalogModelTaskStatus) RegisterPattern(repo repo.Repo) error {
 		// Small, fast chunks for frequent writes
 		FilesystemSettings: &hydraidego.SwampFilesystemSettings{
 			WriteInterval: time.Second * 10,
-			MaxFileSize:   8192, // 8 KB
+			MaxFileSize:   8192, // Deprecated: V1 only — ignored by V2 engine (default for new installs)
 		},
 	})
 

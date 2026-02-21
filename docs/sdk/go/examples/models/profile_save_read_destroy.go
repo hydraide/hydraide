@@ -263,7 +263,7 @@ func (m *UserProfile) RegisterPattern(repo repo.Repo) error {
 		IsInMemorySwamp: false,
 		FilesystemSettings: &hydraidego.SwampFilesystemSettings{
 			WriteInterval: time.Second * 1,
-			MaxFileSize:   1048576,
+			MaxFileSize:   1048576, // Deprecated: V1 only — ignored by V2 engine (default for new installs)
 		},
 	})
 

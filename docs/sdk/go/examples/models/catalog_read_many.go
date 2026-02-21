@@ -204,7 +204,7 @@ func (c *CatalogModelUserSessionLog) RegisterPattern(repo repo.Repo) error {
 		// Write small chunks frequently to reduce data loss and latency
 		FilesystemSettings: &hydraidego.SwampFilesystemSettings{
 			WriteInterval: time.Second * 10, // flush every 10s
-			MaxFileSize:   8192,             // 8KB chunk size
+			MaxFileSize:   8192,             // Deprecated: V1 only — ignored by V2 engine (default for new installs)
 		},
 	})
 
