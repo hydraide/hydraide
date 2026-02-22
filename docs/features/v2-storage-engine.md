@@ -20,20 +20,30 @@ The V2 engine was designed with these priorities:
 
 ### 📁 File Format
 
-Each Swamp is stored in a single `.hyd` file with this structure:
+Each Swamp is stored in a **single `.hyd` file**. The file is created at the same directory level where the V1 chunk folder would have been, with a `.hyd` extension appended:
+
+```
+V1 (legacy):  /data/sanctuary/realm/ab/swampname/   ← folder with many chunk files
+V2:           /data/sanctuary/realm/ab/swampname.hyd ← one file
+```
+
+The `.hyd` file has a fixed structure:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    FILE HEADER (64 bytes)                    │
-│  Magic: "HYDR" | Version: 2 | Created | Modified | Stats    │
+│  Magic: "HYDR" (4B) | Version: 2 (2B) | Flags (2B)          │
+│  CreatedAt (8B) | ModifiedAt (8B) | BlockSize (4B)           │
+│  EntryCount (8B) | BlockCount (8B) | Reserved (16B)          │
 ├─────────────────────────────────────────────────────────────┤
 │                         BLOCK 1                              │
 │  ┌─────────────────────────────────────────────────────────┐│
 │  │ Block Header (16 bytes)                                 ││
-│  │ Compressed Size | Uncompressed Size | Entry Count | CRC ││
+│  │  CompressedSize (4B) | UncompressedSize (4B)            ││
+│  │  EntryCount (2B) | CRC32 checksum (4B) | Flags (2B)     ││
 │  ├─────────────────────────────────────────────────────────┤│
-│  │ Compressed Entry Data (Snappy)                          ││
-│  │ [Entry1][Entry2][Entry3]...                             ││
+│  │ Compressed Payload (Snappy)                             ││
+│  │  [Entry][Entry][Entry]...  ← up to 16KB uncompressed    ││
 │  └─────────────────────────────────────────────────────────┘│
 ├─────────────────────────────────────────────────────────────┤
 │                         BLOCK 2                              │
@@ -43,16 +53,29 @@ Each Swamp is stored in a single `.hyd` file with this structure:
 └─────────────────────────────────────────────────────────────┘
 ```
 
-Each **entry** contains:
-- **Operation**: INSERT (1), UPDATE (2), DELETE (3), or METADATA (4)
-- **Key**: The treasure's unique identifier
-- **Data**: GOB-encoded treasure data (or empty for DELETE)
+#### Entry binary format (variable size)
+
+Each entry inside a block has the following binary layout:
+
+```
+Operation  (1 byte)  – 1=INSERT, 2=UPDATE, 3=DELETE, 4=METADATA
+KeyLen     (2 bytes) – length of the key string
+Key        (N bytes) – the Treasure's unique key (UTF-8 string)
+DataLen    (4 bytes) – length of the data payload
+Data       (M bytes) – GOB-encoded Treasure bytes (empty for DELETE)
+```
+
+Minimum entry size: **7 bytes** (1+2+4 with empty key and empty data — key cannot actually be empty).
+
+#### Metadata entry
+
+When a Swamp file is created for the first time, a special `METADATA` entry is written as the **very first entry in the first block**, and is immediately flushed to disk (not buffered). The key is always `__swamp_meta__` and the data payload contains the full canonical Swamp name as a UTF-8 string. This entry enables `hydraidectl` to reverse-map hashed folder names back to human-readable Swamp names.
 
 ---
 
 ### 🧠 Memory and Write Buffer
 
-The V2 engine uses a **persistent writer** that stays open while the Swamp is active. This eliminates the overhead of repeatedly opening and closing files.
+The V2 engine uses a **persistent writer** (`FileWriter`) that stays open while the Swamp is active in memory. This eliminates the overhead of repeatedly opening and closing the file on every write cycle.
 
 #### Write Buffer Architecture
 
@@ -60,133 +83,198 @@ The V2 engine uses a **persistent writer** that stays open while the Swamp is ac
 ┌──────────────────────────────────────────────────────────────────┐
 │                         MEMORY                                    │
 │  ┌────────────────────────────────────────────────────────────┐  │
-│  │                    Write Buffer                             │  │
-│  │  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐           │  │
-│  │  │ Entry 1 │ │ Entry 2 │ │ Entry 3 │ │ Entry 4 │ ...       │  │
-│  │  └─────────┘ └─────────┘ └─────────┘ └─────────┘           │  │
+│  │                    WriteBuffer                              │  │
+│  │  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐          │  │
+│  │  │ Entry 1 │ │ Entry 2 │ │ Entry 3 │ │ Entry N │ ...       │  │
+│  │  └─────────┘ └─────────┘ └─────────┘ └─────────┘          │  │
 │  │                                                             │  │
-│  │  Current Size: 8KB          Max Size: 16KB                  │  │
+│  │  Accumulated uncompressed size: tracked per-entry          │  │
+│  │  Flush threshold: 16 KB (DefaultMaxBlockSize)              │  │
 │  └────────────────────────────────────────────────────────────┘  │
 │                              │                                    │
-│                              ▼ (when buffer full OR Close())      │
+│          Buffer reaches 16KB │  OR  Flush() called               │
+│                              ▼                                    │
 │                     ┌────────────────┐                            │
-│                     │ Snappy Compress │                           │
+│                     │ Snappy Compress │ ← single block            │
 │                     └────────────────┘                            │
 │                              │                                    │
 └──────────────────────────────┼────────────────────────────────────┘
                                ▼
 ┌──────────────────────────────────────────────────────────────────┐
-│                          DISK                                     │
-│                     ┌────────────────┐                            │
-│                     │  .hyd file     │                            │
-│                     │  [Block N+1]   │  ← Append only             │
-│                     └────────────────┘                            │
+│                          DISK (.hyd file)                         │
+│   [FILE HEADER] [BLOCK 1] [BLOCK 2] ... [BLOCK N] [BLOCK N+1]   │
+│                                                    ↑ appended    │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-**Key behaviors:**
+**The block flush threshold is 16 KB of uncompressed entry data** (the `DefaultMaxBlockSize` constant in the source). This value is **not configurable per Swamp** — it is a fixed server-side internal constant. After Snappy compression, the actual bytes written per block are typically 40–60% of the original size.
 
-1. **Buffered writes**: Entries accumulate in the write buffer (up to 16KB uncompressed)
-2. **Automatic flush**: When the buffer reaches 16KB, it's compressed and written as a new block
-3. **Close flush**: When the Swamp closes, any remaining buffer data is flushed
-4. **Metadata immediate flush**: Swamp name metadata is flushed immediately to ensure consistency
+**Block flush is triggered by exactly two conditions:**
+1. The accumulated uncompressed size in the `WriteBuffer` reaches or exceeds **16 KB** → automatic flush during `WriteEntry()`
+2. An explicit `Flush()` call is made (e.g. immediately after writing the METADATA entry on new file creation)
+
+A flush always produces **exactly one block**: all buffered entries are serialized, Snappy-compressed together, a 16-byte `BlockHeader` is prepended (with `CRC32` checksum of the compressed payload), and the result is appended to the file.
 
 ---
 
 ### ⚡ Write Flow
 
-When you save a Treasure, here's what happens:
+When a client saves a Treasure, here is the exact sequence:
 
 ```
-1. Save(treasure)
+1. Client calls CatalogSave / ProfileSave / etc.
        │
        ▼
-2. Swamp adds to "waiting for write" queue
+2. Swamp marks Treasure as "waiting for write" (in-memory queue)
        │
        ▼
-3. Write Ticker fires (default: every 10 seconds)
-   OR immediate flush if WriteInterval = 0
+3. WriteInterval ticker fires  ← controlled by client's RegisterSwamp setting
+   (OR WriteInterval = 0 → immediate flush on every change)
        │
        ▼
-4. Chronicler.Write(treasures[])
+4. swamp.fileWriterHandler() is called
        │
        ▼
-5. ensureWriter() - Opens file if needed
-   └── First write? → Write metadata entry (swamp name) + FLUSH
+5. chroniclerV2.Write([]treasure) is called
        │
        ▼
-6. For each treasure:
-   └── Encode to GOB → Create Entry → Add to WriteBuffer
+6. ensureWriter():
+   └── Writer already open? → reuse it (no file re-open overhead)
+   └── Writer nil or closed? → open file (create or append)
+       └── New file? → write METADATA entry + immediate Flush()
+       └── Existing file missing metadata? → write METADATA + Flush() (repair)
        │
        ▼
-7. Buffer full? → Compress with Snappy → Append block to file
+7. For each Treasure in batch:
+   ├── Deleted (DeletedAt > 0)?  → Entry{Op: DELETE, Key, Data: nil}
+   ├── Has no FileName yet?      → Entry{Op: INSERT, Key, Data: GOB bytes}
+   └── Has FileName already?     → Entry{Op: UPDATE, Key, Data: GOB bytes}
        │
        ▼
-8. Swamp.Close() → Flush remaining buffer → Update header → Close file
+8. WriteBuffer.Add(entry):
+   └── Accumulated size < 16KB → stays in buffer, no disk I/O
+   └── Accumulated size >= 16KB → automatic Flush() → 1 block appended to file
+       │
+       ▼
+9. FilePointerCallback fired for each Treasure
+       (tells the Swamp which file the Treasure lives in → always the .hyd file)
+```
+
+**The writer stays open** (`FileWriter` holds an open `*os.File`) for the entire duration that the Swamp is loaded in memory. It is only closed when the Swamp closes.
+
+---
+
+### 🔒 Swamp Close Flow
+
+When `CloseAfterIdle` expires (no reads or writes for the configured duration) or a graceful shutdown is triggered:
+
+```
+1. swamp.Close() is called
+       │
+       ▼
+2. All pending Treasures in "waiting for write" queue are flushed:
+   └── chroniclerV2.Write() called with remaining batch
+       └── Remaining buffer entries → Flush() → last block appended
+       │
+       ▼
+3. chroniclerV2.Close() is called
+   └── flushLocked() → flush any remaining buffer → last block(s) written
+   └── Header updated (BlockCount, EntryCount written back to byte 0-63)
+   └── file.Close() → OS file handle released
+       │
+       ▼
+4. Compaction check (maybeCompactUnlocked):
+   └── Open file with FileReader
+   └── Calculate fragmentation = (total entries - live entries) / total entries
+   └── Fragmentation < 50%?  → skip compaction
+   └── Fragmentation >= 50%? → run Compact()
+       │
+       ▼
+5. Swamp removed from in-memory map → GC frees memory
 ```
 
 ---
 
 ### 🔄 Read Flow (Hydration)
 
-When a Swamp is accessed after being idle:
+When a Swamp is accessed after being idle (not in memory):
 
 ```
-1. SummonSwamp(name)
+1. SummonSwamp(name) called
        │
        ▼
-2. Swamp not in memory → Create new Swamp
+2. Swamp not in memory → create new Swamp object
        │
        ▼
-3. Chronicler.Load(beacon)
+3. chroniclerV2.Load(beacon) called
        │
        ▼
-4. Open .hyd file → Read all blocks
+4. FileReader opens .hyd file, reads 64-byte FILE HEADER
        │
        ▼
-5. For each block:
-   └── Decompress → Parse entries → Apply to index
+5. Sequential read of all blocks from byte 64 onward:
+   └── Read BlockHeader (16 bytes) → decompress payload → parse Entries
        │
        ▼
-6. Build final state:
-   - INSERT/UPDATE → Add/update in index
-   - DELETE → Remove from index
-   - METADATA → Extract swamp name
+6. BuildIndex (replay log):
+   ├── METADATA entry → extract swamp name (ignored in data index)
+   ├── INSERT / UPDATE → index[key] = latestData  (overwrites previous)
+   └── DELETE        → delete(index, key)
        │
        ▼
-7. Swamp ready in memory with all Treasures
+7. All live entries pushed into the in-memory Beacon index
+       │
+       ▼
+8. Writer is NOT opened yet (lazy initialization — opened on first write)
+       │
+       ▼
+9. Swamp is ready in memory with full Treasure state
 ```
 
-The **replay** mechanism means we never need to compact during reads – we simply replay the log and keep only the latest state of each key.
+The replay mechanism means the engine never needs random-access reads. It reads the file sequentially from start to finish exactly once, building the final live state by applying all logged operations in order.
 
 ---
 
 ### 🗜️ Compaction
 
-Over time, the `.hyd` file accumulates dead entries (updates and deletes). Compaction rewrites the file with only live entries.
+Over time, the `.hyd` file accumulates **dead entries**: every UPDATE writes a new entry without removing the old one, and every DELETE writes a tombstone without physically removing the original INSERT. This is the append-only trade-off.
 
-**When compaction runs:**
-- On `Close()` if fragmentation exceeds threshold (default: 50%)
-- Manually via `hydraidectl compact`
-
-**Compaction process:**
-1. Read all entries and build live index
-2. Write new file with only live entries (including metadata)
-3. Atomic rename to replace old file
-
+**Fragmentation formula:**
 ```
-Before Compaction:
-┌─────────────────────────────────────────┐
-│ INSERT key1 │ UPDATE key1 │ DELETE key2 │  ← 3 entries
-│ INSERT key2 │ UPDATE key1 │ INSERT key3 │  ← 6 total
-└─────────────────────────────────────────┘
-Fragmentation: 66% (4 dead, 2 live)
+fragmentation = (total_entry_count - live_entry_count) / total_entry_count
+```
 
-After Compaction:
-┌─────────────────────────────────────────┐
-│ METADATA │ INSERT key1 │ INSERT key3   │  ← 3 entries (2 live + meta)
-└─────────────────────────────────────────┘
-Fragmentation: 0%
+**When compaction is triggered:**
+- Automatically on every `swamp.Close()`, if `fragmentation >= 0.5` (50%)
+- Manually at any time via `hydraidectl compact`
+
+**Compaction process (atomic):**
+```
+1. Open .hyd file with FileReader
+2. Calculate fragmentation → skip if below threshold
+3. LoadIndex() → build map of only live entries (key → latest data)
+4. Write all live entries to a NEW temp file: swampname.hyd.compact
+   └── METADATA entry written first (swamp name preserved)
+   └── Each live key written as OpInsert
+5. writer.Close() on temp file → header finalized, file synced
+6. os.Rename(swampname.hyd.compact, swampname.hyd) → atomic replacement
+7. Old file is gone; new compact file takes its place
+```
+
+Example:
+```
+Before compaction (66% fragmentation):
+┌──────────────────────────────────────────────────────┐
+│ META:meta │ INSERT:key1 │ UPDATE:key1 │ DELETE:key2   │ ← block 1
+│ INSERT:key2 │ UPDATE:key1 │ INSERT:key3               │ ← block 2
+└──────────────────────────────────────────────────────┘
+total=6 entries, live=2 (key1, key3)
+
+After compaction (0% fragmentation):
+┌──────────────────────────────────────────────────────┐
+│ META:meta │ INSERT:key1 │ INSERT:key3                 │ ← block 1
+└──────────────────────────────────────────────────────┘
+total=3 entries (2 live + 1 meta), 1 block
 ```
 
 ---
@@ -205,45 +293,45 @@ Fragmentation: 0%
 
 ### 🛡️ Reliability Features
 
-1. **Atomic block writes**: Each block is written atomically with CRC32 checksum
-2. **Append-only**: Existing data is never modified, preventing corruption
-3. **Graceful recovery**: Corrupted trailing blocks can be truncated without data loss
-4. **Metadata persistence**: Swamp name is written and flushed immediately on file creation
+1. **CRC32 per block**: Every block carries a checksum of its compressed payload. A mismatch on read signals corruption.
+2. **Append-only**: Existing bytes in the file are never overwritten during normal operation — only the 64-byte header is rewritten on `Close()` to update `BlockCount` and `EntryCount`.
+3. **Atomic compaction**: The compacted file is built in a temp path and only swapped in via `os.Rename` (atomic on all POSIX systems). A crash during compaction leaves the original file intact.
+4. **Metadata flush**: The METADATA entry (swamp name) is always flushed immediately to disk after being written, ensuring it is visible even if the process crashes before the next write-interval.
+5. **Graceful recovery**: If the last block is partially written (e.g., crash mid-write), the reader will hit an `io.EOF` or checksum mismatch on that block and stop reading. All previously valid blocks remain intact.
 
 ---
 
 ### 🔧 Configuration
 
-V2 engine settings can be configured per-Swamp:
+The following settings are **client-controlled** via `RegisterSwamp` and remain fully active in V2:
 
 ```go
 h.RegisterSwamp(ctx, &hydraidego.RegisterSwampRequest{
     SwampPattern:   "users/profiles/*",
 
-    // CloseAfterIdle controls how long the Swamp stays loaded in memory after the last access.
-    // Once this idle period expires with no active reads or writes, the Swamp is automatically
-    // closed and any remaining in-memory changes are flushed to disk.
-    // This setting is fully active in V2 — the client controls memory lifetime per Swamp.
+    // CloseAfterIdle: how long the Swamp stays loaded in memory after the last
+    // read or write. When this expires, the Swamp is closed, all remaining
+    // buffered writes are flushed to disk, and memory is released.
+    // Fully active in V2 — the client controls memory lifetime per Swamp.
     CloseAfterIdle: 6 * time.Hour,
 
     FilesystemSettings: &hydraidego.SwampFilesystemSettings{
-        // WriteInterval controls how often the V2 engine flushes in-memory changes to the .hyd file.
-        // This setting is fully active in V2 — the client controls flush frequency per Swamp.
-        // Lower values = more durable (more frequent disk writes).
-        // Higher values = better throughput (fewer disk writes, but more data at risk on crash).
+        // WriteInterval: how often the write-ticker fires to flush in-memory
+        // changes (Treasures in the "waiting for write" queue) to the .hyd file.
+        // Fully active in V2 — the client controls flush frequency per Swamp.
+        // 0 = flush immediately on every change (highest durability, more I/O).
         WriteInterval: 10 * time.Second,
 
-        // MaxFileSize is a V1-only field. Do NOT set this for V2 Swamps — it is ignored.
-        // The V2 engine uses a single append-only .hyd file with automatic internal block
-        // management. There is no concept of a configurable max file size in V2.
+        // MaxFileSize: V1-only field, completely ignored by V2. Do not set.
     },
 })
 ```
 
-**Global settings** (in HydrAIDE server config):
-- `UseV2Engine: true` – Enable V2 for all new Swamps (default: true)
-- `MaxBlockSize: 16384` – Block size in bytes (default: 16KB, optimized for ZFS)
-- `CompactionThreshold: 0.5` – Fragmentation ratio to trigger auto-compaction
+**Internal server-side constants** (not configurable per Swamp):
+- `DefaultMaxBlockSize = 16384` – block flush threshold in bytes (16KB uncompressed, ZFS-optimized)
+- `CompactionThreshold = 0.5` – fragmentation ratio above which compaction runs on Close()
+- Block compression: **Snappy** (always, not configurable)
+- File format version: **2** (magic bytes: `HYDR`)
 
 ---
 
@@ -260,15 +348,3 @@ hydraidectl migrate --instance myinstance --full
 ```
 
 See [Migration Guide](../hydraidectl/hydraidectl-migration.md) for detailed instructions.
-
----
-
-### 📈 When to Use V2
-
-**Always use V2** for new deployments. It's faster, smaller, and more reliable.
-
-The only reason to stay on V1 is if you have specific tooling that depends on the multi-file chunk format – but even then, migration is straightforward.
-
----
-
-This architecture makes HydrAIDE one of the fastest embedded data engines available, while maintaining simplicity and reliability.
