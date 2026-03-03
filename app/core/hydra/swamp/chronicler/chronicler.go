@@ -39,6 +39,10 @@ type Chronicler interface {
 	// For V1: no-op (writes are atomic)
 	// For V2: flushes buffer, syncs to disk, closes file handle, optionally runs compaction
 	Close() error
+	// ForceCompaction runs compaction regardless of fragmentation threshold.
+	// For V1: no-op (V1 doesn't use append-only format)
+	// For V2: rewrites the .hyd file, removing all dead entries
+	ForceCompaction() error
 }
 
 type FileNameEvent struct {
@@ -150,6 +154,11 @@ func (c *chronicler) Destroy() {
 		slog.Error("can not delete the swamp directory with all empty folders", "error", err)
 	}
 
+}
+
+// ForceCompaction is a no-op for V1 chronicler (V1 uses per-file storage, not append-only).
+func (c *chronicler) ForceCompaction() error {
+	return nil
 }
 
 func (c *chronicler) IsFilesystemInitiated() bool {

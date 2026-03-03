@@ -586,6 +586,10 @@ type Swamp interface {
 	// - Close is a critical function for optimizing memory usage in the system, allowing it to retain only the necessary data.
 	Close()
 
+	// ForceCompaction forces a full rewrite of the swamp's storage file,
+	// removing all dead (superseded) entries and reducing fragmentation to 0%.
+	ForceCompaction() error
+
 	// StartSendingInformation enables the swamp to send information and events to the Hydra if there are any clients interested in receiving them.
 	// This function is typically used to initiate real-time data streaming to clients who have subscribed to updates from this swamp.
 	//
@@ -2106,6 +2110,14 @@ func (s *swamp) SaveFunction(t treasure.Treasure, guardID guard.ID) treasure.Tre
 	// nothing changed, we don't need to send events to the hydra
 	return treasure.StatusSame
 
+}
+
+// ForceCompaction forces a full rewrite of the swamp's storage file.
+func (s *swamp) ForceCompaction() error {
+	if atomic.LoadInt32(&s.inMemorySwamp) == 1 {
+		return nil // in-memory swamps have no file to compact
+	}
+	return s.chroniclerInterface.ForceCompaction()
 }
 
 // Close closes the swamp (write all waiting treasures to the chroniclerInterface) and stops all goroutines inside the swamp

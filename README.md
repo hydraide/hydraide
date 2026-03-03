@@ -51,6 +51,48 @@ hydraidectl migrate --source /path/to/hydraide/data --workers 4
 
 ---
 
+## 🔍 New: Server-Side Filtering & Streaming Reads
+
+HydrAIDE now supports **server-side query filters** with **nested AND/OR logic** and **streaming reads** for Catalog Swamps:
+
+| Feature | Description |
+|---------|-------------|
+| **FilterGroup (AND/OR)** | Build complex boolean filter expressions with nested AND/OR groups — evaluated entirely on the server |
+| **CatalogReadManyStream** | Streaming variant of CatalogReadMany — results arrive one-by-one via gRPC server-stream instead of a single large response |
+| **CatalogReadManyFromMany** | Read from multiple Swamps in a single streaming call with per-Swamp Index and Filters |
+| **String Operators** | Contains, NotContains, StartsWith, EndsWith — advanced string matching beyond equality |
+| **Server-Side Filters** | Filter Treasures by typed values (int, float, string, bool) directly on the server — non-matching data never leaves the engine |
+| **MessagePack Encoding** | Optional cross-language encoding for complex types, enabling server-side field-level inspection within struct values |
+| **CompactSwamp** | Force a full .hyd file rewrite to clean up after encoding migration |
+
+```go
+// Stream products with price > 100 AND name contains "Pro", newest first
+filters := hydraidego.FilterAND(
+    hydraidego.FilterFloat64(hydraidego.GreaterThan, 100.0),
+    hydraidego.FilterString(hydraidego.Contains, "Pro"),
+)
+err := h.CatalogReadManyStream(ctx, swamp, index, filters, Product{}, func(m any) error {
+    product := m.(*Product)
+    fmt.Println(product.Name, product.Price)
+    return nil
+})
+
+// Nested AND/OR: price > 100 AND (status == "active" OR status == "pending")
+filters := hydraidego.FilterAND(
+    hydraidego.FilterFloat64(hydraidego.GreaterThan, 100.0),
+    hydraidego.FilterOR(
+        hydraidego.FilterString(hydraidego.Equal, "active"),
+        hydraidego.FilterString(hydraidego.Equal, "pending"),
+    ),
+)
+```
+
+> 100% backward compatible — existing APIs work unchanged. Filters are optional. Default encoding remains GOB.
+
+👉 Full documentation: [Server-Side Filtering & Streaming](docs/sdk/go/go-sdk.md#-server-side-filtering--streaming)
+
+---
+
 ## 🧠 What is HydrAIDE?
 
 **One engine that replaces your database, cache, and pub/sub — just save your structs.**
@@ -82,6 +124,7 @@ With HydrAIDE, you don’t adapt to the database — **the database adapts to yo
 | 🛡️ **Built-in business lock**                  | Per-key, distributed locking that works across services and servers — ideal for enforcing business-level rules without race conditions. HydrAIDE automatically queues lock requests (FIFO), applies a TTL to prevent deadlocks, and releases locks safely even if a service crashes [👉 read more](docs/features/built-in-busines-lock.md) |
 | 🧠 **Memory-Efficient**                         | Swamps live in memory only when accessed. Instant hydration, automatic disposal when idle. [👉 read more](docs/features/memory-efficient.md)                                                                                                                                        |
 | 🧹 **Zero Garbage**                             | No daemons. No cron jobs. No cleanup scripts. Swamps manage themselves via lifecycle logic. [👉 read more](docs/features/zero-garbage.md)                                                                                                                                           |
+| 🔍 **Server-Side Filtering & Streaming**        | Built-in query filter system with streaming delivery. Filter Treasures by typed values directly on the server — non-matching data never leaves the engine. Stream millions of results without loading them all into memory. Read from multiple Swamps in a single streaming call with per-Swamp filters. [👉 read more](docs/sdk/go/go-sdk.md#-server-side-filtering--streaming) |
 | ✍️ **No More Queries**                          | No SELECT, no WHERE, no JOINS, no Aggregates. Your struct *is* the query. [👉 read more](docs/features/no-more-queries.md)                                                                                                                                                          |
 | 🛰️ **Pure gRPC Control**                       | Fully gRPC-native. Works with or without SDKs. Ideal for CLI tools, edge services, and IoT nodes. [👉 read more](docs/features/pure-grpc-control.md)                                                                                                                                |
 | 🌐 **Scaling Without Orchestrator**             | Deterministic folder-based distribution. No orchestrators. Just spawn instances where needed. [👉 read more](docs/features/scaing-without-orchestrator.md)                                                                                                                                                                                      |

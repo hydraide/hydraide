@@ -419,6 +419,35 @@ service HydraideService {
   // Useful for dashboards and quick health checks.
   rpc GetTelemetryStats(TelemetryStatsRequest) returns (TelemetryStatsResponse) {}
 
+  // GetByIndexStream is the streaming variant of GetByIndex.
+  //
+  // Instead of returning all matching Treasures in a single response,
+  // it streams them one by one as they pass the optional filters.
+  // This enables processing millions of records without loading all into memory.
+  //
+  // The server applies filters server-side before streaming each matching Treasure.
+  // If no filters are provided, behavior is identical to GetByIndex but streamed.
+  //
+  // Backpressure is handled automatically via gRPC's built-in HTTP/2 flow control.
+  rpc GetByIndexStream(GetByIndexStreamRequest) returns (stream GetByIndexStreamResponse) {}
+
+  // GetByIndexStreamFromMany reads from multiple swamps with optional per-swamp filtering,
+  // streaming combined results across all specified swamps.
+  //
+  // Results are streamed per-swamp in the order swamps are listed in the request.
+  // Each response includes the SwampName so the client knows which swamp it came from.
+  //
+  // This is the read counterpart to CatalogCreateManyToMany / CatalogDeleteManyFromMany.
+  rpc GetByIndexStreamFromMany(GetByIndexStreamFromManyRequest) returns (stream GetByIndexStreamFromManyResponse) {}
+
+  // CompactSwamp forces a full rewrite of the swamp's .hyd file,
+  // removing all dead (superseded/deleted) entries.
+  //
+  // Normally compaction runs automatically when fragmentation >= 50% on swamp close.
+  // This RPC allows explicit triggering, useful after encoding migration
+  // (GOB → MessagePack) to clean up old entries immediately.
+  rpc CompactSwamp(CompactSwampRequest) returns (CompactSwampResponse) {}
+
 }
 
 message HeartbeatRequest {
@@ -581,6 +610,25 @@ message RegisterSwampRequest {
   // Optional. Applies only when IsInMemorySwamp is false and using V1 engine.
   // New installations should not set this field.
   optional int64 MaxFileSize = 5 [deprecated = true];
+
+  // EncodingFormat controls how complex value types (structs, slices, maps, pointers)
+  // are serialized into the BytesVal field of a Treasure.
+  //
+  // Default (GOB = 0): Uses Go's native binary encoding. This is the legacy format
+  // and ensures backward compatibility with existing data and older SDK versions.
+  //
+  // MSGPACK (1): Uses MessagePack encoding, which is cross-language compatible
+  // and allows server-side field-level inspection for query filtering.
+  //
+  // Changing this setting only affects NEW writes. Existing data on disk remains
+  // in its original format. The SDK auto-detects the format when reading.
+  //
+  // To migrate existing data from GOB to MSGPACK:
+  // 1. Set EncodingFormat to MSGPACK
+  // 2. Read all data from the swamp (auto-detected as GOB)
+  // 3. Re-save all data (SDK writes in MSGPACK, server detects byte-level change)
+  // 4. Call CompactSwamp to remove old GOB entries from the .hyd file
+  optional EncodingFormat.Type EncodingFormat = 6;
 }
 
 message RegisterSwampResponse {
@@ -1606,6 +1654,10 @@ message Relational {
     LESS_THAN = 3;              // value < reference
     LESS_THAN_OR_EQUAL = 4;     // value <= reference
     NOT_EQUAL = 5;              // value != reference
+    CONTAINS = 6;               // string contains substring (case-sensitive)
+    NOT_CONTAINS = 7;           // string does NOT contain substring (case-sensitive)
+    STARTS_WITH = 8;            // string starts with prefix (case-sensitive)
+    ENDS_WITH = 9;              // string ends with suffix (case-sensitive)
   }
 }
 
@@ -1995,4 +2047,206 @@ message TelemetryErrorSummary {
 
   // When this error last occurred.
   google.protobuf.Timestamp last_occurrence = 5;
+}
+
+
+// --- ENCODING FORMAT ---
+
+// EncodingFormat defines how complex value types (structs, slices, maps, pointers)
+// are serialized into the BytesVal field of a Treasure.
+message EncodingFormat {
+  enum Type {
+    // GOB is Go's native binary encoding format.
+    // This is the default and legacy format for backward compatibility.
+    // Data encoded with GOB can only be read by Go clients.
+    GOB = 0;
+
+    // MSGPACK uses MessagePack encoding, a cross-language binary format.
+    // MessagePack-encoded data can be read by any language (Python, JS, Rust, Java, etc.)
+    // and supports server-side field-level inspection for query filtering via BytesFieldPath.
+    MSGPACK = 1;
+  }
+}
+
+
+// --- QUERY FILTER SYSTEM ---
+
+// TreasureFilter defines a single predicate to evaluate against a Treasure's value.
+//
+// The filter compares the Treasure's corresponding typed value field
+// (Int32Val, StringVal, etc.) against the provided comparison value
+// using the specified relational operator.
+//
+// If BytesFieldPath is set, the filter extracts a field from the Treasure's
+// MessagePack-encoded BytesVal content and applies the comparison to that extracted value.
+// This only works with MessagePack-encoded data (GOB-encoded data will not match).
+//
+// Multiple TreasureFilters in a FilterSet are combined with AND logic:
+// a Treasure must satisfy ALL filters to be included in the results.
+message TreasureFilter {
+
+  // Operator defines how to compare the Treasure's value against the reference value.
+  // Uses the existing Relational.Operator enum (EQUAL, NOT_EQUAL, GREATER_THAN, etc.)
+  Relational.Operator Operator = 1;
+
+  // Exactly ONE of these value fields must be set.
+  // The set field determines WHICH Treasure value field to compare against.
+  // For example, if Int32Val is set, the filter compares against the Treasure's Int32Val.
+  oneof CompareValue {
+    int32           Int8Val    = 3;
+    int32           Int16Val   = 4;
+    int32           Int32Val   = 5;
+    int64           Int64Val   = 6;
+    uint32          Uint8Val   = 7;
+    uint32          Uint16Val  = 8;
+    uint32          Uint32Val  = 9;
+    uint64          Uint64Val  = 10;
+    float           Float32Val = 11;
+    double          Float64Val = 12;
+    string          StringVal  = 13;
+    Boolean.Type    BoolVal    = 14;
+  }
+
+  // BytesFieldPath is an optional dot-separated path to a field within a
+  // MessagePack-encoded BytesVal struct.
+  //
+  // When set, the server extracts the value at this path from the Treasure's BytesVal,
+  // then applies the Operator and CompareValue to the extracted value.
+  //
+  // Example: "Address.City" extracts the City field from a nested Address struct.
+  //
+  // This only works with MessagePack-encoded BytesVal data.
+  // If the BytesVal is GOB-encoded or the path doesn't exist, the filter returns false (no match).
+  optional string BytesFieldPath = 15;
+}
+
+// FilterLogic defines how filters within a FilterGroup are combined.
+message FilterLogic {
+  enum Type {
+    AND = 0;  // All conditions must be true (default)
+    OR = 1;   // At least one condition must be true
+  }
+}
+
+// FilterGroup is a recursive filter structure supporting nested AND/OR logic.
+//
+// A FilterGroup contains:
+//   - Logic: AND or OR (default AND)
+//   - Filters: leaf-level conditions evaluated against Treasure fields
+//   - SubGroups: nested FilterGroups for complex boolean expressions
+//
+// Evaluation:
+//   - AND: ALL Filters AND ALL SubGroups must evaluate to true
+//   - OR: at least ONE Filter OR ONE SubGroup must evaluate to true
+//   - Empty group (no Filters, no SubGroups): passes all Treasures (no filtering)
+//
+// Example: (price > 100 AND (status == "active" OR status == "pending"))
+//   FilterGroup{Logic: AND,
+//     Filters: [price > 100],
+//     SubGroups: [FilterGroup{Logic: OR, Filters: [status == "active", status == "pending"]}]
+//   }
+message FilterGroup {
+  FilterLogic.Type Logic = 1;
+  repeated TreasureFilter Filters = 2;
+  repeated FilterGroup SubGroups = 3;
+}
+
+
+// --- STREAMING READ REQUESTS/RESPONSES ---
+
+// GetByIndexStreamRequest is the streaming variant of GetByIndexRequest.
+//
+// It has the same index, ordering, pagination, and time-filtering fields as GetByIndexRequest,
+// plus an optional FilterGroup for server-side predicate evaluation with AND/OR logic.
+//
+// Results are streamed one-by-one as GetByIndexStreamResponse messages.
+message GetByIndexStreamRequest {
+  // IslandID is the deterministic storage zone where this Swamp lives.
+  uint64 IslandID = 1;
+
+  // SwampName is the name of the swamp to query.
+  string SwampName = 2;
+
+  // IndexType specifies which field to index and query on.
+  IndexType.Type IndexType = 3;
+
+  // OrderType defines the sort direction (ASC or DESC).
+  OrderType.Type OrderType = 4;
+
+  // From defines the starting index (zero-based) for pagination.
+  int32 From = 5;
+
+  // Limit defines how many items to return. 0 = all matching items.
+  int32 Limit = 6;
+
+  // Optional time bounds for time-based indexes (EXPIRATION_TIME, CREATION_TIME, UPDATE_TIME).
+  optional google.protobuf.Timestamp FromTime = 7;
+  optional google.protobuf.Timestamp ToTime = 8;
+
+  // Optional filter group to apply server-side before streaming results.
+  // Supports nested AND/OR logic. If nil or empty, all Treasures matching the
+  // index criteria are streamed (equivalent to GetByIndex).
+  optional FilterGroup Filters = 9;
+}
+
+// GetByIndexStreamResponse contains a single matching Treasure.
+// The server sends one of these per matching result via the stream.
+message GetByIndexStreamResponse {
+  Treasure Treasure = 1;
+}
+
+// SwampQuery defines a single swamp's query parameters within a multi-swamp streaming read.
+// Each query can have its own index type, ordering, pagination, time bounds, and filters.
+message SwampQuery {
+  uint64 IslandID = 1;
+  string SwampName = 2;
+  IndexType.Type IndexType = 3;
+  OrderType.Type OrderType = 4;
+  int32 From = 5;
+  int32 Limit = 6;
+  optional google.protobuf.Timestamp FromTime = 7;
+  optional google.protobuf.Timestamp ToTime = 8;
+  optional FilterGroup Filters = 9;
+}
+
+// GetByIndexStreamFromManyRequest allows reading from multiple swamps in a single streaming operation.
+// Results are streamed per-swamp in the order the queries are listed.
+message GetByIndexStreamFromManyRequest {
+  // Queries is a list of per-swamp query definitions.
+  // Each swamp can have independent index, ordering, and filter parameters.
+  repeated SwampQuery Queries = 1;
+}
+
+// GetByIndexStreamFromManyResponse contains a single matching Treasure
+// along with the SwampName identifying which swamp it came from.
+message GetByIndexStreamFromManyResponse {
+  // SwampName identifies which swamp this Treasure was read from.
+  string SwampName = 1;
+
+  // A single matching Treasure from that swamp.
+  Treasure Treasure = 2;
+}
+
+
+// --- COMPACTION ---
+
+// CompactSwampRequest triggers a forced compaction of the specified swamp's .hyd file.
+//
+// Compaction rewrites the file, keeping only live entries and removing all
+// dead (superseded/deleted) entries. This reduces file size and improves read performance.
+//
+// Normally compaction runs automatically when fragmentation >= 50% on swamp close.
+// This RPC allows explicit triggering, which is useful after encoding migration
+// (GOB → MessagePack) to immediately clean up old format entries.
+message CompactSwampRequest {
+  // IslandID is the deterministic storage zone where this Swamp lives.
+  uint64 IslandID = 1;
+
+  // SwampName is the name of the swamp to compact.
+  string SwampName = 2;
+}
+
+// CompactSwampResponse is returned after successful compaction.
+// Success is indicated by the absence of a gRPC error.
+message CompactSwampResponse {
 }

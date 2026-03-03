@@ -19,43 +19,46 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	HydraideService_Heartbeat_FullMethodName               = "/hydraidepbgo.HydraideService/Heartbeat"
-	HydraideService_Lock_FullMethodName                    = "/hydraidepbgo.HydraideService/Lock"
-	HydraideService_Unlock_FullMethodName                  = "/hydraidepbgo.HydraideService/Unlock"
-	HydraideService_RegisterSwamp_FullMethodName           = "/hydraidepbgo.HydraideService/RegisterSwamp"
-	HydraideService_DeRegisterSwamp_FullMethodName         = "/hydraidepbgo.HydraideService/DeRegisterSwamp"
-	HydraideService_Set_FullMethodName                     = "/hydraidepbgo.HydraideService/Set"
-	HydraideService_Get_FullMethodName                     = "/hydraidepbgo.HydraideService/Get"
-	HydraideService_GetAll_FullMethodName                  = "/hydraidepbgo.HydraideService/GetAll"
-	HydraideService_GetByIndex_FullMethodName              = "/hydraidepbgo.HydraideService/GetByIndex"
-	HydraideService_GetByKeys_FullMethodName               = "/hydraidepbgo.HydraideService/GetByKeys"
-	HydraideService_ShiftByKeys_FullMethodName             = "/hydraidepbgo.HydraideService/ShiftByKeys"
-	HydraideService_ShiftExpiredTreasures_FullMethodName   = "/hydraidepbgo.HydraideService/ShiftExpiredTreasures"
-	HydraideService_Destroy_FullMethodName                 = "/hydraidepbgo.HydraideService/Destroy"
-	HydraideService_Delete_FullMethodName                  = "/hydraidepbgo.HydraideService/Delete"
-	HydraideService_Count_FullMethodName                   = "/hydraidepbgo.HydraideService/Count"
-	HydraideService_IsSwampExist_FullMethodName            = "/hydraidepbgo.HydraideService/IsSwampExist"
-	HydraideService_IsKeyExist_FullMethodName              = "/hydraidepbgo.HydraideService/IsKeyExist"
-	HydraideService_SubscribeToEvents_FullMethodName       = "/hydraidepbgo.HydraideService/SubscribeToEvents"
-	HydraideService_SubscribeToInfo_FullMethodName         = "/hydraidepbgo.HydraideService/SubscribeToInfo"
-	HydraideService_Uint32SlicePush_FullMethodName         = "/hydraidepbgo.HydraideService/Uint32SlicePush"
-	HydraideService_Uint32SliceDelete_FullMethodName       = "/hydraidepbgo.HydraideService/Uint32SliceDelete"
-	HydraideService_Uint32SliceSize_FullMethodName         = "/hydraidepbgo.HydraideService/Uint32SliceSize"
-	HydraideService_Uint32SliceIsValueExist_FullMethodName = "/hydraidepbgo.HydraideService/Uint32SliceIsValueExist"
-	HydraideService_IncrementInt8_FullMethodName           = "/hydraidepbgo.HydraideService/IncrementInt8"
-	HydraideService_IncrementInt16_FullMethodName          = "/hydraidepbgo.HydraideService/IncrementInt16"
-	HydraideService_IncrementInt32_FullMethodName          = "/hydraidepbgo.HydraideService/IncrementInt32"
-	HydraideService_IncrementInt64_FullMethodName          = "/hydraidepbgo.HydraideService/IncrementInt64"
-	HydraideService_IncrementUint8_FullMethodName          = "/hydraidepbgo.HydraideService/IncrementUint8"
-	HydraideService_IncrementUint16_FullMethodName         = "/hydraidepbgo.HydraideService/IncrementUint16"
-	HydraideService_IncrementUint32_FullMethodName         = "/hydraidepbgo.HydraideService/IncrementUint32"
-	HydraideService_IncrementUint64_FullMethodName         = "/hydraidepbgo.HydraideService/IncrementUint64"
-	HydraideService_IncrementFloat32_FullMethodName        = "/hydraidepbgo.HydraideService/IncrementFloat32"
-	HydraideService_IncrementFloat64_FullMethodName        = "/hydraidepbgo.HydraideService/IncrementFloat64"
-	HydraideService_SubscribeToTelemetry_FullMethodName    = "/hydraidepbgo.HydraideService/SubscribeToTelemetry"
-	HydraideService_GetTelemetryHistory_FullMethodName     = "/hydraidepbgo.HydraideService/GetTelemetryHistory"
-	HydraideService_GetErrorDetails_FullMethodName         = "/hydraidepbgo.HydraideService/GetErrorDetails"
-	HydraideService_GetTelemetryStats_FullMethodName       = "/hydraidepbgo.HydraideService/GetTelemetryStats"
+	HydraideService_Heartbeat_FullMethodName                = "/hydraidepbgo.HydraideService/Heartbeat"
+	HydraideService_Lock_FullMethodName                     = "/hydraidepbgo.HydraideService/Lock"
+	HydraideService_Unlock_FullMethodName                   = "/hydraidepbgo.HydraideService/Unlock"
+	HydraideService_RegisterSwamp_FullMethodName            = "/hydraidepbgo.HydraideService/RegisterSwamp"
+	HydraideService_DeRegisterSwamp_FullMethodName          = "/hydraidepbgo.HydraideService/DeRegisterSwamp"
+	HydraideService_Set_FullMethodName                      = "/hydraidepbgo.HydraideService/Set"
+	HydraideService_Get_FullMethodName                      = "/hydraidepbgo.HydraideService/Get"
+	HydraideService_GetAll_FullMethodName                   = "/hydraidepbgo.HydraideService/GetAll"
+	HydraideService_GetByIndex_FullMethodName               = "/hydraidepbgo.HydraideService/GetByIndex"
+	HydraideService_GetByKeys_FullMethodName                = "/hydraidepbgo.HydraideService/GetByKeys"
+	HydraideService_ShiftByKeys_FullMethodName              = "/hydraidepbgo.HydraideService/ShiftByKeys"
+	HydraideService_ShiftExpiredTreasures_FullMethodName    = "/hydraidepbgo.HydraideService/ShiftExpiredTreasures"
+	HydraideService_Destroy_FullMethodName                  = "/hydraidepbgo.HydraideService/Destroy"
+	HydraideService_Delete_FullMethodName                   = "/hydraidepbgo.HydraideService/Delete"
+	HydraideService_Count_FullMethodName                    = "/hydraidepbgo.HydraideService/Count"
+	HydraideService_IsSwampExist_FullMethodName             = "/hydraidepbgo.HydraideService/IsSwampExist"
+	HydraideService_IsKeyExist_FullMethodName               = "/hydraidepbgo.HydraideService/IsKeyExist"
+	HydraideService_SubscribeToEvents_FullMethodName        = "/hydraidepbgo.HydraideService/SubscribeToEvents"
+	HydraideService_SubscribeToInfo_FullMethodName          = "/hydraidepbgo.HydraideService/SubscribeToInfo"
+	HydraideService_Uint32SlicePush_FullMethodName          = "/hydraidepbgo.HydraideService/Uint32SlicePush"
+	HydraideService_Uint32SliceDelete_FullMethodName        = "/hydraidepbgo.HydraideService/Uint32SliceDelete"
+	HydraideService_Uint32SliceSize_FullMethodName          = "/hydraidepbgo.HydraideService/Uint32SliceSize"
+	HydraideService_Uint32SliceIsValueExist_FullMethodName  = "/hydraidepbgo.HydraideService/Uint32SliceIsValueExist"
+	HydraideService_IncrementInt8_FullMethodName            = "/hydraidepbgo.HydraideService/IncrementInt8"
+	HydraideService_IncrementInt16_FullMethodName           = "/hydraidepbgo.HydraideService/IncrementInt16"
+	HydraideService_IncrementInt32_FullMethodName           = "/hydraidepbgo.HydraideService/IncrementInt32"
+	HydraideService_IncrementInt64_FullMethodName           = "/hydraidepbgo.HydraideService/IncrementInt64"
+	HydraideService_IncrementUint8_FullMethodName           = "/hydraidepbgo.HydraideService/IncrementUint8"
+	HydraideService_IncrementUint16_FullMethodName          = "/hydraidepbgo.HydraideService/IncrementUint16"
+	HydraideService_IncrementUint32_FullMethodName          = "/hydraidepbgo.HydraideService/IncrementUint32"
+	HydraideService_IncrementUint64_FullMethodName          = "/hydraidepbgo.HydraideService/IncrementUint64"
+	HydraideService_IncrementFloat32_FullMethodName         = "/hydraidepbgo.HydraideService/IncrementFloat32"
+	HydraideService_IncrementFloat64_FullMethodName         = "/hydraidepbgo.HydraideService/IncrementFloat64"
+	HydraideService_SubscribeToTelemetry_FullMethodName     = "/hydraidepbgo.HydraideService/SubscribeToTelemetry"
+	HydraideService_GetTelemetryHistory_FullMethodName      = "/hydraidepbgo.HydraideService/GetTelemetryHistory"
+	HydraideService_GetErrorDetails_FullMethodName          = "/hydraidepbgo.HydraideService/GetErrorDetails"
+	HydraideService_GetTelemetryStats_FullMethodName        = "/hydraidepbgo.HydraideService/GetTelemetryStats"
+	HydraideService_GetByIndexStream_FullMethodName         = "/hydraidepbgo.HydraideService/GetByIndexStream"
+	HydraideService_GetByIndexStreamFromMany_FullMethodName = "/hydraidepbgo.HydraideService/GetByIndexStreamFromMany"
+	HydraideService_CompactSwamp_FullMethodName             = "/hydraidepbgo.HydraideService/CompactSwamp"
 )
 
 // HydraideServiceClient is the client API for HydraideService service.
@@ -440,6 +443,32 @@ type HydraideServiceClient interface {
 	//
 	// Useful for dashboards and quick health checks.
 	GetTelemetryStats(ctx context.Context, in *TelemetryStatsRequest, opts ...grpc.CallOption) (*TelemetryStatsResponse, error)
+	// GetByIndexStream is the streaming variant of GetByIndex.
+	//
+	// Instead of returning all matching Treasures in a single response,
+	// it streams them one by one as they pass the optional filters.
+	// This enables processing millions of records without loading all into memory.
+	//
+	// The server applies filters server-side before streaming each matching Treasure.
+	// If no filters are provided, behavior is identical to GetByIndex but streamed.
+	//
+	// Backpressure is handled automatically via gRPC's built-in HTTP/2 flow control.
+	GetByIndexStream(ctx context.Context, in *GetByIndexStreamRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[GetByIndexStreamResponse], error)
+	// GetByIndexStreamFromMany reads from multiple swamps with optional per-swamp filtering,
+	// streaming combined results across all specified swamps.
+	//
+	// Results are streamed per-swamp in the order swamps are listed in the request.
+	// Each response includes the SwampName so the client knows which swamp it came from.
+	//
+	// This is the read counterpart to CatalogCreateManyToMany / CatalogDeleteManyFromMany.
+	GetByIndexStreamFromMany(ctx context.Context, in *GetByIndexStreamFromManyRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[GetByIndexStreamFromManyResponse], error)
+	// CompactSwamp forces a full rewrite of the swamp's .hyd file,
+	// removing all dead (superseded/deleted) entries.
+	//
+	// Normally compaction runs automatically when fragmentation >= 50% on swamp close.
+	// This RPC allows explicit triggering, useful after encoding migration
+	// (GOB → MessagePack) to clean up old entries immediately.
+	CompactSwamp(ctx context.Context, in *CompactSwampRequest, opts ...grpc.CallOption) (*CompactSwampResponse, error)
 }
 
 type hydraideServiceClient struct {
@@ -847,6 +876,54 @@ func (c *hydraideServiceClient) GetTelemetryStats(ctx context.Context, in *Telem
 	return out, nil
 }
 
+func (c *hydraideServiceClient) GetByIndexStream(ctx context.Context, in *GetByIndexStreamRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[GetByIndexStreamResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &HydraideService_ServiceDesc.Streams[3], HydraideService_GetByIndexStream_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[GetByIndexStreamRequest, GetByIndexStreamResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type HydraideService_GetByIndexStreamClient = grpc.ServerStreamingClient[GetByIndexStreamResponse]
+
+func (c *hydraideServiceClient) GetByIndexStreamFromMany(ctx context.Context, in *GetByIndexStreamFromManyRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[GetByIndexStreamFromManyResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &HydraideService_ServiceDesc.Streams[4], HydraideService_GetByIndexStreamFromMany_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[GetByIndexStreamFromManyRequest, GetByIndexStreamFromManyResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type HydraideService_GetByIndexStreamFromManyClient = grpc.ServerStreamingClient[GetByIndexStreamFromManyResponse]
+
+func (c *hydraideServiceClient) CompactSwamp(ctx context.Context, in *CompactSwampRequest, opts ...grpc.CallOption) (*CompactSwampResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CompactSwampResponse)
+	err := c.cc.Invoke(ctx, HydraideService_CompactSwamp_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // HydraideServiceServer is the server API for HydraideService service.
 // All implementations must embed UnimplementedHydraideServiceServer
 // for forward compatibility.
@@ -1229,6 +1306,32 @@ type HydraideServiceServer interface {
 	//
 	// Useful for dashboards and quick health checks.
 	GetTelemetryStats(context.Context, *TelemetryStatsRequest) (*TelemetryStatsResponse, error)
+	// GetByIndexStream is the streaming variant of GetByIndex.
+	//
+	// Instead of returning all matching Treasures in a single response,
+	// it streams them one by one as they pass the optional filters.
+	// This enables processing millions of records without loading all into memory.
+	//
+	// The server applies filters server-side before streaming each matching Treasure.
+	// If no filters are provided, behavior is identical to GetByIndex but streamed.
+	//
+	// Backpressure is handled automatically via gRPC's built-in HTTP/2 flow control.
+	GetByIndexStream(*GetByIndexStreamRequest, grpc.ServerStreamingServer[GetByIndexStreamResponse]) error
+	// GetByIndexStreamFromMany reads from multiple swamps with optional per-swamp filtering,
+	// streaming combined results across all specified swamps.
+	//
+	// Results are streamed per-swamp in the order swamps are listed in the request.
+	// Each response includes the SwampName so the client knows which swamp it came from.
+	//
+	// This is the read counterpart to CatalogCreateManyToMany / CatalogDeleteManyFromMany.
+	GetByIndexStreamFromMany(*GetByIndexStreamFromManyRequest, grpc.ServerStreamingServer[GetByIndexStreamFromManyResponse]) error
+	// CompactSwamp forces a full rewrite of the swamp's .hyd file,
+	// removing all dead (superseded/deleted) entries.
+	//
+	// Normally compaction runs automatically when fragmentation >= 50% on swamp close.
+	// This RPC allows explicit triggering, useful after encoding migration
+	// (GOB → MessagePack) to clean up old entries immediately.
+	CompactSwamp(context.Context, *CompactSwampRequest) (*CompactSwampResponse, error)
 	mustEmbedUnimplementedHydraideServiceServer()
 }
 
@@ -1349,6 +1452,15 @@ func (UnimplementedHydraideServiceServer) GetErrorDetails(context.Context, *Erro
 }
 func (UnimplementedHydraideServiceServer) GetTelemetryStats(context.Context, *TelemetryStatsRequest) (*TelemetryStatsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetTelemetryStats not implemented")
+}
+func (UnimplementedHydraideServiceServer) GetByIndexStream(*GetByIndexStreamRequest, grpc.ServerStreamingServer[GetByIndexStreamResponse]) error {
+	return status.Errorf(codes.Unimplemented, "method GetByIndexStream not implemented")
+}
+func (UnimplementedHydraideServiceServer) GetByIndexStreamFromMany(*GetByIndexStreamFromManyRequest, grpc.ServerStreamingServer[GetByIndexStreamFromManyResponse]) error {
+	return status.Errorf(codes.Unimplemented, "method GetByIndexStreamFromMany not implemented")
+}
+func (UnimplementedHydraideServiceServer) CompactSwamp(context.Context, *CompactSwampRequest) (*CompactSwampResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CompactSwamp not implemented")
 }
 func (UnimplementedHydraideServiceServer) mustEmbedUnimplementedHydraideServiceServer() {}
 func (UnimplementedHydraideServiceServer) testEmbeddedByValue()                         {}
@@ -2016,6 +2128,46 @@ func _HydraideService_GetTelemetryStats_Handler(srv interface{}, ctx context.Con
 	return interceptor(ctx, in, info, handler)
 }
 
+func _HydraideService_GetByIndexStream_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(GetByIndexStreamRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(HydraideServiceServer).GetByIndexStream(m, &grpc.GenericServerStream[GetByIndexStreamRequest, GetByIndexStreamResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type HydraideService_GetByIndexStreamServer = grpc.ServerStreamingServer[GetByIndexStreamResponse]
+
+func _HydraideService_GetByIndexStreamFromMany_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(GetByIndexStreamFromManyRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(HydraideServiceServer).GetByIndexStreamFromMany(m, &grpc.GenericServerStream[GetByIndexStreamFromManyRequest, GetByIndexStreamFromManyResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type HydraideService_GetByIndexStreamFromManyServer = grpc.ServerStreamingServer[GetByIndexStreamFromManyResponse]
+
+func _HydraideService_CompactSwamp_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CompactSwampRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HydraideServiceServer).CompactSwamp(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HydraideService_CompactSwamp_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HydraideServiceServer).CompactSwamp(ctx, req.(*CompactSwampRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // HydraideService_ServiceDesc is the grpc.ServiceDesc for HydraideService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -2159,6 +2311,10 @@ var HydraideService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "GetTelemetryStats",
 			Handler:    _HydraideService_GetTelemetryStats_Handler,
 		},
+		{
+			MethodName: "CompactSwamp",
+			Handler:    _HydraideService_CompactSwamp_Handler,
+		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
@@ -2174,6 +2330,16 @@ var HydraideService_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "SubscribeToTelemetry",
 			Handler:       _HydraideService_SubscribeToTelemetry_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "GetByIndexStream",
+			Handler:       _HydraideService_GetByIndexStream_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "GetByIndexStreamFromMany",
+			Handler:       _HydraideService_GetByIndexStreamFromMany_Handler,
 			ServerStreams: true,
 		},
 	},

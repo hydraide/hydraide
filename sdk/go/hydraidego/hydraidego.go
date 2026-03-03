@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"path"
 	"reflect"
 	"slices"
 	"strings"
@@ -16,6 +17,7 @@ import (
 	"github.com/hydraide/hydraide/generated/hydraidepbgo"
 	"github.com/hydraide/hydraide/sdk/go/hydraidego/client"
 	"github.com/hydraide/hydraide/sdk/go/hydraidego/name"
+	"github.com/vmihailenco/msgpack/v5"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -96,6 +98,9 @@ type Hydraidego interface {
 	Uint32SliceDelete(ctx context.Context, swampName name.Name, KeyValuesPair []*KeyValuesPair) error
 	Uint32SliceSize(ctx context.Context, swampName name.Name, key string) (int64, error)
 	Uint32SliceIsValueExist(ctx context.Context, swampName name.Name, key string, value uint32) (bool, error)
+	CompactSwamp(ctx context.Context, swampName name.Name) error
+	CatalogReadManyStream(ctx context.Context, swampName name.Name, index *Index, filters *FilterGroup, model any, iterator CatalogReadManyIteratorFunc) error
+	CatalogReadManyFromMany(ctx context.Context, request []*CatalogReadManyFromManyRequest, model any, iterator CatalogReadManyFromManyIteratorFunc) error
 }
 
 // Index defines the configuration for index-based queries in HydrAIDE.
@@ -256,6 +261,27 @@ type RegisterSwampRequest struct {
 	FilesystemSettings *SwampFilesystemSettings
 }
 
+// EncodingFormat controls how complex value types (structs, slices, maps, pointers)
+// are serialized into the BytesVal field of a Treasure.
+//
+// Default (EncodingGOB): Uses Go's native binary encoding for backward compatibility.
+// EncodingMsgPack: Uses MessagePack, a cross-language binary format that supports
+// server-side field-level inspection for query filtering via BytesFieldPath.
+//
+// Changing this only affects new writes. Existing data is auto-detected when reading.
+type EncodingFormat int
+
+const (
+	// EncodingGOB uses Go's native binary encoding (default, backward compatible).
+	// Data encoded with GOB can only be read by Go SDK clients.
+	EncodingGOB EncodingFormat = iota
+
+	// EncodingMsgPack uses MessagePack encoding, a cross-language binary format.
+	// Supports server-side field-level inspection for query filtering.
+	// Data can be read by any language SDK (Python, JS, Rust, Java, etc.)
+	EncodingMsgPack
+)
+
 type SwampFilesystemSettings struct {
 
 	// WriteInterval defines how often (in seconds) HydrAIDE should write
@@ -271,31 +297,244 @@ type SwampFilesystemSettings struct {
 
 	// MaxFileSize defines the maximum compressed chunk size on disk.
 	//
-	// ⚠️ DEPRECATED: This field is only used by the legacy V1 storage engine.
+	// Deprecated: This field is only used by the legacy V1 storage engine.
 	// After migrating to V2 (using `hydraidectl migrate`), this field is ignored
 	// and can be safely removed from your code.
-	//
-	// The V2 engine uses a single append-only file per swamp with automatic
-	// block management, eliminating the need for manual chunk size configuration.
-	//
-	// For V1 (legacy) behavior:
-	// Once this size is reached, a new chunk is created for further writes.
-	// This prevents large file rewrites, which can damage SSDs over time.
-	// Smaller sizes → more files, better endurance.
-	// Larger sizes → fewer files, better read performance for rarely-changed data.
-	//
-	// Deprecated: Use V2 storage engine instead. Migrate with `hydraidectl migrate`.
 	MaxFileSize int
+
+	// EncodingFormat controls how complex value types are serialized into BytesVal.
+	//
+	// Default (EncodingGOB): Go binary encoding. Backward compatible with all existing data.
+	// EncodingMsgPack: MessagePack encoding. Cross-language, supports server-side field filtering.
+	//
+	// To migrate existing data from GOB to MessagePack:
+	// 1. Set EncodingFormat to EncodingMsgPack in RegisterSwamp
+	// 2. Read all data from the swamp (auto-detected as GOB)
+	// 3. Re-save all data (SDK writes in MessagePack, server detects byte-level change)
+	// 4. Call CompactSwamp to remove old GOB entries from the .hyd file
+	EncodingFormat EncodingFormat
 }
 
+// Filter defines a server-side filter predicate applied to Treasures.
+// Exactly one typed value field should be set; it determines which Treasure field to compare.
+// If BytesFieldPath is set, the filter extracts from the MessagePack-encoded BytesVal instead.
+type Filter struct {
+	operator       RelationalOperator
+	int8Val        *int8
+	int16Val       *int16
+	int32Val       *int32
+	int64Val       *int64
+	uint8Val       *uint8
+	uint16Val      *uint16
+	uint32Val      *uint32
+	uint64Val      *uint64
+	float32Val     *float32
+	float64Val     *float64
+	stringVal      *string
+	boolVal        *bool
+	bytesFieldPath *string
+}
+
+// --- Filter constructors for primitive Treasure value types ---
+
+func FilterInt8(op RelationalOperator, value int8) *Filter {
+	return &Filter{operator: op, int8Val: &value}
+}
+func FilterInt16(op RelationalOperator, value int16) *Filter {
+	return &Filter{operator: op, int16Val: &value}
+}
+func FilterInt32(op RelationalOperator, value int32) *Filter {
+	return &Filter{operator: op, int32Val: &value}
+}
+func FilterInt64(op RelationalOperator, value int64) *Filter {
+	return &Filter{operator: op, int64Val: &value}
+}
+func FilterUint8(op RelationalOperator, value uint8) *Filter {
+	return &Filter{operator: op, uint8Val: &value}
+}
+func FilterUint16(op RelationalOperator, value uint16) *Filter {
+	return &Filter{operator: op, uint16Val: &value}
+}
+func FilterUint32(op RelationalOperator, value uint32) *Filter {
+	return &Filter{operator: op, uint32Val: &value}
+}
+func FilterUint64(op RelationalOperator, value uint64) *Filter {
+	return &Filter{operator: op, uint64Val: &value}
+}
+func FilterFloat32(op RelationalOperator, value float32) *Filter {
+	return &Filter{operator: op, float32Val: &value}
+}
+func FilterFloat64(op RelationalOperator, value float64) *Filter {
+	return &Filter{operator: op, float64Val: &value}
+}
+func FilterString(op RelationalOperator, value string) *Filter {
+	return &Filter{operator: op, stringVal: &value}
+}
+func FilterBool(op RelationalOperator, value bool) *Filter {
+	return &Filter{operator: op, boolVal: &value}
+}
+
+// --- Filter constructors for BytesVal field-level filtering (MessagePack only) ---
+
+func FilterBytesFieldInt8(op RelationalOperator, fieldPath string, value int8) *Filter {
+	return &Filter{operator: op, bytesFieldPath: &fieldPath, int8Val: &value}
+}
+func FilterBytesFieldInt16(op RelationalOperator, fieldPath string, value int16) *Filter {
+	return &Filter{operator: op, bytesFieldPath: &fieldPath, int16Val: &value}
+}
+func FilterBytesFieldInt32(op RelationalOperator, fieldPath string, value int32) *Filter {
+	return &Filter{operator: op, bytesFieldPath: &fieldPath, int32Val: &value}
+}
+func FilterBytesFieldInt64(op RelationalOperator, fieldPath string, value int64) *Filter {
+	return &Filter{operator: op, bytesFieldPath: &fieldPath, int64Val: &value}
+}
+func FilterBytesFieldUint8(op RelationalOperator, fieldPath string, value uint8) *Filter {
+	return &Filter{operator: op, bytesFieldPath: &fieldPath, uint8Val: &value}
+}
+func FilterBytesFieldUint16(op RelationalOperator, fieldPath string, value uint16) *Filter {
+	return &Filter{operator: op, bytesFieldPath: &fieldPath, uint16Val: &value}
+}
+func FilterBytesFieldUint32(op RelationalOperator, fieldPath string, value uint32) *Filter {
+	return &Filter{operator: op, bytesFieldPath: &fieldPath, uint32Val: &value}
+}
+func FilterBytesFieldUint64(op RelationalOperator, fieldPath string, value uint64) *Filter {
+	return &Filter{operator: op, bytesFieldPath: &fieldPath, uint64Val: &value}
+}
+func FilterBytesFieldFloat32(op RelationalOperator, fieldPath string, value float32) *Filter {
+	return &Filter{operator: op, bytesFieldPath: &fieldPath, float32Val: &value}
+}
+func FilterBytesFieldFloat64(op RelationalOperator, fieldPath string, value float64) *Filter {
+	return &Filter{operator: op, bytesFieldPath: &fieldPath, float64Val: &value}
+}
+func FilterBytesFieldString(op RelationalOperator, fieldPath string, value string) *Filter {
+	return &Filter{operator: op, bytesFieldPath: &fieldPath, stringVal: &value}
+}
+func FilterBytesFieldBool(op RelationalOperator, fieldPath string, value bool) *Filter {
+	return &Filter{operator: op, bytesFieldPath: &fieldPath, boolVal: &value}
+}
+
+// FilterLogic defines how conditions within a FilterGroup are combined.
+type FilterLogic int
+
+const (
+	// FilterLogicAND requires ALL conditions to be true (default).
+	FilterLogicAND FilterLogic = iota
+	// FilterLogicOR requires at least ONE condition to be true.
+	FilterLogicOR
+)
+
+// FilterItem is an interface implemented by both Filter and FilterGroup,
+// allowing them to be used interchangeably in FilterAND/FilterOR constructors.
+type FilterItem interface {
+	isFilterItem()
+}
+
+// isFilterItem marks Filter as a valid FilterItem.
+func (f *Filter) isFilterItem() {}
+
+// FilterGroup is a recursive filter structure supporting nested AND/OR logic.
+//
+// A FilterGroup contains leaf-level Filters and nested SubGroups combined with AND or OR logic.
+//
+// Evaluation rules:
+//   - AND: ALL Filters AND ALL SubGroups must evaluate to true
+//   - OR: at least ONE Filter OR ONE SubGroup must evaluate to true
+//   - Empty group (no Filters, no SubGroups) passes all Treasures (no filtering)
+//
+// Example: (price > 100 AND (status == "active" OR status == "pending"))
+//
+//	hydraidego.FilterAND(
+//	    hydraidego.FilterFloat64(hydraidego.GreaterThan, 100.0),
+//	    hydraidego.FilterOR(
+//	        hydraidego.FilterString(hydraidego.Equal, "active"),
+//	        hydraidego.FilterString(hydraidego.Equal, "pending"),
+//	    ),
+//	)
+type FilterGroup struct {
+	logic     FilterLogic
+	filters   []*Filter
+	subGroups []*FilterGroup
+}
+
+// isFilterItem marks FilterGroup as a valid FilterItem.
+func (fg *FilterGroup) isFilterItem() {}
+
+// FilterAND creates a FilterGroup that requires ALL conditions to be true.
+// Accepts any combination of *Filter and *FilterGroup items.
+func FilterAND(items ...FilterItem) *FilterGroup {
+	g := &FilterGroup{logic: FilterLogicAND}
+	for _, item := range items {
+		switch v := item.(type) {
+		case *Filter:
+			g.filters = append(g.filters, v)
+		case *FilterGroup:
+			g.subGroups = append(g.subGroups, v)
+		}
+	}
+	return g
+}
+
+// FilterOR creates a FilterGroup that requires at least ONE condition to be true.
+// Accepts any combination of *Filter and *FilterGroup items.
+func FilterOR(items ...FilterItem) *FilterGroup {
+	g := &FilterGroup{logic: FilterLogicOR}
+	for _, item := range items {
+		switch v := item.(type) {
+		case *Filter:
+			g.filters = append(g.filters, v)
+		case *FilterGroup:
+			g.subGroups = append(g.subGroups, v)
+		}
+	}
+	return g
+}
+
+// CatalogReadManyFromManyRequest defines a per-swamp query for multi-swamp streaming reads.
+type CatalogReadManyFromManyRequest struct {
+	SwampName name.Name
+	Index     *Index
+	Filters   *FilterGroup
+}
+
+// CatalogReadManyFromManyIteratorFunc is called for each Treasure found during
+// a multi-swamp streaming read, along with the source swamp name.
+type CatalogReadManyFromManyIteratorFunc func(swampName name.Name, model any) error
+
 type hydraidego struct {
-	client client.Client
+	client          client.Client
+	patternEncoding map[string]EncodingFormat
+	patternMu       sync.RWMutex
 }
 
 func New(client client.Client) Hydraidego {
 	return &hydraidego{
-		client: client,
+		client:          client,
+		patternEncoding: make(map[string]EncodingFormat),
 	}
+}
+
+// getEncodingForSwamp returns the encoding format registered for the given swamp name.
+// It first checks for an exact match, then tries wildcard pattern matching.
+// Returns EncodingGOB if no matching pattern is found (backward compatible default).
+func (h *hydraidego) getEncodingForSwamp(swampName name.Name) EncodingFormat {
+	h.patternMu.RLock()
+	defer h.patternMu.RUnlock()
+
+	nameStr := swampName.Get()
+
+	// Exact match first
+	if enc, ok := h.patternEncoding[nameStr]; ok {
+		return enc
+	}
+
+	// Wildcard pattern match
+	for pattern, enc := range h.patternEncoding {
+		if matched, _ := path.Match(pattern, nameStr); matched {
+			return enc
+		}
+	}
+
+	return EncodingGOB
 }
 
 // Heartbeat checks if all HydrAIDE servers are reachable.
@@ -389,6 +628,19 @@ func (h *hydraidego) RegisterSwamp(ctx context.Context, request *RegisterSwampRe
 			mfs := int64(request.FilesystemSettings.MaxFileSize)
 			rsr.WriteInterval = &wi
 			rsr.MaxFileSize = &mfs
+
+			// Send encoding format to server if explicitly set to MsgPack
+			if request.FilesystemSettings.EncodingFormat == EncodingMsgPack {
+				ef := hydraidepbgo.EncodingFormat_MSGPACK
+				rsr.EncodingFormat = &ef
+			}
+		}
+
+		// Store encoding format locally for use during write operations
+		if request.FilesystemSettings != nil && request.FilesystemSettings.EncodingFormat == EncodingMsgPack {
+			h.patternMu.Lock()
+			h.patternEncoding[request.SwampPattern.Get()] = EncodingMsgPack
+			h.patternMu.Unlock()
 		}
 
 		// Attempt to register the Swamp pattern on the current server.
@@ -879,7 +1131,7 @@ func (h *hydraidego) IsKeyExists(ctx context.Context, swampName name.Name, key s
 // Each record is identified by UserUUID and optionally enriched with metadata.
 func (h *hydraidego) CatalogCreate(ctx context.Context, swampName name.Name, model any) error {
 
-	kvPair, err := convertCatalogModelToKeyValuePair(model)
+	kvPair, err := convertCatalogModelToKeyValuePair(model, h.getEncodingForSwamp(swampName))
 	if err != nil {
 		return NewError(ErrCodeInvalidModel, err.Error())
 	}
@@ -994,10 +1246,11 @@ type CreateManyIteratorFunc func(key string, err error) error
 //     the function returns a global error (e.g. ErrCodeConnectionError, ErrCodeInternalDatabaseError, etc.)
 func (h *hydraidego) CatalogCreateMany(ctx context.Context, swampName name.Name, models []any, iterator CreateManyIteratorFunc) error {
 
+	encoding := h.getEncodingForSwamp(swampName)
 	kvPairs := make([]*hydraidepbgo.KeyValuePair, 0, len(models))
 
 	for _, model := range models {
-		kvPair, err := convertCatalogModelToKeyValuePair(model)
+		kvPair, err := convertCatalogModelToKeyValuePair(model, encoding)
 		if err != nil {
 			return NewError(ErrCodeInvalidModel, err.Error())
 		}
@@ -1146,10 +1399,11 @@ func (h *hydraidego) CatalogCreateManyToMany(ctx context.Context, request []*Cat
 			}
 		}
 
+		encoding := h.getEncodingForSwamp(req.SwampName)
 		kvPairs := make([]*hydraidepbgo.KeyValuePair, 0, len(req.Models))
 
 		for _, model := range req.Models {
-			kvPair, err := convertCatalogModelToKeyValuePair(model)
+			kvPair, err := convertCatalogModelToKeyValuePair(model, encoding)
 			if err != nil {
 				return NewError(ErrCodeInvalidModel, err.Error())
 			}
@@ -1544,7 +1798,7 @@ func (h *hydraidego) CatalogUpdate(ctx context.Context, swampName name.Name, mod
 	}
 
 	// Convert the model into a typed key-value pair based on struct tags and reflection
-	kvPair, err := convertCatalogModelToKeyValuePair(model)
+	kvPair, err := convertCatalogModelToKeyValuePair(model, h.getEncodingForSwamp(swampName))
 	if err != nil {
 		return NewError(ErrCodeInvalidModel, err.Error())
 	}
@@ -1640,9 +1894,10 @@ func (h *hydraidego) CatalogUpdateMany(ctx context.Context, swampName name.Name,
 	}
 
 	// Convert all models to KeyValuePair (binary form)
+	encoding := h.getEncodingForSwamp(swampName)
 	kvPairs := make([]*hydraidepbgo.KeyValuePair, 0, len(models))
 	for _, model := range models {
-		kvPair, err := convertCatalogModelToKeyValuePair(model)
+		kvPair, err := convertCatalogModelToKeyValuePair(model, encoding)
 		if err != nil {
 			return NewError(ErrCodeInvalidModel, err.Error())
 		}
@@ -1984,7 +2239,7 @@ func (h *hydraidego) CatalogDeleteManyFromMany(ctx context.Context, request []*C
 func (h *hydraidego) CatalogSave(ctx context.Context, swampName name.Name, model any) (eventStatus EventStatus, err error) {
 
 	// Convert the model into a KeyValuePair (binary format) using reflection + hydrun tags
-	kvPair, err := convertCatalogModelToKeyValuePair(model)
+	kvPair, err := convertCatalogModelToKeyValuePair(model, h.getEncodingForSwamp(swampName))
 	if err != nil {
 		return StatusUnknown, NewError(ErrCodeInvalidModel, err.Error())
 	}
@@ -2073,9 +2328,10 @@ type CatalogSaveManyIteratorFunc func(key string, status EventStatus) error
 func (h *hydraidego) CatalogSaveMany(ctx context.Context, swampName name.Name, models []any, iterator CatalogSaveManyIteratorFunc) error {
 
 	// Convert all provided models into KeyValuePair slices
+	encoding := h.getEncodingForSwamp(swampName)
 	kvPairs := make([]*hydraidepbgo.KeyValuePair, 0, len(models))
 	for _, model := range models {
-		kvPair, err := convertCatalogModelToKeyValuePair(model)
+		kvPair, err := convertCatalogModelToKeyValuePair(model, encoding)
 		if err != nil {
 			return NewError(ErrCodeInvalidModel, err.Error())
 		}
@@ -2183,11 +2439,12 @@ func (h *hydraidego) CatalogSaveManyToMany(ctx context.Context, request []*Catal
 	for _, req := range request {
 
 		swampName := req.SwampName.Get()
+		encoding := h.getEncodingForSwamp(req.SwampName)
 		kvPairs := make([]*hydraidepbgo.KeyValuePair, 0, len(req.Models))
 
 		// Convert each model into a KeyValuePair
 		for _, model := range req.Models {
-			kvPair, err := convertCatalogModelToKeyValuePair(model)
+			kvPair, err := convertCatalogModelToKeyValuePair(model, encoding)
 			if err != nil {
 				return NewError(ErrCodeInvalidModel, err.Error())
 			}
@@ -2556,7 +2813,7 @@ func (h *hydraidego) CatalogShiftBatch(ctx context.Context, swampName name.Name,
 // 💡 Best used for profiles, preferences, system snapshots, or grouped state representations.
 func (h *hydraidego) ProfileSave(ctx context.Context, swampName name.Name, model any) (err error) {
 
-	kvPairs, deletableKeys, err := convertProfileModelToKeyValuePair(model)
+	kvPairs, deletableKeys, err := convertProfileModelToKeyValuePair(model, h.getEncodingForSwamp(swampName))
 
 	if err != nil {
 		return NewError(ErrCodeInvalidModel, err.Error())
@@ -2742,7 +2999,7 @@ func (h *hydraidego) ProfileSaveBatch(ctx context.Context, swampNames []name.Nam
 	for i, model := range models {
 		swampName := swampNames[i]
 
-		kvPairs, deletableKeys, err := convertProfileModelToKeyValuePair(model)
+		kvPairs, deletableKeys, err := convertProfileModelToKeyValuePair(model, h.getEncodingForSwamp(swampName))
 		if err != nil {
 			// Call iterator with error for this specific swamp
 			iterErr := iterator(swampName, NewError(ErrCodeInvalidModel, err.Error()))
@@ -3266,6 +3523,257 @@ func (h *hydraidego) Destroy(ctx context.Context, swampName name.Name) error {
 	return nil
 }
 
+// CompactSwamp forces a full rewrite of the swamp's .hyd file,
+// removing all dead (superseded) entries and reducing fragmentation to 0%.
+// This is useful after encoding migration (GOB → MessagePack) to clean up
+// old entries and reclaim disk space.
+func (h *hydraidego) CompactSwamp(ctx context.Context, swampName name.Name) error {
+
+	_, err := h.client.GetServiceClient(swampName).CompactSwamp(ctx, &hydraidepbgo.CompactSwampRequest{
+		IslandID:  swampName.GetIslandID(h.client.GetAllIslands()),
+		SwampName: swampName.Get(),
+	})
+
+	if err != nil {
+		return NewError(ErrCodeInternalDatabaseError, fmt.Sprintf("%s: %v", errorMessageUnknown, err))
+	}
+
+	return nil
+}
+
+// convertFilterToProto converts a single SDK Filter to a proto TreasureFilter.
+func convertFilterToProto(f *Filter) *hydraidepbgo.TreasureFilter {
+	pf := &hydraidepbgo.TreasureFilter{
+		Operator:       convertRelationalOperatorToProtoOperator(f.operator),
+		BytesFieldPath: f.bytesFieldPath,
+	}
+
+	switch {
+	case f.int8Val != nil:
+		pf.CompareValue = &hydraidepbgo.TreasureFilter_Int8Val{Int8Val: int32(*f.int8Val)}
+	case f.int16Val != nil:
+		pf.CompareValue = &hydraidepbgo.TreasureFilter_Int16Val{Int16Val: int32(*f.int16Val)}
+	case f.int32Val != nil:
+		pf.CompareValue = &hydraidepbgo.TreasureFilter_Int32Val{Int32Val: *f.int32Val}
+	case f.int64Val != nil:
+		pf.CompareValue = &hydraidepbgo.TreasureFilter_Int64Val{Int64Val: *f.int64Val}
+	case f.uint8Val != nil:
+		pf.CompareValue = &hydraidepbgo.TreasureFilter_Uint8Val{Uint8Val: uint32(*f.uint8Val)}
+	case f.uint16Val != nil:
+		pf.CompareValue = &hydraidepbgo.TreasureFilter_Uint16Val{Uint16Val: uint32(*f.uint16Val)}
+	case f.uint32Val != nil:
+		pf.CompareValue = &hydraidepbgo.TreasureFilter_Uint32Val{Uint32Val: *f.uint32Val}
+	case f.uint64Val != nil:
+		pf.CompareValue = &hydraidepbgo.TreasureFilter_Uint64Val{Uint64Val: *f.uint64Val}
+	case f.float32Val != nil:
+		pf.CompareValue = &hydraidepbgo.TreasureFilter_Float32Val{Float32Val: *f.float32Val}
+	case f.float64Val != nil:
+		pf.CompareValue = &hydraidepbgo.TreasureFilter_Float64Val{Float64Val: *f.float64Val}
+	case f.stringVal != nil:
+		pf.CompareValue = &hydraidepbgo.TreasureFilter_StringVal{StringVal: *f.stringVal}
+	case f.boolVal != nil:
+		bv := hydraidepbgo.Boolean_FALSE
+		if *f.boolVal {
+			bv = hydraidepbgo.Boolean_TRUE
+		}
+		pf.CompareValue = &hydraidepbgo.TreasureFilter_BoolVal{BoolVal: bv}
+	}
+
+	return pf
+}
+
+// convertFilterGroupToProto converts an SDK FilterGroup to a proto FilterGroup.
+// Returns nil if the group is nil (no filtering).
+func convertFilterGroupToProto(group *FilterGroup) *hydraidepbgo.FilterGroup {
+	if group == nil {
+		return nil
+	}
+
+	pg := &hydraidepbgo.FilterGroup{}
+
+	if group.logic == FilterLogicOR {
+		pg.Logic = hydraidepbgo.FilterLogic_OR
+	} else {
+		pg.Logic = hydraidepbgo.FilterLogic_AND
+	}
+
+	for _, f := range group.filters {
+		if f != nil {
+			pg.Filters = append(pg.Filters, convertFilterToProto(f))
+		}
+	}
+
+	for _, sg := range group.subGroups {
+		if sg != nil {
+			pg.SubGroups = append(pg.SubGroups, convertFilterGroupToProto(sg))
+		}
+	}
+
+	return pg
+}
+
+// CatalogReadManyStream is the streaming variant of CatalogReadMany.
+// It reads Treasures from a single swamp using server-streaming, with optional server-side filtering.
+// Each matching Treasure is streamed individually instead of being collected into one response.
+// If filters is nil, all Treasures matching the index criteria are returned.
+//
+// The filters parameter accepts a *FilterGroup built with FilterAND() or FilterOR() constructors.
+// FilterGroups support nested AND/OR logic for complex boolean expressions.
+func (h *hydraidego) CatalogReadManyStream(ctx context.Context, swampName name.Name, index *Index, filters *FilterGroup, model any, iterator CatalogReadManyIteratorFunc) error {
+
+	if index == nil {
+		return NewError(ErrCodeInvalidArgument, "index can not be nil")
+	}
+	if iterator == nil {
+		return NewError(ErrCodeInvalidArgument, "iterator can not be nil")
+	}
+	if reflect.TypeOf(model).Kind() == reflect.Ptr {
+		return NewError(ErrCodeInvalidArgument, "model cannot be a pointer")
+	}
+
+	request := &hydraidepbgo.GetByIndexStreamRequest{
+		IslandID:  swampName.GetIslandID(h.client.GetAllIslands()),
+		SwampName: swampName.Get(),
+		IndexType: convertIndexTypeToProtoIndexType(index.IndexType),
+		OrderType: convertOrderTypeToProtoOrderType(index.IndexOrder),
+		From:      index.From,
+		Limit:     index.Limit,
+		Filters:   convertFilterGroupToProto(filters),
+	}
+
+	if index.FromTime != nil && !index.FromTime.IsZero() {
+		request.FromTime = timestamppb.New(*index.FromTime)
+	}
+	if index.ToTime != nil && !index.ToTime.IsZero() {
+		request.ToTime = timestamppb.New(*index.ToTime)
+	}
+
+	stream, err := h.client.GetServiceClient(swampName).GetByIndexStream(ctx, request)
+	if err != nil {
+		return errorHandler(err)
+	}
+
+	for {
+		response, recvErr := stream.Recv()
+		if recvErr != nil {
+			if recvErr == io.EOF {
+				return nil // stream completed normally
+			}
+			return errorHandler(recvErr)
+		}
+
+		treasure := response.GetTreasure()
+		if treasure == nil || !treasure.IsExist {
+			continue
+		}
+
+		modelValue := reflect.New(reflect.TypeOf(model)).Interface()
+		if convErr := convertProtoTreasureToCatalogModel(treasure, modelValue); convErr != nil {
+			return NewError(ErrCodeInvalidModel, convErr.Error())
+		}
+
+		if iterErr := iterator(modelValue); iterErr != nil {
+			return iterErr
+		}
+	}
+}
+
+// CatalogReadManyFromMany reads from multiple swamps using server-streaming with per-swamp filtering.
+// Results arrive swamp-by-swamp in the order of the request slice.
+// The iterator receives the source swamp name along with each matching Treasure.
+func (h *hydraidego) CatalogReadManyFromMany(ctx context.Context, request []*CatalogReadManyFromManyRequest, model any, iterator CatalogReadManyFromManyIteratorFunc) error {
+
+	if len(request) == 0 {
+		return NewError(ErrCodeInvalidArgument, "request can not be empty")
+	}
+	if iterator == nil {
+		return NewError(ErrCodeInvalidArgument, "iterator can not be nil")
+	}
+	if reflect.TypeOf(model).Kind() == reflect.Ptr {
+		return NewError(ErrCodeInvalidArgument, "model cannot be a pointer")
+	}
+
+	// Group queries by server
+	type serverGroup struct {
+		client  hydraidepbgo.HydraideServiceClient
+		queries []*hydraidepbgo.SwampQuery
+	}
+
+	serverGroups := make(map[string]*serverGroup)
+
+	for _, req := range request {
+		if req.Index == nil {
+			return NewError(ErrCodeInvalidArgument, "index can not be nil in request")
+		}
+
+		clientAndHost := h.client.GetServiceClientAndHost(req.SwampName)
+
+		if _, ok := serverGroups[clientAndHost.Host]; !ok {
+			serverGroups[clientAndHost.Host] = &serverGroup{
+				client: clientAndHost.GrpcClient,
+			}
+		}
+
+		query := &hydraidepbgo.SwampQuery{
+			IslandID:  req.SwampName.GetIslandID(h.client.GetAllIslands()),
+			SwampName: req.SwampName.Get(),
+			IndexType: convertIndexTypeToProtoIndexType(req.Index.IndexType),
+			OrderType: convertOrderTypeToProtoOrderType(req.Index.IndexOrder),
+			From:      req.Index.From,
+			Limit:     req.Index.Limit,
+			Filters:   convertFilterGroupToProto(req.Filters),
+		}
+
+		if req.Index.FromTime != nil && !req.Index.FromTime.IsZero() {
+			query.FromTime = timestamppb.New(*req.Index.FromTime)
+		}
+		if req.Index.ToTime != nil && !req.Index.ToTime.IsZero() {
+			query.ToTime = timestamppb.New(*req.Index.ToTime)
+		}
+
+		serverGroups[clientAndHost.Host].queries = append(serverGroups[clientAndHost.Host].queries, query)
+	}
+
+	// Execute streaming requests per server
+	for _, sg := range serverGroups {
+
+		stream, err := sg.client.GetByIndexStreamFromMany(ctx, &hydraidepbgo.GetByIndexStreamFromManyRequest{
+			Queries: sg.queries,
+		})
+		if err != nil {
+			return errorHandler(err)
+		}
+
+		for {
+			response, recvErr := stream.Recv()
+			if recvErr != nil {
+				if recvErr == io.EOF {
+					break // this server's stream is done, move to next
+				}
+				return errorHandler(recvErr)
+			}
+
+			treasure := response.GetTreasure()
+			if treasure == nil || !treasure.IsExist {
+				continue
+			}
+
+			swampName := name.Load(response.GetSwampName())
+
+			modelValue := reflect.New(reflect.TypeOf(model)).Interface()
+			if convErr := convertProtoTreasureToCatalogModel(treasure, modelValue); convErr != nil {
+				return NewError(ErrCodeInvalidModel, convErr.Error())
+			}
+
+			if iterErr := iterator(swampName, modelValue); iterErr != nil {
+				return iterErr
+			}
+		}
+	}
+
+	return nil
+}
+
 type SubscribeIteratorFunc func(model any, eventStatus EventStatus, err error) error
 
 // Subscribe sets up a real-time event stream for a given Swamp, allowing you to react to changes as they happen.
@@ -3536,6 +4044,18 @@ const (
 
 	// LessThan means "current value < condition value"
 	LessThan
+
+	// Contains means "string contains substring" (case-sensitive)
+	Contains
+
+	// NotContains means "string does NOT contain substring" (case-sensitive)
+	NotContains
+
+	// StartsWith means "string starts with prefix" (case-sensitive)
+	StartsWith
+
+	// EndsWith means "string ends with suffix" (case-sensitive)
+	EndsWith
 )
 
 // IncrementMetaRequest defines optional metadata to be set when performing
@@ -5450,8 +5970,8 @@ func convertOrderTypeToProtoOrderType(orderType IndexOrder) hydraidepbgo.OrderTy
 // ✅ Supported value types:
 // - Primitives: string, bool, int, uint, float (various widths)
 // - time.Time (as int64 UNIX timestamp)
-// - Slices and maps (serialized as GOB-encoded binary blobs)
-// - Structs and pointers (also GOB-encoded)
+// - Slices and maps (serialized as GOB or MessagePack binary blobs depending on encoding setting)
+// - Structs and pointers (also GOB or MessagePack encoded)
 // - `nil` / empty values are optionally excluded if marked with `omitempty`
 //
 // ⚠️ Requirements:
@@ -5475,7 +5995,7 @@ func convertOrderTypeToProtoOrderType(orderType IndexOrder) hydraidepbgo.OrderTy
 // - Metadata injection
 // - Optional field skipping (e.g. omitempty)
 // - Consistent type coercion for known value types
-func convertCatalogModelToKeyValuePair(model any) (*hydraidepbgo.KeyValuePair, error) {
+func convertCatalogModelToKeyValuePair(model any, encoding EncodingFormat) (*hydraidepbgo.KeyValuePair, error) {
 
 	// Get the reflection value of the input model
 	v := reflect.ValueOf(model)
@@ -5534,7 +6054,7 @@ func convertCatalogModelToKeyValuePair(model any) (*hydraidepbgo.KeyValuePair, e
 			}
 
 			// convert the value to KeyValuePair
-			if err := convertFieldToKvPair(value, kvPair); err != nil {
+			if err := convertFieldToKvPair(value, kvPair, encoding); err != nil {
 				return nil, err
 			}
 
@@ -5937,26 +6457,43 @@ func setProtoTreasureToModel(treasure *hydraidepbgo.Treasure, field reflect.Valu
 		switch field.Kind() {
 		case reflect.Slice:
 			if field.Type().Elem().Kind() == reflect.Uint8 {
+				// Raw []byte → direct assignment
 				field.SetBytes(treasure.GetBytesVal())
 			} else {
-
-				decoder := gob.NewDecoder(bytes.NewReader(treasure.GetBytesVal()))
+				data := treasure.GetBytesVal()
 				decoded := reflect.New(field.Type()).Interface()
 
-				if err := decoder.Decode(decoded); err != nil {
-					return fmt.Errorf("failed to decode gob into slice field: %w", err)
+				if isMsgpackEncoded(data) {
+					// MessagePack decode
+					if err := msgpack.Unmarshal(unwrapMsgpack(data), decoded); err != nil {
+						return fmt.Errorf("failed to msgpack-decode slice field: %w", err)
+					}
+				} else {
+					// Legacy GOB decode
+					decoder := gob.NewDecoder(bytes.NewReader(data))
+					if err := decoder.Decode(decoded); err != nil {
+						return fmt.Errorf("failed to gob-decode slice field: %w", err)
+					}
 				}
 
 				field.Set(reflect.ValueOf(decoded).Elem())
 			}
 
 		case reflect.Map, reflect.Ptr:
-
-			decoder := gob.NewDecoder(bytes.NewReader(treasure.GetBytesVal()))
+			data := treasure.GetBytesVal()
 			decoded := reflect.New(field.Type()).Interface()
 
-			if err := decoder.Decode(decoded); err != nil {
-				return fmt.Errorf("failed to decode gob into map/ptr field: %w", err)
+			if isMsgpackEncoded(data) {
+				// MessagePack decode
+				if err := msgpack.Unmarshal(unwrapMsgpack(data), decoded); err != nil {
+					return fmt.Errorf("failed to msgpack-decode map/ptr field: %w", err)
+				}
+			} else {
+				// Legacy GOB decode
+				decoder := gob.NewDecoder(bytes.NewReader(data))
+				if err := decoder.Decode(decoded); err != nil {
+					return fmt.Errorf("failed to gob-decode map/ptr field: %w", err)
+				}
 			}
 
 			field.Set(reflect.ValueOf(decoded).Elem())
@@ -5997,7 +6534,7 @@ func setProtoTreasureToModel(treasure *hydraidepbgo.Treasure, field reflect.Valu
 //   - Otherwise, a KeyValuePair is created for the field and added to the kvPairs slice.
 //
 // - Returns the list of KeyValuePair objects, the list of deletable keys, and an error if any.
-func convertProfileModelToKeyValuePair(model any) ([]*hydraidepbgo.KeyValuePair, []string, error) {
+func convertProfileModelToKeyValuePair(model any, encoding EncodingFormat) ([]*hydraidepbgo.KeyValuePair, []string, error) {
 	// Check if the model is a pointer to a struct
 	v := reflect.ValueOf(model)
 	if v.Kind() != reflect.Ptr || v.Elem().Kind() != reflect.Struct {
@@ -6042,7 +6579,7 @@ func convertProfileModelToKeyValuePair(model any) ([]*hydraidepbgo.KeyValuePair,
 			Key: field.Name,
 		}
 
-		if err := convertFieldToKvPair(value, kvPair); err != nil {
+		if err := convertFieldToKvPair(value, kvPair, encoding); err != nil {
 			return nil, nil, err
 		}
 
@@ -6087,8 +6624,35 @@ func isFieldEmpty(value reflect.Value) bool {
 
 }
 
+// msgpack format detection constants.
+// We prepend a 2-byte magic prefix to all MessagePack-encoded data: [0xC7, 0x00]
+// (MessagePack ext format with length 0 and type 0). GOB will never produce this sequence.
+const (
+	msgpackMagic0 byte = 0xC7
+	msgpackMagic1 byte = 0x00
+)
+
+// isMsgpackEncoded returns true if the byte slice has the MessagePack magic prefix.
+func isMsgpackEncoded(data []byte) bool {
+	return len(data) >= 2 && data[0] == msgpackMagic0 && data[1] == msgpackMagic1
+}
+
+// wrapMsgpack prepends the MessagePack magic prefix to the encoded data.
+func wrapMsgpack(data []byte) []byte {
+	result := make([]byte, len(data)+2)
+	result[0] = msgpackMagic0
+	result[1] = msgpackMagic1
+	copy(result[2:], data)
+	return result
+}
+
+// unwrapMsgpack removes the 2-byte MessagePack magic prefix.
+func unwrapMsgpack(data []byte) []byte {
+	return data[2:]
+}
+
 // convert one field to a key value pair
-func convertFieldToKvPair(value reflect.Value, kvPair *hydraidepbgo.KeyValuePair) (err error) {
+func convertFieldToKvPair(value reflect.Value, kvPair *hydraidepbgo.KeyValuePair, encoding EncodingFormat) (err error) {
 
 	switch value.Kind() {
 	// 🧵 Simple primitives (string, bool, numbers)
@@ -6135,14 +6699,20 @@ func convertFieldToKvPair(value reflect.Value, kvPair *hydraidepbgo.KeyValuePair
 	case reflect.Float64:
 		floatVal := value.Float()
 		kvPair.Float64Val = &floatVal
-	// 🧱 Complex binary types – slices, maps, pointers, structs (excluding time)
+	// Complex binary types – slices, maps, pointers, structs (excluding time)
 	case reflect.Slice:
 
-		// Special case for []byte → raw binary value
+		// Special case for []byte → raw binary value (no encoding wrapper)
 		if value.Type().Elem().Kind() == reflect.Uint8 {
 			kvPair.BytesVal = value.Bytes()
+		} else if encoding == EncodingMsgPack {
+			encoded, encErr := msgpack.Marshal(value.Interface())
+			if encErr != nil {
+				err = fmt.Errorf("could not msgpack-encode slice: %w", encErr)
+				break
+			}
+			kvPair.BytesVal = wrapMsgpack(encoded)
 		} else {
-			// All other slices are GOB-encoded
 			registerGobTypeIfNeeded(value.Interface())
 			var buf bytes.Buffer
 			encoder := gob.NewEncoder(&buf)
@@ -6154,14 +6724,23 @@ func convertFieldToKvPair(value reflect.Value, kvPair *hydraidepbgo.KeyValuePair
 		}
 
 	case reflect.Map:
-		registerGobTypeIfNeeded(value.Interface())
-		var buf bytes.Buffer
-		encoder := gob.NewEncoder(&buf)
-		if encErr := encoder.Encode(value.Interface()); encErr != nil {
-			err = fmt.Errorf("could not GOB-encode map: %w", encErr)
-			break
+		if encoding == EncodingMsgPack {
+			encoded, encErr := msgpack.Marshal(value.Interface())
+			if encErr != nil {
+				err = fmt.Errorf("could not msgpack-encode map: %w", encErr)
+				break
+			}
+			kvPair.BytesVal = wrapMsgpack(encoded)
+		} else {
+			registerGobTypeIfNeeded(value.Interface())
+			var buf bytes.Buffer
+			encoder := gob.NewEncoder(&buf)
+			if encErr := encoder.Encode(value.Interface()); encErr != nil {
+				err = fmt.Errorf("could not GOB-encode map: %w", encErr)
+				break
+			}
+			kvPair.BytesVal = buf.Bytes()
 		}
-		kvPair.BytesVal = buf.Bytes()
 
 	case reflect.Ptr:
 
@@ -6170,15 +6749,23 @@ func convertFieldToKvPair(value reflect.Value, kvPair *hydraidepbgo.KeyValuePair
 			break
 		}
 
-		registerGobTypeIfNeeded(value.Interface())
-		var buf bytes.Buffer
-		encoder := gob.NewEncoder(&buf)
-		if encErr := encoder.Encode(value.Interface()); encErr != nil {
-			err = fmt.Errorf("could not GOB-encode pointer value: %w", encErr)
-			break
+		if encoding == EncodingMsgPack {
+			encoded, encErr := msgpack.Marshal(value.Interface())
+			if encErr != nil {
+				err = fmt.Errorf("could not msgpack-encode pointer value: %w", encErr)
+				break
+			}
+			kvPair.BytesVal = wrapMsgpack(encoded)
+		} else {
+			registerGobTypeIfNeeded(value.Interface())
+			var buf bytes.Buffer
+			encoder := gob.NewEncoder(&buf)
+			if encErr := encoder.Encode(value.Interface()); encErr != nil {
+				err = fmt.Errorf("could not GOB-encode pointer value: %w", encErr)
+				break
+			}
+			kvPair.BytesVal = buf.Bytes()
 		}
-
-		kvPair.BytesVal = buf.Bytes()
 
 	// 🕒 Special case for time.Time → store as int64 (Unix timestamp)
 	case reflect.Struct:
@@ -6299,12 +6886,19 @@ func convertRelationalOperatorToProtoOperator(operator RelationalOperator) hydra
 		return hydraidepbgo.Relational_LESS_THAN_OR_EQUAL
 	case LessThan:
 		return hydraidepbgo.Relational_LESS_THAN
+	case Contains:
+		return hydraidepbgo.Relational_CONTAINS
+	case NotContains:
+		return hydraidepbgo.Relational_NOT_CONTAINS
+	case StartsWith:
+		return hydraidepbgo.Relational_STARTS_WITH
+	case EndsWith:
+		return hydraidepbgo.Relational_ENDS_WITH
 	case Equal:
 		fallthrough
 	default:
 		return hydraidepbgo.Relational_EQUAL
 	}
-
 }
 
 // ErrorCode represents predefined error codes used throughout the HydrAIDE SDK.

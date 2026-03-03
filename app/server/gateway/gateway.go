@@ -585,6 +585,180 @@ func (g Gateway) GetByKeys(ctx context.Context, in *hydrapb.GetByKeysRequest) (*
 
 }
 
+// GetByIndexStream is the streaming variant of GetByIndex.
+// It sends each matching Treasure individually over the stream instead of
+// collecting them all into a single response message.
+// Optional filters are evaluated server-side; only matching Treasures are sent.
+func (g Gateway) GetByIndexStream(in *hydrapb.GetByIndexStreamRequest, stream hydrapb.HydraideService_GetByIndexStreamServer) error {
+
+	// Do NOT use LockSystem for streaming RPCs (same pattern as SubscribeToEvents).
+	defer handlePanic()
+
+	swampName, err := checkSwampName(g.ZeusInterface, in.GetIslandID(), in.SwampName, true)
+	if err != nil {
+		return status.Error(codes.InvalidArgument, err.Error())
+	}
+
+	hydraInterface := g.ZeusInterface.GetHydra()
+
+	swampInterface, err := hydraInterface.SummonSwamp(stream.Context(), in.GetIslandID(), swampName)
+	if err != nil {
+		return status.Error(codes.Internal, fmt.Sprintf("internal server error in hydra: %s", err.Error()))
+	}
+
+	swampInterface.BeginVigil()
+	defer swampInterface.CeaseVigil()
+
+	var fromTime, toTime *time.Time
+	if in.GetFromTime() != nil {
+		t := in.GetFromTime().AsTime()
+		fromTime = &t
+	}
+	if in.GetToTime() != nil {
+		t := in.GetToTime().AsTime()
+		toTime = &t
+	}
+
+	treasures, err := swampInterface.GetTreasuresByBeacon(
+		inputIndexTypeToBeaconType(in.GetIndexType()),
+		inputOrderTypeToBeaconOrderType(in.GetOrderType()),
+		in.GetFrom(), in.GetLimit(), fromTime, toTime)
+	if err != nil {
+		return status.Error(codes.Internal, fmt.Sprintf("hydra error: %s", err.Error()))
+	}
+
+	filters := in.GetFilters()
+
+	for _, treasureInterface := range treasures {
+		// Check for client cancellation
+		if stream.Context().Err() != nil {
+			return stream.Context().Err()
+		}
+
+		t := &hydrapb.Treasure{}
+		treasureToKeyValuePair(treasureInterface, t)
+
+		if !evaluateFilterGroup(t, filters) {
+			continue
+		}
+
+		if err := stream.Send(&hydrapb.GetByIndexStreamResponse{
+			Treasure: t,
+		}); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// GetByIndexStreamFromMany reads from multiple swamps in sequence,
+// streaming each matching Treasure with its source swamp name.
+func (g Gateway) GetByIndexStreamFromMany(in *hydrapb.GetByIndexStreamFromManyRequest, stream hydrapb.HydraideService_GetByIndexStreamFromManyServer) error {
+
+	defer handlePanic()
+
+	hydraInterface := g.ZeusInterface.GetHydra()
+
+	for _, query := range in.GetQueries() {
+
+		if stream.Context().Err() != nil {
+			return stream.Context().Err()
+		}
+
+		swampName, err := checkSwampName(g.ZeusInterface, query.GetIslandID(), query.SwampName, true)
+		if err != nil {
+			return status.Error(codes.InvalidArgument, err.Error())
+		}
+
+		swampInterface, err := hydraInterface.SummonSwamp(stream.Context(), query.GetIslandID(), swampName)
+		if err != nil {
+			return status.Error(codes.Internal, fmt.Sprintf("internal server error in hydra: %s", err.Error()))
+		}
+
+		swampInterface.BeginVigil()
+
+		var fromTime, toTime *time.Time
+		if query.GetFromTime() != nil {
+			t := query.GetFromTime().AsTime()
+			fromTime = &t
+		}
+		if query.GetToTime() != nil {
+			t := query.GetToTime().AsTime()
+			toTime = &t
+		}
+
+		treasures, err := swampInterface.GetTreasuresByBeacon(
+			inputIndexTypeToBeaconType(query.GetIndexType()),
+			inputOrderTypeToBeaconOrderType(query.GetOrderType()),
+			query.GetFrom(), query.GetLimit(), fromTime, toTime)
+
+		if err != nil {
+			swampInterface.CeaseVigil()
+			return status.Error(codes.Internal, fmt.Sprintf("hydra error: %s", err.Error()))
+		}
+
+		filters := query.GetFilters()
+
+		for _, treasureInterface := range treasures {
+			if stream.Context().Err() != nil {
+				swampInterface.CeaseVigil()
+				return stream.Context().Err()
+			}
+
+			t := &hydrapb.Treasure{}
+			treasureToKeyValuePair(treasureInterface, t)
+
+			if !evaluateFilterGroup(t, filters) {
+				continue
+			}
+
+			if err := stream.Send(&hydrapb.GetByIndexStreamFromManyResponse{
+				SwampName: query.SwampName,
+				Treasure:  t,
+			}); err != nil {
+				swampInterface.CeaseVigil()
+				return err
+			}
+		}
+
+		swampInterface.CeaseVigil()
+	}
+
+	return nil
+}
+
+// CompactSwamp forces a full rewrite of the swamp's .hyd file,
+// removing all dead entries and reducing fragmentation to 0%.
+func (g Gateway) CompactSwamp(ctx context.Context, in *hydrapb.CompactSwampRequest) (*hydrapb.CompactSwampResponse, error) {
+
+	g.ZeusInterface.GetSafeops().LockSystem()
+	defer g.ZeusInterface.GetSafeops().UnlockSystem()
+
+	defer handlePanic()
+
+	swampName, err := checkSwampName(g.ZeusInterface, in.GetIslandID(), in.SwampName, true)
+	if err != nil {
+		return nil, err
+	}
+
+	hydraInterface := g.ZeusInterface.GetHydra()
+
+	swampInterface, err := hydraInterface.SummonSwamp(ctx, in.GetIslandID(), swampName)
+	if err != nil {
+		return nil, status.Error(codes.Internal, fmt.Sprintf("internal server error in hydra: %s", err.Error()))
+	}
+
+	swampInterface.BeginVigil()
+	defer swampInterface.CeaseVigil()
+
+	if err := swampInterface.ForceCompaction(); err != nil {
+		return nil, status.Error(codes.Internal, fmt.Sprintf("compaction error: %s", err.Error()))
+	}
+
+	return &hydrapb.CompactSwampResponse{}, nil
+}
+
 func (g Gateway) ShiftByKeys(ctx context.Context, in *hydrapb.ShiftByKeysRequest) (*hydrapb.ShiftByKeysResponse, error) {
 
 	g.ZeusInterface.GetSafeops().LockSystem()

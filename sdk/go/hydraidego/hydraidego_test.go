@@ -314,7 +314,7 @@ func TestConvertCatalogModelWithOmitEmpty(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 
 			// Convert to key-value pair
-			kv, err := convertCatalogModelToKeyValuePair(tc.input)
+			kv, err := convertCatalogModelToKeyValuePair(tc.input, EncodingGOB)
 
 			require.NoError(t, err, "Conversion should succeed")
 
@@ -1413,7 +1413,7 @@ func TestHydraideTypeConversions(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			kv, err := convertCatalogModelToKeyValuePair(tc.input)
+			kv, err := convertCatalogModelToKeyValuePair(tc.input, EncodingGOB)
 			require.NoError(t, err)
 
 			treasure := convertKeyValuePairToTreasure(kv)

@@ -19,9 +19,10 @@ lock-free operations, real-time subscriptions, and stateless routing, all tailor
 7. [🗂️ Catalog Swamps](#-catalog-swamps)
 8. [📚 Good to Know: Split Catalogs When Needed](#-good-to-know-split-catalogs-when-needed)
 9. [🧯 When Not to Use Catalogs](#-when-not-to-use-catalogs)
-10. [➕ Increment / Decrement – Atomic State Without the Overhead](#-increment--decrement--atomic-state-with-metadata-control)
-11. [📌 Slice & Reverse Indexing in HydrAIDE](#-slice--reverse-indexing-in-hydraide)
-12. [🧪 Testing with Real Database Connection](#-testing-with-real-database-connection)
+10. [🔍 Server-Side Filtering & Streaming](#-server-side-filtering--streaming)
+11. [➕ Increment / Decrement – Atomic State Without the Overhead](#-increment--decrement--atomic-state-with-metadata-control)
+12. [📌 Slice & Reverse Indexing in HydrAIDE](#-slice--reverse-indexing-in-hydraide)
+13. [🧪 Testing with Real Database Connection](#-testing-with-real-database-connection)
 
 ---
 
@@ -495,6 +496,192 @@ Great for:
 
 ---
 
+#### 🔍 Server-Side Filtering & Streaming
+
+HydrAIDE supports **server-side filtering** with **nested AND/OR logic** and **streaming reads** — enabling efficient querying of large datasets without loading everything into memory or transferring non-matching records over the network.
+
+##### Why Streaming?
+
+`CatalogReadMany` loads all results into a single gRPC response message. For small-to-medium datasets this is fine, but when a Swamp contains millions of Treasures, this becomes a problem:
+
+- **Memory**: The entire result set must fit in one proto message
+- **Latency**: You wait for ALL results before processing the first one
+- **Network**: All data travels in one large payload
+
+`CatalogReadManyStream` solves this by streaming each matching Treasure individually over a gRPC server-stream.
+
+##### FilterGroup — Nested AND/OR Logic
+
+Filters are organized into **FilterGroups** that support recursive AND/OR logic. A FilterGroup contains leaf-level filters and nested sub-groups, all combined with either AND or OR logic.
+
+Use `FilterAND(...)` and `FilterOR(...)` to build filter trees:
+
+```go
+// Simple AND: price > 100 AND status == "active"
+filters := hydraidego.FilterAND(
+    hydraidego.FilterFloat64(hydraidego.GreaterThan, 100.0),
+    hydraidego.FilterString(hydraidego.Equal, "active"),
+)
+
+// Nested AND/OR: price > 100 AND (status == "active" OR status == "pending")
+filters := hydraidego.FilterAND(
+    hydraidego.FilterFloat64(hydraidego.GreaterThan, 100.0),
+    hydraidego.FilterOR(
+        hydraidego.FilterString(hydraidego.Equal, "active"),
+        hydraidego.FilterString(hydraidego.Equal, "pending"),
+    ),
+)
+
+// Deep nesting: (A AND B) OR (C AND D)
+filters := hydraidego.FilterOR(
+    hydraidego.FilterAND(
+        hydraidego.FilterInt32(hydraidego.GreaterThan, 10),
+        hydraidego.FilterString(hydraidego.Contains, "premium"),
+    ),
+    hydraidego.FilterAND(
+        hydraidego.FilterInt32(hydraidego.LessThanOrEqual, 10),
+        hydraidego.FilterString(hydraidego.StartsWith, "free"),
+    ),
+)
+```
+
+Evaluation rules:
+- **AND**: ALL leaf filters AND ALL sub-groups must be true
+- **OR**: at least ONE leaf filter OR ONE sub-group must be true
+- **Empty group** (no filters, no sub-groups): passes all Treasures
+- **nil filters**: no filtering applied (all Treasures pass)
+
+##### Server-Side Filters
+
+Filters are evaluated **on the server** before results are sent to the client. This means non-matching Treasures never leave the HydrAIDE server — saving bandwidth, memory, and processing time.
+
+**Available filter types** (matching the Treasure's typed value fields):
+
+| Constructor | Matches Against |
+|-------------|----------------|
+| `FilterInt8(op, value)` | Treasure's `Int8Val` |
+| `FilterInt16(op, value)` | Treasure's `Int16Val` |
+| `FilterInt32(op, value)` | Treasure's `Int32Val` |
+| `FilterInt64(op, value)` | Treasure's `Int64Val` |
+| `FilterUint8(op, value)` | Treasure's `Uint8Val` |
+| `FilterUint16(op, value)` | Treasure's `Uint16Val` |
+| `FilterUint32(op, value)` | Treasure's `Uint32Val` |
+| `FilterUint64(op, value)` | Treasure's `Uint64Val` |
+| `FilterFloat32(op, value)` | Treasure's `Float32Val` |
+| `FilterFloat64(op, value)` | Treasure's `Float64Val` |
+| `FilterString(op, value)` | Treasure's `StringVal` |
+| `FilterBool(op, value)` | Treasure's `BoolVal` |
+
+**Relational operators** (for all types):
+
+| Operator | Meaning |
+|----------|---------|
+| `Equal` | `==` |
+| `NotEqual` | `!=` |
+| `GreaterThan` | `>` |
+| `GreaterThanOrEqual` | `>=` |
+| `LessThan` | `<` |
+| `LessThanOrEqual` | `<=` |
+
+**String-specific operators** (only valid with `FilterString` / `FilterBytesFieldString`):
+
+| Operator | Meaning |
+|----------|---------|
+| `Contains` | String contains substring (case-sensitive) |
+| `NotContains` | String does NOT contain substring (case-sensitive) |
+| `StartsWith` | String starts with prefix (case-sensitive) |
+| `EndsWith` | String ends with suffix (case-sensitive) |
+
+##### CatalogReadManyStream — Streaming Read with Filters
+
+```go
+// Read all products with price > 100.0, newest first
+index := &hydraidego.Index{
+    IndexType:  hydraidego.IndexCreationTime,
+    IndexOrder: hydraidego.IndexOrderDesc,
+}
+
+filters := hydraidego.FilterAND(
+    hydraidego.FilterFloat64(hydraidego.GreaterThan, 100.0),
+)
+
+err := h.CatalogReadManyStream(ctx, swamp, index, filters, ProductModel{}, func(model any) error {
+    product := model.(*ProductModel)
+    fmt.Printf("Product: %s, Price: %.2f\n", product.Name, product.Price)
+    return nil
+})
+```
+
+When `filters` is `nil`, all Treasures matching the Index criteria are streamed (equivalent to `CatalogReadMany` but with streaming delivery).
+
+> Full example: [catalog_read_many_stream.go](examples/models/catalog_read_many_stream.go)
+
+##### CatalogReadManyFromMany — Multi-Swamp Streaming Read
+
+Reads from **multiple Swamps** in a single streaming call, with per-swamp Index and Filters.
+Results arrive swamp-by-swamp in the request order. The iterator receives the source swamp name.
+
+```go
+requests := []*hydraidego.CatalogReadManyFromManyRequest{
+    {
+        SwampName: name.New().Sanctuary("orders").Realm("eu").Swamp("hu"),
+        Index:     &hydraidego.Index{IndexType: hydraidego.IndexKey, IndexOrder: hydraidego.IndexOrderAsc},
+        Filters:   hydraidego.FilterAND(hydraidego.FilterString(hydraidego.Equal, "pending")),
+    },
+    {
+        SwampName: name.New().Sanctuary("orders").Realm("eu").Swamp("de"),
+        Index:     &hydraidego.Index{IndexType: hydraidego.IndexKey, IndexOrder: hydraidego.IndexOrderAsc},
+        Filters:   hydraidego.FilterOR(
+            hydraidego.FilterString(hydraidego.Equal, "pending"),
+            hydraidego.FilterString(hydraidego.Contains, "ship"),
+        ),
+    },
+}
+
+err := h.CatalogReadManyFromMany(ctx, requests, OrderModel{}, func(swampName name.Name, model any) error {
+    order := model.(*OrderModel)
+    fmt.Printf("[%s] Order: %s - %s\n", swampName.Get(), order.OrderID, order.Status)
+    return nil
+})
+```
+
+> Full example: [catalog_read_many_from_many.go](examples/models/catalog_read_many_from_many.go)
+
+##### MessagePack Encoding (Optional)
+
+By default, HydrAIDE uses Go's GOB encoding for complex types (structs, slices, maps, pointers stored in `BytesVal`). You can opt into **MessagePack encoding** for cross-language compatibility and server-side field-level filtering within complex types.
+
+```go
+h.RegisterSwamp(ctx, &hydraidego.RegisterSwampRequest{
+    SwampPattern: name.New().Sanctuary("products").Realm("catalog").Swamp("*"),
+    CloseAfterIdle: time.Hour,
+    FilesystemSettings: &hydraidego.SwampFilesystemSettings{
+        WriteInterval:  time.Second * 5,
+        EncodingFormat: hydraidego.EncodingMsgPack, // Enable MessagePack encoding
+    },
+})
+```
+
+With MessagePack enabled, you can filter on fields **inside** complex struct values using `FilterBytesField*` constructors:
+
+```go
+// Filter on a nested struct field within BytesVal
+// Example: find Treasures where Address.City == "Budapest"
+filters := hydraidego.FilterAND(
+    hydraidego.FilterBytesFieldString(hydraidego.Equal, "Address.City", "Budapest"),
+)
+```
+
+**Encoding migration** from GOB to MessagePack is automatic:
+1. Set `EncodingFormat: hydraidego.EncodingMsgPack` in `RegisterSwamp`
+2. Read existing data (auto-detected as GOB)
+3. Re-save the data (SDK writes in MessagePack, server detects the byte-level change)
+4. Call `h.CompactSwamp(ctx, swampName)` to remove old GOB entries from the `.hyd` file
+
+> Primitive types (int, string, bool, float) are **not affected** by encoding changes. They always use native proto fields directly. Only complex types (structs, slices, maps, pointers) use `BytesVal` with GOB/MessagePack.
+
+---
+
 #### 🔎 Batch key-based shift — CatalogShiftBatch
 
 CatalogShiftBatch is designed for scenarios where you need to **retrieve and delete** multiple Treasures by their keys in a single atomic operation. This is particularly useful for job queue processing, message consumption, shopping cart checkout, and other consume-and-remove workflows.
@@ -723,6 +910,9 @@ Catalogs are not suitable when:
 | CatalogSave               | ✅ Ready | [catalog_save.go](examples/models/catalog_save.go)             |
 | CatalogSaveMany           | ✅ Ready | [catalog_save_many.go](examples/models/catalog_save_many.go)             |
 | CatalogSaveManyToMany     | ✅ Ready | [catalog_save_many_to_many.go](examples/models/catalog_save_many_to_many.go)             |
+| CatalogReadManyStream     | ✅ Ready | [catalog_read_many_stream.go](examples/models/catalog_read_many_stream.go)            |
+| CatalogReadManyFromMany   | ✅ Ready | [catalog_read_many_from_many.go](examples/models/catalog_read_many_from_many.go)            |
+| CompactSwamp              | ✅ Ready | Encoding migration helper — forces .hyd file rewrite              |
 | CatalogShiftExpired       | ✅ Ready | [catalog_shift_expired.go](examples/models/catalog_shift_expired.go)              |
 | CatalogShiftBatch         | ✅ Ready | [catalog_shift_batch.go](examples/models/catalog_shift_batch.go)              |
 
