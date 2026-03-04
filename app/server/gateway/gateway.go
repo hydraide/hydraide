@@ -940,6 +940,11 @@ func (g Gateway) ShiftExpiredTreasures(ctx context.Context, in *hydrapb.ShiftExp
 		return nil, status.Error(codes.Internal, fmt.Sprintf("hydra error: %s", err.Error()))
 	}
 
+	slog.Debug("ShiftExpiredTreasures completed",
+		"swamp", in.SwampName,
+		"shifted", len(treasures),
+		"isClosing", swampInterface.IsClosing())
+
 	// convert all treasures to the protobuf format
 	var response []*hydrapb.Treasure
 	for _, treasureInterface := range treasures {
@@ -1077,6 +1082,9 @@ func (g Gateway) Count(ctx context.Context, in *hydrapb.CountRequest) (*hydrapb.
 
 		swampNameObject, err := checkSwampName(g.ZeusInterface, swampIdentifier.GetIslandID(), swampIdentifier.GetSwampName(), true)
 		if err != nil {
+			slog.Debug("Count: checkSwampName failed",
+				"swamp", swampIdentifier.GetSwampName(),
+				"error", err)
 			// Ellenőrizzük, hogy a hiba állapota 'NotFound' kódú-e
 			if st, ok := status.FromError(err); ok && st.Code() == codes.NotFound {
 				// this is not an error, just a swamp that does not exist
@@ -1089,6 +1097,7 @@ func (g Gateway) Count(ctx context.Context, in *hydrapb.CountRequest) (*hydrapb.
 				// return with grpc error message
 				return nil, err
 			}
+			continue
 		}
 
 		swamps = append(swamps, &SwampIdentifier{

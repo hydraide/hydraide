@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -268,6 +269,222 @@ func TestHydra_SummonSwamp(t *testing.T) {
 		assert.NoError(t, err, "should be nil")
 		assert.False(t, isExists, "should be false")
 
+	})
+
+	t.Run("e2e gateway simulation: ShiftExpiredTreasures then Count should see swamp as non-existent", func(t *testing.T) {
+
+		swampName := name.New().Sanctuary(sanctuaryForQuickTest).Realm("e2e-gateway-sim").Swamp("shift-then-count")
+
+		// ============================================================
+		// PHASE 1: Simulate gateway Set handler — create swamp and add a treasure
+		// ============================================================
+		swampInterface, err := hydraInterface.SummonSwamp(context.Background(), 10, swampName)
+		assert.Nil(t, err, "SummonSwamp should succeed")
+
+		swampInterface.BeginVigil()
+		treasure := swampInterface.CreateTreasure("msg-1")
+		guardID := treasure.StartTreasureGuard(true)
+		treasure.SetExpirationTime(guardID, time.Now().Add(-1*time.Second)) // expired 1 second ago
+		treasure.SetContentString(guardID, "test message content")
+		treasure.Save(guardID)
+		treasure.ReleaseTreasureGuard(guardID)
+		swampInterface.CeaseVigil()
+
+		t.Logf("PHASE 1: treasure created, CountTreasures=%d", swampInterface.CountTreasures())
+		assert.Equal(t, 1, swampInterface.CountTreasures(), "should have 1 treasure after save")
+
+		// Wait for write ticker to flush to disk (writeInterval=1s in test settings)
+		time.Sleep(1500 * time.Millisecond)
+
+		// ============================================================
+		// PHASE 2: Simulate gateway Count handler — verify treasure exists
+		// ============================================================
+		// Count handler: checkSwampName(checkExist=true) → SummonSwamp → BeginVigil → CountTreasures → CeaseVigil
+		isExists, err := hydraInterface.IsExistSwamp(10, swampName)
+		assert.NoError(t, err)
+		assert.True(t, isExists, "swamp should exist before delete")
+
+		summonedSwamp, err := hydraInterface.SummonSwamp(context.Background(), 10, swampName)
+		assert.NoError(t, err)
+
+		summonedSwamp.BeginVigil()
+		count := summonedSwamp.CountTreasures()
+		summonedSwamp.CeaseVigil()
+		t.Logf("PHASE 2: Count before delete: %d", count)
+		assert.Equal(t, 1, count, "count should be 1")
+
+		// ============================================================
+		// PHASE 3: Simulate gateway ShiftExpiredTreasures handler
+		// ============================================================
+		// ShiftExpiredTreasures: checkSwampName → SummonSwamp → BeginVigil → CloneAndDeleteExpiredTreasures → defer CeaseVigil
+		summonedSwamp2, err := hydraInterface.SummonSwamp(context.Background(), 10, swampName)
+		assert.NoError(t, err)
+
+		summonedSwamp2.BeginVigil()
+		shifted, err := summonedSwamp2.CloneAndDeleteExpiredTreasures(1000000000)
+		assert.Nil(t, err, "CloneAndDeleteExpiredTreasures should succeed")
+		t.Logf("PHASE 3: shifted=%d, IsClosing=%v", len(shifted), summonedSwamp2.IsClosing())
+		assert.Equal(t, 1, len(shifted), "should shift 1 expired treasure")
+		// Gateway defer CeaseVigil
+		summonedSwamp2.CeaseVigil()
+
+		// Small delay to let destroy finish
+		time.Sleep(200 * time.Millisecond)
+
+		// ============================================================
+		// PHASE 4: Simulate gateway Count handler AFTER delete
+		// ============================================================
+		// Count handler: checkSwampName(checkExist=true) → should fail because swamp was destroyed
+		isExists, err = hydraInterface.IsExistSwamp(10, swampName)
+		t.Logf("PHASE 4: IsExistSwamp=%v, err=%v", isExists, err)
+		assert.NoError(t, err, "IsExistSwamp should not error")
+		assert.False(t, isExists, "swamp should NOT exist after auto-destroy — this is what the trendizz-api test expects")
+
+		// If the swamp DOES still exist, let's investigate why
+		if isExists {
+			t.Log("BUG: swamp still exists! Investigating...")
+			summonedSwamp3, err := hydraInterface.SummonSwamp(context.Background(), 10, swampName)
+			if err == nil {
+				summonedSwamp3.BeginVigil()
+				t.Logf("  CountTreasures=%d, IsClosing=%v", summonedSwamp3.CountTreasures(), summonedSwamp3.IsClosing())
+				summonedSwamp3.CeaseVigil()
+				// cleanup
+				summonedSwamp3.Destroy()
+			} else {
+				t.Logf("  SummonSwamp error: %v", err)
+			}
+		}
+
+	})
+
+	t.Run("e2e gateway simulation: fast path — no write ticker flush before delete", func(t *testing.T) {
+
+		// This simulates the trendizz-api scenario exactly:
+		// Save → (only ~200ms) → DeleteAllExpired → Count
+		// The write ticker (1s interval) has NOT flushed the treasure to disk yet
+
+		swampName := name.New().Sanctuary(sanctuaryForQuickTest).Realm("e2e-gateway-sim").Swamp("fast-no-flush")
+
+		// PHASE 1: Save a treasure (gateway Set handler)
+		swampInterface, err := hydraInterface.SummonSwamp(context.Background(), 10, swampName)
+		assert.Nil(t, err)
+
+		swampInterface.BeginVigil()
+		tr := swampInterface.CreateTreasure("msg-1")
+		gid := tr.StartTreasureGuard(true)
+		tr.SetExpirationTime(gid, time.Now().Add(-1*time.Second)) // already expired
+		tr.SetContentString(gid, "test message")
+		tr.Save(gid)
+		tr.ReleaseTreasureGuard(gid)
+		swampInterface.CeaseVigil()
+
+		t.Logf("PHASE 1: saved, CountTreasures=%d, GetFileName=%v", swampInterface.CountTreasures(), tr.GetFileName())
+
+		// NO sleep here — simulating fast path where write ticker hasn't flushed yet
+		// Only 200ms like the trendizz-api test
+		time.Sleep(200 * time.Millisecond)
+
+		// PHASE 2: Count (gateway Count handler)
+		isExists, _ := hydraInterface.IsExistSwamp(10, swampName)
+		assert.True(t, isExists, "swamp should exist")
+		s2, _ := hydraInterface.SummonSwamp(context.Background(), 10, swampName)
+		s2.BeginVigil()
+		count := s2.CountTreasures()
+		s2.CeaseVigil()
+		t.Logf("PHASE 2: count=%d", count)
+		assert.Equal(t, 1, count)
+
+		// PHASE 3: ShiftExpiredTreasures (gateway handler)
+		s3, _ := hydraInterface.SummonSwamp(context.Background(), 10, swampName)
+		s3.BeginVigil()
+		shifted, err := s3.CloneAndDeleteExpiredTreasures(1000000000)
+		assert.Nil(t, err)
+		t.Logf("PHASE 3: shifted=%d, IsClosing=%v", len(shifted), s3.IsClosing())
+		s3.CeaseVigil()
+
+		time.Sleep(200 * time.Millisecond)
+
+		// PHASE 4: Count after delete (gateway Count handler)
+		isExists, err = hydraInterface.IsExistSwamp(10, swampName)
+		t.Logf("PHASE 4: IsExistSwamp=%v, err=%v", isExists, err)
+		assert.NoError(t, err)
+		assert.False(t, isExists, "swamp should NOT exist after auto-destroy")
+
+		if isExists {
+			t.Log("BUG: swamp still exists after fast-path delete!")
+			s4, _ := hydraInterface.SummonSwamp(context.Background(), 10, swampName)
+			s4.BeginVigil()
+			t.Logf("  CountTreasures=%d, IsClosing=%v", s4.CountTreasures(), s4.IsClosing())
+			s4.CeaseVigil()
+			s4.Destroy()
+		}
+
+	})
+
+	t.Run("e2e gateway simulation: verify .hyd file is not recreated by write ticker after destroy", func(t *testing.T) {
+
+		swampName := name.New().Sanctuary(sanctuaryForQuickTest).Realm("e2e-gateway-sim").Swamp("hyd-file-check")
+
+		// PHASE 1: Save a treasure and wait for disk flush
+		swampInterface, err := hydraInterface.SummonSwamp(context.Background(), 10, swampName)
+		assert.Nil(t, err)
+
+		swampInterface.BeginVigil()
+		tr := swampInterface.CreateTreasure("msg-1")
+		gid := tr.StartTreasureGuard(true)
+		tr.SetExpirationTime(gid, time.Now().Add(-1*time.Second))
+		tr.SetContentString(gid, "content")
+		tr.Save(gid)
+		tr.ReleaseTreasureGuard(gid)
+		swampInterface.CeaseVigil()
+
+		// Wait for write ticker to flush to disk (writeInterval=1s)
+		time.Sleep(1500 * time.Millisecond)
+
+		// Get the .hyd file path from the chronicler (more reliable than manual calculation)
+		hydFilePath := swampInterface.GetChronicler().GetSwampAbsPath() + ".hyd"
+		_, statErr := os.Stat(hydFilePath)
+		if statErr != nil {
+			t.Logf("PHASE 1: .hyd file NOT found at %s (may not have flushed yet), skipping file-level checks", hydFilePath)
+		} else {
+			t.Logf("PHASE 1: .hyd file exists at %s", hydFilePath)
+		}
+		fileExistedBefore := statErr == nil
+
+		// PHASE 2: ShiftExpiredTreasures (auto-destroy)
+		s2, _ := hydraInterface.SummonSwamp(context.Background(), 10, swampName)
+		s2.BeginVigil()
+		shifted, _ := s2.CloneAndDeleteExpiredTreasures(1000000000)
+		t.Logf("PHASE 2: shifted=%d, IsClosing=%v", len(shifted), s2.IsClosing())
+		s2.CeaseVigil()
+
+		time.Sleep(100 * time.Millisecond)
+
+		// Only check file deletion if the file existed before
+		if fileExistedBefore {
+			_, statErr = os.Stat(hydFilePath)
+			t.Logf("PHASE 2: .hyd file deleted = %v", os.IsNotExist(statErr))
+			assert.True(t, os.IsNotExist(statErr), ".hyd file should be deleted after Destroy")
+
+			// PHASE 3: Wait longer to see if write ticker recreates the .hyd file
+			time.Sleep(3 * time.Second)
+			_, statErr = os.Stat(hydFilePath)
+			t.Logf("PHASE 3: .hyd file recreated after 3s = %v", !os.IsNotExist(statErr))
+			assert.True(t, os.IsNotExist(statErr), ".hyd file should NOT be recreated by write ticker after Destroy")
+		}
+
+		// PHASE 4: Final IsExistSwamp check (always runs)
+		isExists, _ := hydraInterface.IsExistSwamp(10, swampName)
+		t.Logf("PHASE 4: IsExistSwamp=%v", isExists)
+		assert.False(t, isExists, "swamp should not exist after auto-destroy")
+
+		if isExists {
+			t.Log("BUG: swamp still exists after auto-destroy!")
+			s3, err := hydraInterface.SummonSwamp(context.Background(), 10, swampName)
+			if err == nil {
+				s3.Destroy()
+			}
+		}
 	})
 
 	t.Run("should create and modify treasure", func(t *testing.T) {

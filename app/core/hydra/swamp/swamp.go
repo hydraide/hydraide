@@ -2181,15 +2181,22 @@ func (s *swamp) sendClosedEvent() {
 // WAITS FOR ALL TRANSACTIONS TO BE RELEASED
 func (s *swamp) Destroy() {
 
+	swampName := s.name.Get()
+	slog.Info("Destroy: starting", "swamp", swampName)
+
 	atomic.StoreInt32(&s.closing, 1)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	slog.Debug("Destroy: acquired mutex", "swamp", swampName)
+
 	s.StopSendingInformation()
 	s.StopSendingEvents()
 
 	s.Vigil.WaitForActiveVigilsClosed()
+
+	slog.Debug("Destroy: vigils closed", "swamp", swampName)
 
 	// stops all goroutines inside the swamp
 	s.goRoutineCancelFunction()
@@ -2198,10 +2205,13 @@ func (s *swamp) Destroy() {
 	if atomic.LoadInt32(&s.inMemorySwamp) == 0 {
 		// ez a filesystem-en keresztül törli a swampot és a meta filet is egyben
 		s.chroniclerInterface.Destroy()
+		slog.Debug("Destroy: chronicler destroyed", "swamp", swampName)
 	}
 
 	// send the closed event to the ManagerInterface that will delete the swamp from the map
 	s.sendClosedEvent()
+
+	slog.Info("Destroy: completed", "swamp", swampName)
 
 	return
 
@@ -2415,7 +2425,14 @@ func (s *swamp) CloneAndDeleteExpiredTreasures(howMany int32) ([]treasure.Treasu
 	}
 
 	// destroy the swamp if there is no treasure in it
-	if s.beaconKey.Count() == 0 {
+	remainingCount := s.beaconKey.Count()
+	slog.Debug("CloneAndDeleteExpiredTreasures auto-destroy check",
+		"swamp", s.name.Get(),
+		"shifted", len(shiftedTreasures),
+		"remainingCount", remainingCount)
+	if remainingCount == 0 {
+		slog.Info("CloneAndDeleteExpiredTreasures: auto-destroying empty swamp",
+			"swamp", s.name.Get())
 		s.CeaseVigil()
 		s.Destroy()
 	}
