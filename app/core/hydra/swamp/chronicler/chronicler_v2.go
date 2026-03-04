@@ -56,6 +56,11 @@ type chroniclerV2 struct {
 	// This avoids repeated file open/close for each Write() call
 	writer       *v2.FileWriter
 	writerClosed bool
+
+	// destroyed is set to true by Destroy() to prevent Write() from
+	// recreating the .hyd file after it has been deleted.
+	// Protected by mu.
+	destroyed bool
 }
 
 // NewV2 creates a new V2 chronicler that uses append-only storage.
@@ -160,9 +165,12 @@ func (c *chroniclerV2) CreateDirectoryIfNotExists() {
 }
 
 // Destroy removes the .hyd file and cleans up empty parent folders.
+// After Destroy, Write() will be a no-op to prevent file recreation.
 func (c *chroniclerV2) Destroy() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	c.destroyed = true
 
 	// Remove the .hyd file
 	if err := os.Remove(c.hydFilePath); err != nil && !os.IsNotExist(err) {
@@ -250,6 +258,10 @@ func (c *chroniclerV2) Load(indexObj beacon.Beacon) {
 func (c *chroniclerV2) Write(treasures []treasure.Treasure) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	if c.destroyed {
+		return
+	}
 
 	if len(treasures) == 0 {
 		return
