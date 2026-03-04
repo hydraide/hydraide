@@ -647,9 +647,137 @@ err := h.CatalogReadManyFromMany(ctx, requests, OrderModel{}, func(swampName nam
 
 > Full example: [catalog_read_many_from_many.go](examples/models/catalog_read_many_from_many.go)
 
-##### MessagePack Encoding (Optional)
+##### Filtering Inside Complex Types (BytesField Filters)
 
-By default, HydrAIDE uses Go's GOB encoding for complex types (structs, slices, maps, pointers stored in `BytesVal`). You can opt into **MessagePack encoding** for cross-language compatibility and server-side field-level filtering within complex types.
+When a Catalog model contains **struct, slice, map, or pointer fields**, HydrAIDE stores them encoded in the Treasure's `BytesVal`. With **MessagePack encoding** enabled, the server can **reach inside** these complex values and filter on individual fields — including deeply nested structs.
+
+This is one of HydrAIDE's most powerful features: you can store rich, structured data in a Treasure and query specific fields within it, all evaluated on the server.
+
+**How it works:**
+
+Consider a product catalog model with a nested struct:
+
+```go
+type Product struct {
+    SKU     string  `hydraide:"key"`
+    Name    string  `hydraide:"value"`
+    Details Details `hydraide:"value"` // stored in BytesVal as MessagePack
+}
+
+type Details struct {
+    Brand    string
+    Color    string
+    Weight   float64
+    InStock  bool
+    Address  Address
+}
+
+type Address struct {
+    City    string
+    Country string
+    ZipCode string
+}
+```
+
+The `Details` struct (including the nested `Address`) is serialized into the Treasure's `BytesVal`. With MessagePack encoding, the server decodes this and navigates to any field using a **dot-separated path**.
+
+**Available BytesField filter constructors:**
+
+| Constructor | Extracts & Compares |
+|-------------|---------------------|
+| `FilterBytesFieldInt8(op, path, value)` | int8 field at path |
+| `FilterBytesFieldInt16(op, path, value)` | int16 field at path |
+| `FilterBytesFieldInt32(op, path, value)` | int32 field at path |
+| `FilterBytesFieldInt64(op, path, value)` | int64 field at path |
+| `FilterBytesFieldUint8(op, path, value)` | uint8 field at path |
+| `FilterBytesFieldUint16(op, path, value)` | uint16 field at path |
+| `FilterBytesFieldUint32(op, path, value)` | uint32 field at path |
+| `FilterBytesFieldUint64(op, path, value)` | uint64 field at path |
+| `FilterBytesFieldFloat32(op, path, value)` | float32 field at path |
+| `FilterBytesFieldFloat64(op, path, value)` | float64 field at path |
+| `FilterBytesFieldString(op, path, value)` | string field at path |
+| `FilterBytesFieldBool(op, path, value)` | bool field at path |
+
+All relational operators (`Equal`, `NotEqual`, `GreaterThan`, etc.) and string operators (`Contains`, `StartsWith`, etc.) work with BytesField filters.
+
+**Examples:**
+
+```go
+// 1. Simple field filter: find products by brand
+filters := hydraidego.FilterAND(
+    hydraidego.FilterBytesFieldString(hydraidego.Equal, "Brand", "Apple"),
+)
+
+// 2. Nested field filter: find products from Budapest
+filters := hydraidego.FilterAND(
+    hydraidego.FilterBytesFieldString(hydraidego.Equal, "Address.City", "Budapest"),
+)
+
+// 3. Multiple field filters with AND: heavy Apple products
+filters := hydraidego.FilterAND(
+    hydraidego.FilterBytesFieldString(hydraidego.Equal, "Brand", "Apple"),
+    hydraidego.FilterBytesFieldFloat64(hydraidego.GreaterThan, "Weight", 0.5),
+)
+
+// 4. String operators on struct fields: brands containing "Sam"
+filters := hydraidego.FilterAND(
+    hydraidego.FilterBytesFieldString(hydraidego.Contains, "Brand", "Sam"),
+)
+
+// 5. AND/OR with BytesField: (Brand == "Apple" OR Brand == "Samsung") AND InStock == true
+filters := hydraidego.FilterAND(
+    hydraidego.FilterOR(
+        hydraidego.FilterBytesFieldString(hydraidego.Equal, "Brand", "Apple"),
+        hydraidego.FilterBytesFieldString(hydraidego.Equal, "Brand", "Samsung"),
+    ),
+    hydraidego.FilterBytesFieldBool(hydraidego.Equal, "InStock", true),
+)
+
+// 6. Mixed: primitive filter + BytesField filter
+//    price > 100 (Float64Val) AND country starts with "H" (inside BytesVal struct)
+filters := hydraidego.FilterAND(
+    hydraidego.FilterFloat64(hydraidego.GreaterThan, 100.0),
+    hydraidego.FilterBytesFieldString(hydraidego.StartsWith, "Address.Country", "H"),
+)
+
+// 7. Deep nesting with OR: products from Budapest OR products with ZipCode ending in "00"
+filters := hydraidego.FilterOR(
+    hydraidego.FilterBytesFieldString(hydraidego.Equal, "Address.City", "Budapest"),
+    hydraidego.FilterBytesFieldString(hydraidego.EndsWith, "Address.ZipCode", "00"),
+)
+```
+
+**Full streaming example:**
+
+```go
+index := &hydraidego.Index{
+    IndexType:  hydraidego.IndexCreationTime,
+    IndexOrder: hydraidego.IndexOrderDesc,
+}
+
+// Find all Apple products from Hungary that are in stock
+filters := hydraidego.FilterAND(
+    hydraidego.FilterBytesFieldString(hydraidego.Equal, "Brand", "Apple"),
+    hydraidego.FilterBytesFieldString(hydraidego.Equal, "Address.Country", "Hungary"),
+    hydraidego.FilterBytesFieldBool(hydraidego.Equal, "InStock", true),
+)
+
+swamp := name.New().Sanctuary("products").Realm("catalog").Swamp("electronics")
+
+err := h.CatalogReadManyStream(ctx, swamp, index, filters, Product{}, func(model any) error {
+    product := model.(*Product)
+    fmt.Printf("%s — %s (%s)\n", product.SKU, product.Details.Brand, product.Details.Address.City)
+    return nil
+})
+```
+
+> Full example: [catalog_read_many_stream_bytes_field.go](examples/models/catalog_read_many_stream_bytes_field.go)
+
+**Important:** BytesField filtering requires **MessagePack encoding**. If the Treasure's `BytesVal` uses GOB encoding (the default), the server cannot inspect its contents and the filter returns `false` (no match). See below for how to enable MessagePack.
+
+##### MessagePack Encoding
+
+By default, HydrAIDE uses Go's GOB encoding for complex types (structs, slices, maps, pointers stored in `BytesVal`). To enable BytesField filtering, you must opt into **MessagePack encoding**:
 
 ```go
 h.RegisterSwamp(ctx, &hydraidego.RegisterSwampRequest{
@@ -662,15 +790,7 @@ h.RegisterSwamp(ctx, &hydraidego.RegisterSwampRequest{
 })
 ```
 
-With MessagePack enabled, you can filter on fields **inside** complex struct values using `FilterBytesField*` constructors:
-
-```go
-// Filter on a nested struct field within BytesVal
-// Example: find Treasures where Address.City == "Budapest"
-filters := hydraidego.FilterAND(
-    hydraidego.FilterBytesFieldString(hydraidego.Equal, "Address.City", "Budapest"),
-)
-```
+MessagePack is also the recommended encoding for **cross-language compatibility** — unlike GOB, MessagePack is supported in Python, Node.js, Rust, Java, and every other major language.
 
 **Encoding migration** from GOB to MessagePack is automatic:
 1. Set `EncodingFormat: hydraidego.EncodingMsgPack` in `RegisterSwamp`

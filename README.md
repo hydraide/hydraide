@@ -62,6 +62,7 @@ HydrAIDE now supports **server-side query filters** with **nested AND/OR logic**
 | **CatalogReadManyFromMany** | Read from multiple Swamps in a single streaming call with per-Swamp Index and Filters |
 | **String Operators** | Contains, NotContains, StartsWith, EndsWith — advanced string matching beyond equality |
 | **Server-Side Filters** | Filter Treasures by typed values (int, float, string, bool) directly on the server — non-matching data never leaves the engine |
+| **BytesField Filters** | Filter on fields **inside** complex struct values (nested structs, any depth) using dot-separated paths — requires MessagePack encoding |
 | **MessagePack Encoding** | Optional cross-language encoding for complex types, enabling server-side field-level inspection within struct values |
 | **CompactSwamp** | Force a full .hyd file rewrite to clean up after encoding migration |
 
@@ -84,6 +85,13 @@ filters := hydraidego.FilterAND(
         hydraidego.FilterString(hydraidego.Equal, "active"),
         hydraidego.FilterString(hydraidego.Equal, "pending"),
     ),
+)
+
+// Filter inside a struct field (requires MessagePack encoding):
+// Find products where Details.Brand == "Apple" AND Details.Address.City == "Budapest"
+filters := hydraidego.FilterAND(
+    hydraidego.FilterBytesFieldString(hydraidego.Equal, "Brand", "Apple"),
+    hydraidego.FilterBytesFieldString(hydraidego.Equal, "Address.City", "Budapest"),
 )
 ```
 
