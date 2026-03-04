@@ -592,6 +592,38 @@ Filters are evaluated **on the server** before results are sent to the client. T
 | `StartsWith` | String starts with prefix (case-sensitive) |
 | `EndsWith` | String ends with suffix (case-sensitive) |
 
+**Existence operators** (for all types — the CompareValue is ignored, only the field type matters):
+
+| Operator | Meaning |
+|----------|---------|
+| `IsEmpty` | Field is `nil`/unset, or empty string `""` for strings |
+| `IsNotEmpty` | Field exists and is non-empty |
+
+These operators work with both primitive Treasure fields and BytesField struct fields:
+
+```go
+// Find Treasures where StringVal is set (not nil and not "")
+filters := hydraidego.FilterAND(
+    hydraidego.FilterString(hydraidego.IsNotEmpty, ""),  // value is ignored
+)
+
+// Find Treasures where Int32Val is NOT set (nil)
+filters := hydraidego.FilterAND(
+    hydraidego.FilterInt32(hydraidego.IsEmpty, 0),  // value is ignored
+)
+
+// BytesField: find products where Brand field exists and is non-empty
+filters := hydraidego.FilterAND(
+    hydraidego.FilterBytesFieldString(hydraidego.IsNotEmpty, "Brand", ""),  // value is ignored
+)
+
+// Combine with other filters: price > 100 AND description is not empty
+filters := hydraidego.FilterAND(
+    hydraidego.FilterFloat64(hydraidego.GreaterThan, 100.0),
+    hydraidego.FilterBytesFieldString(hydraidego.IsNotEmpty, "Description", ""),
+)
+```
+
 ##### CatalogReadManyStream — Streaming Read with Filters
 
 ```go

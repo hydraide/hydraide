@@ -4056,6 +4056,12 @@ const (
 
 	// EndsWith means "string ends with suffix" (case-sensitive)
 	EndsWith
+
+	// IsEmpty means "field is nil/unset or empty string" (CompareValue is ignored)
+	IsEmpty
+
+	// IsNotEmpty means "field exists and is non-empty" (CompareValue is ignored)
+	IsNotEmpty
 )
 
 // IncrementMetaRequest defines optional metadata to be set when performing
@@ -6894,6 +6900,10 @@ func convertRelationalOperatorToProtoOperator(operator RelationalOperator) hydra
 		return hydraidepbgo.Relational_STARTS_WITH
 	case EndsWith:
 		return hydraidepbgo.Relational_ENDS_WITH
+	case IsEmpty:
+		return hydraidepbgo.Relational_IS_EMPTY
+	case IsNotEmpty:
+		return hydraidepbgo.Relational_IS_NOT_EMPTY
 	case Equal:
 		fallthrough
 	default:

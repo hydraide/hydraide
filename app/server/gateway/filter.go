@@ -81,6 +81,44 @@ func evaluateSingleFilter(treasure *hydrapb.Treasure, filter *hydrapb.TreasureFi
 		return evaluateBytesFieldFilter(treasure, filter)
 	}
 
+	// IS_EMPTY / IS_NOT_EMPTY: check whether the Treasure field is nil (or empty string for strings).
+	// The CompareValue oneof determines which field to check; the actual value is ignored.
+	if op == hydrapb.Relational_IS_EMPTY || op == hydrapb.Relational_IS_NOT_EMPTY {
+		var isEmpty bool
+		switch filter.GetCompareValue().(type) {
+		case *hydrapb.TreasureFilter_Int8Val:
+			isEmpty = treasure.Int8Val == nil
+		case *hydrapb.TreasureFilter_Int16Val:
+			isEmpty = treasure.Int16Val == nil
+		case *hydrapb.TreasureFilter_Int32Val:
+			isEmpty = treasure.Int32Val == nil
+		case *hydrapb.TreasureFilter_Int64Val:
+			isEmpty = treasure.Int64Val == nil
+		case *hydrapb.TreasureFilter_Uint8Val:
+			isEmpty = treasure.Uint8Val == nil
+		case *hydrapb.TreasureFilter_Uint16Val:
+			isEmpty = treasure.Uint16Val == nil
+		case *hydrapb.TreasureFilter_Uint32Val:
+			isEmpty = treasure.Uint32Val == nil
+		case *hydrapb.TreasureFilter_Uint64Val:
+			isEmpty = treasure.Uint64Val == nil
+		case *hydrapb.TreasureFilter_Float32Val:
+			isEmpty = treasure.Float32Val == nil
+		case *hydrapb.TreasureFilter_Float64Val:
+			isEmpty = treasure.Float64Val == nil
+		case *hydrapb.TreasureFilter_StringVal:
+			isEmpty = treasure.StringVal == nil || *treasure.StringVal == ""
+		case *hydrapb.TreasureFilter_BoolVal:
+			isEmpty = treasure.BoolVal == nil
+		default:
+			isEmpty = true
+		}
+		if op == hydrapb.Relational_IS_EMPTY {
+			return isEmpty
+		}
+		return !isEmpty
+	}
+
 	switch cv := filter.GetCompareValue().(type) {
 	case *hydrapb.TreasureFilter_Int8Val:
 		if treasure.Int8Val == nil {
@@ -163,26 +201,39 @@ func evaluateSingleFilter(treasure *hydrapb.Treasure, filter *hydrapb.TreasureFi
 // evaluateBytesFieldFilter extracts a field from MessagePack-encoded BytesVal
 // and applies the filter to the extracted value.
 // Returns false if BytesVal is nil, not MessagePack-encoded, or the field path doesn't exist.
+// Exception: IS_EMPTY returns true when the field doesn't exist.
 func evaluateBytesFieldFilter(treasure *hydrapb.Treasure, filter *hydrapb.TreasureFilter) bool {
-	if treasure.BytesVal == nil {
-		return false
-	}
-	if !isMsgpackEncoded(treasure.BytesVal) {
-		// GOB-encoded data cannot be inspected — filter does not match
-		return false
+	op := filter.GetOperator()
+
+	if treasure.BytesVal == nil || !isMsgpackEncoded(treasure.BytesVal) {
+		// No inspectable data — field doesn't exist
+		return op == hydrapb.Relational_IS_EMPTY
 	}
 
 	decoded, err := decodeMsgpackToMap(unwrapMsgpack(treasure.BytesVal))
 	if err != nil {
-		return false
+		return op == hydrapb.Relational_IS_EMPTY
 	}
 
 	fieldVal := extractFieldByPath(decoded, *filter.BytesFieldPath)
+
+	// IS_EMPTY / IS_NOT_EMPTY: check existence and emptiness
+	if op == hydrapb.Relational_IS_EMPTY || op == hydrapb.Relational_IS_NOT_EMPTY {
+		isEmpty := fieldVal == nil
+		if !isEmpty {
+			if s, ok := fieldVal.(string); ok {
+				isEmpty = s == ""
+			}
+		}
+		if op == hydrapb.Relational_IS_EMPTY {
+			return isEmpty
+		}
+		return !isEmpty
+	}
+
 	if fieldVal == nil {
 		return false
 	}
-
-	op := filter.GetOperator()
 
 	// Match the extracted value against the filter's CompareValue
 	switch cv := filter.GetCompareValue().(type) {
