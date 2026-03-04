@@ -183,8 +183,6 @@ func (s *settings) RegisterPattern(pattern name.Name, inMemorySwamp bool, closeA
 			}
 		}
 
-		// create a new swamp setting
-		s.patterns[pattern.Get()] = setting.New(swampSetting)
 		if filesystemSettings != nil {
 			swampSetting.WriteIntervalSec = time.Duration(filesystemSettings.WriteIntervalSec) * time.Second
 			swampSetting.MaxFileSizeByte = filesystemSettings.MaxFileSizeByte
@@ -192,6 +190,12 @@ func (s *settings) RegisterPattern(pattern name.Name, inMemorySwamp bool, closeA
 		}
 
 	}
+
+	// Register the pattern in the runtime map for ALL swamp types (both in-memory and persistent).
+	// Previously this was inside the !inMemorySwamp block, so in-memory patterns were never
+	// registered in the runtime map, causing GetBySwampName to return default PermanentSwamp
+	// settings and incorrectly creating .hyd files for in-memory swamps.
+	s.patterns[pattern.Get()] = setting.New(swampSetting)
 
 	// add the pattern to the Model
 	func() {
