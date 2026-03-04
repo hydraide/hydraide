@@ -315,6 +315,18 @@ type SwampFilesystemSettings struct {
 	EncodingFormat EncodingFormat
 }
 
+// TimeField identifies which Treasure timestamp field to filter on.
+type TimeField int
+
+const (
+	// TimeFieldCreatedAt filters on the Treasure's creation timestamp.
+	TimeFieldCreatedAt TimeField = iota
+	// TimeFieldUpdatedAt filters on the Treasure's last update timestamp.
+	TimeFieldUpdatedAt
+	// TimeFieldExpiredAt filters on the Treasure's expiration timestamp.
+	TimeFieldExpiredAt
+)
+
 // Filter defines a server-side filter predicate applied to Treasures.
 // Exactly one typed value field should be set; it determines which Treasure field to compare.
 // If BytesFieldPath is set, the filter extracts from the MessagePack-encoded BytesVal instead.
@@ -333,6 +345,8 @@ type Filter struct {
 	stringVal      *string
 	boolVal        *bool
 	bytesFieldPath *string
+	timeVal        *time.Time
+	timeField      *TimeField
 }
 
 // --- Filter constructors for primitive Treasure value types ---
@@ -372,6 +386,29 @@ func FilterString(op RelationalOperator, value string) *Filter {
 }
 func FilterBool(op RelationalOperator, value bool) *Filter {
 	return &Filter{operator: op, boolVal: &value}
+}
+
+// --- Filter constructors for Treasure timestamp fields ---
+
+// FilterCreatedAt creates a filter that compares against the Treasure's CreatedAt timestamp.
+// Supported operators: Equal, NotEqual, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual, IsEmpty, IsNotEmpty.
+func FilterCreatedAt(op RelationalOperator, value time.Time) *Filter {
+	tf := TimeFieldCreatedAt
+	return &Filter{operator: op, timeVal: &value, timeField: &tf}
+}
+
+// FilterUpdatedAt creates a filter that compares against the Treasure's UpdatedAt timestamp.
+// Supported operators: Equal, NotEqual, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual, IsEmpty, IsNotEmpty.
+func FilterUpdatedAt(op RelationalOperator, value time.Time) *Filter {
+	tf := TimeFieldUpdatedAt
+	return &Filter{operator: op, timeVal: &value, timeField: &tf}
+}
+
+// FilterExpiredAt creates a filter that compares against the Treasure's ExpiredAt timestamp.
+// Supported operators: Equal, NotEqual, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual, IsEmpty, IsNotEmpty.
+func FilterExpiredAt(op RelationalOperator, value time.Time) *Filter {
+	tf := TimeFieldExpiredAt
+	return &Filter{operator: op, timeVal: &value, timeField: &tf}
 }
 
 // --- Filter constructors for BytesVal field-level filtering (MessagePack only) ---
@@ -451,16 +488,47 @@ func (f *Filter) isFilterItem() {}
 //	    ),
 //	)
 type FilterGroup struct {
-	logic     FilterLogic
-	filters   []*Filter
-	subGroups []*FilterGroup
+	logic         FilterLogic
+	filters       []*Filter
+	subGroups     []*FilterGroup
+	phraseFilters []*PhraseFilter
 }
 
 // isFilterItem marks FilterGroup as a valid FilterItem.
 func (fg *FilterGroup) isFilterItem() {}
 
+// PhraseFilter checks if specified words appear at consecutive positions
+// in a word-index map (map[string][]int) stored in the Treasure's BytesVal.
+//
+// The BytesFieldPath identifies the field within the MessagePack-encoded BytesVal
+// that holds the word-index map. Each key in the map is a word, and the value
+// is a sorted list of positions where that word appears in a text.
+//
+// If Negate is false: matches when the words ARE found at consecutive positions.
+// If Negate is true: matches when the words are NOT found at consecutive positions.
+type PhraseFilter struct {
+	bytesFieldPath string
+	words          []string
+	negate         bool
+}
+
+// isFilterItem marks PhraseFilter as a valid FilterItem.
+func (pf *PhraseFilter) isFilterItem() {}
+
+// FilterPhrase creates a PhraseFilter that matches when the specified words
+// appear at consecutive positions in the word-index map at bytesFieldPath.
+func FilterPhrase(bytesFieldPath string, words ...string) *PhraseFilter {
+	return &PhraseFilter{bytesFieldPath: bytesFieldPath, words: words, negate: false}
+}
+
+// FilterNotPhrase creates a PhraseFilter that matches when the specified words
+// do NOT appear at consecutive positions in the word-index map at bytesFieldPath.
+func FilterNotPhrase(bytesFieldPath string, words ...string) *PhraseFilter {
+	return &PhraseFilter{bytesFieldPath: bytesFieldPath, words: words, negate: true}
+}
+
 // FilterAND creates a FilterGroup that requires ALL conditions to be true.
-// Accepts any combination of *Filter and *FilterGroup items.
+// Accepts any combination of *Filter, *FilterGroup, and *PhraseFilter items.
 func FilterAND(items ...FilterItem) *FilterGroup {
 	g := &FilterGroup{logic: FilterLogicAND}
 	for _, item := range items {
@@ -469,13 +537,15 @@ func FilterAND(items ...FilterItem) *FilterGroup {
 			g.filters = append(g.filters, v)
 		case *FilterGroup:
 			g.subGroups = append(g.subGroups, v)
+		case *PhraseFilter:
+			g.phraseFilters = append(g.phraseFilters, v)
 		}
 	}
 	return g
 }
 
 // FilterOR creates a FilterGroup that requires at least ONE condition to be true.
-// Accepts any combination of *Filter and *FilterGroup items.
+// Accepts any combination of *Filter, *FilterGroup, and *PhraseFilter items.
 func FilterOR(items ...FilterItem) *FilterGroup {
 	g := &FilterGroup{logic: FilterLogicOR}
 	for _, item := range items {
@@ -484,6 +554,8 @@ func FilterOR(items ...FilterItem) *FilterGroup {
 			g.filters = append(g.filters, v)
 		case *FilterGroup:
 			g.subGroups = append(g.subGroups, v)
+		case *PhraseFilter:
+			g.phraseFilters = append(g.phraseFilters, v)
 		}
 	}
 	return g
@@ -3577,6 +3649,16 @@ func convertFilterToProto(f *Filter) *hydraidepbgo.TreasureFilter {
 			bv = hydraidepbgo.Boolean_TRUE
 		}
 		pf.CompareValue = &hydraidepbgo.TreasureFilter_BoolVal{BoolVal: bv}
+	case f.timeVal != nil && f.timeField != nil:
+		ts := timestamppb.New(*f.timeVal)
+		switch *f.timeField {
+		case TimeFieldCreatedAt:
+			pf.CompareValue = &hydraidepbgo.TreasureFilter_CreatedAtVal{CreatedAtVal: ts}
+		case TimeFieldUpdatedAt:
+			pf.CompareValue = &hydraidepbgo.TreasureFilter_UpdatedAtVal{UpdatedAtVal: ts}
+		case TimeFieldExpiredAt:
+			pf.CompareValue = &hydraidepbgo.TreasureFilter_ExpiredAtVal{ExpiredAtVal: ts}
+		}
 	}
 
 	return pf
@@ -3606,6 +3688,16 @@ func convertFilterGroupToProto(group *FilterGroup) *hydraidepbgo.FilterGroup {
 	for _, sg := range group.subGroups {
 		if sg != nil {
 			pg.SubGroups = append(pg.SubGroups, convertFilterGroupToProto(sg))
+		}
+	}
+
+	for _, pf := range group.phraseFilters {
+		if pf != nil {
+			pg.PhraseFilters = append(pg.PhraseFilters, &hydraidepbgo.PhraseFilter{
+				BytesFieldPath: pf.bytesFieldPath,
+				Words:          pf.words,
+				Negate:         pf.negate,
+			})
 		}
 	}
 
@@ -4062,6 +4154,12 @@ const (
 
 	// IsNotEmpty means "field exists and is non-empty" (CompareValue is ignored)
 	IsNotEmpty
+
+	// HasKey means "BytesVal map contains the specified key" (uses StringVal as key name, requires BytesFieldPath)
+	HasKey
+
+	// HasNotKey means "BytesVal map does NOT contain the specified key" (uses StringVal as key name, requires BytesFieldPath)
+	HasNotKey
 )
 
 // IncrementMetaRequest defines optional metadata to be set when performing
@@ -6904,6 +7002,10 @@ func convertRelationalOperatorToProtoOperator(operator RelationalOperator) hydra
 		return hydraidepbgo.Relational_IS_EMPTY
 	case IsNotEmpty:
 		return hydraidepbgo.Relational_IS_NOT_EMPTY
+	case HasKey:
+		return hydraidepbgo.Relational_HAS_KEY
+	case HasNotKey:
+		return hydraidepbgo.Relational_HAS_NOT_KEY
 	case Equal:
 		fallthrough
 	default:

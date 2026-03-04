@@ -599,6 +599,13 @@ Filters are evaluated **on the server** before results are sent to the client. T
 | `IsEmpty` | Field is `nil`/unset, or empty string `""` for strings |
 | `IsNotEmpty` | Field exists and is non-empty |
 
+**Map key operators** (only valid with `FilterBytesFieldString` — checks if a key exists in a `map[string]...` inside BytesVal):
+
+| Operator | Meaning |
+|----------|---------|
+| `HasKey` | The map at BytesFieldPath contains the specified key |
+| `HasNotKey` | The map at BytesFieldPath does NOT contain the specified key |
+
 These operators work with both primitive Treasure fields and BytesField struct fields:
 
 ```go
@@ -831,6 +838,140 @@ MessagePack is also the recommended encoding for **cross-language compatibility*
 4. Call `h.CompactSwamp(ctx, swampName)` to remove old GOB entries from the `.hyd` file
 
 > Primitive types (int, string, bool, float) are **not affected** by encoding changes. They always use native proto fields directly. Only complex types (structs, slices, maps, pointers) use `BytesVal` with GOB/MessagePack.
+
+##### Timestamp Filtering
+
+HydrAIDE Treasures have three built-in timestamp fields: **CreatedAt**, **UpdatedAt**, and **ExpiredAt**. You can filter on these using dedicated constructors:
+
+| Constructor | Compares Against |
+|-------------|-----------------|
+| `FilterCreatedAt(op, time.Time)` | Treasure's creation timestamp |
+| `FilterUpdatedAt(op, time.Time)` | Treasure's last update timestamp |
+| `FilterExpiredAt(op, time.Time)` | Treasure's expiration timestamp |
+
+All relational operators work with timestamps: `Equal`, `NotEqual`, `GreaterThan`, `GreaterThanOrEqual`, `LessThan`, `LessThanOrEqual`. The existence operators `IsEmpty` and `IsNotEmpty` also work (to check if a timestamp is set).
+
+```go
+// Find Treasures created in the last 24 hours
+cutoff := time.Now().Add(-24 * time.Hour)
+filters := hydraidego.FilterAND(
+    hydraidego.FilterCreatedAt(hydraidego.GreaterThan, cutoff),
+)
+
+// Find expired Treasures (ExpiredAt is before now)
+filters := hydraidego.FilterAND(
+    hydraidego.FilterExpiredAt(hydraidego.LessThan, time.Now()),
+)
+
+// Find Treasures that have never been updated (UpdatedAt is nil)
+filters := hydraidego.FilterAND(
+    hydraidego.FilterUpdatedAt(hydraidego.IsEmpty, time.Time{}), // value is ignored for IsEmpty
+)
+
+// Find Treasures with an expiration date set
+filters := hydraidego.FilterAND(
+    hydraidego.FilterExpiredAt(hydraidego.IsNotEmpty, time.Time{}), // value is ignored
+)
+
+// Combine: created after Jan 1 2024 AND has expiration
+filters := hydraidego.FilterAND(
+    hydraidego.FilterCreatedAt(hydraidego.GreaterThanOrEqual, time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)),
+    hydraidego.FilterExpiredAt(hydraidego.IsNotEmpty, time.Time{}),
+)
+```
+
+##### Map Key Existence (HasKey / HasNotKey)
+
+When a BytesVal field contains a `map[string]...`, you can check if a specific key exists in the map using the `HasKey` and `HasNotKey` operators with `FilterBytesFieldString`:
+
+```go
+// Model with a map field
+type UserProfile struct {
+    ID       string                 `hydraide:"key"`
+    Name     string                 `hydraide:"value"`
+    Metadata map[string]interface{} `hydraide:"value"` // stored in BytesVal
+}
+
+// Find users whose Metadata map contains the "email" key
+filters := hydraidego.FilterAND(
+    hydraidego.FilterBytesFieldString(hydraidego.HasKey, "Metadata", "email"),
+)
+
+// Find users whose Metadata map does NOT contain "phone"
+filters := hydraidego.FilterAND(
+    hydraidego.FilterBytesFieldString(hydraidego.HasNotKey, "Metadata", "phone"),
+)
+
+// Combine: has email key AND name starts with "J"
+filters := hydraidego.FilterAND(
+    hydraidego.FilterBytesFieldString(hydraidego.HasKey, "Metadata", "email"),
+    hydraidego.FilterString(hydraidego.StartsWith, "J"),
+)
+```
+
+The `HasKey`/`HasNotKey` operators only work with MessagePack-encoded map fields accessed through `BytesFieldPath`. If the field at the path is not a map, `HasKey` returns `false` and `HasNotKey` returns `true`.
+
+##### Phrase Search (FilterPhrase / FilterNotPhrase)
+
+HydrAIDE supports **phrase search** for full-text search scenarios. This is designed for word-index data stored as `map[string][]int` in a BytesVal field, where:
+- **Keys** are words (lowercase, normalized)
+- **Values** are sorted position lists indicating where each word appears in a text
+
+The phrase filter checks if specified words appear at **consecutive positions**, forming a phrase.
+
+```go
+// Model with a word-index field
+type Document struct {
+    ID        string            `hydraide:"key"`
+    Title     string            `hydraide:"value"`
+    WordIndex map[string][]int  `hydraide:"value"` // stored in BytesVal as MessagePack
+}
+
+// Example word-index for text "Az általános szerződési feltételek érvényesek."
+// WordIndex: {
+//   "az":           [0],
+//   "altalanos":    [1],
+//   "szerzodesi":   [2],
+//   "feltetelek":   [3],
+//   "ervenyesek":   [4],
+// }
+```
+
+Use `FilterPhrase` to find documents containing a phrase, and `FilterNotPhrase` to exclude them:
+
+```go
+// Find documents containing the phrase "altalanos szerzodesi feltetelek"
+filters := hydraidego.FilterAND(
+    hydraidego.FilterPhrase("WordIndex", "altalanos", "szerzodesi", "feltetelek"),
+)
+
+// Exclude documents containing the phrase "altalanos szerzodesi feltetelek"
+filters := hydraidego.FilterAND(
+    hydraidego.FilterNotPhrase("WordIndex", "altalanos", "szerzodesi", "feltetelek"),
+)
+
+// Combine phrase search with other filters:
+// Find recent documents containing the phrase
+filters := hydraidego.FilterAND(
+    hydraidego.FilterCreatedAt(hydraidego.GreaterThan, time.Now().Add(-7*24*time.Hour)),
+    hydraidego.FilterPhrase("WordIndex", "altalanos", "szerzodesi", "feltetelek"),
+)
+
+// OR logic: match either phrase
+filters := hydraidego.FilterOR(
+    hydraidego.FilterPhrase("WordIndex", "altalanos", "szerzodesi"),
+    hydraidego.FilterPhrase("WordIndex", "adatvedelmi", "nyilatkozat"),
+)
+```
+
+**How the algorithm works:**
+1. The server decodes the MessagePack BytesVal and extracts the word-index map at `BytesFieldPath`
+2. For each word in the phrase, it retrieves the sorted position list from the map
+3. If any word is missing from the map, the phrase is not found
+4. Starting from each position of the first word, it checks if subsequent words appear at positions `pos+1`, `pos+2`, etc. using binary search
+5. `FilterPhrase` matches when consecutive positions are found; `FilterNotPhrase` matches when they are NOT found
+
+> Full example: [catalog_advanced_filters.go](examples/models/catalog_advanced_filters.go)
 
 ---
 

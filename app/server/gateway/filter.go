@@ -1,10 +1,12 @@
 package gateway
 
 import (
+	"sort"
 	"strings"
 
 	hydrapb "github.com/hydraide/hydraide/generated/hydraidepbgo"
 	"github.com/vmihailenco/msgpack/v5"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // msgpack format detection constants (must match SDK values).
@@ -35,14 +37,15 @@ func evaluateFilterGroup(treasure *hydrapb.Treasure, group *hydrapb.FilterGroup)
 
 	hasFilters := len(group.Filters) > 0
 	hasSubGroups := len(group.SubGroups) > 0
+	hasPhraseFilters := len(group.PhraseFilters) > 0
 
 	// Empty group = no filtering = pass
-	if !hasFilters && !hasSubGroups {
+	if !hasFilters && !hasSubGroups && !hasPhraseFilters {
 		return true
 	}
 
 	if group.Logic == hydrapb.FilterLogic_OR {
-		// OR: at least one leaf filter or sub-group must be true
+		// OR: at least one leaf filter, sub-group, or phrase filter must be true
 		for _, f := range group.Filters {
 			if evaluateSingleFilter(treasure, f) {
 				return true
@@ -53,10 +56,15 @@ func evaluateFilterGroup(treasure *hydrapb.Treasure, group *hydrapb.FilterGroup)
 				return true
 			}
 		}
+		for _, pf := range group.PhraseFilters {
+			if evaluatePhraseFilter(treasure, pf) {
+				return true
+			}
+		}
 		return false
 	}
 
-	// AND (default): all leaf filters and all sub-groups must be true
+	// AND (default): all leaf filters, sub-groups, and phrase filters must be true
 	for _, f := range group.Filters {
 		if !evaluateSingleFilter(treasure, f) {
 			return false
@@ -64,6 +72,11 @@ func evaluateFilterGroup(treasure *hydrapb.Treasure, group *hydrapb.FilterGroup)
 	}
 	for _, sg := range group.SubGroups {
 		if !evaluateFilterGroup(treasure, sg) {
+			return false
+		}
+	}
+	for _, pf := range group.PhraseFilters {
+		if !evaluatePhraseFilter(treasure, pf) {
 			return false
 		}
 	}
@@ -110,6 +123,12 @@ func evaluateSingleFilter(treasure *hydrapb.Treasure, filter *hydrapb.TreasureFi
 			isEmpty = treasure.StringVal == nil || *treasure.StringVal == ""
 		case *hydrapb.TreasureFilter_BoolVal:
 			isEmpty = treasure.BoolVal == nil
+		case *hydrapb.TreasureFilter_CreatedAtVal:
+			isEmpty = treasure.CreatedAt == nil
+		case *hydrapb.TreasureFilter_UpdatedAtVal:
+			isEmpty = treasure.UpdatedAt == nil
+		case *hydrapb.TreasureFilter_ExpiredAtVal:
+			isEmpty = treasure.ExpiredAt == nil
 		default:
 			isEmpty = true
 		}
@@ -192,6 +211,15 @@ func evaluateSingleFilter(treasure *hydrapb.Treasure, filter *hydrapb.TreasureFi
 		}
 		return compareBool(*treasure.BoolVal, op, cv.BoolVal)
 
+	case *hydrapb.TreasureFilter_CreatedAtVal:
+		return compareTimestamp(treasure.CreatedAt, op, cv.CreatedAtVal)
+
+	case *hydrapb.TreasureFilter_UpdatedAtVal:
+		return compareTimestamp(treasure.UpdatedAt, op, cv.UpdatedAtVal)
+
+	case *hydrapb.TreasureFilter_ExpiredAtVal:
+		return compareTimestamp(treasure.ExpiredAt, op, cv.ExpiredAtVal)
+
 	default:
 		// Unknown filter type — skip (don't match)
 		return false
@@ -229,6 +257,23 @@ func evaluateBytesFieldFilter(treasure *hydrapb.Treasure, filter *hydrapb.Treasu
 			return isEmpty
 		}
 		return !isEmpty
+	}
+
+	// HAS_KEY / HAS_NOT_KEY: check if a key exists in a map
+	if op == hydrapb.Relational_HAS_KEY || op == hydrapb.Relational_HAS_NOT_KEY {
+		mapVal, ok := fieldVal.(map[string]interface{})
+		if !ok {
+			return op == hydrapb.Relational_HAS_NOT_KEY
+		}
+		cv, ok := filter.GetCompareValue().(*hydrapb.TreasureFilter_StringVal)
+		if !ok {
+			return false
+		}
+		_, exists := mapVal[cv.StringVal]
+		if op == hydrapb.Relational_HAS_KEY {
+			return exists
+		}
+		return !exists
 	}
 
 	if fieldVal == nil {
@@ -585,4 +630,135 @@ func compareBoolRaw(actual bool, op hydrapb.Relational_Operator, ref bool) bool 
 	default:
 		return false
 	}
+}
+
+// compareTimestamp compares two protobuf Timestamps using nanosecond precision.
+func compareTimestamp(actual *timestamppb.Timestamp, op hydrapb.Relational_Operator, ref *timestamppb.Timestamp) bool {
+	if actual == nil || ref == nil {
+		return false
+	}
+	at := actual.AsTime().UnixNano()
+	rt := ref.AsTime().UnixNano()
+	switch op {
+	case hydrapb.Relational_EQUAL:
+		return at == rt
+	case hydrapb.Relational_NOT_EQUAL:
+		return at != rt
+	case hydrapb.Relational_GREATER_THAN:
+		return at > rt
+	case hydrapb.Relational_GREATER_THAN_OR_EQUAL:
+		return at >= rt
+	case hydrapb.Relational_LESS_THAN:
+		return at < rt
+	case hydrapb.Relational_LESS_THAN_OR_EQUAL:
+		return at <= rt
+	default:
+		return false
+	}
+}
+
+// evaluatePhraseFilter checks if the specified words appear at consecutive positions
+// in a word-index map (map[string][]int) stored in the Treasure's BytesVal.
+func evaluatePhraseFilter(treasure *hydrapb.Treasure, pf *hydrapb.PhraseFilter) bool {
+	if pf == nil || len(pf.Words) == 0 {
+		return true
+	}
+
+	if treasure.BytesVal == nil || !isMsgpackEncoded(treasure.BytesVal) {
+		if pf.Negate {
+			return true
+		}
+		return false
+	}
+
+	decoded, err := decodeMsgpackToMap(unwrapMsgpack(treasure.BytesVal))
+	if err != nil {
+		if pf.Negate {
+			return true
+		}
+		return false
+	}
+
+	fieldVal := extractFieldByPath(decoded, pf.BytesFieldPath)
+	wordIndex, ok := fieldVal.(map[string]interface{})
+	if !ok {
+		if pf.Negate {
+			return true
+		}
+		return false
+	}
+
+	// Collect position lists for each word
+	wordPositions := make([][]int64, len(pf.Words))
+	for i, word := range pf.Words {
+		posVal, exists := wordIndex[word]
+		if !exists {
+			if pf.Negate {
+				return true
+			}
+			return false
+		}
+		positions := toInt64Slice(posVal)
+		if len(positions) == 0 {
+			if pf.Negate {
+				return true
+			}
+			return false
+		}
+		sort.Slice(positions, func(a, b int) bool { return positions[a] < positions[b] })
+		wordPositions[i] = positions
+	}
+
+	found := hasConsecutivePositions(wordPositions)
+	if pf.Negate {
+		return !found
+	}
+	return found
+}
+
+// toInt64Slice converts a msgpack-decoded interface{} (expected []interface{}) to []int64.
+func toInt64Slice(val interface{}) []int64 {
+	arr, ok := val.([]interface{})
+	if !ok {
+		return nil
+	}
+	result := make([]int64, 0, len(arr))
+	for _, item := range arr {
+		if v, ok := toInt64(item); ok {
+			result = append(result, v)
+		}
+	}
+	return result
+}
+
+// hasConsecutivePositions checks if there exists a sequence of consecutive positions
+// across the word position lists. For each starting position of the first word,
+// checks if subsequent words have pos+1, pos+2, etc.
+func hasConsecutivePositions(wordPositions [][]int64) bool {
+	if len(wordPositions) == 0 {
+		return true
+	}
+	if len(wordPositions) == 1 {
+		return len(wordPositions[0]) > 0
+	}
+	for _, startPos := range wordPositions[0] {
+		found := true
+		for i := 1; i < len(wordPositions); i++ {
+			target := startPos + int64(i)
+			if !sortedContains(wordPositions[i], target) {
+				found = false
+				break
+			}
+		}
+		if found {
+			return true
+		}
+	}
+	return false
+}
+
+// sortedContains checks if a sorted int64 slice contains the target value using binary search.
+func sortedContains(sorted []int64, target int64) bool {
+	i := sort.Search(len(sorted), func(j int) bool { return sorted[j] >= target })
+	return i < len(sorted) && sorted[i] == target
 }

@@ -1660,6 +1660,8 @@ message Relational {
     ENDS_WITH = 9;              // string ends with suffix (case-sensitive)
     IS_EMPTY = 10;              // field is nil/unset or empty string (CompareValue ignored)
     IS_NOT_EMPTY = 11;          // field exists and is non-empty (CompareValue ignored)
+    HAS_KEY = 12;               // BytesVal map contains the specified key (uses StringVal as key name)
+    HAS_NOT_KEY = 13;           // BytesVal map does NOT contain the specified key (uses StringVal as key name)
   }
 }
 
@@ -2107,6 +2109,9 @@ message TreasureFilter {
     double          Float64Val = 12;
     string          StringVal  = 13;
     Boolean.Type    BoolVal    = 14;
+    google.protobuf.Timestamp CreatedAtVal = 16;  // compare against Treasure.CreatedAt
+    google.protobuf.Timestamp UpdatedAtVal = 17;  // compare against Treasure.UpdatedAt
+    google.protobuf.Timestamp ExpiredAtVal = 18;  // compare against Treasure.ExpiredAt
   }
 
   // BytesFieldPath is an optional dot-separated path to a field within a
@@ -2151,6 +2156,27 @@ message FilterGroup {
   FilterLogic.Type Logic = 1;
   repeated TreasureFilter Filters = 2;
   repeated FilterGroup SubGroups = 3;
+  repeated PhraseFilter PhraseFilters = 4;
+}
+
+// PhraseFilter checks if specified words appear at consecutive positions
+// within a word-index map stored in the Treasure's BytesVal.
+//
+// The BytesVal is expected to contain a MessagePack-encoded struct with a field
+// (identified by BytesFieldPath) of type map[string][]int — where keys are words
+// and values are sorted position lists indicating where each word appears in a text.
+//
+// The filter checks if ALL Words appear at consecutive positions (pos, pos+1, pos+2, ...)
+// in the word-index map. If Negate is true, the result is inverted: the filter matches
+// when the phrase is NOT found at consecutive positions.
+//
+// Example: For the phrase "general terms conditions" with word-index:
+//   {"general": [2, 5], "terms": [3, 6], "conditions": [4, 7]}
+//   → Match found at positions 5,6,7 (consecutive)
+message PhraseFilter {
+  string BytesFieldPath = 1;
+  repeated string Words = 2;
+  bool Negate = 3;
 }
 
 

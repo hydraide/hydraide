@@ -63,6 +63,9 @@ HydrAIDE now supports **server-side query filters** with **nested AND/OR logic**
 | **String Operators** | Contains, NotContains, StartsWith, EndsWith — advanced string matching beyond equality |
 | **Server-Side Filters** | Filter Treasures by typed values (int, float, string, bool) directly on the server — non-matching data never leaves the engine |
 | **BytesField Filters** | Filter on fields **inside** complex struct values (nested structs, any depth) using dot-separated paths — requires MessagePack encoding |
+| **Timestamp Filters** | Filter on CreatedAt, UpdatedAt, ExpiredAt — find recent, expired, or never-updated Treasures |
+| **Map Key Existence** | HasKey / HasNotKey — check if a key exists in a map field inside BytesVal |
+| **Phrase Search** | FilterPhrase / FilterNotPhrase — find consecutive words in a word-index map for full-text search |
 | **MessagePack Encoding** | Optional cross-language encoding for complex types, enabling server-side field-level inspection within struct values |
 | **CompactSwamp** | Force a full .hyd file rewrite to clean up after encoding migration |
 
@@ -92,6 +95,21 @@ filters := hydraidego.FilterAND(
 filters := hydraidego.FilterAND(
     hydraidego.FilterBytesFieldString(hydraidego.Equal, "Brand", "Apple"),
     hydraidego.FilterBytesFieldString(hydraidego.Equal, "Address.City", "Budapest"),
+)
+
+// Timestamp filter: find Treasures created in the last 24 hours
+filters := hydraidego.FilterAND(
+    hydraidego.FilterCreatedAt(hydraidego.GreaterThan, time.Now().Add(-24*time.Hour)),
+)
+
+// Map key existence: find users with "email" in their Metadata map
+filters := hydraidego.FilterAND(
+    hydraidego.FilterBytesFieldString(hydraidego.HasKey, "Metadata", "email"),
+)
+
+// Phrase search: find documents containing "altalanos szerzodesi feltetelek"
+filters := hydraidego.FilterAND(
+    hydraidego.FilterPhrase("WordIndex", "altalanos", "szerzodesi", "feltetelek"),
 )
 ```
 
