@@ -3986,3 +3986,307 @@ func TestSwamp_CloneAndDeleteTreasuresByKeys(t *testing.T) {
 		swampInterface.Destroy()
 	})
 }
+
+// --- Auto-Destroy on Empty Swamp Tests ---
+// These tests verify that swamps automatically destroy themselves when all treasures
+// are removed, ensuring no empty swamps remain in memory or on disk.
+
+func TestSwamp_AutoDestroy_DeleteTreasure(t *testing.T) {
+
+	fsInterface := filesystem.New()
+	settingsInterface := settings.New(testMaxDepth, testMaxFolderPerLevel)
+	fss := &settings.FileSystemSettings{
+		WriteIntervalSec: 1,
+		MaxFileSizeByte:  8192,
+	}
+	settingsInterface.RegisterPattern(name.New().Sanctuary(sanctuaryForQuickTest).Realm("*").Swamp("*"), false, 1, fss)
+	closeAfterIdle := 10 * time.Second
+	writeInterval := 1 * time.Second
+	maxFileSize := int64(8192)
+
+	t.Run("should auto-destroy when last treasure is deleted via DeleteTreasure", func(t *testing.T) {
+
+		destroyed := int32(0)
+
+		swampName := name.New().Sanctuary(sanctuaryForQuickTest).Realm("auto-destroy").Swamp("delete-treasure")
+		hashPath := swampName.GetFullHashPath(settingsInterface.GetHydraAbsDataFolderPath(), testAllServers, testMaxDepth, testMaxFolderPerLevel)
+		chroniclerInterface := chronicler.New(hashPath, maxFileSize, testMaxDepth, fsInterface, metadata.New(hashPath))
+		chroniclerInterface.CreateDirectoryIfNotExists()
+
+		swampEventCallbackFunc := func(e *Event) {}
+		closeCallbackFunc := func(n name.Name) {
+			atomic.StoreInt32(&destroyed, 1)
+		}
+		swampInfoCallbackFunc := func(i *Info) {}
+
+		fssSwamp := &FilesystemSettings{
+			ChroniclerInterface: chroniclerInterface,
+			WriteInterval:       writeInterval,
+		}
+
+		metadataInterface := metadata.New(hashPath)
+		swampInterface := New(swampName, closeAfterIdle, fssSwamp, swampEventCallbackFunc, swampInfoCallbackFunc, closeCallbackFunc, metadataInterface)
+
+		swampInterface.BeginVigil()
+
+		// Create 3 treasures
+		for i := 0; i < 3; i++ {
+			tr := swampInterface.CreateTreasure(fmt.Sprintf("t-%d", i))
+			guardID := tr.StartTreasureGuard(true)
+			tr.SetContentString(guardID, fmt.Sprintf("value-%d", i))
+			_ = tr.Save(guardID)
+			tr.ReleaseTreasureGuard(guardID)
+		}
+		assert.Equal(t, 3, swampInterface.CountTreasures())
+
+		// Delete first two — swamp should still be alive
+		_ = swampInterface.DeleteTreasure("t-0", false)
+		assert.Equal(t, 2, swampInterface.CountTreasures())
+		assert.False(t, swampInterface.IsClosing(), "swamp should still be alive with 2 treasures")
+
+		_ = swampInterface.DeleteTreasure("t-1", false)
+		assert.Equal(t, 1, swampInterface.CountTreasures())
+		assert.False(t, swampInterface.IsClosing(), "swamp should still be alive with 1 treasure")
+
+		// Delete last treasure — swamp should auto-destroy
+		_ = swampInterface.DeleteTreasure("t-2", false)
+		assert.True(t, swampInterface.IsClosing(), "swamp should auto-destroy when last treasure is deleted")
+
+		// Wait for close callback
+		time.Sleep(100 * time.Millisecond)
+		assert.Equal(t, int32(1), atomic.LoadInt32(&destroyed), "close callback should have been called")
+	})
+}
+
+func TestSwamp_AutoDestroy_CloneAndDeleteExpiredTreasures(t *testing.T) {
+
+	fsInterface := filesystem.New()
+	settingsInterface := settings.New(testMaxDepth, testMaxFolderPerLevel)
+	fss := &settings.FileSystemSettings{
+		WriteIntervalSec: 1,
+		MaxFileSizeByte:  8192,
+	}
+	settingsInterface.RegisterPattern(name.New().Sanctuary(sanctuaryForQuickTest).Realm("*").Swamp("*"), false, 1, fss)
+	closeAfterIdle := 10 * time.Second
+	writeInterval := 1 * time.Second
+	maxFileSize := int64(8192)
+
+	t.Run("should auto-destroy when all expired treasures are removed", func(t *testing.T) {
+
+		destroyed := int32(0)
+
+		swampName := name.New().Sanctuary(sanctuaryForQuickTest).Realm("auto-destroy").Swamp("expired-all")
+		hashPath := swampName.GetFullHashPath(settingsInterface.GetHydraAbsDataFolderPath(), testAllServers, testMaxDepth, testMaxFolderPerLevel)
+		chroniclerInterface := chronicler.New(hashPath, maxFileSize, testMaxDepth, fsInterface, metadata.New(hashPath))
+		chroniclerInterface.CreateDirectoryIfNotExists()
+
+		swampEventCallbackFunc := func(e *Event) {}
+		closeCallbackFunc := func(n name.Name) {
+			atomic.StoreInt32(&destroyed, 1)
+		}
+		swampInfoCallbackFunc := func(i *Info) {}
+
+		fssSwamp := &FilesystemSettings{
+			ChroniclerInterface: chroniclerInterface,
+			WriteInterval:       writeInterval,
+		}
+
+		metadataInterface := metadata.New(hashPath)
+		swampInterface := New(swampName, closeAfterIdle, fssSwamp, swampEventCallbackFunc, swampInfoCallbackFunc, closeCallbackFunc, metadataInterface)
+
+		swampInterface.BeginVigil()
+
+		// Create 3 treasures, all already expired
+		for i := 0; i < 3; i++ {
+			tr := swampInterface.CreateTreasure(fmt.Sprintf("expired-%d", i))
+			guardID := tr.StartTreasureGuard(true)
+			tr.SetContentString(guardID, fmt.Sprintf("data-%d", i))
+			tr.SetExpirationTime(guardID, time.Now().Add(-time.Second*time.Duration(i+1)))
+			_ = tr.Save(guardID)
+			tr.ReleaseTreasureGuard(guardID)
+		}
+		assert.Equal(t, 3, swampInterface.CountTreasures())
+		assert.False(t, swampInterface.IsClosing(), "swamp should be alive with 3 treasures")
+
+		// Delete all expired treasures at once
+		shifted, err := swampInterface.CloneAndDeleteExpiredTreasures(100)
+		assert.NoError(t, err)
+		assert.Equal(t, 3, len(shifted), "all 3 expired treasures should be shifted")
+
+		// Swamp should auto-destroy
+		assert.True(t, swampInterface.IsClosing(), "swamp should auto-destroy when all expired treasures are removed")
+
+		time.Sleep(100 * time.Millisecond)
+		assert.Equal(t, int32(1), atomic.LoadInt32(&destroyed), "close callback should have been called")
+	})
+
+	t.Run("should NOT auto-destroy when some treasures remain after expired removal", func(t *testing.T) {
+
+		destroyed := int32(0)
+
+		swampName := name.New().Sanctuary(sanctuaryForQuickTest).Realm("auto-destroy").Swamp("expired-partial")
+		hashPath := swampName.GetFullHashPath(settingsInterface.GetHydraAbsDataFolderPath(), testAllServers, testMaxDepth, testMaxFolderPerLevel)
+		chroniclerInterface := chronicler.New(hashPath, maxFileSize, testMaxDepth, fsInterface, metadata.New(hashPath))
+		chroniclerInterface.CreateDirectoryIfNotExists()
+
+		swampEventCallbackFunc := func(e *Event) {}
+		closeCallbackFunc := func(n name.Name) {
+			atomic.StoreInt32(&destroyed, 1)
+		}
+		swampInfoCallbackFunc := func(i *Info) {}
+
+		fssSwamp := &FilesystemSettings{
+			ChroniclerInterface: chroniclerInterface,
+			WriteInterval:       writeInterval,
+		}
+
+		metadataInterface := metadata.New(hashPath)
+		swampInterface := New(swampName, closeAfterIdle, fssSwamp, swampEventCallbackFunc, swampInfoCallbackFunc, closeCallbackFunc, metadataInterface)
+
+		swampInterface.BeginVigil()
+
+		// Create 2 expired treasures
+		for i := 0; i < 2; i++ {
+			tr := swampInterface.CreateTreasure(fmt.Sprintf("expired-%d", i))
+			guardID := tr.StartTreasureGuard(true)
+			tr.SetContentString(guardID, fmt.Sprintf("expired-data-%d", i))
+			tr.SetExpirationTime(guardID, time.Now().Add(-time.Second*time.Duration(i+1)))
+			_ = tr.Save(guardID)
+			tr.ReleaseTreasureGuard(guardID)
+		}
+
+		// Create 1 non-expired treasure
+		alive := swampInterface.CreateTreasure("alive")
+		guardID := alive.StartTreasureGuard(true)
+		alive.SetContentString(guardID, "still-here")
+		alive.SetExpirationTime(guardID, time.Now().Add(time.Hour))
+		_ = alive.Save(guardID)
+		alive.ReleaseTreasureGuard(guardID)
+
+		assert.Equal(t, 3, swampInterface.CountTreasures())
+
+		// Delete only expired treasures
+		shifted, err := swampInterface.CloneAndDeleteExpiredTreasures(100)
+		assert.NoError(t, err)
+		assert.Equal(t, 2, len(shifted), "2 expired treasures should be shifted")
+
+		// Swamp should NOT auto-destroy — 1 treasure remains
+		assert.Equal(t, 1, swampInterface.CountTreasures())
+		assert.False(t, swampInterface.IsClosing(), "swamp should stay alive when non-expired treasures remain")
+		assert.Equal(t, int32(0), atomic.LoadInt32(&destroyed), "close callback should NOT have been called")
+
+		swampInterface.CeaseVigil()
+		swampInterface.Destroy()
+	})
+}
+
+func TestSwamp_AutoDestroy_CloneAndDeleteTreasuresByKeys(t *testing.T) {
+
+	fsInterface := filesystem.New()
+	settingsInterface := settings.New(testMaxDepth, testMaxFolderPerLevel)
+	fss := &settings.FileSystemSettings{
+		WriteIntervalSec: 1,
+		MaxFileSizeByte:  8192,
+	}
+	settingsInterface.RegisterPattern(name.New().Sanctuary(sanctuaryForQuickTest).Realm("*").Swamp("*"), false, 1, fss)
+	closeAfterIdle := 10 * time.Second
+	writeInterval := 1 * time.Second
+	maxFileSize := int64(8192)
+
+	t.Run("should auto-destroy when all treasures are deleted by keys", func(t *testing.T) {
+
+		destroyed := int32(0)
+
+		swampName := name.New().Sanctuary(sanctuaryForQuickTest).Realm("auto-destroy").Swamp("by-keys-all")
+		hashPath := swampName.GetFullHashPath(settingsInterface.GetHydraAbsDataFolderPath(), testAllServers, testMaxDepth, testMaxFolderPerLevel)
+		chroniclerInterface := chronicler.New(hashPath, maxFileSize, testMaxDepth, fsInterface, metadata.New(hashPath))
+		chroniclerInterface.CreateDirectoryIfNotExists()
+
+		swampEventCallbackFunc := func(e *Event) {}
+		closeCallbackFunc := func(n name.Name) {
+			atomic.StoreInt32(&destroyed, 1)
+		}
+		swampInfoCallbackFunc := func(i *Info) {}
+
+		fssSwamp := &FilesystemSettings{
+			ChroniclerInterface: chroniclerInterface,
+			WriteInterval:       writeInterval,
+		}
+
+		metadataInterface := metadata.New(hashPath)
+		swampInterface := New(swampName, closeAfterIdle, fssSwamp, swampEventCallbackFunc, swampInfoCallbackFunc, closeCallbackFunc, metadataInterface)
+
+		swampInterface.BeginVigil()
+
+		// Create 4 treasures
+		keys := []string{"a", "b", "c", "d"}
+		for _, key := range keys {
+			tr := swampInterface.CreateTreasure(key)
+			guardID := tr.StartTreasureGuard(true)
+			tr.SetContentString(guardID, "val-"+key)
+			_ = tr.Save(guardID)
+			tr.ReleaseTreasureGuard(guardID)
+		}
+		assert.Equal(t, 4, swampInterface.CountTreasures())
+
+		// Delete all by keys
+		shifted, err := swampInterface.CloneAndDeleteTreasuresByKeys(keys)
+		assert.NoError(t, err)
+		assert.Equal(t, 4, len(shifted))
+
+		// Swamp should auto-destroy
+		assert.True(t, swampInterface.IsClosing(), "swamp should auto-destroy when all treasures are deleted by keys")
+
+		time.Sleep(100 * time.Millisecond)
+		assert.Equal(t, int32(1), atomic.LoadInt32(&destroyed), "close callback should have been called")
+	})
+
+	t.Run("should NOT auto-destroy when some treasures remain after key deletion", func(t *testing.T) {
+
+		destroyed := int32(0)
+
+		swampName := name.New().Sanctuary(sanctuaryForQuickTest).Realm("auto-destroy").Swamp("by-keys-partial")
+		hashPath := swampName.GetFullHashPath(settingsInterface.GetHydraAbsDataFolderPath(), testAllServers, testMaxDepth, testMaxFolderPerLevel)
+		chroniclerInterface := chronicler.New(hashPath, maxFileSize, testMaxDepth, fsInterface, metadata.New(hashPath))
+		chroniclerInterface.CreateDirectoryIfNotExists()
+
+		swampEventCallbackFunc := func(e *Event) {}
+		closeCallbackFunc := func(n name.Name) {
+			atomic.StoreInt32(&destroyed, 1)
+		}
+		swampInfoCallbackFunc := func(i *Info) {}
+
+		fssSwamp := &FilesystemSettings{
+			ChroniclerInterface: chroniclerInterface,
+			WriteInterval:       writeInterval,
+		}
+
+		metadataInterface := metadata.New(hashPath)
+		swampInterface := New(swampName, closeAfterIdle, fssSwamp, swampEventCallbackFunc, swampInfoCallbackFunc, closeCallbackFunc, metadataInterface)
+
+		swampInterface.BeginVigil()
+
+		// Create 4 treasures
+		for _, key := range []string{"a", "b", "c", "d"} {
+			tr := swampInterface.CreateTreasure(key)
+			guardID := tr.StartTreasureGuard(true)
+			tr.SetContentString(guardID, "val-"+key)
+			_ = tr.Save(guardID)
+			tr.ReleaseTreasureGuard(guardID)
+		}
+		assert.Equal(t, 4, swampInterface.CountTreasures())
+
+		// Delete only 2 of 4
+		shifted, err := swampInterface.CloneAndDeleteTreasuresByKeys([]string{"a", "c"})
+		assert.NoError(t, err)
+		assert.Equal(t, 2, len(shifted))
+
+		// Swamp should NOT auto-destroy — 2 treasures remain
+		assert.Equal(t, 2, swampInterface.CountTreasures())
+		assert.False(t, swampInterface.IsClosing(), "swamp should stay alive when treasures remain")
+		assert.Equal(t, int32(0), atomic.LoadInt32(&destroyed), "close callback should NOT have been called")
+
+		swampInterface.CeaseVigil()
+		swampInterface.Destroy()
+	})
+}

@@ -2414,6 +2414,12 @@ func (s *swamp) CloneAndDeleteExpiredTreasures(howMany int32) ([]treasure.Treasu
 		s.deleteHandler(d.GetKey(), false)
 	}
 
+	// destroy the swamp if there is no treasure in it
+	if s.beaconKey.Count() == 0 {
+		s.CeaseVigil()
+		s.Destroy()
+	}
+
 	// return with the shifted treasures
 	return shiftedTreasures, nil
 }
@@ -2455,6 +2461,12 @@ func (s *swamp) CloneAndDeleteTreasuresByKeys(keys []string) ([]treasure.Treasur
 			s.deleteHandler(key, false)
 		}
 		// Missing keys are silently ignored (as per specification)
+	}
+
+	// destroy the swamp if there is no treasure in it
+	if s.beaconKey.Count() == 0 {
+		s.CeaseVigil()
+		s.Destroy()
 	}
 
 	return result, nil
