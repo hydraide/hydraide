@@ -913,6 +913,243 @@ func TestProfileFilterGroup_PhraseFilter_MissingTreasure(t *testing.T) {
 	}
 }
 
+// --- Profile ForKey Integration Tests ---
+// These tests simulate the exact scenarios reported as failing in production:
+// Profile fields stored as separate Treasures, filtered with ForKey().
+
+// TestProfileForKey_BoolFilter verifies that FilterBool + ForKey works on a profile bool Treasure.
+func TestProfileForKey_BoolFilter(t *testing.T) {
+	treasures := map[string]*hydrapb.Treasure{
+		"IsHttps": {Key: "IsHttps", BoolVal: boolPtr(hydrapb.Boolean_TRUE)},
+		"Name":    {Key: "Name", StringVal: stringPtr("example.com")},
+	}
+
+	key := "IsHttps"
+	group := &hydrapb.FilterGroup{
+		Logic: hydrapb.FilterLogic_AND,
+		Filters: []*hydrapb.TreasureFilter{
+			{Operator: hydrapb.Relational_EQUAL, CompareValue: &hydrapb.TreasureFilter_BoolVal{BoolVal: hydrapb.Boolean_TRUE}, TreasureKey: &key},
+		},
+	}
+
+	if !evaluateProfileFilterGroup(treasures, group) {
+		t.Error("expected FilterBool(EQUAL, true).ForKey('IsHttps') to match")
+	}
+}
+
+// TestProfileForKey_Int32Filter verifies that FilterInt32 + ForKey works on a profile int32 Treasure.
+func TestProfileForKey_Int32Filter(t *testing.T) {
+	treasures := map[string]*hydrapb.Treasure{
+		"Engine": {Key: "Engine", Int32Val: int32Ptr(10)},
+	}
+
+	key := "Engine"
+	group := &hydrapb.FilterGroup{
+		Logic: hydrapb.FilterLogic_AND,
+		Filters: []*hydrapb.TreasureFilter{
+			{Operator: hydrapb.Relational_EQUAL, CompareValue: &hydrapb.TreasureFilter_Int32Val{Int32Val: 10}, TreasureKey: &key},
+		},
+	}
+
+	if !evaluateProfileFilterGroup(treasures, group) {
+		t.Error("expected FilterInt32(EQUAL, 10).ForKey('Engine') to match")
+	}
+}
+
+// TestProfileForKey_BytesFieldHasKey verifies FilterBytesFieldString(HasKey) + ForKey
+// on a profile Treasure where BytesVal contains a map (e.g., map[string]bool).
+// This was broken because BytesFieldPath="" caused evaluateSingleFilter to skip BytesField evaluation.
+func TestProfileForKey_BytesFieldHasKey(t *testing.T) {
+	treasures := map[string]*hydrapb.Treasure{
+		"PluginDomains": {
+			Key: "PluginDomains",
+			BytesVal: makeMsgpackBytesVal(t, map[string]interface{}{
+				"analytics.google.com": true,
+				"cdn.example.com":     true,
+			}),
+		},
+	}
+
+	key := "PluginDomains"
+	emptyPath := ""
+	group := &hydrapb.FilterGroup{
+		Logic: hydrapb.FilterLogic_AND,
+		Filters: []*hydrapb.TreasureFilter{
+			{
+				Operator:       hydrapb.Relational_HAS_KEY,
+				CompareValue:   &hydrapb.TreasureFilter_StringVal{StringVal: "analytics.google.com"},
+				BytesFieldPath: &emptyPath,
+				TreasureKey:    &key,
+			},
+		},
+	}
+
+	if !evaluateProfileFilterGroup(treasures, group) {
+		t.Error("expected FilterBytesFieldString(HAS_KEY, '', 'analytics.google.com').ForKey('PluginDomains') to match")
+	}
+
+	// Verify non-existent key does NOT match
+	groupMiss := &hydrapb.FilterGroup{
+		Logic: hydrapb.FilterLogic_AND,
+		Filters: []*hydrapb.TreasureFilter{
+			{
+				Operator:       hydrapb.Relational_HAS_KEY,
+				CompareValue:   &hydrapb.TreasureFilter_StringVal{StringVal: "nonexistent.com"},
+				BytesFieldPath: &emptyPath,
+				TreasureKey:    &key,
+			},
+		},
+	}
+
+	if evaluateProfileFilterGroup(treasures, groupMiss) {
+		t.Error("expected HAS_KEY for non-existent key to NOT match")
+	}
+}
+
+// TestProfileForKey_PhraseFilter verifies FilterPhrase + ForKey
+// on a profile Treasure where BytesVal contains a word index map (map[string][]int).
+// This was broken because extractFieldByPath("") returned nil instead of the root map.
+func TestProfileForKey_PhraseFilter(t *testing.T) {
+	treasures := map[string]*hydrapb.Treasure{
+		"WordPositions": {
+			Key: "WordPositions",
+			BytesVal: makeMsgpackBytesVal(t, map[string]interface{}{
+				"wordpress": []interface{}{int64(0), int64(5)},
+				"plugin":    []interface{}{int64(1), int64(6)},
+				"install":   []interface{}{int64(2)},
+			}),
+		},
+	}
+
+	// Single word phrase search
+	key := "WordPositions"
+	group := &hydrapb.FilterGroup{
+		Logic: hydrapb.FilterLogic_AND,
+		PhraseFilters: []*hydrapb.PhraseFilter{
+			{
+				BytesFieldPath: "",
+				Words:          []string{"wordpress"},
+				TreasureKey:    &key,
+			},
+		},
+	}
+
+	if !evaluateProfileFilterGroup(treasures, group) {
+		t.Error("expected FilterPhrase('', 'wordpress').ForKey('WordPositions') to match")
+	}
+
+	// Multi-word consecutive phrase: "wordpress plugin" at positions 0,1 or 5,6
+	groupPhrase := &hydrapb.FilterGroup{
+		Logic: hydrapb.FilterLogic_AND,
+		PhraseFilters: []*hydrapb.PhraseFilter{
+			{
+				BytesFieldPath: "",
+				Words:          []string{"wordpress", "plugin"},
+				TreasureKey:    &key,
+			},
+		},
+	}
+
+	if !evaluateProfileFilterGroup(treasures, groupPhrase) {
+		t.Error("expected FilterPhrase('', 'wordpress', 'plugin').ForKey('WordPositions') to match consecutive positions")
+	}
+
+	// Non-existent word
+	groupMiss := &hydrapb.FilterGroup{
+		Logic: hydrapb.FilterLogic_AND,
+		PhraseFilters: []*hydrapb.PhraseFilter{
+			{
+				BytesFieldPath: "",
+				Words:          []string{"nonexistent"},
+				TreasureKey:    &key,
+			},
+		},
+	}
+
+	if evaluateProfileFilterGroup(treasures, groupMiss) {
+		t.Error("expected FilterPhrase for non-existent word to NOT match")
+	}
+}
+
+// TestProfileForKey_CombinedAND verifies that multiple ForKey filters in a single AND group
+// work correctly together — the exact scenario the user reported as failing.
+func TestProfileForKey_CombinedAND(t *testing.T) {
+	treasures := map[string]*hydrapb.Treasure{
+		"IsHttps": {Key: "IsHttps", BoolVal: boolPtr(hydrapb.Boolean_TRUE)},
+		"Engine":  {Key: "Engine", Int32Val: int32Ptr(10)},
+		"PluginDomains": {
+			Key: "PluginDomains",
+			BytesVal: makeMsgpackBytesVal(t, map[string]interface{}{
+				"analytics.google.com": true,
+			}),
+		},
+		"WordPositions": {
+			Key: "WordPositions",
+			BytesVal: makeMsgpackBytesVal(t, map[string]interface{}{
+				"wordpress": []interface{}{int64(0)},
+			}),
+		},
+	}
+
+	boolKey := "IsHttps"
+	intKey := "Engine"
+	mapKey := "PluginDomains"
+	wordKey := "WordPositions"
+	emptyPath := ""
+
+	group := &hydrapb.FilterGroup{
+		Logic: hydrapb.FilterLogic_AND,
+		Filters: []*hydrapb.TreasureFilter{
+			{Operator: hydrapb.Relational_EQUAL, CompareValue: &hydrapb.TreasureFilter_BoolVal{BoolVal: hydrapb.Boolean_TRUE}, TreasureKey: &boolKey},
+			{Operator: hydrapb.Relational_EQUAL, CompareValue: &hydrapb.TreasureFilter_Int32Val{Int32Val: 10}, TreasureKey: &intKey},
+			{Operator: hydrapb.Relational_HAS_KEY, CompareValue: &hydrapb.TreasureFilter_StringVal{StringVal: "analytics.google.com"}, BytesFieldPath: &emptyPath, TreasureKey: &mapKey},
+		},
+		PhraseFilters: []*hydrapb.PhraseFilter{
+			{BytesFieldPath: "", Words: []string{"wordpress"}, TreasureKey: &wordKey},
+		},
+	}
+
+	if !evaluateProfileFilterGroup(treasures, group) {
+		t.Error("expected combined AND group with bool, int32, HAS_KEY, and phrase to all match")
+	}
+}
+
+// TestExtractFieldByPath_EmptyPath verifies the fix for empty path returning root map.
+func TestExtractFieldByPath_EmptyPath(t *testing.T) {
+	m := map[string]interface{}{
+		"key1": "value1",
+		"key2": int64(42),
+	}
+
+	result := extractFieldByPath(m, "")
+	if result == nil {
+		t.Fatal("extractFieldByPath with empty path should return root map, got nil")
+	}
+
+	resultMap, ok := result.(map[string]interface{})
+	if !ok {
+		t.Fatalf("extractFieldByPath with empty path should return map, got %T", result)
+	}
+
+	if resultMap["key1"] != "value1" {
+		t.Error("root map should contain key1=value1")
+	}
+}
+
+// TestExtractFieldByPath_NestedPath verifies that normal nested paths still work.
+func TestExtractFieldByPath_NestedPath(t *testing.T) {
+	m := map[string]interface{}{
+		"Address": map[string]interface{}{
+			"City": "Budapest",
+		},
+	}
+
+	result := extractFieldByPath(m, "Address.City")
+	if result != "Budapest" {
+		t.Errorf("expected 'Budapest', got %v", result)
+	}
+}
+
 // --- Helper functions ---
 
 func boolPtr(v hydrapb.Boolean_Type) *hydrapb.Boolean_Type { return &v }

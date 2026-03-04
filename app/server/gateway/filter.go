@@ -104,8 +104,9 @@ func evaluateFilterGroup(treasure *hydrapb.Treasure, group *hydrapb.FilterGroup)
 func evaluateSingleFilter(treasure *hydrapb.Treasure, filter *hydrapb.TreasureFilter) bool {
 	op := filter.GetOperator()
 
-	// If BytesFieldPath is set, extract the value from MessagePack-encoded BytesVal
-	if filter.BytesFieldPath != nil && *filter.BytesFieldPath != "" {
+	// If BytesFieldPath is set, extract the value from MessagePack-encoded BytesVal.
+	// An empty string path ("") is valid in profile mode — it means the entire BytesVal is the target.
+	if filter.BytesFieldPath != nil {
 		return evaluateBytesFieldFilter(treasure, filter)
 	}
 
@@ -362,7 +363,11 @@ func decodeMsgpackToMap(data []byte) (map[string]interface{}, error) {
 
 // extractFieldByPath navigates a dot-separated path in a nested map.
 // Example: "Address.City" extracts m["Address"].(map)["City"].
+// An empty path returns the root map itself (used in profile mode where the entire BytesVal is the target).
 func extractFieldByPath(m map[string]interface{}, path string) interface{} {
+	if path == "" {
+		return m
+	}
 	parts := strings.Split(path, ".")
 	var current interface{} = m
 	for _, part := range parts {
