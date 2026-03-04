@@ -629,6 +629,292 @@ func TestPhraseFilter_InFilterGroup_OR(t *testing.T) {
 	}
 }
 
+// --- Profile FilterGroup Tests ---
+
+func stringPtr(s string) *string { return &s }
+
+func TestProfileFilterGroup_AND_AllMatch(t *testing.T) {
+	treasures := map[string]*hydrapb.Treasure{
+		"Age":    {Key: "Age", Int32Val: int32Ptr(30)},
+		"Name":   {Key: "Name", StringVal: stringPtr("Alice")},
+		"Active": {Key: "Active", BoolVal: boolPtr(hydrapb.Boolean_TRUE)},
+	}
+
+	ageKey := "Age"
+	nameKey := "Name"
+	activeKey := "Active"
+
+	group := &hydrapb.FilterGroup{
+		Logic: hydrapb.FilterLogic_AND,
+		Filters: []*hydrapb.TreasureFilter{
+			{Operator: hydrapb.Relational_GREATER_THAN, CompareValue: &hydrapb.TreasureFilter_Int32Val{Int32Val: 18}, TreasureKey: &ageKey},
+			{Operator: hydrapb.Relational_EQUAL, CompareValue: &hydrapb.TreasureFilter_StringVal{StringVal: "Alice"}, TreasureKey: &nameKey},
+			{Operator: hydrapb.Relational_EQUAL, CompareValue: &hydrapb.TreasureFilter_BoolVal{BoolVal: hydrapb.Boolean_TRUE}, TreasureKey: &activeKey},
+		},
+	}
+
+	if !evaluateProfileFilterGroup(treasures, group) {
+		t.Error("expected AND group to match when all filters pass")
+	}
+}
+
+func TestProfileFilterGroup_AND_OneFails(t *testing.T) {
+	treasures := map[string]*hydrapb.Treasure{
+		"Age":  {Key: "Age", Int32Val: int32Ptr(15)},
+		"Name": {Key: "Name", StringVal: stringPtr("Bob")},
+	}
+
+	ageKey := "Age"
+	nameKey := "Name"
+
+	group := &hydrapb.FilterGroup{
+		Logic: hydrapb.FilterLogic_AND,
+		Filters: []*hydrapb.TreasureFilter{
+			{Operator: hydrapb.Relational_GREATER_THAN, CompareValue: &hydrapb.TreasureFilter_Int32Val{Int32Val: 18}, TreasureKey: &ageKey},
+			{Operator: hydrapb.Relational_EQUAL, CompareValue: &hydrapb.TreasureFilter_StringVal{StringVal: "Bob"}, TreasureKey: &nameKey},
+		},
+	}
+
+	if evaluateProfileFilterGroup(treasures, group) {
+		t.Error("expected AND group to fail when Age < 18")
+	}
+}
+
+func TestProfileFilterGroup_OR_OneMatch(t *testing.T) {
+	treasures := map[string]*hydrapb.Treasure{
+		"Status": {Key: "Status", StringVal: stringPtr("inactive")},
+		"Age":    {Key: "Age", Int32Val: int32Ptr(25)},
+	}
+
+	statusKey := "Status"
+	ageKey := "Age"
+
+	group := &hydrapb.FilterGroup{
+		Logic: hydrapb.FilterLogic_OR,
+		Filters: []*hydrapb.TreasureFilter{
+			{Operator: hydrapb.Relational_EQUAL, CompareValue: &hydrapb.TreasureFilter_StringVal{StringVal: "active"}, TreasureKey: &statusKey},
+			{Operator: hydrapb.Relational_GREATER_THAN, CompareValue: &hydrapb.TreasureFilter_Int32Val{Int32Val: 20}, TreasureKey: &ageKey},
+		},
+	}
+
+	if !evaluateProfileFilterGroup(treasures, group) {
+		t.Error("expected OR group to match because Age > 20")
+	}
+}
+
+func TestProfileFilterGroup_OR_NoneMatch(t *testing.T) {
+	treasures := map[string]*hydrapb.Treasure{
+		"Status": {Key: "Status", StringVal: stringPtr("inactive")},
+		"Age":    {Key: "Age", Int32Val: int32Ptr(10)},
+	}
+
+	statusKey := "Status"
+	ageKey := "Age"
+
+	group := &hydrapb.FilterGroup{
+		Logic: hydrapb.FilterLogic_OR,
+		Filters: []*hydrapb.TreasureFilter{
+			{Operator: hydrapb.Relational_EQUAL, CompareValue: &hydrapb.TreasureFilter_StringVal{StringVal: "active"}, TreasureKey: &statusKey},
+			{Operator: hydrapb.Relational_GREATER_THAN, CompareValue: &hydrapb.TreasureFilter_Int32Val{Int32Val: 20}, TreasureKey: &ageKey},
+		},
+	}
+
+	if evaluateProfileFilterGroup(treasures, group) {
+		t.Error("expected OR group to fail when neither filter matches")
+	}
+}
+
+func TestProfileFilterGroup_MissingKey(t *testing.T) {
+	treasures := map[string]*hydrapb.Treasure{
+		"Name": {Key: "Name", StringVal: stringPtr("Alice")},
+	}
+
+	ageKey := "Age"
+
+	group := &hydrapb.FilterGroup{
+		Logic: hydrapb.FilterLogic_AND,
+		Filters: []*hydrapb.TreasureFilter{
+			{Operator: hydrapb.Relational_GREATER_THAN, CompareValue: &hydrapb.TreasureFilter_Int32Val{Int32Val: 18}, TreasureKey: &ageKey},
+		},
+	}
+
+	if evaluateProfileFilterGroup(treasures, group) {
+		t.Error("expected filter to fail when TreasureKey does not exist in map")
+	}
+}
+
+func TestProfileFilterGroup_MissingKey_IsEmpty(t *testing.T) {
+	treasures := map[string]*hydrapb.Treasure{
+		"Name": {Key: "Name", StringVal: stringPtr("Alice")},
+	}
+
+	ageKey := "Age"
+
+	group := &hydrapb.FilterGroup{
+		Logic: hydrapb.FilterLogic_AND,
+		Filters: []*hydrapb.TreasureFilter{
+			{Operator: hydrapb.Relational_IS_EMPTY, CompareValue: &hydrapb.TreasureFilter_Int32Val{Int32Val: 0}, TreasureKey: &ageKey},
+		},
+	}
+
+	if !evaluateProfileFilterGroup(treasures, group) {
+		t.Error("expected IS_EMPTY to return true when TreasureKey is missing")
+	}
+}
+
+func TestProfileFilterGroup_PhraseFilter(t *testing.T) {
+	wordIndex := map[string]interface{}{
+		"WordIndex": map[string]interface{}{
+			"hello": []interface{}{int64(1), int64(5)},
+			"world": []interface{}{int64(2), int64(6)},
+		},
+	}
+
+	treasures := map[string]*hydrapb.Treasure{
+		"Content": {Key: "Content", BytesVal: makeMsgpackBytesVal(t, wordIndex)},
+	}
+
+	contentKey := "Content"
+
+	group := &hydrapb.FilterGroup{
+		Logic: hydrapb.FilterLogic_AND,
+		PhraseFilters: []*hydrapb.PhraseFilter{
+			{BytesFieldPath: "WordIndex", Words: []string{"hello", "world"}, TreasureKey: &contentKey},
+		},
+	}
+
+	if !evaluateProfileFilterGroup(treasures, group) {
+		t.Error("expected phrase filter to match consecutive positions 1,2")
+	}
+}
+
+func TestProfileFilterGroup_SubGroups(t *testing.T) {
+	treasures := map[string]*hydrapb.Treasure{
+		"Age":    {Key: "Age", Int32Val: int32Ptr(25)},
+		"Status": {Key: "Status", StringVal: stringPtr("pending")},
+		"Role":   {Key: "Role", StringVal: stringPtr("admin")},
+	}
+
+	ageKey := "Age"
+	statusKey := "Status"
+	roleKey := "Role"
+
+	// AND(Age > 18, OR(Status == "active", Role == "admin"))
+	group := &hydrapb.FilterGroup{
+		Logic: hydrapb.FilterLogic_AND,
+		Filters: []*hydrapb.TreasureFilter{
+			{Operator: hydrapb.Relational_GREATER_THAN, CompareValue: &hydrapb.TreasureFilter_Int32Val{Int32Val: 18}, TreasureKey: &ageKey},
+		},
+		SubGroups: []*hydrapb.FilterGroup{
+			{
+				Logic: hydrapb.FilterLogic_OR,
+				Filters: []*hydrapb.TreasureFilter{
+					{Operator: hydrapb.Relational_EQUAL, CompareValue: &hydrapb.TreasureFilter_StringVal{StringVal: "active"}, TreasureKey: &statusKey},
+					{Operator: hydrapb.Relational_EQUAL, CompareValue: &hydrapb.TreasureFilter_StringVal{StringVal: "admin"}, TreasureKey: &roleKey},
+				},
+			},
+		},
+	}
+
+	if !evaluateProfileFilterGroup(treasures, group) {
+		t.Error("expected nested AND(OR) to match: Age>18 AND (Status=active OR Role=admin)")
+	}
+}
+
+func TestProfileFilterGroup_EmptyGroup(t *testing.T) {
+	treasures := map[string]*hydrapb.Treasure{
+		"Name": {Key: "Name", StringVal: stringPtr("Alice")},
+	}
+
+	group := &hydrapb.FilterGroup{}
+
+	if !evaluateProfileFilterGroup(treasures, group) {
+		t.Error("expected empty filter group to pass all profiles")
+	}
+}
+
+func TestProfileFilterGroup_NilGroup(t *testing.T) {
+	treasures := map[string]*hydrapb.Treasure{
+		"Name": {Key: "Name", StringVal: stringPtr("Alice")},
+	}
+
+	if !evaluateProfileFilterGroup(treasures, nil) {
+		t.Error("expected nil filter group to pass all profiles")
+	}
+}
+
+func TestProfileFilterGroup_NoTreasureKey(t *testing.T) {
+	treasures := map[string]*hydrapb.Treasure{
+		"Age": {Key: "Age", Int32Val: int32Ptr(25)},
+	}
+
+	// Filter without TreasureKey — should return false in profile mode
+	group := &hydrapb.FilterGroup{
+		Logic: hydrapb.FilterLogic_AND,
+		Filters: []*hydrapb.TreasureFilter{
+			{Operator: hydrapb.Relational_GREATER_THAN, CompareValue: &hydrapb.TreasureFilter_Int32Val{Int32Val: 18}},
+		},
+	}
+
+	if evaluateProfileFilterGroup(treasures, group) {
+		t.Error("expected filter without TreasureKey to fail in profile mode")
+	}
+}
+
+func TestProfileFilterGroup_PhraseFilter_NoTreasureKey(t *testing.T) {
+	treasures := map[string]*hydrapb.Treasure{
+		"Content": {Key: "Content", BytesVal: makeMsgpackBytesVal(t, map[string]interface{}{
+			"WordIndex": map[string]interface{}{"hello": []interface{}{int64(1)}},
+		})},
+	}
+
+	// PhraseFilter without TreasureKey — should return false in profile mode
+	group := &hydrapb.FilterGroup{
+		Logic: hydrapb.FilterLogic_AND,
+		PhraseFilters: []*hydrapb.PhraseFilter{
+			{BytesFieldPath: "WordIndex", Words: []string{"hello"}},
+		},
+	}
+
+	if evaluateProfileFilterGroup(treasures, group) {
+		t.Error("expected phrase filter without TreasureKey to fail in profile mode")
+	}
+}
+
+func TestProfileFilterGroup_PhraseFilter_MissingTreasure(t *testing.T) {
+	treasures := map[string]*hydrapb.Treasure{
+		"Name": {Key: "Name", StringVal: stringPtr("Alice")},
+	}
+
+	contentKey := "Content"
+
+	// Non-negated phrase filter targeting missing Treasure
+	group := &hydrapb.FilterGroup{
+		Logic: hydrapb.FilterLogic_AND,
+		PhraseFilters: []*hydrapb.PhraseFilter{
+			{BytesFieldPath: "WordIndex", Words: []string{"hello"}, Negate: false, TreasureKey: &contentKey},
+		},
+	}
+
+	if evaluateProfileFilterGroup(treasures, group) {
+		t.Error("expected non-negated phrase filter to fail when Treasure is missing")
+	}
+
+	// Negated phrase filter targeting missing Treasure — should match
+	groupNeg := &hydrapb.FilterGroup{
+		Logic: hydrapb.FilterLogic_AND,
+		PhraseFilters: []*hydrapb.PhraseFilter{
+			{BytesFieldPath: "WordIndex", Words: []string{"hello"}, Negate: true, TreasureKey: &contentKey},
+		},
+	}
+
+	if !evaluateProfileFilterGroup(treasures, groupNeg) {
+		t.Error("expected negated phrase filter to match when Treasure is missing")
+	}
+}
+
 // --- Helper functions ---
+
+func boolPtr(v hydrapb.Boolean_Type) *hydrapb.Boolean_Type { return &v }
 
 func int32Ptr(v int32) *int32 { return &v }

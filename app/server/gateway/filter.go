@@ -762,3 +762,90 @@ func sortedContains(sorted []int64, target int64) bool {
 	i := sort.Search(len(sorted), func(j int) bool { return sorted[j] >= target })
 	return i < len(sorted) && sorted[i] == target
 }
+
+// evaluateProfileFilterGroup evaluates a FilterGroup against a profile's Treasures.
+//
+// In profile mode, each struct field is stored as a separate Treasure keyed by field name.
+// Filters use TreasureKey to specify which Treasure to evaluate against.
+// If TreasureKey is not set on a filter, it evaluates to false (required in profile mode).
+//
+// Returns true if the group is nil or empty (no filtering applied).
+func evaluateProfileFilterGroup(treasures map[string]*hydrapb.Treasure, group *hydrapb.FilterGroup) bool {
+	if group == nil {
+		return true
+	}
+
+	hasFilters := len(group.Filters) > 0
+	hasSubGroups := len(group.SubGroups) > 0
+	hasPhraseFilters := len(group.PhraseFilters) > 0
+
+	// Empty group = no filtering = pass
+	if !hasFilters && !hasSubGroups && !hasPhraseFilters {
+		return true
+	}
+
+	if group.Logic == hydrapb.FilterLogic_OR {
+		for _, f := range group.Filters {
+			if evaluateProfileSingleFilter(treasures, f) {
+				return true
+			}
+		}
+		for _, sg := range group.SubGroups {
+			if evaluateProfileFilterGroup(treasures, sg) {
+				return true
+			}
+		}
+		for _, pf := range group.PhraseFilters {
+			if evaluateProfilePhraseFilter(treasures, pf) {
+				return true
+			}
+		}
+		return false
+	}
+
+	// AND (default)
+	for _, f := range group.Filters {
+		if !evaluateProfileSingleFilter(treasures, f) {
+			return false
+		}
+	}
+	for _, sg := range group.SubGroups {
+		if !evaluateProfileFilterGroup(treasures, sg) {
+			return false
+		}
+	}
+	for _, pf := range group.PhraseFilters {
+		if !evaluateProfilePhraseFilter(treasures, pf) {
+			return false
+		}
+	}
+	return true
+}
+
+// evaluateProfileSingleFilter resolves the TreasureKey from a filter and delegates
+// to evaluateSingleFilter with the targeted Treasure.
+func evaluateProfileSingleFilter(treasures map[string]*hydrapb.Treasure, filter *hydrapb.TreasureFilter) bool {
+	if filter.TreasureKey == nil || *filter.TreasureKey == "" {
+		return false // TreasureKey is required in profile mode
+	}
+	treasure, exists := treasures[*filter.TreasureKey]
+	if !exists {
+		// Missing key: only IS_EMPTY should return true
+		return filter.GetOperator() == hydrapb.Relational_IS_EMPTY
+	}
+	return evaluateSingleFilter(treasure, filter)
+}
+
+// evaluateProfilePhraseFilter resolves the TreasureKey from a PhraseFilter and delegates
+// to evaluatePhraseFilter with the targeted Treasure.
+func evaluateProfilePhraseFilter(treasures map[string]*hydrapb.Treasure, pf *hydrapb.PhraseFilter) bool {
+	if pf.TreasureKey == nil || *pf.TreasureKey == "" {
+		return false // TreasureKey is required in profile mode
+	}
+	treasure, exists := treasures[*pf.TreasureKey]
+	if !exists {
+		// Missing treasure: negated phrase filter should match (phrase not found)
+		return pf.Negate
+	}
+	return evaluatePhraseFilter(treasure, pf)
+}

@@ -628,6 +628,8 @@ func (g Gateway) GetByIndexStream(in *hydrapb.GetByIndexStreamRequest, stream hy
 	}
 
 	filters := in.GetFilters()
+	maxResults := in.GetMaxResults()
+	var matchCount int32
 
 	for _, treasureInterface := range treasures {
 		// Check for client cancellation
@@ -647,6 +649,11 @@ func (g Gateway) GetByIndexStream(in *hydrapb.GetByIndexStreamRequest, stream hy
 		}); err != nil {
 			return err
 		}
+
+		matchCount++
+		if maxResults > 0 && matchCount >= maxResults {
+			return nil
+		}
 	}
 
 	return nil
@@ -659,6 +666,9 @@ func (g Gateway) GetByIndexStreamFromMany(in *hydrapb.GetByIndexStreamFromManyRe
 	defer handlePanic()
 
 	hydraInterface := g.ZeusInterface.GetHydra()
+
+	globalMax := in.GetMaxResults()
+	var globalCount int32
 
 	for _, query := range in.GetQueries() {
 
@@ -699,6 +709,8 @@ func (g Gateway) GetByIndexStreamFromMany(in *hydrapb.GetByIndexStreamFromManyRe
 		}
 
 		filters := query.GetFilters()
+		queryMax := query.GetMaxResults()
+		var queryCount int32
 
 		for _, treasureInterface := range treasures {
 			if stream.Context().Err() != nil {
@@ -720,9 +732,24 @@ func (g Gateway) GetByIndexStreamFromMany(in *hydrapb.GetByIndexStreamFromManyRe
 				swampInterface.CeaseVigil()
 				return err
 			}
+
+			queryCount++
+			globalCount++
+
+			if queryMax > 0 && queryCount >= queryMax {
+				break // move to next swamp
+			}
+			if globalMax > 0 && globalCount >= globalMax {
+				swampInterface.CeaseVigil()
+				return nil // stream done
+			}
 		}
 
 		swampInterface.CeaseVigil()
+
+		if globalMax > 0 && globalCount >= globalMax {
+			return nil
+		}
 	}
 
 	return nil
@@ -757,6 +784,84 @@ func (g Gateway) CompactSwamp(ctx context.Context, in *hydrapb.CompactSwampReque
 	}
 
 	return &hydrapb.CompactSwampResponse{}, nil
+}
+
+// GetStream reads profiles from multiple swamps with server-side filtering,
+// streaming each matching profile as a complete set of Treasures.
+// This is the profile-mode counterpart to GetByIndexStream/GetByIndexStreamFromMany.
+func (g Gateway) GetStream(in *hydrapb.GetStreamRequest, stream hydrapb.HydraideService_GetStreamServer) error {
+
+	// Do NOT use LockSystem for streaming RPCs.
+	defer handlePanic()
+
+	hydraInterface := g.ZeusInterface.GetHydra()
+
+	maxResults := in.GetMaxResults()
+	var matchCount int32
+
+	for _, query := range in.GetQueries() {
+
+		if stream.Context().Err() != nil {
+			return stream.Context().Err()
+		}
+
+		swampName, err := checkSwampName(g.ZeusInterface, query.GetIslandID(), query.SwampName, true)
+		if err != nil {
+			return status.Error(codes.InvalidArgument, err.Error())
+		}
+
+		swampInterface, err := hydraInterface.SummonSwamp(stream.Context(), query.GetIslandID(), swampName)
+		if err != nil {
+			return status.Error(codes.Internal, fmt.Sprintf("internal server error in hydra: %s", err.Error()))
+		}
+
+		swampInterface.BeginVigil()
+
+		// Fetch all requested keys and build the treasure map
+		treasureMap := make(map[string]*hydrapb.Treasure)
+		var treasureList []*hydrapb.Treasure
+		swampExists := true
+
+		for _, key := range query.GetKeys() {
+			t := &hydrapb.Treasure{
+				Key:     key,
+				IsExist: true,
+			}
+
+			treasureInterface, getErr := swampInterface.GetTreasure(key)
+			if getErr != nil {
+				t.IsExist = false
+			} else {
+				treasureToKeyValuePair(treasureInterface, t)
+			}
+
+			treasureMap[key] = t
+			treasureList = append(treasureList, t)
+		}
+
+		// Evaluate profile filters against the treasure map
+		filters := query.GetFilters()
+		if evaluateProfileFilterGroup(treasureMap, filters) {
+			if err := stream.Send(&hydrapb.GetStreamResponse{
+				SwampName: query.SwampName,
+				Treasures: treasureList,
+				IsExist:   swampExists,
+			}); err != nil {
+				swampInterface.CeaseVigil()
+				return err
+			}
+
+			matchCount++
+			if maxResults > 0 && matchCount >= maxResults {
+				swampInterface.CeaseVigil()
+				return nil
+			}
+		}
+
+		swampInterface.CeaseVigil()
+	}
+
+	return nil
 }
 
 func (g Gateway) ShiftByKeys(ctx context.Context, in *hydrapb.ShiftByKeysRequest) (*hydrapb.ShiftByKeysResponse, error) {

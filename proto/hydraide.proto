@@ -448,6 +448,20 @@ service HydraideService {
   // (GOB → MessagePack) to clean up old entries immediately.
   rpc CompactSwamp(CompactSwampRequest) returns (CompactSwampResponse) {}
 
+  // GetStream reads profiles from multiple swamps with server-side filtering,
+  // streaming each matching profile as a complete set of Treasures.
+  //
+  // This is the profile-mode counterpart to GetByIndexStream/GetByIndexStreamFromMany.
+  // Unlike catalog streaming (which uses indexes), profile streaming fetches all
+  // requested keys from each swamp, applies filters using TreasureKey-based targeting,
+  // and streams only profiles that pass all filter conditions.
+  //
+  // Use this for:
+  // - Filtering profiles by field values before loading
+  // - Scanning multiple profiles with shared filter criteria
+  // - Phrase search across profile fields
+  rpc GetStream(GetStreamRequest) returns (stream GetStreamResponse) {}
+
 }
 
 message HeartbeatRequest {
@@ -2125,6 +2139,16 @@ message TreasureFilter {
   // This only works with MessagePack-encoded BytesVal data.
   // If the BytesVal is GOB-encoded or the path doesn't exist, the filter returns false (no match).
   optional string BytesFieldPath = 15;
+
+  // TreasureKey is used in profile-mode filtering to specify WHICH Treasure
+  // (identified by its key) this filter should be evaluated against.
+  //
+  // In profile mode, each struct field is stored as a separate Treasure where
+  // the key is the field name. This field tells the server which Treasure to
+  // pick from the profile's key-value set before applying the filter.
+  //
+  // Not used in catalog-mode filtering (where each record is a single Treasure).
+  optional string TreasureKey = 19;
 }
 
 // FilterLogic defines how filters within a FilterGroup are combined.
@@ -2177,6 +2201,10 @@ message PhraseFilter {
   string BytesFieldPath = 1;
   repeated string Words = 2;
   bool Negate = 3;
+
+  // TreasureKey is used in profile-mode filtering to specify WHICH Treasure
+  // this phrase filter should be evaluated against. See TreasureFilter.TreasureKey.
+  optional string TreasureKey = 4;
 }
 
 
@@ -2215,6 +2243,12 @@ message GetByIndexStreamRequest {
   // Supports nested AND/OR logic. If nil or empty, all Treasures matching the
   // index criteria are streamed (equivalent to GetByIndex).
   optional FilterGroup Filters = 9;
+
+  // MaxResults limits the number of matching results streamed back.
+  // 0 = unlimited (stream all matches). >0 = stop after N matches.
+  // This is a post-filter limit: the server still evaluates all candidates
+  // but stops streaming after MaxResults matches have been sent.
+  int32 MaxResults = 10;
 }
 
 // GetByIndexStreamResponse contains a single matching Treasure.
@@ -2235,6 +2269,9 @@ message SwampQuery {
   optional google.protobuf.Timestamp FromTime = 7;
   optional google.protobuf.Timestamp ToTime = 8;
   optional FilterGroup Filters = 9;
+
+  // MaxResults limits per-swamp matching results. 0 = unlimited.
+  int32 MaxResults = 10;
 }
 
 // GetByIndexStreamFromManyRequest allows reading from multiple swamps in a single streaming operation.
@@ -2243,6 +2280,11 @@ message GetByIndexStreamFromManyRequest {
   // Queries is a list of per-swamp query definitions.
   // Each swamp can have independent index, ordering, and filter parameters.
   repeated SwampQuery Queries = 1;
+
+  // MaxResults is a global limit across all swamps combined.
+  // 0 = unlimited. >0 = stop streaming after N total matches across all swamps.
+  // This is independent of per-swamp MaxResults in each SwampQuery.
+  int32 MaxResults = 2;
 }
 
 // GetByIndexStreamFromManyResponse contains a single matching Treasure
@@ -2253,6 +2295,55 @@ message GetByIndexStreamFromManyResponse {
 
   // A single matching Treasure from that swamp.
   Treasure Treasure = 2;
+}
+
+
+// --- PROFILE STREAMING WITH FILTERS ---
+
+// ProfileSwampQuery defines a single profile swamp query with its keys and filters.
+//
+// Each profile is stored as multiple Treasures in a single swamp, where each Treasure's
+// key corresponds to a struct field name. The Keys list specifies which fields to fetch,
+// and the optional Filters use TreasureKey-based targeting to evaluate conditions
+// against specific profile fields.
+message ProfileSwampQuery {
+  // IslandID is the deterministic storage zone where this Swamp lives.
+  uint64 IslandID = 1;
+
+  // SwampName is the name of the profile swamp to query.
+  string SwampName = 2;
+
+  // Keys is the list of profile field keys to retrieve (derived from struct tags).
+  repeated string Keys = 3;
+
+  // Optional filter group with TreasureKey-targeted filters.
+  // If nil or empty, the profile always matches (no filtering).
+  optional FilterGroup Filters = 4;
+}
+
+// GetStreamRequest allows reading multiple profiles with server-side filtering.
+// Each query targets a different profile swamp, and results are streamed
+// for profiles that pass all filter conditions.
+message GetStreamRequest {
+  // Queries is a list of per-swamp profile query definitions.
+  repeated ProfileSwampQuery Queries = 1;
+
+  // MaxResults is a global limit across all profiles.
+  // 0 = unlimited. >0 = stop streaming after N matching profiles.
+  int32 MaxResults = 2;
+}
+
+// GetStreamResponse contains a matching profile's complete set of Treasures.
+// Sent once per matching profile.
+message GetStreamResponse {
+  // SwampName identifies which profile swamp this result came from.
+  string SwampName = 1;
+
+  // Treasures contains all the profile's field Treasures.
+  repeated Treasure Treasures = 2;
+
+  // IsExist indicates whether the swamp exists. If false, Treasures will be empty.
+  bool IsExist = 3;
 }
 
 

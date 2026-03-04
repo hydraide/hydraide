@@ -101,6 +101,8 @@ type Hydraidego interface {
 	CompactSwamp(ctx context.Context, swampName name.Name) error
 	CatalogReadManyStream(ctx context.Context, swampName name.Name, index *Index, filters *FilterGroup, model any, iterator CatalogReadManyIteratorFunc) error
 	CatalogReadManyFromMany(ctx context.Context, request []*CatalogReadManyFromManyRequest, model any, iterator CatalogReadManyFromManyIteratorFunc) error
+	ProfileReadWithFilter(ctx context.Context, swampName name.Name, filters *FilterGroup, model any) (bool, error)
+	ProfileReadBatchWithFilter(ctx context.Context, swampNames []name.Name, filters *FilterGroup, model any, maxResults int32, iterator ProfileReadBatchWithFilterIteratorFunc) error
 }
 
 // Index defines the configuration for index-based queries in HydrAIDE.
@@ -139,12 +141,13 @@ type Hydraidego interface {
 //	    ToTime:     time.Date(2024, 6, 30, 23, 59, 59, 0, time.UTC),
 //	}
 type Index struct {
-	IndexType             // What field to use for sorting/filtering
-	IndexOrder            // Ascending or Descending order
-	From       int32      // Offset: how many records to skip (0 = start from first)
-	Limit      int32      // Max results to return (0 = return all)
-	FromTime   *time.Time // Inclusive lower bound for time-based filtering - optional. It can be nil
-	ToTime     *time.Time // Exclusive upper bound for time-based filtering - optional. It can be nil
+	IndexType              // What field to use for sorting/filtering
+	IndexOrder             // Ascending or Descending order
+	From       int32       // Offset: how many records to skip (0 = start from first)
+	Limit      int32       // Max results to return (0 = return all) — pre-filter engine limit
+	FromTime   *time.Time  // Inclusive lower bound for time-based filtering - optional. It can be nil
+	ToTime     *time.Time  // Exclusive upper bound for time-based filtering - optional. It can be nil
+	MaxResults int32       // Post-filter limit: stop streaming after N matches (0 = unlimited)
 }
 
 // IndexType specifies which field to use as the index during a read.
@@ -347,6 +350,19 @@ type Filter struct {
 	bytesFieldPath *string
 	timeVal        *time.Time
 	timeField      *TimeField
+	treasureKey    *string // Profile mode: which Treasure key this filter targets
+}
+
+// ForKey sets the TreasureKey for profile-mode filtering.
+// In profile mode, each struct field is stored as a separate Treasure keyed by field name.
+// This method specifies which Treasure the filter should evaluate against.
+//
+// Example:
+//
+//	hydraidego.FilterInt32(hydraidego.GreaterThan, 25).ForKey("Age")
+func (f *Filter) ForKey(key string) *Filter {
+	f.treasureKey = &key
+	return f
 }
 
 // --- Filter constructors for primitive Treasure value types ---
@@ -510,6 +526,18 @@ type PhraseFilter struct {
 	bytesFieldPath string
 	words          []string
 	negate         bool
+	treasureKey    *string // Profile mode: which Treasure key this filter targets
+}
+
+// ForKey sets the TreasureKey for profile-mode phrase filtering.
+// See Filter.ForKey for details.
+//
+// Example:
+//
+//	hydraidego.FilterPhrase("WordIndex", "hello", "world").ForKey("Content")
+func (pf *PhraseFilter) ForKey(key string) *PhraseFilter {
+	pf.treasureKey = &key
+	return pf
 }
 
 // isFilterItem marks PhraseFilter as a valid FilterItem.
@@ -3491,6 +3519,185 @@ func (h *hydraidego) ProfileReadBatch(ctx context.Context, swampNames []name.Nam
 	return nil
 }
 
+// ProfileReadBatchWithFilterIteratorFunc is called for each profile that passes the filter conditions
+// during a multi-profile filtered read.
+type ProfileReadBatchWithFilterIteratorFunc func(swampName name.Name, model any, err error) error
+
+// ProfileReadWithFilter reads a single profile from a Swamp and applies server-side filters.
+// Returns (true, nil) if the profile matches the filter conditions and was populated into the model.
+// Returns (false, nil) if the profile does not match (model is not populated).
+// Returns (false, error) on communication or validation errors.
+//
+// The filters should use ForKey() to target specific profile fields:
+//
+//	filters := hydraidego.FilterAND(
+//	    hydraidego.FilterInt32(hydraidego.GreaterThan, 18).ForKey("Age"),
+//	    hydraidego.FilterString(hydraidego.Equal, "active").ForKey("Status"),
+//	)
+//	matched, err := h.ProfileReadWithFilter(ctx, swampName, filters, &user)
+func (h *hydraidego) ProfileReadWithFilter(ctx context.Context, swampName name.Name, filters *FilterGroup, model any) (bool, error) {
+
+	// Extract the expected keys from the model using reflection and struct tags
+	keys, err := getKeyFromProfileModel(model)
+	if err != nil {
+		return false, NewError(ErrCodeInvalidModel, err.Error())
+	}
+
+	// Build the GetStream request with a single profile query
+	query := &hydraidepbgo.ProfileSwampQuery{
+		IslandID:  swampName.GetIslandID(h.client.GetAllIslands()),
+		SwampName: swampName.Get(),
+		Keys:      keys,
+		Filters:   convertFilterGroupToProto(filters),
+	}
+
+	stream, err := h.client.GetServiceClient(swampName).GetStream(ctx, &hydraidepbgo.GetStreamRequest{
+		Queries:    []*hydraidepbgo.ProfileSwampQuery{query},
+		MaxResults: 1,
+	})
+	if err != nil {
+		return false, errorHandler(err)
+	}
+
+	// Try to receive one matching profile
+	response, recvErr := stream.Recv()
+	if recvErr != nil {
+		if recvErr == io.EOF {
+			return false, nil // no match
+		}
+		return false, errorHandler(recvErr)
+	}
+
+	if !response.GetIsExist() {
+		return false, NewError(ErrCodeSwampNotFound, fmt.Sprintf("%s: %s", errorMessageSwampNotFound, swampName.Get()))
+	}
+
+	// Populate the model from the received treasures
+	for _, treasure := range response.GetTreasures() {
+		if !treasure.IsExist {
+			continue
+		}
+		if setErr := setTreasureValueToProfileModel(model, treasure); setErr != nil {
+			continue
+		}
+	}
+
+	return true, nil
+}
+
+// ProfileReadBatchWithFilter reads multiple profiles from multiple Swamps with server-side filtering.
+// Only profiles that pass the filter conditions are streamed back and passed to the iterator.
+//
+// The filters are shared across all swamp queries and should use ForKey() to target specific profile fields.
+// maxResults limits the total number of matching profiles (0 = unlimited).
+//
+// Results are streamed per-profile. The iterator receives:
+//   - swampName: which profile swamp matched
+//   - model: populated profile model (type-assert to your struct pointer)
+//   - err: error if the swamp doesn't exist
+//
+// Return nil from the iterator to continue, or an error to abort.
+func (h *hydraidego) ProfileReadBatchWithFilter(ctx context.Context, swampNames []name.Name, filters *FilterGroup, model any, maxResults int32, iterator ProfileReadBatchWithFilterIteratorFunc) error {
+
+	if iterator == nil {
+		return NewError(ErrCodeInvalidArgument, "iterator must not be nil")
+	}
+	if len(swampNames) == 0 {
+		return NewError(ErrCodeInvalidArgument, "swampNames must not be empty")
+	}
+
+	// Validate that model is a pointer to a struct
+	v := reflect.ValueOf(model)
+	if v.Kind() != reflect.Ptr || v.Elem().Kind() != reflect.Struct {
+		return NewError(ErrCodeInvalidModel, "model must be a pointer to a struct")
+	}
+
+	// Extract the expected keys from the model using reflection and struct tags
+	keys, err := getKeyFromProfileModel(model)
+	if err != nil {
+		return NewError(ErrCodeInvalidModel, err.Error())
+	}
+
+	protoFilters := convertFilterGroupToProto(filters)
+
+	// Group queries by server
+	type serverGroup struct {
+		client  hydraidepbgo.HydraideServiceClient
+		queries []*hydraidepbgo.ProfileSwampQuery
+	}
+
+	serverGroups := make(map[string]*serverGroup)
+
+	for _, sn := range swampNames {
+		clientAndHost := h.client.GetServiceClientAndHost(sn)
+
+		if _, ok := serverGroups[clientAndHost.Host]; !ok {
+			serverGroups[clientAndHost.Host] = &serverGroup{
+				client: clientAndHost.GrpcClient,
+			}
+		}
+
+		serverGroups[clientAndHost.Host].queries = append(serverGroups[clientAndHost.Host].queries, &hydraidepbgo.ProfileSwampQuery{
+			IslandID:  sn.GetIslandID(h.client.GetAllIslands()),
+			SwampName: sn.Get(),
+			Keys:      keys,
+			Filters:   protoFilters,
+		})
+	}
+
+	// Execute streaming requests per server
+	for _, sg := range serverGroups {
+
+		stream, err := sg.client.GetStream(ctx, &hydraidepbgo.GetStreamRequest{
+			Queries:    sg.queries,
+			MaxResults: maxResults,
+		})
+		if err != nil {
+			return errorHandler(err)
+		}
+
+		for {
+			response, recvErr := stream.Recv()
+			if recvErr != nil {
+				if recvErr == io.EOF {
+					break // this server's stream is done
+				}
+				return errorHandler(recvErr)
+			}
+
+			sn := name.Load(response.GetSwampName())
+
+			if !response.GetIsExist() {
+				iterErr := iterator(sn, nil, NewError(ErrCodeSwampNotFound, fmt.Sprintf("%s: %s", errorMessageSwampNotFound, sn.Get())))
+				if iterErr != nil {
+					return iterErr
+				}
+				continue
+			}
+
+			// Create a new instance of the model for this profile
+			modelType := reflect.TypeOf(model).Elem()
+			newModel := reflect.New(modelType).Interface()
+
+			for _, treasure := range response.GetTreasures() {
+				if !treasure.IsExist {
+					continue
+				}
+				if setErr := setTreasureValueToProfileModel(newModel, treasure); setErr != nil {
+					continue
+				}
+			}
+
+			iterErr := iterator(sn, newModel, nil)
+			if iterErr != nil {
+				return iterErr
+			}
+		}
+	}
+
+	return nil
+}
+
 // Count returns the number of Treasures stored in a given Swamp.
 //
 // This function queries the Hydra cluster and asks for the element count (Treasure count)
@@ -3661,6 +3868,10 @@ func convertFilterToProto(f *Filter) *hydraidepbgo.TreasureFilter {
 		}
 	}
 
+	if f.treasureKey != nil {
+		pf.TreasureKey = f.treasureKey
+	}
+
 	return pf
 }
 
@@ -3693,11 +3904,15 @@ func convertFilterGroupToProto(group *FilterGroup) *hydraidepbgo.FilterGroup {
 
 	for _, pf := range group.phraseFilters {
 		if pf != nil {
-			pg.PhraseFilters = append(pg.PhraseFilters, &hydraidepbgo.PhraseFilter{
+			protoPF := &hydraidepbgo.PhraseFilter{
 				BytesFieldPath: pf.bytesFieldPath,
 				Words:          pf.words,
 				Negate:         pf.negate,
-			})
+			}
+			if pf.treasureKey != nil {
+				protoPF.TreasureKey = pf.treasureKey
+			}
+			pg.PhraseFilters = append(pg.PhraseFilters, protoPF)
 		}
 	}
 
@@ -3724,13 +3939,14 @@ func (h *hydraidego) CatalogReadManyStream(ctx context.Context, swampName name.N
 	}
 
 	request := &hydraidepbgo.GetByIndexStreamRequest{
-		IslandID:  swampName.GetIslandID(h.client.GetAllIslands()),
-		SwampName: swampName.Get(),
-		IndexType: convertIndexTypeToProtoIndexType(index.IndexType),
-		OrderType: convertOrderTypeToProtoOrderType(index.IndexOrder),
-		From:      index.From,
-		Limit:     index.Limit,
-		Filters:   convertFilterGroupToProto(filters),
+		IslandID:   swampName.GetIslandID(h.client.GetAllIslands()),
+		SwampName:  swampName.Get(),
+		IndexType:  convertIndexTypeToProtoIndexType(index.IndexType),
+		OrderType:  convertOrderTypeToProtoOrderType(index.IndexOrder),
+		From:       index.From,
+		Limit:      index.Limit,
+		Filters:    convertFilterGroupToProto(filters),
+		MaxResults: index.MaxResults,
 	}
 
 	if index.FromTime != nil && !index.FromTime.IsZero() {
@@ -3807,13 +4023,14 @@ func (h *hydraidego) CatalogReadManyFromMany(ctx context.Context, request []*Cat
 		}
 
 		query := &hydraidepbgo.SwampQuery{
-			IslandID:  req.SwampName.GetIslandID(h.client.GetAllIslands()),
-			SwampName: req.SwampName.Get(),
-			IndexType: convertIndexTypeToProtoIndexType(req.Index.IndexType),
-			OrderType: convertOrderTypeToProtoOrderType(req.Index.IndexOrder),
-			From:      req.Index.From,
-			Limit:     req.Index.Limit,
-			Filters:   convertFilterGroupToProto(req.Filters),
+			IslandID:   req.SwampName.GetIslandID(h.client.GetAllIslands()),
+			SwampName:  req.SwampName.Get(),
+			IndexType:  convertIndexTypeToProtoIndexType(req.Index.IndexType),
+			OrderType:  convertOrderTypeToProtoOrderType(req.Index.IndexOrder),
+			From:       req.Index.From,
+			Limit:      req.Index.Limit,
+			Filters:    convertFilterGroupToProto(req.Filters),
+			MaxResults: req.Index.MaxResults,
 		}
 
 		if req.Index.FromTime != nil && !req.Index.FromTime.IsZero() {

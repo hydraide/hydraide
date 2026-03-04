@@ -66,6 +66,8 @@ HydrAIDE now supports **server-side query filters** with **nested AND/OR logic**
 | **Timestamp Filters** | Filter on CreatedAt, UpdatedAt, ExpiredAt — find recent, expired, or never-updated Treasures |
 | **Map Key Existence** | HasKey / HasNotKey — check if a key exists in a map field inside BytesVal |
 | **Phrase Search** | FilterPhrase / FilterNotPhrase — find consecutive words in a word-index map for full-text search |
+| **Profile Filtering** | Apply server-side filters to profile reads — ForKey() targets specific Treasure fields, with single and batch streaming support |
+| **MaxResults** | Post-filter limit for streaming — stop after N matches for both catalog and profile streaming |
 | **MessagePack Encoding** | Optional cross-language encoding for complex types, enabling server-side field-level inspection within struct values |
 | **CompactSwamp** | Force a full .hyd file rewrite to clean up after encoding migration |
 
@@ -111,6 +113,21 @@ filters := hydraidego.FilterAND(
 filters := hydraidego.FilterAND(
     hydraidego.FilterPhrase("WordIndex", "altalanos", "szerzodesi", "feltetelek"),
 )
+
+// Profile filtering: only load profiles where Age > 18 AND Status == "active"
+filters := hydraidego.FilterAND(
+    hydraidego.FilterInt32(hydraidego.GreaterThan, 18).ForKey("Age"),
+    hydraidego.FilterString(hydraidego.Equal, "active").ForKey("Status"),
+)
+matched, err := h.ProfileReadWithFilter(ctx, swampName, filters, &user)
+
+// Multi-profile streaming with MaxResults: scan 100 profiles, return first 10 matches
+h.ProfileReadBatchWithFilter(ctx, swampNames, filters, &UserProfile{}, 10,
+    func(sn name.Name, m any, err error) error { /* ... */ })
+
+// MaxResults for catalog streaming: stop after 10 matches
+index := &hydraidego.Index{IndexType: hydraidego.IndexCreationTime, MaxResults: 10}
+h.CatalogReadManyStream(ctx, swamp, index, filters, Product{}, iterator)
 ```
 
 > 100% backward compatible — existing APIs work unchanged. Filters are optional. Default encoding remains GOB.

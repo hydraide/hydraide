@@ -975,6 +975,125 @@ filters := hydraidego.FilterOR(
 
 ---
 
+##### Profile Filtering (ForKey / ProfileReadWithFilter)
+
+HydrAIDE's filter system extends to **profile reads**. In profile mode, each struct field is stored as a separate Treasure keyed by field name. Filters use the `ForKey()` method to target specific fields:
+
+```go
+type UserProfile struct {
+    Name   string `hydraide:"Name"`
+    Age    int32  `hydraide:"Age"`
+    Status string `hydraide:"Status"`
+}
+
+// Build filters targeting specific profile fields
+filters := hydraidego.FilterAND(
+    hydraidego.FilterInt32(hydraidego.GreaterThan, 18).ForKey("Age"),
+    hydraidego.FilterString(hydraidego.Equal, "active").ForKey("Status"),
+)
+
+// Read a single profile — returns (true, nil) if it matches
+user := &UserProfile{}
+matched, err := h.ProfileReadWithFilter(ctx, swampName, filters, user)
+if err != nil {
+    log.Fatal(err)
+}
+if matched {
+    fmt.Printf("User: %s, Age: %d\n", user.Name, user.Age)
+}
+```
+
+`ForKey()` works with all filter types:
+
+```go
+// Primitive filters
+hydraidego.FilterInt32(hydraidego.GreaterThan, 25).ForKey("Age")
+hydraidego.FilterString(hydraidego.Contains, "admin").ForKey("Role")
+
+// Timestamp filters
+hydraidego.FilterCreatedAt(hydraidego.GreaterThan, cutoff).ForKey("LastLogin")
+
+// BytesField filters (for complex types stored as MessagePack)
+hydraidego.FilterBytesFieldString(hydraidego.HasKey, "Settings", "email").ForKey("Metadata")
+
+// Phrase filters
+hydraidego.FilterPhrase("WordIndex", "hello", "world").ForKey("Content")
+```
+
+---
+
+##### Multi-Profile Streaming (ProfileReadBatchWithFilter)
+
+Read from **multiple profile swamps** with shared filters, streaming matching profiles back:
+
+```go
+swampNames := []name.Name{
+    name.New().Sanctuary("users").Realm("profiles").Swamp("alice"),
+    name.New().Sanctuary("users").Realm("profiles").Swamp("bob"),
+    name.New().Sanctuary("users").Realm("profiles").Swamp("charlie"),
+    // ... hundreds more
+}
+
+filters := hydraidego.FilterAND(
+    hydraidego.FilterInt32(hydraidego.GreaterThan, 18).ForKey("Age"),
+    hydraidego.FilterString(hydraidego.Equal, "active").ForKey("Status"),
+)
+
+var results []*UserProfile
+err := h.ProfileReadBatchWithFilter(ctx, swampNames, filters, &UserProfile{}, 0,
+    func(swampName name.Name, model any, err error) error {
+        if err != nil {
+            return nil // skip errors, continue
+        }
+        user := model.(*UserProfile)
+        results = append(results, user)
+        return nil
+    })
+```
+
+The `maxResults` parameter (4th argument, `0` = unlimited) limits the total number of matching profiles streamed back. The stream stops after `maxResults` matches.
+
+Profiles are grouped by server automatically for efficient network usage (same pattern as `CatalogReadManyFromMany`).
+
+---
+
+##### MaxResults — Post-Filter Limit for Streaming
+
+All streaming reads support `MaxResults` — a post-filter limit that stops the stream after N matches:
+
+```go
+// Catalog: stop after first 10 matches
+index := &hydraidego.Index{
+    IndexType:  hydraidego.IndexCreationTime,
+    IndexOrder: hydraidego.IndexOrderDesc,
+    MaxResults: 10, // stop streaming after 10 matches
+}
+
+var results []*Product
+err := h.CatalogReadManyStream(ctx, swamp, index, filters, Product{}, func(model any) error {
+    results = append(results, model.(*Product))
+    return nil
+})
+// results will contain at most 10 items
+```
+
+**MaxResults vs Limit:**
+
+| Field | Level | Behavior |
+|-------|-------|----------|
+| `Limit` | Pre-filter | Engine fetches at most N candidates from the index |
+| `MaxResults` | Post-filter | Stream stops after N candidates pass the filters |
+
+Use `Limit` to bound the search space, and `MaxResults` to bound the result set.
+
+For `CatalogReadManyFromMany`, `MaxResults` works per-swamp (each swamp's query has its own limit via `Index.MaxResults`).
+
+For `ProfileReadBatchWithFilter`, `maxResults` is a global limit across all profiles.
+
+> Full example: [profile_advanced_filters.go](examples/models/profile_advanced_filters.go)
+
+---
+
 #### 🔎 Batch key-based shift — CatalogShiftBatch
 
 CatalogShiftBatch is designed for scenarios where you need to **retrieve and delete** multiple Treasures by their keys in a single atomic operation. This is particularly useful for job queue processing, message consumption, shopping cart checkout, and other consume-and-remove workflows.

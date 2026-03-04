@@ -59,6 +59,7 @@ const (
 	HydraideService_GetByIndexStream_FullMethodName         = "/hydraidepbgo.HydraideService/GetByIndexStream"
 	HydraideService_GetByIndexStreamFromMany_FullMethodName = "/hydraidepbgo.HydraideService/GetByIndexStreamFromMany"
 	HydraideService_CompactSwamp_FullMethodName             = "/hydraidepbgo.HydraideService/CompactSwamp"
+	HydraideService_GetStream_FullMethodName                = "/hydraidepbgo.HydraideService/GetStream"
 )
 
 // HydraideServiceClient is the client API for HydraideService service.
@@ -469,6 +470,19 @@ type HydraideServiceClient interface {
 	// This RPC allows explicit triggering, useful after encoding migration
 	// (GOB → MessagePack) to clean up old entries immediately.
 	CompactSwamp(ctx context.Context, in *CompactSwampRequest, opts ...grpc.CallOption) (*CompactSwampResponse, error)
+	// GetStream reads profiles from multiple swamps with server-side filtering,
+	// streaming each matching profile as a complete set of Treasures.
+	//
+	// This is the profile-mode counterpart to GetByIndexStream/GetByIndexStreamFromMany.
+	// Unlike catalog streaming (which uses indexes), profile streaming fetches all
+	// requested keys from each swamp, applies filters using TreasureKey-based targeting,
+	// and streams only profiles that pass all filter conditions.
+	//
+	// Use this for:
+	// - Filtering profiles by field values before loading
+	// - Scanning multiple profiles with shared filter criteria
+	// - Phrase search across profile fields
+	GetStream(ctx context.Context, in *GetStreamRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[GetStreamResponse], error)
 }
 
 type hydraideServiceClient struct {
@@ -924,6 +938,25 @@ func (c *hydraideServiceClient) CompactSwamp(ctx context.Context, in *CompactSwa
 	return out, nil
 }
 
+func (c *hydraideServiceClient) GetStream(ctx context.Context, in *GetStreamRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[GetStreamResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &HydraideService_ServiceDesc.Streams[5], HydraideService_GetStream_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[GetStreamRequest, GetStreamResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type HydraideService_GetStreamClient = grpc.ServerStreamingClient[GetStreamResponse]
+
 // HydraideServiceServer is the server API for HydraideService service.
 // All implementations must embed UnimplementedHydraideServiceServer
 // for forward compatibility.
@@ -1332,6 +1365,19 @@ type HydraideServiceServer interface {
 	// This RPC allows explicit triggering, useful after encoding migration
 	// (GOB → MessagePack) to clean up old entries immediately.
 	CompactSwamp(context.Context, *CompactSwampRequest) (*CompactSwampResponse, error)
+	// GetStream reads profiles from multiple swamps with server-side filtering,
+	// streaming each matching profile as a complete set of Treasures.
+	//
+	// This is the profile-mode counterpart to GetByIndexStream/GetByIndexStreamFromMany.
+	// Unlike catalog streaming (which uses indexes), profile streaming fetches all
+	// requested keys from each swamp, applies filters using TreasureKey-based targeting,
+	// and streams only profiles that pass all filter conditions.
+	//
+	// Use this for:
+	// - Filtering profiles by field values before loading
+	// - Scanning multiple profiles with shared filter criteria
+	// - Phrase search across profile fields
+	GetStream(*GetStreamRequest, grpc.ServerStreamingServer[GetStreamResponse]) error
 	mustEmbedUnimplementedHydraideServiceServer()
 }
 
@@ -1461,6 +1507,9 @@ func (UnimplementedHydraideServiceServer) GetByIndexStreamFromMany(*GetByIndexSt
 }
 func (UnimplementedHydraideServiceServer) CompactSwamp(context.Context, *CompactSwampRequest) (*CompactSwampResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CompactSwamp not implemented")
+}
+func (UnimplementedHydraideServiceServer) GetStream(*GetStreamRequest, grpc.ServerStreamingServer[GetStreamResponse]) error {
+	return status.Errorf(codes.Unimplemented, "method GetStream not implemented")
 }
 func (UnimplementedHydraideServiceServer) mustEmbedUnimplementedHydraideServiceServer() {}
 func (UnimplementedHydraideServiceServer) testEmbeddedByValue()                         {}
@@ -2168,6 +2217,17 @@ func _HydraideService_CompactSwamp_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _HydraideService_GetStream_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(GetStreamRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(HydraideServiceServer).GetStream(m, &grpc.GenericServerStream[GetStreamRequest, GetStreamResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type HydraideService_GetStreamServer = grpc.ServerStreamingServer[GetStreamResponse]
+
 // HydraideService_ServiceDesc is the grpc.ServiceDesc for HydraideService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -2340,6 +2400,11 @@ var HydraideService_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "GetByIndexStreamFromMany",
 			Handler:       _HydraideService_GetByIndexStreamFromMany_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "GetStream",
+			Handler:       _HydraideService_GetStream_Handler,
 			ServerStreams: true,
 		},
 	},
