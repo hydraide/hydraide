@@ -483,21 +483,7 @@ func (g Gateway) GetByIndex(ctx context.Context, in *hydrapb.GetByIndexRequest) 
 	swampInterface.BeginVigil()
 	defer swampInterface.CeaseVigil()
 
-	// convert timestamppb.Timestamp to time.Time
-	fromTime := &time.Time{}
-	toTime := &time.Time{}
-	if in.GetFromTime() != nil {
-		t := in.GetFromTime().AsTime()
-		fromTime = &t
-	} else {
-		fromTime = nil
-	}
-	if in.GetToTime() != nil {
-		t := in.GetToTime().AsTime()
-		toTime = &t
-	} else {
-		toTime = nil
-	}
+	fromTime, toTime := parseOptionalTimestamps(in.GetFromTime(), in.GetToTime())
 
 	treasures, err := swampInterface.GetTreasuresByBeacon(inputIndexTypeToBeaconType(in.GetIndexType()),
 		inputOrderTypeToBeaconOrderType(in.GetOrderType()), in.GetFrom(), in.GetLimit(), fromTime, toTime)
@@ -609,15 +595,7 @@ func (g Gateway) GetByIndexStream(in *hydrapb.GetByIndexStreamRequest, stream hy
 	swampInterface.BeginVigil()
 	defer swampInterface.CeaseVigil()
 
-	var fromTime, toTime *time.Time
-	if in.GetFromTime() != nil {
-		t := in.GetFromTime().AsTime()
-		fromTime = &t
-	}
-	if in.GetToTime() != nil {
-		t := in.GetToTime().AsTime()
-		toTime = &t
-	}
+	fromTime, toTime := parseOptionalTimestamps(in.GetFromTime(), in.GetToTime())
 
 	treasures, err := swampInterface.GetTreasuresByBeacon(
 		inputIndexTypeToBeaconType(in.GetIndexType()),
@@ -688,15 +666,7 @@ func (g Gateway) GetByIndexStreamFromMany(in *hydrapb.GetByIndexStreamFromManyRe
 
 		swampInterface.BeginVigil()
 
-		var fromTime, toTime *time.Time
-		if query.GetFromTime() != nil {
-			t := query.GetFromTime().AsTime()
-			fromTime = &t
-		}
-		if query.GetToTime() != nil {
-			t := query.GetToTime().AsTime()
-			toTime = &t
-		}
+		fromTime, toTime := parseOptionalTimestamps(query.GetFromTime(), query.GetToTime())
 
 		treasures, err := swampInterface.GetTreasuresByBeacon(
 			inputIndexTypeToBeaconType(query.GetIndexType()),
@@ -2530,6 +2500,20 @@ func convertTreasureStatusToPbStatus(treasureStatus treasure.TreasureStatus) hyd
 }
 
 // handle all the panics in the gateway
+// parseOptionalTimestamps converts optional protobuf Timestamps to Go *time.Time pointers.
+// Returns nil for each timestamp that is nil in the input.
+func parseOptionalTimestamps(from, to *timestamppb.Timestamp) (fromTime, toTime *time.Time) {
+	if from != nil {
+		t := from.AsTime()
+		fromTime = &t
+	}
+	if to != nil {
+		t := to.AsTime()
+		toTime = &t
+	}
+	return
+}
+
 func handlePanic() {
 	if r := recover(); r != nil {
 		// get the stack trace

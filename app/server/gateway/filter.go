@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"cmp"
 	"sort"
 	"strings"
 
@@ -30,7 +31,14 @@ func unwrapMsgpack(data []byte) []byte {
 //   - OR: at least ONE leaf filter OR ONE sub-group must evaluate to true
 //
 // Returns true if the group is nil or empty (no filtering applied).
-func evaluateFilterGroup(treasure *hydrapb.Treasure, group *hydrapb.FilterGroup) bool {
+// evaluateFilterGroupWith is the generic AND/OR evaluator for filter groups.
+// The three callbacks determine how individual filters, sub-groups, and phrase filters are evaluated.
+func evaluateFilterGroupWith(
+	group *hydrapb.FilterGroup,
+	evalFilter func(*hydrapb.TreasureFilter) bool,
+	evalSubGroup func(*hydrapb.FilterGroup) bool,
+	evalPhrase func(*hydrapb.PhraseFilter) bool,
+) bool {
 	if group == nil {
 		return true
 	}
@@ -45,42 +53,49 @@ func evaluateFilterGroup(treasure *hydrapb.Treasure, group *hydrapb.FilterGroup)
 	}
 
 	if group.Logic == hydrapb.FilterLogic_OR {
-		// OR: at least one leaf filter, sub-group, or phrase filter must be true
 		for _, f := range group.Filters {
-			if evaluateSingleFilter(treasure, f) {
+			if evalFilter(f) {
 				return true
 			}
 		}
 		for _, sg := range group.SubGroups {
-			if evaluateFilterGroup(treasure, sg) {
+			if evalSubGroup(sg) {
 				return true
 			}
 		}
 		for _, pf := range group.PhraseFilters {
-			if evaluatePhraseFilter(treasure, pf) {
+			if evalPhrase(pf) {
 				return true
 			}
 		}
 		return false
 	}
 
-	// AND (default): all leaf filters, sub-groups, and phrase filters must be true
+	// AND (default)
 	for _, f := range group.Filters {
-		if !evaluateSingleFilter(treasure, f) {
+		if !evalFilter(f) {
 			return false
 		}
 	}
 	for _, sg := range group.SubGroups {
-		if !evaluateFilterGroup(treasure, sg) {
+		if !evalSubGroup(sg) {
 			return false
 		}
 	}
 	for _, pf := range group.PhraseFilters {
-		if !evaluatePhraseFilter(treasure, pf) {
+		if !evalPhrase(pf) {
 			return false
 		}
 	}
 	return true
+}
+
+func evaluateFilterGroup(treasure *hydrapb.Treasure, group *hydrapb.FilterGroup) bool {
+	return evaluateFilterGroupWith(group,
+		func(f *hydrapb.TreasureFilter) bool { return evaluateSingleFilter(treasure, f) },
+		func(sg *hydrapb.FilterGroup) bool { return evaluateFilterGroup(treasure, sg) },
+		func(pf *hydrapb.PhraseFilter) bool { return evaluatePhraseFilter(treasure, pf) },
+	)
 }
 
 // evaluateSingleFilter evaluates one TreasureFilter against a Treasure.
@@ -143,61 +158,61 @@ func evaluateSingleFilter(treasure *hydrapb.Treasure, filter *hydrapb.TreasureFi
 		if treasure.Int8Val == nil {
 			return false
 		}
-		return compareInt32(*treasure.Int8Val, op, cv.Int8Val)
+		return compareOrdered(*treasure.Int8Val, op, cv.Int8Val)
 
 	case *hydrapb.TreasureFilter_Int16Val:
 		if treasure.Int16Val == nil {
 			return false
 		}
-		return compareInt32(*treasure.Int16Val, op, cv.Int16Val)
+		return compareOrdered(*treasure.Int16Val, op, cv.Int16Val)
 
 	case *hydrapb.TreasureFilter_Int32Val:
 		if treasure.Int32Val == nil {
 			return false
 		}
-		return compareInt32(*treasure.Int32Val, op, cv.Int32Val)
+		return compareOrdered(*treasure.Int32Val, op, cv.Int32Val)
 
 	case *hydrapb.TreasureFilter_Int64Val:
 		if treasure.Int64Val == nil {
 			return false
 		}
-		return compareInt64(*treasure.Int64Val, op, cv.Int64Val)
+		return compareOrdered(*treasure.Int64Val, op, cv.Int64Val)
 
 	case *hydrapb.TreasureFilter_Uint8Val:
 		if treasure.Uint8Val == nil {
 			return false
 		}
-		return compareUint32(*treasure.Uint8Val, op, cv.Uint8Val)
+		return compareOrdered(*treasure.Uint8Val, op, cv.Uint8Val)
 
 	case *hydrapb.TreasureFilter_Uint16Val:
 		if treasure.Uint16Val == nil {
 			return false
 		}
-		return compareUint32(*treasure.Uint16Val, op, cv.Uint16Val)
+		return compareOrdered(*treasure.Uint16Val, op, cv.Uint16Val)
 
 	case *hydrapb.TreasureFilter_Uint32Val:
 		if treasure.Uint32Val == nil {
 			return false
 		}
-		return compareUint32(*treasure.Uint32Val, op, cv.Uint32Val)
+		return compareOrdered(*treasure.Uint32Val, op, cv.Uint32Val)
 
 	case *hydrapb.TreasureFilter_Uint64Val:
 		if treasure.Uint64Val == nil {
 			return false
 		}
-		return compareUint64(*treasure.Uint64Val, op, cv.Uint64Val)
+		return compareOrdered(*treasure.Uint64Val, op, cv.Uint64Val)
 
 	case *hydrapb.TreasureFilter_Float32Val:
 		if treasure.Float32Val == nil {
 			return false
 		}
-		return compareFloat32(*treasure.Float32Val, op, cv.Float32Val)
+		return compareOrdered(*treasure.Float32Val, op, cv.Float32Val)
 
 	case *hydrapb.TreasureFilter_Float64Val:
 		if treasure.Float64Val == nil {
 			return false
 		}
-		return compareFloat64(*treasure.Float64Val, op, cv.Float64Val)
+		return compareOrdered(*treasure.Float64Val, op, cv.Float64Val)
 
 	case *hydrapb.TreasureFilter_StringVal:
 		if treasure.StringVal == nil {
@@ -284,43 +299,43 @@ func evaluateBytesFieldFilter(treasure *hydrapb.Treasure, filter *hydrapb.Treasu
 	switch cv := filter.GetCompareValue().(type) {
 	case *hydrapb.TreasureFilter_Int8Val:
 		if v, ok := toInt64(fieldVal); ok {
-			return compareInt64(v, op, int64(cv.Int8Val))
+			return compareOrdered(v, op, int64(cv.Int8Val))
 		}
 	case *hydrapb.TreasureFilter_Int16Val:
 		if v, ok := toInt64(fieldVal); ok {
-			return compareInt64(v, op, int64(cv.Int16Val))
+			return compareOrdered(v, op, int64(cv.Int16Val))
 		}
 	case *hydrapb.TreasureFilter_Int32Val:
 		if v, ok := toInt64(fieldVal); ok {
-			return compareInt64(v, op, int64(cv.Int32Val))
+			return compareOrdered(v, op, int64(cv.Int32Val))
 		}
 	case *hydrapb.TreasureFilter_Int64Val:
 		if v, ok := toInt64(fieldVal); ok {
-			return compareInt64(v, op, cv.Int64Val)
+			return compareOrdered(v, op, cv.Int64Val)
 		}
 	case *hydrapb.TreasureFilter_Uint8Val:
 		if v, ok := toUint64(fieldVal); ok {
-			return compareUint64(v, op, uint64(cv.Uint8Val))
+			return compareOrdered(v, op, uint64(cv.Uint8Val))
 		}
 	case *hydrapb.TreasureFilter_Uint16Val:
 		if v, ok := toUint64(fieldVal); ok {
-			return compareUint64(v, op, uint64(cv.Uint16Val))
+			return compareOrdered(v, op, uint64(cv.Uint16Val))
 		}
 	case *hydrapb.TreasureFilter_Uint32Val:
 		if v, ok := toUint64(fieldVal); ok {
-			return compareUint64(v, op, uint64(cv.Uint32Val))
+			return compareOrdered(v, op, uint64(cv.Uint32Val))
 		}
 	case *hydrapb.TreasureFilter_Uint64Val:
 		if v, ok := toUint64(fieldVal); ok {
-			return compareUint64(v, op, cv.Uint64Val)
+			return compareOrdered(v, op, cv.Uint64Val)
 		}
 	case *hydrapb.TreasureFilter_Float32Val:
 		if v, ok := toFloat64(fieldVal); ok {
-			return compareFloat64(v, op, float64(cv.Float32Val))
+			return compareOrdered(v, op, float64(cv.Float32Val))
 		}
 	case *hydrapb.TreasureFilter_Float64Val:
 		if v, ok := toFloat64(fieldVal); ok {
-			return compareFloat64(v, op, cv.Float64Val)
+			return compareOrdered(v, op, cv.Float64Val)
 		}
 	case *hydrapb.TreasureFilter_StringVal:
 		if v, ok := fieldVal.(string); ok {
@@ -467,7 +482,10 @@ func toFloat64(v interface{}) (float64, bool) {
 // --- Typed comparison functions ---
 // All use Relational.Operator (EQUAL, NOT_EQUAL, GREATER_THAN, etc.)
 
-func compareInt32(actual int32, op hydrapb.Relational_Operator, ref int32) bool {
+// compareOrdered is a generic comparison function for all ordered types
+// (int32, int64, uint32, uint64, float32, float64, string).
+// It handles EQ, NEQ, GT, GTE, LT, LTE operators.
+func compareOrdered[T cmp.Ordered](actual T, op hydrapb.Relational_Operator, ref T) bool {
 	switch op {
 	case hydrapb.Relational_EQUAL:
 		return actual == ref
@@ -486,115 +504,10 @@ func compareInt32(actual int32, op hydrapb.Relational_Operator, ref int32) bool 
 	}
 }
 
-func compareInt64(actual int64, op hydrapb.Relational_Operator, ref int64) bool {
-	switch op {
-	case hydrapb.Relational_EQUAL:
-		return actual == ref
-	case hydrapb.Relational_NOT_EQUAL:
-		return actual != ref
-	case hydrapb.Relational_GREATER_THAN:
-		return actual > ref
-	case hydrapb.Relational_GREATER_THAN_OR_EQUAL:
-		return actual >= ref
-	case hydrapb.Relational_LESS_THAN:
-		return actual < ref
-	case hydrapb.Relational_LESS_THAN_OR_EQUAL:
-		return actual <= ref
-	default:
-		return false
-	}
-}
-
-func compareUint32(actual uint32, op hydrapb.Relational_Operator, ref uint32) bool {
-	switch op {
-	case hydrapb.Relational_EQUAL:
-		return actual == ref
-	case hydrapb.Relational_NOT_EQUAL:
-		return actual != ref
-	case hydrapb.Relational_GREATER_THAN:
-		return actual > ref
-	case hydrapb.Relational_GREATER_THAN_OR_EQUAL:
-		return actual >= ref
-	case hydrapb.Relational_LESS_THAN:
-		return actual < ref
-	case hydrapb.Relational_LESS_THAN_OR_EQUAL:
-		return actual <= ref
-	default:
-		return false
-	}
-}
-
-func compareUint64(actual uint64, op hydrapb.Relational_Operator, ref uint64) bool {
-	switch op {
-	case hydrapb.Relational_EQUAL:
-		return actual == ref
-	case hydrapb.Relational_NOT_EQUAL:
-		return actual != ref
-	case hydrapb.Relational_GREATER_THAN:
-		return actual > ref
-	case hydrapb.Relational_GREATER_THAN_OR_EQUAL:
-		return actual >= ref
-	case hydrapb.Relational_LESS_THAN:
-		return actual < ref
-	case hydrapb.Relational_LESS_THAN_OR_EQUAL:
-		return actual <= ref
-	default:
-		return false
-	}
-}
-
-func compareFloat32(actual float32, op hydrapb.Relational_Operator, ref float32) bool {
-	switch op {
-	case hydrapb.Relational_EQUAL:
-		return actual == ref
-	case hydrapb.Relational_NOT_EQUAL:
-		return actual != ref
-	case hydrapb.Relational_GREATER_THAN:
-		return actual > ref
-	case hydrapb.Relational_GREATER_THAN_OR_EQUAL:
-		return actual >= ref
-	case hydrapb.Relational_LESS_THAN:
-		return actual < ref
-	case hydrapb.Relational_LESS_THAN_OR_EQUAL:
-		return actual <= ref
-	default:
-		return false
-	}
-}
-
-func compareFloat64(actual float64, op hydrapb.Relational_Operator, ref float64) bool {
-	switch op {
-	case hydrapb.Relational_EQUAL:
-		return actual == ref
-	case hydrapb.Relational_NOT_EQUAL:
-		return actual != ref
-	case hydrapb.Relational_GREATER_THAN:
-		return actual > ref
-	case hydrapb.Relational_GREATER_THAN_OR_EQUAL:
-		return actual >= ref
-	case hydrapb.Relational_LESS_THAN:
-		return actual < ref
-	case hydrapb.Relational_LESS_THAN_OR_EQUAL:
-		return actual <= ref
-	default:
-		return false
-	}
-}
-
+// compareString handles string comparison with additional string-specific operators
+// (Contains, NotContains, StartsWith, EndsWith) on top of the standard ordered comparison.
 func compareString(actual string, op hydrapb.Relational_Operator, ref string) bool {
 	switch op {
-	case hydrapb.Relational_EQUAL:
-		return actual == ref
-	case hydrapb.Relational_NOT_EQUAL:
-		return actual != ref
-	case hydrapb.Relational_GREATER_THAN:
-		return actual > ref
-	case hydrapb.Relational_GREATER_THAN_OR_EQUAL:
-		return actual >= ref
-	case hydrapb.Relational_LESS_THAN:
-		return actual < ref
-	case hydrapb.Relational_LESS_THAN_OR_EQUAL:
-		return actual <= ref
 	case hydrapb.Relational_CONTAINS:
 		return strings.Contains(actual, ref)
 	case hydrapb.Relational_NOT_CONTAINS:
@@ -604,7 +517,7 @@ func compareString(actual string, op hydrapb.Relational_Operator, ref string) bo
 	case hydrapb.Relational_ENDS_WITH:
 		return strings.HasSuffix(actual, ref)
 	default:
-		return false
+		return compareOrdered(actual, op, ref)
 	}
 }
 
@@ -637,24 +550,7 @@ func compareTimestamp(actual *timestamppb.Timestamp, op hydrapb.Relational_Opera
 	if actual == nil || ref == nil {
 		return false
 	}
-	at := actual.AsTime().UnixNano()
-	rt := ref.AsTime().UnixNano()
-	switch op {
-	case hydrapb.Relational_EQUAL:
-		return at == rt
-	case hydrapb.Relational_NOT_EQUAL:
-		return at != rt
-	case hydrapb.Relational_GREATER_THAN:
-		return at > rt
-	case hydrapb.Relational_GREATER_THAN_OR_EQUAL:
-		return at >= rt
-	case hydrapb.Relational_LESS_THAN:
-		return at < rt
-	case hydrapb.Relational_LESS_THAN_OR_EQUAL:
-		return at <= rt
-	default:
-		return false
-	}
+	return compareOrdered(actual.AsTime().UnixNano(), op, ref.AsTime().UnixNano())
 }
 
 // evaluatePhraseFilter checks if the specified words appear at consecutive positions
@@ -771,55 +667,11 @@ func sortedContains(sorted []int64, target int64) bool {
 //
 // Returns true if the group is nil or empty (no filtering applied).
 func evaluateProfileFilterGroup(treasures map[string]*hydrapb.Treasure, group *hydrapb.FilterGroup) bool {
-	if group == nil {
-		return true
-	}
-
-	hasFilters := len(group.Filters) > 0
-	hasSubGroups := len(group.SubGroups) > 0
-	hasPhraseFilters := len(group.PhraseFilters) > 0
-
-	// Empty group = no filtering = pass
-	if !hasFilters && !hasSubGroups && !hasPhraseFilters {
-		return true
-	}
-
-	if group.Logic == hydrapb.FilterLogic_OR {
-		for _, f := range group.Filters {
-			if evaluateProfileSingleFilter(treasures, f) {
-				return true
-			}
-		}
-		for _, sg := range group.SubGroups {
-			if evaluateProfileFilterGroup(treasures, sg) {
-				return true
-			}
-		}
-		for _, pf := range group.PhraseFilters {
-			if evaluateProfilePhraseFilter(treasures, pf) {
-				return true
-			}
-		}
-		return false
-	}
-
-	// AND (default)
-	for _, f := range group.Filters {
-		if !evaluateProfileSingleFilter(treasures, f) {
-			return false
-		}
-	}
-	for _, sg := range group.SubGroups {
-		if !evaluateProfileFilterGroup(treasures, sg) {
-			return false
-		}
-	}
-	for _, pf := range group.PhraseFilters {
-		if !evaluateProfilePhraseFilter(treasures, pf) {
-			return false
-		}
-	}
-	return true
+	return evaluateFilterGroupWith(group,
+		func(f *hydrapb.TreasureFilter) bool { return evaluateProfileSingleFilter(treasures, f) },
+		func(sg *hydrapb.FilterGroup) bool { return evaluateProfileFilterGroup(treasures, sg) },
+		func(pf *hydrapb.PhraseFilter) bool { return evaluateProfilePhraseFilter(treasures, pf) },
+	)
 }
 
 // evaluateProfileSingleFilter resolves the TreasureKey from a filter and delegates

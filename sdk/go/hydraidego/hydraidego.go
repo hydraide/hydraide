@@ -1704,15 +1704,8 @@ func (h *hydraidego) CatalogReadMany(ctx context.Context, swampName name.Name, i
 		Limit:     index.Limit,
 	}
 
-	// check if FromTime and ToTime are set, and if so, convert them to protobuf Timestamp
-	if index.FromTime != nil && !index.FromTime.IsZero() {
-		indexRequest.FromTime = timestamppb.New(*index.FromTime)
-	}
-
-	// check if ToTime is set, and if so, convert it to protobuf Timestamp
-	if index.ToTime != nil && !index.ToTime.IsZero() {
-		indexRequest.ToTime = timestamppb.New(*index.ToTime)
-	}
+	indexRequest.FromTime = toOptionalTimestamppb(index.FromTime)
+	indexRequest.ToTime = toOptionalTimestamppb(index.ToTime)
 
 	// Fetch all matching Treasures from the Hydra engine based on the Index parameters
 	response, err := h.client.GetServiceClient(swampName).GetByIndex(ctx, indexRequest)
@@ -3307,27 +3300,7 @@ func (h *hydraidego) ProfileRead(ctx context.Context, swampName name.Name, model
 		},
 	})
 	if err != nil {
-		// Translate server-side or network error to client-side semantics
-		if s, ok := status.FromError(err); ok {
-			switch s.Code() {
-			case codes.Aborted:
-				// HydrAIDE server is shutting down
-				return NewError(ErrorShuttingDown, errorMessageShuttingDown)
-			case codes.Unavailable:
-				return NewError(ErrCodeConnectionError, errorMessageConnectionError)
-			case codes.DeadlineExceeded:
-				return NewError(ErrCodeCtxTimeout, errorMessageCtxTimeout)
-			case codes.Canceled:
-				return NewError(ErrCodeCtxClosedByClient, errorMessageCtxClosedByClient)
-			case codes.FailedPrecondition:
-				return NewError(ErrCodeSwampNotFound, fmt.Sprintf("%s: %v", errorMessageSwampNotFound, s.Message()))
-			case codes.Internal:
-				return NewError(ErrCodeInternalDatabaseError, fmt.Sprintf("%s: %v", errorMessageInternalError, s.Message()))
-			default:
-				return NewError(ErrCodeUnknown, fmt.Sprintf("%s: %v", errorMessageUnknown, err))
-			}
-		}
-		return NewError(ErrCodeUnknown, fmt.Sprintf("%s: %v", errorMessageUnknown, err))
+		return errorHandler(err)
 	}
 
 	// Parse the response and assign values to the model fields
@@ -3456,24 +3429,7 @@ func (h *hydraidego) ProfileReadBatch(ctx context.Context, swampNames []name.Nam
 	})
 
 	if err != nil {
-		// Translate server-side or network error to client-side semantics
-		if s, ok := status.FromError(err); ok {
-			switch s.Code() {
-			case codes.Aborted:
-				return NewError(ErrorShuttingDown, errorMessageShuttingDown)
-			case codes.Unavailable:
-				return NewError(ErrCodeConnectionError, errorMessageConnectionError)
-			case codes.DeadlineExceeded:
-				return NewError(ErrCodeCtxTimeout, errorMessageCtxTimeout)
-			case codes.Canceled:
-				return NewError(ErrCodeCtxClosedByClient, errorMessageCtxClosedByClient)
-			case codes.Internal:
-				return NewError(ErrCodeInternalDatabaseError, fmt.Sprintf("%s: %v", errorMessageInternalError, s.Message()))
-			default:
-				return NewError(ErrCodeUnknown, fmt.Sprintf("%s: %v", errorMessageUnknown, err))
-			}
-		}
-		return NewError(ErrCodeUnknown, fmt.Sprintf("%s: %v", errorMessageUnknown, err))
+		return errorHandler(err)
 	}
 
 	// Process each swamp response and call the iterator
@@ -3949,12 +3905,8 @@ func (h *hydraidego) CatalogReadManyStream(ctx context.Context, swampName name.N
 		MaxResults: index.MaxResults,
 	}
 
-	if index.FromTime != nil && !index.FromTime.IsZero() {
-		request.FromTime = timestamppb.New(*index.FromTime)
-	}
-	if index.ToTime != nil && !index.ToTime.IsZero() {
-		request.ToTime = timestamppb.New(*index.ToTime)
-	}
+	request.FromTime = toOptionalTimestamppb(index.FromTime)
+	request.ToTime = toOptionalTimestamppb(index.ToTime)
 
 	stream, err := h.client.GetServiceClient(swampName).GetByIndexStream(ctx, request)
 	if err != nil {
@@ -4033,12 +3985,8 @@ func (h *hydraidego) CatalogReadManyFromMany(ctx context.Context, request []*Cat
 			MaxResults: req.Index.MaxResults,
 		}
 
-		if req.Index.FromTime != nil && !req.Index.FromTime.IsZero() {
-			query.FromTime = timestamppb.New(*req.Index.FromTime)
-		}
-		if req.Index.ToTime != nil && !req.Index.ToTime.IsZero() {
-			query.ToTime = timestamppb.New(*req.Index.ToTime)
-		}
+		query.FromTime = toOptionalTimestamppb(req.Index.FromTime)
+		query.ToTime = toOptionalTimestamppb(req.Index.ToTime)
 
 		serverGroups[clientAndHost.Host].queries = append(serverGroups[clientAndHost.Host].queries, query)
 	}
@@ -6224,6 +6172,15 @@ func setTreasureValueToProfileModel(model any, treasure *hydraidepbgo.Treasure) 
 
 	return nil
 
+}
+
+// toOptionalTimestamppb converts a *time.Time to a *timestamppb.Timestamp.
+// Returns nil if t is nil or zero.
+func toOptionalTimestamppb(t *time.Time) *timestamppb.Timestamp {
+	if t != nil && !t.IsZero() {
+		return timestamppb.New(*t)
+	}
+	return nil
 }
 
 // ConvertIndexTypeToProtoIndexType convert the index type to proto index type
