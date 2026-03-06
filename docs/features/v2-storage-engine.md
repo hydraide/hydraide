@@ -27,31 +27,34 @@ V1 (legacy):  /data/sanctuary/realm/ab/swampname/   ← folder with many chunk f
 V2:           /data/sanctuary/realm/ab/swampname.hyd ← one file
 ```
 
-The `.hyd` file has a fixed structure:
+The `.hyd` file has a fixed structure. Starting with **V3** (server 3.3.0+), the swamp name is stored as plain text immediately after the header, enabling fast metadata scanning without decompressing any blocks:
 
 ```
+V2 format (legacy):
 ┌─────────────────────────────────────────────────────────────┐
 │                    FILE HEADER (64 bytes)                    │
 │  Magic: "HYDR" (4B) | Version: 2 (2B) | Flags (2B)          │
 │  CreatedAt (8B) | ModifiedAt (8B) | BlockSize (4B)           │
 │  EntryCount (8B) | BlockCount (8B) | Reserved (16B)          │
 ├─────────────────────────────────────────────────────────────┤
-│                         BLOCK 1                              │
-│  ┌─────────────────────────────────────────────────────────┐│
-│  │ Block Header (16 bytes)                                 ││
-│  │  CompressedSize (4B) | UncompressedSize (4B)            ││
-│  │  EntryCount (2B) | CRC32 checksum (4B) | Flags (2B)     ││
-│  ├─────────────────────────────────────────────────────────┤│
-│  │ Compressed Payload (Snappy)                             ││
-│  │  [Entry][Entry][Entry]...  ← up to 16KB uncompressed    ││
-│  └─────────────────────────────────────────────────────────┘│
+│                     COMPRESSED BLOCKS ...                     │
+└─────────────────────────────────────────────────────────────┘
+
+V3 format (current):
+┌─────────────────────────────────────────────────────────────┐
+│                    FILE HEADER (64 bytes)                    │
+│  Magic: "HYDR" (4B) | Version: 3 (2B) | Flags (2B)          │
+│  CreatedAt (8B) | ModifiedAt (8B) | BlockSize (4B)           │
+│  EntryCount (8B) | BlockCount (8B)                           │
+│  NameLength (2B) | Reserved (14B)                            │
 ├─────────────────────────────────────────────────────────────┤
-│                         BLOCK 2                              │
-│                          ...                                 │
+│              SWAMP NAME (NameLength bytes, plain UTF-8)      │
 ├─────────────────────────────────────────────────────────────┤
-│                         BLOCK N                              │
+│                     COMPRESSED BLOCKS ...                     │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+The V3 format stores the swamp name (e.g., `users/profiles/alice`) in plain text right after the 64-byte header. This allows tools like `hydraidectl explore` to read only ~100 bytes per file to discover swamp names, instead of decompressing the first block. Existing V2 files are automatically upgraded to V3 during compaction. The V3 reader is fully backward-compatible with V2 files.
 
 #### Entry binary format (variable size)
 
@@ -67,9 +70,11 @@ Data       (M bytes) – GOB-encoded Treasure bytes (empty for DELETE)
 
 Minimum entry size: **7 bytes** (1+2+4 with empty key and empty data — key cannot actually be empty).
 
-#### Metadata entry
+#### Metadata entry (V2 legacy)
 
-When a Swamp file is created for the first time, a special `METADATA` entry is written as the **very first entry in the first block**, and is immediately flushed to disk (not buffered). The key is always `__swamp_meta__` and the data payload contains the full canonical Swamp name as a UTF-8 string. This entry enables `hydraidectl` to reverse-map hashed folder names back to human-readable Swamp names.
+In V2 files, a special `METADATA` entry is written as the first entry in the first block, with key `__swamp_meta__` and the swamp name as data. This enables tools to reverse-map hashed folder names to human-readable swamp names.
+
+**In V3 files, this entry is no longer needed** because the swamp name is stored as plain text after the header. V2 files with metadata entries are still fully supported — the name is read from the compressed block as a fallback. During compaction, V2 files are automatically upgraded to V3 format.
 
 ---
 
@@ -254,12 +259,14 @@ fragmentation = (total_entry_count - live_entry_count) / total_entry_count
 2. Calculate fragmentation → skip if below threshold
 3. LoadIndex() → build map of only live entries (key → latest data)
 4. Write all live entries to a NEW temp file: swampname.hyd.compact
-   └── METADATA entry written first (swamp name preserved)
+   └── V3 header with swamp name in plain text (auto-upgrade from V2)
    └── Each live key written as OpInsert
 5. writer.Close() on temp file → header finalized, file synced
 6. os.Rename(swampname.hyd.compact, swampname.hyd) → atomic replacement
 7. Old file is gone; new compact file takes its place
 ```
+
+**Note:** Compaction always outputs V3 format, even when the input is V2. This means V2 files are automatically upgraded to V3 over time as they get compacted.
 
 Example:
 ```
@@ -331,7 +338,7 @@ h.RegisterSwamp(ctx, &hydraidego.RegisterSwampRequest{
 - `DefaultMaxBlockSize = 16384` – block flush threshold in bytes (16KB uncompressed, ZFS-optimized)
 - `CompactionThreshold = 0.5` – fragmentation ratio above which compaction runs on Close()
 - Block compression: **Snappy** (always, not configurable)
-- File format version: **2** (magic bytes: `HYDR`)
+- File format version: **3** (magic bytes: `HYDR`, backward-compatible with V2)
 
 ---
 

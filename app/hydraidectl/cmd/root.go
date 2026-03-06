@@ -33,6 +33,7 @@ MONITORING & STATUS:
   list        Show all registered instances with status
   health      Check health status of an instance
   observe     Real-time monitoring dashboard (TUI) for debugging
+  explore     Interactive swamp hierarchy explorer (TUI)
   telemetry   Enable/disable telemetry collection for observe
   version     Display CLI and instance version information
 
@@ -59,6 +60,7 @@ EXAMPLES:
   hydraidectl migrate --instance prod --full
   hydraidectl telemetry --instance prod --enable
   hydraidectl observe --instance prod
+  hydraidectl explore --instance prod
 `,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		// Skip update check for version command itself

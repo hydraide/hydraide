@@ -33,6 +33,7 @@ Although `hydraidectl` is stable and production-tested, new features are under d
 * [`backup` – Create instance backup](#backup--create-instance-backup)
 * [`restore` – Restore instance from backup](#restore--restore-instance-from-backup)
 * [`size` – Show instance data size](#size--show-instance-data-size)
+* [`explore` – Interactive swamp hierarchy explorer](#explore--interactive-swamp-hierarchy-explorer)
 * [`stats` – Show detailed swamp statistics and health report](#stats--show-detailed-swamp-statistics-and-health-report)
 * [`cleanup` – Remove old storage files](#cleanup--remove-old-storage-files)
 * [`version` – Display CLI and optional instance metadata](#version--display-cli-and-optional-instance-metadata)
@@ -617,6 +618,70 @@ hydraidectl telemetry --instance prod --json
 * Data is stored in a ring buffer (last 30 minutes)
 * No data is persisted to disk - telemetry is memory-only
 * Recommended to enable only when debugging
+
+---
+
+## `explore` – Interactive Swamp Hierarchy Explorer
+
+The `explore` command provides an interactive TUI (Terminal User Interface) for browsing the Sanctuary / Realm / Swamp hierarchy of your HydrAIDE data. It scans `.hyd` files directly from disk and builds an in-memory index, so **no running server is needed**.
+
+**Quick Start:**
+```bash
+# Browse an instance's data
+hydraidectl explore --instance prod
+
+# Browse a data directory directly
+hydraidectl explore --data-path /var/hydraide/data
+```
+
+**Synopsis:**
+```bash
+hydraidectl explore [--instance <name> | --data-path <path>]
+```
+
+**Flags:**
+| Flag | Description |
+|------|-------------|
+| `--instance, -i` | Instance name (reads data path from instance config) |
+| `--data-path, -d` | Direct path to data directory (no server needed) |
+
+**How It Works:**
+
+On launch, the explorer scans all `.hyd` files in the data directory. For V3 format files, only ~100 bytes per file are read (the 64-byte header + swamp name), making the scan extremely fast even for large datasets.
+
+The swamp names are parsed into a three-level hierarchy: **Sanctuary / Realm / Swamp** (e.g., `users/profiles/alice`). You can then browse this hierarchy interactively.
+
+**Navigation:**
+
+| Key | Action |
+|-----|--------|
+| `j/k` or `Up/Down` | Navigate list |
+| `Enter` or `Right` | Drill down into selected item |
+| `Esc` or `Left` | Go back one level |
+| `/` | Search/filter current list |
+| `PgUp/PgDown` | Scroll pages |
+| `Home/End` | Jump to top/bottom |
+| `r` | Rescan data directory |
+| `q` | Quit |
+
+**Hierarchy Levels:**
+
+1. **Sanctuaries** — Top-level grouping. Shows realm count, swamp count, total size.
+2. **Realms** — Second level within a sanctuary. Shows swamp count, total size.
+3. **Swamps** — Individual swamp files. Shows file size, entry count, format version.
+4. **Detail** — Full metadata for a single swamp: file path, creation/modification time, block count, island ID.
+
+**Examples:**
+
+Browse instance data interactively:
+```bash
+hydraidectl explore --instance prod
+```
+
+Browse a local data directory (useful for development/testing):
+```bash
+hydraidectl explore --data-path /tmp/hydraide-test-data
+```
 
 ---
 
