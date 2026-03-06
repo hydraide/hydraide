@@ -512,7 +512,6 @@ func (h *hydra) IsExistSwamp(islandID uint64, swampName name.Name) (bool, error)
 	}
 
 	if h.getSwamp(swampName) != nil {
-		slog.Debug("IsExistSwamp: found in memory", "swamp", swampName.Get())
 		return true, nil
 	}
 
@@ -523,17 +522,11 @@ func (h *hydra) IsExistSwamp(islandID uint64, swampName name.Name) (bool, error)
 	// V2 uses a single .hyd file, V1 uses a folder with chunk files
 	hydFilePath := swampDataFolderPath + ".hyd"
 	if _, err := os.Stat(hydFilePath); err == nil {
-		slog.Debug("IsExistSwamp: found .hyd file on disk", "swamp", swampName.Get(), "path", hydFilePath)
 		return true, nil
 	}
 
 	// Fall back to V1 folder check
 	v1Exists := h.filesystemInterface.IsFolderExists(swampDataFolderPath)
-	if v1Exists {
-		slog.Debug("IsExistSwamp: found V1 folder on disk", "swamp", swampName.Get(), "path", swampDataFolderPath)
-	} else {
-		slog.Debug("IsExistSwamp: not found anywhere", "swamp", swampName.Get())
-	}
 	return v1Exists, nil
 
 }
