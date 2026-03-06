@@ -277,6 +277,134 @@ func TestCalculateChecksum(t *testing.T) {
 	}
 }
 
+// 8.1. FileHeader V3 — Unit tesztek
+
+func TestV3Header_SerializeDeserialize(t *testing.T) {
+	original := NewFileHeader()
+	original.NameLength = 25
+	original.EntryCount = 999
+	original.BlockCount = 50
+
+	data := original.Serialize()
+	if len(data) != FileHeaderSize {
+		t.Errorf("expected header size %d, got %d", FileHeaderSize, len(data))
+	}
+
+	restored := &FileHeader{}
+	if err := restored.Deserialize(data); err != nil {
+		t.Fatalf("failed to deserialize: %v", err)
+	}
+
+	if restored.Version != Version3 {
+		t.Errorf("version: expected %d, got %d", Version3, restored.Version)
+	}
+	if restored.NameLength != 25 {
+		t.Errorf("NameLength: expected 25, got %d", restored.NameLength)
+	}
+	if restored.EntryCount != 999 {
+		t.Errorf("EntryCount: expected 999, got %d", restored.EntryCount)
+	}
+	if restored.BlockCount != 50 {
+		t.Errorf("BlockCount: expected 50, got %d", restored.BlockCount)
+	}
+	if !restored.IsV3() {
+		t.Error("IsV3() should return true")
+	}
+}
+
+func TestV3Header_NameLengthPreserved(t *testing.T) {
+	testCases := []uint16{0, 1, 100, 255, 65535}
+	for _, nl := range testCases {
+		header := NewFileHeader()
+		header.NameLength = nl
+		data := header.Serialize()
+
+		restored := &FileHeader{}
+		if err := restored.Deserialize(data); err != nil {
+			t.Fatalf("NameLength=%d: deserialize failed: %v", nl, err)
+		}
+		if restored.NameLength != nl {
+			t.Errorf("NameLength=%d: expected %d, got %d", nl, nl, restored.NameLength)
+		}
+	}
+}
+
+func TestV2Header_StillReadable(t *testing.T) {
+	// Create a V2-style header
+	header := NewFileHeader()
+	data := header.Serialize()
+	// Set version to 2
+	data[4] = byte(Version2)
+	data[5] = byte(Version2 >> 8)
+
+	restored := &FileHeader{}
+	if err := restored.Deserialize(data); err != nil {
+		t.Fatalf("V2 header should be readable: %v", err)
+	}
+	if restored.Version != Version2 {
+		t.Errorf("expected version %d, got %d", Version2, restored.Version)
+	}
+	if restored.NameLength != 0 {
+		t.Errorf("V2 NameLength should be 0, got %d", restored.NameLength)
+	}
+	if restored.IsV3() {
+		t.Error("IsV3() should return false for V2")
+	}
+}
+
+func TestV3Header_BufferTooSmall(t *testing.T) {
+	header := &FileHeader{}
+	err := header.Deserialize(make([]byte, 63))
+	if err == nil {
+		t.Error("expected error for 63-byte buffer")
+	}
+}
+
+func TestV3Header_Version2And3Accepted(t *testing.T) {
+	tests := []struct {
+		version  uint16
+		wantErr  bool
+		errValue error
+	}{
+		{Version2, false, nil},
+		{Version3, false, nil},
+		{1, true, ErrUnsupportedVer},
+		{4, true, ErrUnsupportedVer},
+		{99, true, ErrUnsupportedVer},
+	}
+
+	for _, tc := range tests {
+		header := NewFileHeader()
+		data := header.Serialize()
+		data[4] = byte(tc.version)
+		data[5] = byte(tc.version >> 8)
+
+		restored := &FileHeader{}
+		err := restored.Deserialize(data)
+		if tc.wantErr {
+			if err != tc.errValue {
+				t.Errorf("version=%d: expected %v, got %v", tc.version, tc.errValue, err)
+			}
+		} else {
+			if err != nil {
+				t.Errorf("version=%d: unexpected error: %v", tc.version, err)
+			}
+		}
+	}
+}
+
+func TestV3Header_DataStartOffset(t *testing.T) {
+	v3 := &FileHeader{Version: Version3, NameLength: 20}
+	if v3.DataStartOffset() != int64(FileHeaderSize)+20 {
+		t.Errorf("V3 offset: expected %d, got %d", int64(FileHeaderSize)+20, v3.DataStartOffset())
+	}
+
+	v2 := &FileHeader{Version: Version2}
+	if v2.DataStartOffset() != int64(FileHeaderSize) {
+		t.Errorf("V2 offset: expected %d, got %d", int64(FileHeaderSize), v2.DataStartOffset())
+	}
+}
+
 func TestEntry_Size(t *testing.T) {
 	entry := Entry{
 		Operation: OpInsert,

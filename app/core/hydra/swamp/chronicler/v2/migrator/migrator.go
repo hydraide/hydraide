@@ -516,28 +516,14 @@ func (m *Migrator) loadSwampNameFromMeta(folderPath string) (string, error) {
 // MetadataEntryKey is the special key used for storing swamp metadata in V2 files.
 const MetadataEntryKey = "__swamp_meta__"
 
-// writeV2File writes entries to a new V2 .hyd file
+// writeV2File writes entries to a new V3 .hyd file (swamp name in header area)
 func (m *Migrator) writeV2File(filePath string, entries []v2.Entry, swampName string) error {
-	writer, err := v2.NewFileWriter(filePath, v2.DefaultMaxBlockSize)
+	writer, err := v2.NewFileWriterWithName(filePath, v2.DefaultMaxBlockSize, swampName)
 	if err != nil {
 		return err
 	}
 
-	// First, write swamp metadata entry if we have a swamp name
-	if swampName != "" {
-		metaEntry := v2.Entry{
-			Operation: v2.OpMetadata,
-			Key:       MetadataEntryKey,
-			Data:      []byte(swampName), // Simple encoding - just the swamp name string
-		}
-		if err := writer.WriteEntry(metaEntry); err != nil {
-			writer.Close()
-			os.Remove(filePath)
-			return fmt.Errorf("write metadata entry: %w", err)
-		}
-	}
-
-	// Then write all data entries
+	// Write all data entries
 	for _, entry := range entries {
 		if err := writer.WriteEntry(entry); err != nil {
 			writer.Close()

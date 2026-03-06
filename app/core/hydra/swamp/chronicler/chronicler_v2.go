@@ -354,6 +354,8 @@ func (c *chroniclerV2) Write(treasures []treasure.Treasure) {
 }
 
 // ensureWriter creates the persistent writer if it doesn't exist.
+// For new files, uses V3 format (swamp name stored in header area).
+// For existing files, preserves the existing format.
 // Must be called with lock held.
 func (c *chroniclerV2) ensureWriter() error {
 	if c.writer != nil && !c.writerClosed {
@@ -362,16 +364,20 @@ func (c *chroniclerV2) ensureWriter() error {
 
 	// Check if this is a new file (doesn't exist yet)
 	isNewFile := false
-	needsMetadataRepair := false
 	if _, err := os.Stat(c.hydFilePath); os.IsNotExist(err) {
 		isNewFile = true
-	} else if c.swampName != "" {
-		// File exists - check if it has metadata (for backward compatibility with
-		// files created before metadata support was added)
-		needsMetadataRepair = c.checkIfMetadataRepairNeeded()
 	}
 
-	writer, err := v2.NewFileWriter(c.hydFilePath, c.maxBlockSize)
+	var writer *v2.FileWriter
+	var err error
+
+	if isNewFile && c.swampName != "" {
+		// New file: use V3 format with name in header area
+		writer, err = v2.NewFileWriterWithName(c.hydFilePath, c.maxBlockSize, c.swampName)
+	} else {
+		// Existing file: preserve format (V2 or V3)
+		writer, err = v2.NewFileWriter(c.hydFilePath, c.maxBlockSize)
+	}
 	if err != nil {
 		return err
 	}
@@ -379,63 +385,7 @@ func (c *chroniclerV2) ensureWriter() error {
 	c.writer = writer
 	c.writerClosed = false
 
-	// Write metadata entry if:
-	// 1. This is a new file and we have a swamp name, OR
-	// 2. This is an existing file that's missing metadata (backward compatibility fix)
-	if c.swampName != "" && (isNewFile || needsMetadataRepair) {
-		metaEntry := v2.Entry{
-			Operation: v2.OpMetadata,
-			Key:       v2.MetadataEntryKey,
-			Data:      []byte(c.swampName),
-		}
-		if err := c.writer.WriteEntry(metaEntry); err != nil {
-			slog.Error("failed to write swamp name metadata",
-				"path", c.hydFilePath,
-				"swampName", c.swampName,
-				"error", err)
-			// Don't fail - the file is still usable without metadata
-		} else {
-			// CRITICAL: Flush metadata immediately to ensure it's persisted to disk.
-			// Without this, the metadata stays in the write buffer and won't be visible
-			// to other processes (like stats) until the buffer fills up or Close() is called.
-			// This caused a bug where newly created files appeared without swamp names.
-			if err := c.writer.Flush(); err != nil {
-				slog.Error("failed to flush swamp name metadata",
-					"path", c.hydFilePath,
-					"swampName", c.swampName,
-					"error", err)
-			}
-			if needsMetadataRepair {
-				slog.Info("repaired missing swamp name metadata",
-					"path", c.hydFilePath,
-					"swampName", c.swampName)
-			}
-		}
-	}
-
 	return nil
-}
-
-// checkIfMetadataRepairNeeded checks if an existing file is missing swamp name metadata.
-// This handles backward compatibility with files created before metadata support was added.
-// Must be called with lock held.
-func (c *chroniclerV2) checkIfMetadataRepairNeeded() bool {
-	reader, err := v2.NewFileReader(c.hydFilePath)
-	if err != nil {
-		// Can't read the file - don't try to repair
-		return false
-	}
-	defer reader.Close()
-
-	// Load index to get the swamp name from file
-	_, swampNameFromFile, err := reader.LoadIndex()
-	if err != nil {
-		// Error reading - don't try to repair
-		return false
-	}
-
-	// If the file has no swamp name but we have one, it needs repair
-	return swampNameFromFile == ""
 }
 
 // maybeCompact checks fragmentation and runs compaction if threshold exceeded.

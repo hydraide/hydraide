@@ -6,15 +6,17 @@ import (
 	"os"
 )
 
-// FileReader handles reading from a .hyd file.
-// It can read the entire file or specific blocks.
+// FileReader handles reading from a .hyd file (V2 or V3).
+// For V3 files, the swamp name is read from the header area (no block decompression needed).
 type FileReader struct {
-	file     *os.File
-	filePath string
-	header   *FileHeader
+	file      *os.File
+	filePath  string
+	header    *FileHeader
+	swampName string // V3: read from after header. V2: empty until LoadIndex is called.
 }
 
-// NewFileReader opens a .hyd file for reading
+// NewFileReader opens a .hyd file for reading.
+// Supports both V2 and V3 formats. For V3, the swamp name is read immediately.
 func NewFileReader(filePath string) (*FileReader, error) {
 	if filePath == "" {
 		return nil, errors.New("file path cannot be empty")
@@ -34,11 +36,31 @@ func NewFileReader(filePath string) (*FileReader, error) {
 		file.Close()
 		return nil, err
 	}
-	return &FileReader{
+
+	fr := &FileReader{
 		file:     file,
 		filePath: filePath,
 		header:   header,
-	}, nil
+	}
+
+	// V3: read swamp name from after header
+	if header.IsV3() && header.NameLength > 0 {
+		nameBuf := make([]byte, header.NameLength)
+		if _, err := io.ReadFull(file, nameBuf); err != nil {
+			file.Close()
+			return nil, err
+		}
+		fr.swampName = string(nameBuf)
+	}
+
+	return fr, nil
+}
+
+// GetSwampName returns the swamp name.
+// For V3 files, this is read from the header area (always available).
+// For V2 files, this returns empty string — use LoadIndex to get the name from blocks.
+func (fr *FileReader) GetSwampName() string {
+	return fr.swampName
 }
 
 // GetHeader returns the file header
@@ -51,8 +73,8 @@ func (fr *FileReader) GetHeader() *FileHeader {
 // If callback returns false, reading stops.
 // Returns: total entries read, error
 func (fr *FileReader) ReadAllEntries(callback func(entry Entry) bool) (int, error) {
-	// Seek to start of data (after header)
-	if _, err := fr.file.Seek(FileHeaderSize, io.SeekStart); err != nil {
+	// Seek to start of data (after header + swamp name for V3)
+	if _, err := fr.file.Seek(fr.header.DataStartOffset(), io.SeekStart); err != nil {
 		return 0, err
 	}
 	totalEntries := 0
@@ -78,8 +100,8 @@ func (fr *FileReader) ReadAllEntries(callback func(entry Entry) bool) (int, erro
 
 // ReadAllBlocks reads all blocks from the file
 func (fr *FileReader) ReadAllBlocks() ([]*Block, error) {
-	// Seek to start of data (after header)
-	if _, err := fr.file.Seek(FileHeaderSize, io.SeekStart); err != nil {
+	// Seek to start of data (after header + swamp name for V3)
+	if _, err := fr.file.Seek(fr.header.DataStartOffset(), io.SeekStart); err != nil {
 		return nil, err
 	}
 	var blocks []*Block
@@ -149,7 +171,7 @@ const MetadataEntryKey = "__swamp_meta__"
 // Returns: map of key to entry data, swamp name (if found), error
 func (fr *FileReader) LoadIndex() (map[string][]byte, string, error) {
 	index := make(map[string][]byte)
-	swampName := ""
+	swampName := fr.swampName // V3: already read from header area
 	_, err := fr.ReadAllEntries(func(entry Entry) bool {
 		switch entry.Operation {
 		case OpDelete:
@@ -160,8 +182,8 @@ func (fr *FileReader) LoadIndex() (map[string][]byte, string, error) {
 			copy(dataCopy, entry.Data)
 			index[entry.Key] = dataCopy
 		case OpMetadata:
-			// Extract swamp name from metadata entry
-			if entry.Key == MetadataEntryKey && len(entry.Data) > 0 {
+			// V2 fallback: extract swamp name from metadata entry
+			if swampName == "" && entry.Key == MetadataEntryKey && len(entry.Data) > 0 {
 				swampName = string(entry.Data)
 			}
 		}
@@ -171,6 +193,29 @@ func (fr *FileReader) LoadIndex() (map[string][]byte, string, error) {
 		return nil, swampName, err
 	}
 	return index, swampName, nil
+}
+
+// ReadSwampName reads only the swamp name from a .hyd file without loading blocks.
+// For V3 files, reads ~100 bytes (header + name). For V2 files, must decompress blocks.
+// This is the fast-path function for the Swamp Explorer scanner.
+func ReadSwampName(filePath string) (string, error) {
+	fr, err := NewFileReader(filePath)
+	if err != nil {
+		return "", err
+	}
+	defer fr.Close()
+
+	// V3: name already read from header area
+	if fr.header.IsV3() {
+		return fr.swampName, nil
+	}
+
+	// V2 fallback: must read blocks to find OpMetadata entry
+	_, swampName, err := fr.LoadIndex()
+	if err != nil {
+		return "", err
+	}
+	return swampName, nil
 }
 
 // CalculateFragmentation reads the file and calculates fragmentation.

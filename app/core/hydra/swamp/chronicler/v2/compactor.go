@@ -130,27 +130,12 @@ func (c *Compactor) Compact() (*CompactionResult, error) {
 	}
 	reader.Close()
 
-	// Create temp file for new data
+	// Create temp file for new data (always V3 format with name in header area)
 	tempPath := c.filePath + ".compact"
-	writer, err := NewFileWriter(tempPath, c.maxBlockSize)
+	writer, err := NewFileWriterWithName(tempPath, c.maxBlockSize, swampName)
 	if err != nil {
 		result.Error = err
 		return result, err
-	}
-
-	// Write swamp name metadata first (if present)
-	if swampName != "" {
-		metaEntry := Entry{
-			Operation: OpMetadata,
-			Key:       MetadataEntryKey,
-			Data:      []byte(swampName),
-		}
-		if err := writer.WriteEntry(metaEntry); err != nil {
-			writer.Close()
-			os.Remove(tempPath)
-			result.Error = err
-			return result, err
-		}
 	}
 
 	// Write all live entries to new file

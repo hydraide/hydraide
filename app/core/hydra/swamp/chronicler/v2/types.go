@@ -19,16 +19,22 @@ import (
 
 // File format constants
 const (
-	// MagicBytes identifies a valid HydrAIDE V2 file
+	// MagicBytes identifies a valid HydrAIDE V2/V3 file
 	MagicBytes = "HYDR"
 
-	// CurrentVersion is the current file format version
-	CurrentVersion uint16 = 2
+	// Version2 is the legacy file format version (swamp name stored in block as OpMetadata)
+	Version2 uint16 = 2
+
+	// Version3 stores the swamp name directly after the fixed header (no block decompression needed)
+	Version3 uint16 = 3
+
+	// CurrentVersion is the file format version used for newly created files
+	CurrentVersion = Version3
 
 	// DefaultMaxBlockSize is the maximum uncompressed block size (16KB for ZFS optimization)
 	DefaultMaxBlockSize = 16 * 1024
 
-	// FileHeaderSize is the fixed size of the file header
+	// FileHeaderSize is the fixed size of the file header (unchanged between V2 and V3)
 	FileHeaderSize = 64
 
 	// BlockHeaderSize is the fixed size of each block header
@@ -55,17 +61,26 @@ var (
 )
 
 // FileHeader represents the header at the beginning of each .hyd file.
-// Total size: 64 bytes (fixed)
+// Total size: 64 bytes (fixed, same for V2 and V3)
+//
+// V3 layout change: NameLength uses 2 bytes from the former Reserved field.
+// In V3 files, the swamp name (NameLength bytes, UTF-8) is stored immediately
+// after the 64-byte header, before the first block. This allows reading the
+// swamp name without decompressing any blocks.
+//
+// V2 files have NameLength == 0 and store the name as an OpMetadata entry
+// inside the first block.
 type FileHeader struct {
-	Magic      [4]byte // "HYDR"
-	Version    uint16  // File format version (currently 2)
-	Flags      uint16  // Reserved for future use
-	CreatedAt  int64   // Unix nano timestamp when file was created
-	ModifiedAt int64   // Unix nano timestamp of last modification
-	BlockSize  uint32  // Maximum block size (default 16KB)
-	EntryCount uint64  // Total number of live entries (updated after compaction)
-	BlockCount uint64  // Total number of blocks in file
-	Reserved   [16]byte
+	Magic      [4]byte  // "HYDR"
+	Version    uint16   // File format version (2 or 3)
+	Flags      uint16   // Reserved for future use
+	CreatedAt  int64    // Unix nano timestamp when file was created
+	ModifiedAt int64    // Unix nano timestamp of last modification
+	BlockSize  uint32   // Maximum block size (default 16KB)
+	EntryCount uint64   // Total number of live entries (updated after compaction)
+	BlockCount uint64   // Total number of blocks in file
+	NameLength uint16   // V3: length of swamp name in bytes (stored after header). V2: always 0.
+	Reserved   [14]byte // Reserved for future use
 }
 
 // Serialize converts the header to bytes
@@ -79,11 +94,13 @@ func (h *FileHeader) Serialize() []byte {
 	binary.LittleEndian.PutUint32(buf[24:28], h.BlockSize)
 	binary.LittleEndian.PutUint64(buf[28:36], h.EntryCount)
 	binary.LittleEndian.PutUint64(buf[36:44], h.BlockCount)
-	copy(buf[44:60], h.Reserved[:])
+	binary.LittleEndian.PutUint16(buf[44:46], h.NameLength)
+	copy(buf[46:60], h.Reserved[:])
 	return buf
 }
 
-// Deserialize parses bytes into the header
+// Deserialize parses bytes into the header.
+// Supports both V2 and V3 file formats.
 func (h *FileHeader) Deserialize(buf []byte) error {
 	if len(buf) < FileHeaderSize {
 		return errors.New("buffer too small for file header")
@@ -95,7 +112,7 @@ func (h *FileHeader) Deserialize(buf []byte) error {
 	}
 
 	h.Version = binary.LittleEndian.Uint16(buf[4:6])
-	if h.Version != CurrentVersion {
+	if h.Version != Version2 && h.Version != Version3 {
 		return ErrUnsupportedVer
 	}
 
@@ -105,12 +122,21 @@ func (h *FileHeader) Deserialize(buf []byte) error {
 	h.BlockSize = binary.LittleEndian.Uint32(buf[24:28])
 	h.EntryCount = binary.LittleEndian.Uint64(buf[28:36])
 	h.BlockCount = binary.LittleEndian.Uint64(buf[36:44])
-	copy(h.Reserved[:], buf[44:60])
+
+	if h.Version == Version3 {
+		h.NameLength = binary.LittleEndian.Uint16(buf[44:46])
+		copy(h.Reserved[:], buf[46:60])
+	} else {
+		// V2: bytes 44-59 are all Reserved, NameLength stays 0
+		h.NameLength = 0
+		copy(h.Reserved[:], buf[46:60])
+	}
 
 	return nil
 }
 
-// NewFileHeader creates a new file header with default values
+// NewFileHeader creates a new V3 file header with default values.
+// Use SetSwampName to set the swamp name before writing.
 func NewFileHeader() *FileHeader {
 	now := time.Now().UnixNano()
 	return &FileHeader{
@@ -120,6 +146,21 @@ func NewFileHeader() *FileHeader {
 		ModifiedAt: now,
 		BlockSize:  DefaultMaxBlockSize,
 	}
+}
+
+// DataStartOffset returns the byte offset where block data begins.
+// For V3: FileHeaderSize + NameLength (name is stored after header).
+// For V2: FileHeaderSize (blocks start immediately after header).
+func (h *FileHeader) DataStartOffset() int64 {
+	if h.Version == Version3 {
+		return int64(FileHeaderSize) + int64(h.NameLength)
+	}
+	return int64(FileHeaderSize)
+}
+
+// IsV3 returns true if this header is for a V3 format file.
+func (h *FileHeader) IsV3() bool {
+	return h.Version == Version3
 }
 
 // BlockHeader represents the header of each compressed block.

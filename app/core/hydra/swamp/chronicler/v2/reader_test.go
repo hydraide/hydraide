@@ -1,6 +1,7 @@
 package v2
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -255,6 +256,210 @@ func TestFileReader_ReadAllBlocks(t *testing.T) {
 
 	if totalEntries != 20 {
 		t.Errorf("expected 20 total entries, got %d", totalEntries)
+	}
+}
+
+// 8.3. Reader V3 — Unit tesztek
+
+func createV3TestFile(t *testing.T, swampName string, entries []Entry) string {
+	t.Helper()
+	tmpDir := t.TempDir()
+	filePath := filepath.Join(tmpDir, "v3test.hyd")
+
+	writer, err := NewFileWriterWithName(filePath, DefaultMaxBlockSize, swampName)
+	if err != nil {
+		t.Fatalf("failed to create writer: %v", err)
+	}
+	for _, e := range entries {
+		if err := writer.WriteEntry(e); err != nil {
+			t.Fatalf("failed to write entry: %v", err)
+		}
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("failed to close writer: %v", err)
+	}
+	return filePath
+}
+
+func TestV3Reader_ReadsNameFromHeader(t *testing.T) {
+	filePath := createV3TestFile(t, "sanctuary/realm/myswamp", []Entry{
+		{Operation: OpInsert, Key: "k", Data: []byte("v")},
+	})
+
+	reader, err := NewFileReader(filePath)
+	if err != nil {
+		t.Fatalf("failed to open: %v", err)
+	}
+	defer reader.Close()
+
+	if reader.GetSwampName() != "sanctuary/realm/myswamp" {
+		t.Errorf("expected %q, got %q", "sanctuary/realm/myswamp", reader.GetSwampName())
+	}
+	if !reader.GetHeader().IsV3() {
+		t.Error("expected V3 header")
+	}
+}
+
+func TestV3Reader_ReadsEntriesCorrectly(t *testing.T) {
+	var entries []Entry
+	for i := 0; i < 50; i++ {
+		entries = append(entries, Entry{
+			Operation: OpInsert,
+			Key:       fmt.Sprintf("key-%03d", i),
+			Data:      []byte(fmt.Sprintf("data-%03d", i)),
+		})
+	}
+
+	filePath := createV3TestFile(t, "test/50entries", entries)
+
+	reader, err := NewFileReader(filePath)
+	if err != nil {
+		t.Fatalf("failed to open: %v", err)
+	}
+	defer reader.Close()
+
+	var readEntries []Entry
+	count, err := reader.ReadAllEntries(func(entry Entry) bool {
+		readEntries = append(readEntries, entry)
+		return true
+	})
+	if err != nil {
+		t.Fatalf("failed to read entries: %v", err)
+	}
+
+	if count != 50 {
+		t.Errorf("expected 50 entries, got %d", count)
+	}
+
+	for i, entry := range readEntries {
+		expectedKey := fmt.Sprintf("key-%03d", i)
+		expectedData := fmt.Sprintf("data-%03d", i)
+		if entry.Key != expectedKey {
+			t.Errorf("entry %d: expected key %q, got %q", i, expectedKey, entry.Key)
+		}
+		if string(entry.Data) != expectedData {
+			t.Errorf("entry %d: expected data %q, got %q", i, expectedData, string(entry.Data))
+		}
+	}
+}
+
+func TestV3Reader_LoadIndex_V3(t *testing.T) {
+	entries := []Entry{
+		{Operation: OpInsert, Key: "a", Data: []byte("1")},
+		{Operation: OpInsert, Key: "b", Data: []byte("2")},
+		{Operation: OpUpdate, Key: "a", Data: []byte("3")},
+		{Operation: OpDelete, Key: "b"},
+	}
+
+	filePath := createV3TestFile(t, "test/loadindex", entries)
+
+	reader, err := NewFileReader(filePath)
+	if err != nil {
+		t.Fatalf("failed to open: %v", err)
+	}
+	defer reader.Close()
+
+	index, swampName, err := reader.LoadIndex()
+	if err != nil {
+		t.Fatalf("LoadIndex failed: %v", err)
+	}
+
+	if swampName != "test/loadindex" {
+		t.Errorf("swamp name: expected %q, got %q", "test/loadindex", swampName)
+	}
+
+	// Only "a" should remain with updated value
+	if len(index) != 1 {
+		t.Fatalf("expected 1 live entry, got %d", len(index))
+	}
+	if string(index["a"]) != "3" {
+		t.Errorf("key 'a': expected %q, got %q", "3", string(index["a"]))
+	}
+}
+
+func TestV3Reader_ReadSwampName_Fast(t *testing.T) {
+	filePath := createV3TestFile(t, "fast/scan/name", []Entry{
+		{Operation: OpInsert, Key: "k", Data: []byte("v")},
+	})
+
+	name, err := ReadSwampName(filePath)
+	if err != nil {
+		t.Fatalf("ReadSwampName failed: %v", err)
+	}
+	if name != "fast/scan/name" {
+		t.Errorf("expected %q, got %q", "fast/scan/name", name)
+	}
+}
+
+func TestV3Reader_EmptyNameFile(t *testing.T) {
+	filePath := createV3TestFile(t, "", []Entry{
+		{Operation: OpInsert, Key: "k", Data: []byte("v")},
+	})
+
+	reader, err := NewFileReader(filePath)
+	if err != nil {
+		t.Fatalf("failed to open: %v", err)
+	}
+	defer reader.Close()
+
+	if reader.GetSwampName() != "" {
+		t.Errorf("expected empty name, got %q", reader.GetSwampName())
+	}
+
+	// Entries should still be readable
+	index, _, err := reader.LoadIndex()
+	if err != nil {
+		t.Fatalf("LoadIndex failed: %v", err)
+	}
+	if len(index) != 1 {
+		t.Errorf("expected 1 entry, got %d", len(index))
+	}
+}
+
+func TestV3Reader_MultipleBlocks(t *testing.T) {
+	// Use small block size to force multiple blocks
+	tmpDir := t.TempDir()
+	filePath := filepath.Join(tmpDir, "multiblock.hyd")
+
+	writer, err := NewFileWriterWithName(filePath, 500, "multi/block/test")
+	if err != nil {
+		t.Fatalf("failed to create writer: %v", err)
+	}
+
+	for i := 0; i < 30; i++ {
+		writer.WriteEntry(Entry{
+			Operation: OpInsert,
+			Key:       fmt.Sprintf("mb-key-%03d", i),
+			Data:      []byte("some data content that takes up space in the block"),
+		})
+	}
+	writer.Close()
+
+	reader, err := NewFileReader(filePath)
+	if err != nil {
+		t.Fatalf("failed to open: %v", err)
+	}
+	defer reader.Close()
+
+	if reader.GetSwampName() != "multi/block/test" {
+		t.Errorf("expected %q, got %q", "multi/block/test", reader.GetSwampName())
+	}
+
+	blocks, err := reader.ReadAllBlocks()
+	if err != nil {
+		t.Fatalf("ReadAllBlocks failed: %v", err)
+	}
+
+	if len(blocks) < 2 {
+		t.Errorf("expected multiple blocks, got %d", len(blocks))
+	}
+
+	totalEntries := 0
+	for _, b := range blocks {
+		totalEntries += len(b.Entries)
+	}
+	if totalEntries != 30 {
+		t.Errorf("expected 30 total entries, got %d", totalEntries)
 	}
 }
 

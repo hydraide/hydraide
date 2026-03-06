@@ -18,10 +18,13 @@ type FileWriter struct {
 	blockCount uint64
 	entryCount uint64
 	closed     bool
+	swampName  string // Swamp name for V3 format (written after header)
 }
 
 // NewFileWriter creates a new file writer for the given path.
 // If the file exists, it opens it for appending. Otherwise, it creates a new file.
+// For new files, the swamp name is written after the header (V3 format).
+// For existing files, the format is preserved (V2 or V3).
 func NewFileWriter(filePath string, maxBlockSize int) (*FileWriter, error) {
 	if filePath == "" {
 		return nil, errors.New("file path cannot be empty")
@@ -48,7 +51,39 @@ func NewFileWriter(filePath string, maxBlockSize int) (*FileWriter, error) {
 	return fw, nil
 }
 
-// createNewFile creates a new .hyd file with header
+// NewFileWriterWithName creates a new file writer with a swamp name for V3 format.
+// If the file already exists, it opens it for appending (preserving the existing format).
+// If the file does not exist, it creates a new V3 file with the name stored after the header.
+func NewFileWriterWithName(filePath string, maxBlockSize int, swampName string) (*FileWriter, error) {
+	if filePath == "" {
+		return nil, errors.New("file path cannot be empty")
+	}
+
+	fw := &FileWriter{
+		filePath:  filePath,
+		buffer:    NewWriteBuffer(maxBlockSize),
+		swampName: swampName,
+	}
+
+	// Check if file exists
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		// Create new V3 file with name
+		if err := fw.createNewFile(); err != nil {
+			return nil, err
+		}
+	} else {
+		// Open existing file for appending (preserve format)
+		if err := fw.openExistingFile(); err != nil {
+			return nil, err
+		}
+	}
+
+	return fw, nil
+}
+
+// createNewFile creates a new .hyd file with header.
+// If swampName is set, creates a V3 file with the name stored after the header.
+// Otherwise creates a V3 file with NameLength=0.
 func (fw *FileWriter) createNewFile() error {
 	file, err := os.Create(fw.filePath)
 	if err != nil {
@@ -58,16 +93,29 @@ func (fw *FileWriter) createNewFile() error {
 	fw.file = file
 	fw.header = NewFileHeader()
 
+	// V3: store swamp name length in header
+	nameBytes := []byte(fw.swampName)
+	fw.header.NameLength = uint16(len(nameBytes))
+
 	// Write header
 	if _, err := file.Write(fw.header.Serialize()); err != nil {
 		file.Close()
 		return err
 	}
 
+	// V3: write swamp name bytes after header
+	if len(nameBytes) > 0 {
+		if _, err := file.Write(nameBytes); err != nil {
+			file.Close()
+			return err
+		}
+	}
+
 	return nil
 }
 
-// openExistingFile opens an existing .hyd file and reads its header
+// openExistingFile opens an existing .hyd file (V2 or V3) and reads its header.
+// For V3 files, it skips past the swamp name to position at the end for appending.
 func (fw *FileWriter) openExistingFile() error {
 	file, err := os.OpenFile(fw.filePath, os.O_RDWR, 0644)
 	if err != nil {
