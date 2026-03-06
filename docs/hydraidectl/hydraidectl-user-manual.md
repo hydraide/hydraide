@@ -35,6 +35,7 @@ Although `hydraidectl` is stable and production-tested, new features are under d
 * [`size` – Show instance data size](#size--show-instance-data-size)
 * [`explore` – Interactive swamp hierarchy explorer](#explore--interactive-swamp-hierarchy-explorer)
 * [`stats` – Show detailed swamp statistics and health report](#stats--show-detailed-swamp-statistics-and-health-report)
+* [`compact` – Compact swamp files](#compact--compact-swamp-files)
 * [`cleanup` – Remove old storage files](#cleanup--remove-old-storage-files)
 * [`version` – Display CLI and optional instance metadata](#version--display-cli-and-optional-instance-metadata)
 
@@ -1166,6 +1167,49 @@ Fragmentation occurs when records are updated or deleted. Dead entries remain in
 
 ---
 
+## `compact` – Compact Swamp Files
+
+Compacts all V2/V3 swamp files in a HydrAIDE instance to remove dead entries and reclaim disk space. The instance is automatically stopped during compaction.
+
+**Compaction also automatically upgrades V2 files to V3 format** (swamp name stored in plain text after the header for fast scanning).
+
+**Flags**
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--instance, -i` | Instance name (**required**) | - |
+| `--parallel, -p` | Number of parallel workers | `4` |
+| `--threshold, -t` | Fragmentation threshold percentage | `20` |
+| `--restart, -r` | Restart instance after compaction | `false` |
+| `--dry-run` | Only analyze, don't compact | `false` |
+| `--json, -j` | Output as JSON | `false` |
+
+**Examples**
+
+```bash
+# Analyze fragmentation without compacting
+hydraidectl compact --instance prod --dry-run
+
+# Compact all swamps above 20% fragmentation
+hydraidectl compact --instance prod
+
+# Compact with lower threshold and restart after
+hydraidectl compact --instance prod --threshold 10 --restart
+
+# Use more workers for faster processing
+hydraidectl compact --instance prod --parallel 8 --restart
+```
+
+**The compaction process:**
+1. Stops the instance (if running)
+2. Scans all swamp files for fragmentation
+3. Compacts swamps above the threshold (outputs V3 format)
+4. Reports space savings
+5. Optionally restarts the instance (`--restart`)
+
+**V2 to V3 format upgrade:** Compaction always outputs V3 format files. This means running `compact` on an instance will automatically upgrade all compacted V2 files to V3. V3 stores the swamp name in plain text after the 64-byte header, which enables the `explore` command to scan metadata at ~100 bytes per file without decompressing any blocks. No manual migration step is needed — the upgrade is seamless and backward-compatible.
+
+---
+
 ## `cleanup` – Remove Old Storage Files
 
 Remove old V1 or V2 files after migration or rollback.
@@ -1256,3 +1300,22 @@ hydraidectl engine --instance prod --set V1
 # 4. Start instance
 hydraidectl start --instance prod
 ```
+
+---
+
+## V3 File Format Upgrade
+
+Starting with server **v3.3.0** and hydraidectl **v2.4.0**, HydrAIDE uses the **V3** `.hyd` file format. V3 stores the swamp name as plain text immediately after the 64-byte file header, enabling fast metadata scanning (~100 bytes per file) without decompressing any blocks.
+
+**No manual migration is needed.** The upgrade from V2 to V3 happens automatically:
+
+- **New swamp files** are created in V3 format immediately.
+- **Existing V2 files** are upgraded to V3 during compaction (when fragmentation exceeds the threshold and the swamp is closed).
+- You can **force an immediate upgrade** of all files by running compaction:
+
+```bash
+# Upgrade all V2 files to V3 by compacting with a 0% threshold
+hydraidectl compact --instance prod --threshold 0 --restart
+```
+
+V3 is fully backward-compatible — the server and hydraidectl can read both V2 and V3 files without any configuration changes.

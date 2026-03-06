@@ -307,6 +307,24 @@ The migration temporarily needs extra disk space. Solutions:
 
 ---
 
+## V2 to V3 Format Upgrade (server v3.3.0+)
+
+Starting with server v3.3.0, HydrAIDE uses the **V3** `.hyd` file format. V3 stores the swamp name as plain text after the file header, which enables fast metadata scanning for the `hydraidectl explore` command.
+
+**No manual migration is required.** The upgrade happens automatically:
+
+- New files are created in V3 format.
+- Existing V2 files are upgraded during compaction.
+- To force an immediate upgrade of all files:
+
+```bash
+hydraidectl compact --instance prod --threshold 0 --restart
+```
+
+V3 is fully backward-compatible with V2 — no data is lost and no rollback is needed.
+
+---
+
 ## Questions?
 
 - 📚 [HydrAIDE Documentation](../README.md)

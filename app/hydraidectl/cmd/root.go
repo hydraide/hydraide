@@ -45,6 +45,7 @@ UPDATES & MIGRATION:
 DATA MANAGEMENT:
   backup      Create a backup of instance data
   restore     Restore instance data from backup
+  compact     Compact swamp files (reclaim space, auto-upgrade to V3)
   cleanup     Remove orphaned/old storage files
   size        Show instance data storage size
   stats       Show detailed swamp statistics and health report
