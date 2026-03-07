@@ -157,6 +157,115 @@ func TestFileReader_CalculateFragmentation(t *testing.T) {
 	}
 }
 
+func TestFileReader_CalculateFragmentation_ByteBased(t *testing.T) {
+	// Scenario: few dead entries but they hold most of the bytes.
+	// 3 keys: key-A and key-B start with 40KB values, key-C with 1KB.
+	// Then key-A and key-B are updated to tiny 100-byte values.
+	//
+	// Entry-based: 5 total, 3 live → (5-3)/5 = 40%
+	// Byte-based:  ~82KB total, ~1.2KB live → ~98%
+	// Expected: fragmentation should be ~98% (byte-based wins)
+
+	largeData := make([]byte, 40*1024) // 40KB
+	for i := range largeData {
+		largeData[i] = byte(i % 256)
+	}
+	mediumData := make([]byte, 1024) // 1KB
+	smallData := make([]byte, 100)   // 100B
+
+	entries := []Entry{
+		{Operation: OpInsert, Key: "key-A", Data: largeData},
+		{Operation: OpInsert, Key: "key-B", Data: largeData},
+		{Operation: OpInsert, Key: "key-C", Data: mediumData},
+		{Operation: OpUpdate, Key: "key-A", Data: smallData},
+		{Operation: OpUpdate, Key: "key-B", Data: smallData},
+	}
+
+	filePath := createTestFile(t, entries)
+
+	reader, err := NewFileReader(filePath)
+	if err != nil {
+		t.Fatalf("failed to create reader: %v", err)
+	}
+	defer reader.Close()
+
+	fragmentation, liveCount, totalCount, err := reader.CalculateFragmentation()
+	if err != nil {
+		t.Fatalf("failed to calculate fragmentation: %v", err)
+	}
+
+	if totalCount != 5 {
+		t.Errorf("expected 5 total entries, got %d", totalCount)
+	}
+	if liveCount != 3 {
+		t.Errorf("expected 3 live entries, got %d", liveCount)
+	}
+
+	// Entry-based would be 40%, but byte-based should push it above 90%
+	entryFrag := float64(totalCount-liveCount) / float64(totalCount)
+	if entryFrag > 0.5 {
+		t.Errorf("entry-based fragmentation should be below 50%%, got %.1f%%", entryFrag*100)
+	}
+
+	// The returned fragmentation should be the byte-based value (much higher)
+	if fragmentation < 0.9 {
+		t.Errorf("expected fragmentation > 90%% (byte-based), got %.1f%%", fragmentation*100)
+	}
+
+	t.Logf("entry-based=%.1f%%, returned (max)=%.1f%%", entryFrag*100, fragmentation*100)
+}
+
+func TestFileReader_CalculateFragmentation_EntryBasedWins(t *testing.T) {
+	// Scenario: many dead entries of similar size — entry-based wins.
+	// 10 inserts of ~100B, then 6 deletes → 4 live.
+	// Entry-based: (10-4)/10 = 60%
+	// Byte-based:  similar since all entries are ~same size
+
+	data := make([]byte, 100)
+	var entries []Entry
+	for i := 0; i < 10; i++ {
+		entries = append(entries, Entry{
+			Operation: OpInsert,
+			Key:       fmt.Sprintf("key-%d", i),
+			Data:      data,
+		})
+	}
+	for i := 0; i < 6; i++ {
+		entries = append(entries, Entry{
+			Operation: OpDelete,
+			Key:       fmt.Sprintf("key-%d", i),
+		})
+	}
+
+	filePath := createTestFile(t, entries)
+
+	reader, err := NewFileReader(filePath)
+	if err != nil {
+		t.Fatalf("failed to create reader: %v", err)
+	}
+	defer reader.Close()
+
+	fragmentation, liveCount, totalCount, err := reader.CalculateFragmentation()
+	if err != nil {
+		t.Fatalf("failed to calculate fragmentation: %v", err)
+	}
+
+	if liveCount != 4 {
+		t.Errorf("expected 4 live entries, got %d", liveCount)
+	}
+	if totalCount != 16 {
+		t.Errorf("expected 16 total entries, got %d", totalCount)
+	}
+
+	// Entry-based: (16-4)/16 = 75%. Byte-based should be ~62% (6*100 dead / 10*100 total data).
+	// Entry-based wins here.
+	if fragmentation < 0.7 || fragmentation > 0.8 {
+		t.Errorf("expected fragmentation ~75%% (entry-based), got %.1f%%", fragmentation*100)
+	}
+
+	t.Logf("fragmentation=%.1f%%", fragmentation*100)
+}
+
 func TestFileReader_EmptyFile(t *testing.T) {
 	filePath := createTestFile(t, []Entry{})
 

@@ -69,7 +69,7 @@ type chroniclerV2 struct {
 //
 // Configuration:
 //   - maxBlockSize: Size of compressed blocks (default: 64KB)
-//   - compactionThreshold: Fragmentation ratio to trigger compaction (default: 50%)
+//   - compactionThreshold: Fragmentation ratio to trigger compaction (default: 30%)
 func NewV2(swampDataFolderPath string, maxDepth int) Chronicler {
 	// The .hyd file is placed at the same level as the folder would be
 	// e.g., /data/words/ap/apple -> /data/words/ap/apple.hyd
@@ -79,7 +79,7 @@ func NewV2(swampDataFolderPath string, maxDepth int) Chronicler {
 		swampDataFolderPath: swampDataFolderPath,
 		hydFilePath:         hydFilePath,
 		maxBlockSize:        v2.DefaultMaxBlockSize,
-		compactionThreshold: 0.5,
+		compactionThreshold: 0.3,
 		maxDepth:            maxDepth,
 		compactionOnSave:    true,
 	}
@@ -95,7 +95,7 @@ func NewV2WithName(swampDataFolderPath string, maxDepth int, swampName string) C
 		swampDataFolderPath: swampDataFolderPath,
 		hydFilePath:         hydFilePath,
 		maxBlockSize:        v2.DefaultMaxBlockSize,
-		compactionThreshold: 0.5,
+		compactionThreshold: 0.3,
 		maxDepth:            maxDepth,
 		compactionOnSave:    true,
 		swampName:           swampName,

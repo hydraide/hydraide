@@ -33,7 +33,7 @@ type CompactionResult struct {
 // NewCompactor creates a new compactor for the given file
 func NewCompactor(filePath string, maxBlockSize int, threshold float64) *Compactor {
 	if threshold <= 0 || threshold > 1 {
-		threshold = 0.5 // Default 50% fragmentation threshold
+		threshold = 0.3 // Default 30% fragmentation threshold
 	}
 	if maxBlockSize <= 0 {
 		maxBlockSize = DefaultMaxBlockSize

@@ -219,28 +219,58 @@ func ReadSwampName(filePath string) (string, error) {
 }
 
 // CalculateFragmentation reads the file and calculates fragmentation.
-// Fragmentation = (total entries - live entries) / total entries
+// It computes both entry-based and byte-based fragmentation and returns
+// the higher of the two. This prevents large dead entries from going
+// undetected when entry counts alone show low fragmentation.
+//
+// Entry-based: (total entries - live entries) / total entries
+// Byte-based:  (total data bytes - live data bytes) / total data bytes
+//
 // Returns: fragmentation ratio (0.0 to 1.0), live count, total count, error
 func (fr *FileReader) CalculateFragmentation() (float64, int, int, error) {
-	liveKeys := make(map[string]bool)
+	liveKeys := make(map[string]int) // key → latest data size
 	totalEntries := 0
+	totalBytes := 0
+
 	_, err := fr.ReadAllEntries(func(entry Entry) bool {
 		totalEntries++
 		switch entry.Operation {
 		case OpDelete:
 			delete(liveKeys, entry.Key)
 		case OpInsert, OpUpdate:
-			liveKeys[entry.Key] = true
+			liveKeys[entry.Key] = len(entry.Data)
 		}
+		totalBytes += len(entry.Data)
 		return true
 	})
 	if err != nil {
 		return 0, 0, 0, err
 	}
+
 	liveCount := len(liveKeys)
 	if totalEntries == 0 {
 		return 0, 0, 0, nil
 	}
-	fragmentation := float64(totalEntries-liveCount) / float64(totalEntries)
+
+	// Entry-based fragmentation
+	entryFrag := float64(totalEntries-liveCount) / float64(totalEntries)
+
+	// Byte-based fragmentation
+	liveBytes := 0
+	for _, size := range liveKeys {
+		liveBytes += size
+	}
+	byteFrag := 0.0
+	if totalBytes > 0 {
+		byteFrag = float64(totalBytes-liveBytes) / float64(totalBytes)
+	}
+
+	// Use the higher of the two — catches both many-small-dead-entries
+	// and few-but-large-dead-entries scenarios
+	fragmentation := entryFrag
+	if byteFrag > fragmentation {
+		fragmentation = byteFrag
+	}
+
 	return fragmentation, liveCount, totalEntries, nil
 }
