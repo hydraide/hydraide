@@ -48,7 +48,7 @@ Tensions can occur between community members even when they are trying their bes
 
 When an incident does occur, it is important to report it promptly. To report a possible violation, **To report a violation of this Code of Conduct, please contact the lead maintainer directly:
 
-📧 Email: peter.gebri@hydraide.io  
+📧 Email: peter.gebri@trendizz.com  
 💬 Or via direct message on our official Discord: https://discord.gg/xE2YSkzFRm
 
 All reports will be handled with confidentiality and care. We are committed to maintaining a safe and respectful community.
