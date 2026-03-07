@@ -37,10 +37,12 @@ MONITORING & STATUS:
   telemetry   Enable/disable telemetry collection for observe
   version     Display CLI and instance version information
 
-UPDATES & MIGRATION:
-  update      Update an instance to the latest HydrAIDE version
-  migrate     Migrate data from V1 to V2 storage format
-  engine      View or change storage engine version (V1/V2)
+UPGRADES & MIGRATION:
+  upgrade        Upgrade an instance to the latest HydrAIDE version
+  migrate        Migrate data between storage format versions
+    v1-to-v2     Migrate V1 (multi-file) to V2 (single-file) format
+    v2-to-v3     Upgrade V2 files to V3 format (faster scanning)
+  engine         View or change storage engine version (V1/V2)
 
 DATA MANAGEMENT:
   backup      Create a backup of instance data
@@ -57,8 +59,9 @@ EXAMPLES:
   hydraidectl init
   hydraidectl list
   sudo hydraidectl start --instance prod
-  sudo hydraidectl update --instance prod --no-start
-  hydraidectl migrate --instance prod --full
+  sudo hydraidectl upgrade --instance prod --no-start
+  hydraidectl migrate v1-to-v2 --instance prod --full
+  hydraidectl migrate v2-to-v3 --instance prod --restart
   hydraidectl telemetry --instance prod --enable
   hydraidectl observe --instance prod
   hydraidectl explore --instance prod

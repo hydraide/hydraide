@@ -27,8 +27,8 @@ Although `hydraidectl` is stable and production-tested, new features are under d
 * [`telemetry` – Enable/disable telemetry collection](#telemetry--enabledisable-telemetry-collection)
 * [`destroy` – Fully delete an instance, optionally including all its data](#restart--restart-instance)
 * [`cert` – Generate TLS Certificates (without modifying instances)](#cert--generate-tls-certificates-without-modifying-instances)
-* [`update` – Update an Instance In‑Place](#update--update-an-instance-inplace-allinone)
-* [`migrate` – Migrate V1 storage to V2 format](#migrate--migrate-v1-storage-to-v2-format)
+* [`upgrade` – Upgrade an Instance In‑Place](#upgrade--upgrade-an-instance-inplace-allinone)
+* [`migrate v1-to-v2` – Migrate V1 storage to V2 format](#migrate-v1-to-v2--migrate-v1-storage-to-v2-format)
 * [`engine` – View or change storage engine version](#engine--view-or-change-storage-engine-version)
 * [`backup` – Create instance backup](#backup--create-instance-backup)
 * [`restore` – Restore instance from backup](#restore--restore-instance-from-backup)
@@ -36,6 +36,7 @@ Although `hydraidectl` is stable and production-tested, new features are under d
 * [`explore` – Interactive swamp hierarchy explorer](#explore--interactive-swamp-hierarchy-explorer)
 * [`stats` – Show detailed swamp statistics and health report](#stats--show-detailed-swamp-statistics-and-health-report)
 * [`compact` – Compact swamp files](#compact--compact-swamp-files)
+* [`migrate v2-to-v3` – Upgrade V2 files to V3 format](#migrate-v2-to-v3--upgrade-v2-files-to-v3-format)
 * [`cleanup` – Remove old storage files](#cleanup--remove-old-storage-files)
 * [`version` – Display CLI and optional instance metadata](#version--display-cli-and-optional-instance-metadata)
 
@@ -773,7 +774,7 @@ hydraidectl cert
 
 ---
 
-## `update` – Update an Instance In‑Place (all‑in‑one)
+## `upgrade` – Upgrade an Instance In‑Place (all‑in‑one)
 
 Updates a HydrAIDE instance to the **latest available server binary**.
 If an update is available, the command performs the entire flow end‑to‑end:
@@ -794,7 +795,7 @@ If the instance is **already on the latest version**, this command is a **no‑o
 ### Synopsis
 
 ```bash
-hydraidectl update --instance <name> [--no-start]
+hydraidectl upgrade --instance <name> [--no-start]
 ```
 
 ### Flags
@@ -819,10 +820,10 @@ hydraidectl update --instance <name> [--no-start]
 
 ```bash
 # Update an instance named "prod" and start it
-hydraidectl update --instance prod
+hydraidectl upgrade --instance prod
 
 # Update without starting (for migration scenarios)
-sudo hydraidectl update --instance prod --no-start
+sudo hydraidectl upgrade --instance prod --no-start
 ```
 
 **Typical outputs**
@@ -903,7 +904,7 @@ Use that command to reinstall the CLI with the latest stable binary.
 
 ---
 
-## `migrate` – Migrate V1 Storage to V2 Format
+## `migrate v1-to-v2` – Migrate V1 Storage to V2 Format
 
 **⚠️ IMPORTANT: Always create a full backup before migration!**
 
@@ -930,13 +931,13 @@ The V2 storage engine provides:
 ```bash
 # Recommended: Full automated migration
 hydraidectl backup --instance prod --target /backup/pre-migration
-hydraidectl migrate --instance prod --full
+hydraidectl migrate v1-to-v2 --instance prod --full
 
 # Manual migration with data path
-hydraidectl migrate --data-path /path/to/data --verify --delete-old
+hydraidectl migrate v1-to-v2 --data-path /path/to/data --verify --delete-old
 
 # Dry-run to see what would be migrated
-hydraidectl migrate --instance prod --dry-run
+hydraidectl migrate v1-to-v2 --instance prod --dry-run
 ```
 
 ---
@@ -1262,10 +1263,10 @@ sudo hydraidectl stop --instance prod
 sudo hydraidectl backup --instance prod --output /backup/pre-migration --compress
 
 # 5. Update the server WITHOUT starting it
-sudo hydraidectl update --instance prod --no-start
+sudo hydraidectl upgrade --instance prod --no-start
 
 # 6. Run the full migration
-sudo hydraidectl migrate --instance prod --full
+sudo hydraidectl migrate v1-to-v2 --instance prod --full
 
 # 7. Verify migration results (check the output above for any errors)
 hydraidectl size --instance prod
@@ -1303,19 +1304,56 @@ hydraidectl start --instance prod
 
 ---
 
+## `migrate v2-to-v3` – Upgrade V2 Files to V3 Format
+
+Upgrades all V2-format `.hyd` swamp files to V3 format. V3 stores the swamp name in the file header, enabling **~100x faster scanning** for tools like `explore` and `stats`. The instance is automatically stopped during the upgrade.
+
+Already-V3 files are skipped automatically.
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--instance, -i` | Instance name (required) | – |
+| `--parallel, -p` | Number of parallel workers | `4` |
+| `--restart, -r` | Restart instance after upgrade | `false` |
+| `--dry-run` | Only analyze, don't upgrade | `false` |
+| `--json, -j` | Output as JSON | `false` |
+
+```bash
+# Check how many V2 files need upgrading
+hydraidectl migrate v2-to-v3 --instance prod --dry-run
+
+# Upgrade all V2 files to V3
+hydraidectl migrate v2-to-v3 --instance prod --restart
+
+# Upgrade with more workers for faster processing
+hydraidectl migrate v2-to-v3 --instance prod --parallel 8 --restart
+```
+
+**The upgrade process:**
+
+1. Stops the instance (if running)
+2. Scans all `.hyd` files and identifies V2-format files
+3. Rewrites each V2 file as V3 (swamp name stored in header)
+4. Reports upgrade results (files upgraded, space changes)
+5. Optionally restarts the instance
+
+> **Note:** Compaction (`hydraidectl compact`) also automatically upgrades V2 files to V3 during the compaction process. The `migrate v2-to-v3` command is useful when you want to upgrade all files without waiting for compaction thresholds.
+
+---
+
 ## V3 File Format Upgrade
 
 Starting with server **v3.3.0** and hydraidectl **v2.4.0**, HydrAIDE uses the **V3** `.hyd` file format. V3 stores the swamp name as plain text immediately after the 64-byte file header, enabling fast metadata scanning (~100 bytes per file) without decompressing any blocks.
 
-**No manual migration is needed.** The upgrade from V2 to V3 happens automatically:
+The upgrade from V2 to V3 happens through multiple paths:
 
 - **New swamp files** are created in V3 format immediately.
-- **Existing V2 files** are upgraded to V3 during compaction (when fragmentation exceeds the threshold and the swamp is closed).
-- You can **force an immediate upgrade** of all files by running compaction:
+- **Existing V2 files** are upgraded to V3 during compaction (automatic or manual).
+- **Dedicated upgrade command** for immediate, full-instance conversion:
 
 ```bash
-# Upgrade all V2 files to V3 by compacting with a 0% threshold
-hydraidectl compact --instance prod --threshold 0 --restart
+# Upgrade all V2 files to V3 in one step
+hydraidectl migrate v2-to-v3 --instance prod --restart
 ```
 
 V3 is fully backward-compatible — the server and hydraidectl can read both V2 and V3 files without any configuration changes.

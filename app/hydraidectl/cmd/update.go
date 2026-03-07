@@ -17,26 +17,26 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// CLI flag values for update command
+// CLI flag values for upgrade command
 var (
 	updateInstance string
 	updateNoStart  bool
 )
 
-// updateCmd defines the "update" subcommand for the CLI.
+// upgradeCmd defines the "upgrade" subcommand for the CLI.
 // Flow: gracefully stop (if running) -> download latest binary -> save metadata
 // -> (re)generate service definition -> optionally start instance -> wait for healthy.
-var updateCmd = &cobra.Command{
-	Use:   "update",
-	Short: "Update an instance to the latest HydrAIDE version",
-	Long: `The update command performs an all-in-one upgrade:
+var upgradeCmd = &cobra.Command{
+	Use:   "upgrade",
+	Short: "Upgrade an instance to the latest HydrAIDE version",
+	Long: `The upgrade command performs an all-in-one upgrade:
 1) gracefully stops the instance if it is running,
 2) downloads the latest server binary,
 3) updates the service definition,
 4) optionally starts the instance (unless --no-start is used),
 5) waits until it becomes healthy (if started).
 
-Use --no-start when you want to update the binary without starting the server,
+Use --no-start when you want to upgrade the binary without starting the server,
 for example before running a migration.`,
 
 	Run: func(cmd *cobra.Command, args []string) {
@@ -184,8 +184,7 @@ for example before running a migration.`,
 }
 
 func init() {
-	// Register the "update" subcommand and its flags on the root command.
-	rootCmd.AddCommand(updateCmd)
-	updateCmd.Flags().StringVarP(&updateInstance, "instance", "i", "", "Name of the service instance")
-	updateCmd.Flags().BoolVar(&updateNoStart, "no-start", false, "Update without starting the instance (useful before migration)")
+	rootCmd.AddCommand(upgradeCmd)
+	upgradeCmd.Flags().StringVarP(&updateInstance, "instance", "i", "", "Name of the service instance")
+	upgradeCmd.Flags().BoolVar(&updateNoStart, "no-start", false, "Upgrade without starting the instance (useful before migration)")
 }

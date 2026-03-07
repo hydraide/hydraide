@@ -29,6 +29,13 @@ type scanDoneMsg struct {
 	err      error
 }
 
+// scanTickMsg is sent periodically during scanning to update progress.
+type scanTickMsg struct {
+	scanned int64
+	total   int64
+	errors  int64
+}
+
 // Model is the Bubbletea model for the explore TUI.
 type Model struct {
 	explorer *explorer.Explorer
@@ -69,11 +76,12 @@ func NewModel(dataPath string) Model {
 		dataPath: dataPath,
 		level:    levelSanctuaries,
 		scanning: true,
+		scanInfo: "Scanning...",
 	}
 }
 
 func (m Model) Init() tea.Cmd {
-	return m.startScan()
+	return tea.Batch(m.startScan(), m.scanTick())
 }
 
 func (m Model) startScan() tea.Cmd {
@@ -90,11 +98,36 @@ func (m Model) startScan() tea.Cmd {
 	}
 }
 
+func (m Model) scanTick() tea.Cmd {
+	return tea.Tick(100*time.Millisecond, func(_ time.Time) tea.Msg {
+		status := m.explorer.GetScanStatus()
+		return scanTickMsg{
+			scanned: status.ScannedFiles,
+			total:   status.TotalFiles,
+			errors:  status.ErrorCount,
+		}
+	})
+}
+
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		return m, nil
+
+	case scanTickMsg:
+		if m.scanning {
+			if msg.total > 0 {
+				m.scanInfo = fmt.Sprintf("Scanning... %d / %d files", msg.scanned, msg.total)
+			} else {
+				m.scanInfo = fmt.Sprintf("Scanning... %d files found", msg.scanned)
+			}
+			if msg.errors > 0 {
+				m.scanInfo += fmt.Sprintf(" (%d errors)", msg.errors)
+			}
+			return m, m.scanTick()
+		}
 		return m, nil
 
 	case scanDoneMsg:
@@ -354,7 +387,8 @@ func (m Model) View() string {
 
 	// Scan info
 	if m.scanning {
-		b.WriteString("  " + scanStyle.Render("Scanning...") + "\n")
+		b.WriteString("  " + scanStyle.Render(m.scanInfo) + "\n")
+		b.WriteString("\n  " + labelStyle.Render("Press q to quit"))
 		return b.String()
 	}
 	if m.scanError != "" {

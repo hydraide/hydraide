@@ -45,9 +45,9 @@ func (e *Explorer) scanDirectory(ctx context.Context, status *ScanStatus) error 
 	}
 
 	// Process files in parallel
-	workers := runtime.NumCPU()
-	if workers > 16 {
-		workers = 16
+	workers := runtime.NumCPU() * 4
+	if workers > 64 {
+		workers = 64
 	}
 	if workers > len(hydFiles) {
 		workers = len(hydFiles)
@@ -108,12 +108,15 @@ func (e *Explorer) scanFile(filePath string) (*SwampDetail, error) {
 	// Get swamp name
 	swampName := reader.GetSwampName()
 	if swampName == "" {
-		// V2 fallback: need to read blocks for OpMetadata
-		_, name, err := reader.LoadIndex()
-		if err != nil {
-			return nil, err
-		}
-		swampName = name
+		// V2 fallback: read only until we find the OpMetadata entry
+		// (typically the very first entry in the first block)
+		reader.ReadAllEntries(func(entry v2.Entry) bool {
+			if entry.Operation == v2.OpMetadata && entry.Key == v2.MetadataEntryKey {
+				swampName = string(entry.Data)
+				return false // stop reading
+			}
+			return true
+		})
 	}
 
 	if swampName == "" {

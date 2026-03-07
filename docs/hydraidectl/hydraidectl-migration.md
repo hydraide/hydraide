@@ -81,12 +81,12 @@ This creates a compressed backup that can be restored if anything goes wrong.
 Update to the latest server version, but do NOT start the server yet:
 
 ```bash
-sudo hydraidectl update --instance <your-instance-name> --no-start
+sudo hydraidectl upgrade --instance <your-instance-name> --no-start
 ```
 
 Example:
 ```bash
-sudo hydraidectl update --instance prod --no-start
+sudo hydraidectl upgrade --instance prod --no-start
 ```
 
 The `--no-start` flag ensures the server stays stopped so you can run the migration.
@@ -96,12 +96,12 @@ The `--no-start` flag ensures the server stays stopped so you can run the migrat
 Now run the actual migration with full mode:
 
 ```bash
-sudo hydraidectl migrate --instance <your-instance-name> --full
+sudo hydraidectl migrate v1-to-v2 --instance <your-instance-name> --full
 ```
 
 Example:
 ```bash
-sudo hydraidectl migrate --instance prod --full
+sudo hydraidectl migrate v1-to-v2 --instance prod --full
 ```
 
 The `--full` flag will:
@@ -162,10 +162,10 @@ sudo hydraidectl stop --instance prod
 sudo hydraidectl backup --instance prod --target /backup/hydraide/prod-backup.tar.gz --compress
 
 # 5. Update server without starting
-sudo hydraidectl update --instance prod --no-start
+sudo hydraidectl upgrade --instance prod --no-start
 
 # 6. Run migration
-sudo hydraidectl migrate --instance prod --full
+sudo hydraidectl migrate v1-to-v2 --instance prod --full
 
 # 7. Verify results (check output above)
 
@@ -185,7 +185,7 @@ hydraidectl health --instance prod
 Run a dry-run to see what would be migrated without making any changes:
 
 ```bash
-hydraidectl migrate --instance prod --dry-run
+hydraidectl migrate v1-to-v2 --instance prod --dry-run
 ```
 
 ### Parallel Migration (Faster for Large Datasets)
@@ -193,7 +193,7 @@ hydraidectl migrate --instance prod --dry-run
 For large datasets, use multiple worker threads:
 
 ```bash
-hydraidectl migrate --instance prod --full --parallel 8
+hydraidectl migrate v1-to-v2 --instance prod --full --parallel 8
 ```
 
 ### JSON Output
@@ -201,7 +201,7 @@ hydraidectl migrate --instance prod --full --parallel 8
 For scripting or automation:
 
 ```bash
-hydraidectl migrate --instance prod --full --json
+hydraidectl migrate v1-to-v2 --instance prod --full --json
 ```
 
 ---
@@ -311,14 +311,21 @@ The migration temporarily needs extra disk space. Solutions:
 
 Starting with server v3.3.0, HydrAIDE uses the **V3** `.hyd` file format. V3 stores the swamp name as plain text after the file header, which enables fast metadata scanning for the `hydraidectl explore` command.
 
-**No manual migration is required.** The upgrade happens automatically:
+The upgrade happens through multiple paths:
 
-- New files are created in V3 format.
+- New files are created in V3 format automatically.
 - Existing V2 files are upgraded during compaction.
-- To force an immediate upgrade of all files:
+- **Dedicated upgrade command** for immediate, full-instance conversion:
 
 ```bash
-hydraidectl compact --instance prod --threshold 0 --restart
+# Check how many V2 files need upgrading
+hydraidectl migrate v2-to-v3 --instance prod --dry-run
+
+# Upgrade all V2 files to V3
+hydraidectl migrate v2-to-v3 --instance prod --restart
+
+# Upgrade with more workers for faster processing
+hydraidectl migrate v2-to-v3 --instance prod --parallel 8 --restart
 ```
 
 V3 is fully backward-compatible with V2 — no data is lost and no rollback is needed.
