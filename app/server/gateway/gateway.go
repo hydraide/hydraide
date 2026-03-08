@@ -9,6 +9,7 @@ import (
 	"runtime/debug"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -1001,17 +1002,12 @@ func (g Gateway) DestroyBulk(stream hydrapb.HydraideService_DestroyBulkServer) e
 
 	hydraInterface := g.ZeusInterface.GetHydra()
 
-	var destroyed, failed, totalReceived int64
-	var lastError string
+	var destroyed, failed, totalReceived atomic.Int64
+	var lastError atomic.Value
+	lastError.Store("")
 
 	// Work channel for incoming targets
 	workCh := make(chan *hydrapb.DestroyBulkTarget, 1024)
-	// Done channel for worker results
-	type result struct {
-		ok  bool
-		err string
-	}
-	resultCh := make(chan result, 1024)
 
 	// Start workers
 	numWorkers := 8
@@ -1024,47 +1020,37 @@ func (g Gateway) DestroyBulk(stream hydrapb.HydraideService_DestroyBulkServer) e
 				swampName := name.Load(target.GetSwampName())
 				swampInterface, err := hydraInterface.SummonSwamp(stream.Context(), target.GetIslandID(), swampName)
 				if err != nil {
-					resultCh <- result{ok: false, err: fmt.Sprintf("%s: %v", target.GetSwampName(), err)}
+					failed.Add(1)
+					lastError.Store(fmt.Sprintf("%s: %v", target.GetSwampName(), err))
 					continue
 				}
 				swampInterface.Destroy()
-				resultCh <- result{ok: true}
+				destroyed.Add(1)
 			}
 		}()
 	}
 
 	// Progress reporter goroutine
+	stopProgress := make(chan struct{})
 	progressDone := make(chan struct{})
 	go func() {
 		defer close(progressDone)
-		ticker := time.NewTicker(100 * time.Millisecond)
+		ticker := time.NewTicker(200 * time.Millisecond)
 		defer ticker.Stop()
 		for {
 			select {
 			case <-ticker.C:
 				_ = stream.Send(&hydrapb.DestroyBulkResponse{
-					Destroyed:     destroyed,
-					Failed:        failed,
-					TotalReceived: totalReceived,
-					LastError:     lastError,
+					Destroyed:     destroyed.Load(),
+					Failed:        failed.Load(),
+					TotalReceived: totalReceived.Load(),
+					LastError:     lastError.Load().(string),
 					Done:          false,
 				})
+			case <-stopProgress:
+				return
 			case <-stream.Context().Done():
 				return
-			}
-		}
-	}()
-
-	// Result collector goroutine
-	resultDone := make(chan struct{})
-	go func() {
-		defer close(resultDone)
-		for r := range resultCh {
-			if r.ok {
-				destroyed++
-			} else {
-				failed++
-				lastError = r.err
 			}
 		}
 	}()
@@ -1076,14 +1062,14 @@ func (g Gateway) DestroyBulk(stream hydrapb.HydraideService_DestroyBulkServer) e
 			break
 		}
 		if err != nil {
+			close(stopProgress)
+			<-progressDone
 			close(workCh)
 			wg.Wait()
-			close(resultCh)
-			<-resultDone
 			return err
 		}
 		for _, target := range req.GetTargets() {
-			totalReceived++
+			totalReceived.Add(1)
 			workCh <- target
 		}
 	}
@@ -1091,15 +1077,17 @@ func (g Gateway) DestroyBulk(stream hydrapb.HydraideService_DestroyBulkServer) e
 	// All targets received, close work channel and wait for workers
 	close(workCh)
 	wg.Wait()
-	close(resultCh)
-	<-resultDone
+
+	// Stop progress reporter
+	close(stopProgress)
+	<-progressDone
 
 	// Send final response
 	_ = stream.Send(&hydrapb.DestroyBulkResponse{
-		Destroyed:     destroyed,
-		Failed:        failed,
-		TotalReceived: totalReceived,
-		LastError:     lastError,
+		Destroyed:     destroyed.Load(),
+		Failed:        failed.Load(),
+		TotalReceived: totalReceived.Load(),
+		LastError:     lastError.Load().(string),
 		Done:          true,
 	})
 

@@ -130,7 +130,8 @@ func (m *Model) handleDeleteConfirmInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.deleting = true
 				m.deleteTotal = int64(len(m.deleteSwampList))
 				m.deleteProgress = deleteProgressMsg{}
-				return m, tea.Batch(m.startDelete(), m.deleteTick())
+				m.deleteUpdateCh = make(chan tea.Msg, 64)
+				return m, tea.Batch(m.startDelete(), waitForDeleteUpdate(m.deleteUpdateCh))
 			}
 		}
 		return m, nil
@@ -150,32 +151,42 @@ func (m *Model) handleDeleteConfirmInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 }
 
-// deleteTick sends periodic progress updates during deletion.
-func (m Model) deleteTick() tea.Cmd {
-	return tea.Tick(100*time.Millisecond, func(_ time.Time) tea.Msg {
-		return m.deleteProgress
-	})
+// waitForDeleteUpdate blocks on the channel and returns the next message to Bubbletea.
+func waitForDeleteUpdate(ch chan tea.Msg) tea.Cmd {
+	return func() tea.Msg {
+		msg, ok := <-ch
+		if !ok {
+			return nil
+		}
+		return msg
+	}
 }
 
 // startDelete initiates the bulk destroy operation via gRPC streaming.
+// Progress and completion are sent through m.deleteUpdateCh.
 func (m *Model) startDelete() tea.Cmd {
 	swamps := m.deleteSwampList
 	basePath := m.basePath
+	ch := m.deleteUpdateCh
 
 	return func() tea.Msg {
 		start := time.Now()
 
 		conn, err := connectToServer(basePath)
 		if err != nil {
-			return deleteDoneMsg{lastError: fmt.Sprintf("Connection failed: %v", err)}
+			ch <- deleteDoneMsg{lastError: fmt.Sprintf("Connection failed: %v", err)}
+			close(ch)
+			return nil
 		}
-		defer conn.Close()
 
 		client := hydrapb.NewHydraideServiceClient(conn)
 
 		stream, err := client.DestroyBulk(context.Background())
 		if err != nil {
-			return deleteDoneMsg{lastError: fmt.Sprintf("Stream open failed: %v", err)}
+			conn.Close()
+			ch <- deleteDoneMsg{lastError: fmt.Sprintf("Stream open failed: %v", err)}
+			close(ch)
+			return nil
 		}
 
 		// Send targets in batches
@@ -195,41 +206,48 @@ func (m *Model) startDelete() tea.Cmd {
 			}
 
 			if err := stream.Send(batch); err != nil {
-				return deleteDoneMsg{lastError: fmt.Sprintf("Send failed: %v", err)}
+				conn.Close()
+				ch <- deleteDoneMsg{lastError: fmt.Sprintf("Send failed: %v", err)}
+				close(ch)
+				return nil
 			}
 		}
 
 		// Close send side
 		if err := stream.CloseSend(); err != nil {
-			return deleteDoneMsg{lastError: fmt.Sprintf("CloseSend failed: %v", err)}
+			conn.Close()
+			ch <- deleteDoneMsg{lastError: fmt.Sprintf("CloseSend failed: %v", err)}
+			close(ch)
+			return nil
 		}
 
-		// Read progress responses until done
-		var lastResp *hydrapb.DestroyBulkResponse
+		// Read progress responses and forward to Bubbletea via channel
 		for {
 			resp, err := stream.Recv()
 			if err != nil {
 				break
 			}
-			lastResp = resp
 			if resp.Done {
+				ch <- deleteDoneMsg{
+					destroyed: resp.Destroyed,
+					failed:    resp.Failed,
+					duration:  time.Since(start),
+					lastError: resp.LastError,
+				}
 				break
 			}
-		}
-
-		if lastResp != nil {
-			return deleteDoneMsg{
-				destroyed: lastResp.Destroyed,
-				failed:    lastResp.Failed,
-				duration:  time.Since(start),
-				lastError: lastResp.LastError,
+			// Forward progress update
+			ch <- deleteProgressMsg{
+				destroyed: resp.Destroyed,
+				failed:    resp.Failed,
+				total:     resp.TotalReceived,
+				lastError: resp.LastError,
 			}
 		}
 
-		return deleteDoneMsg{
-			duration:  time.Since(start),
-			lastError: "No response received from server",
-		}
+		conn.Close()
+		close(ch)
+		return nil
 	}
 }
 

@@ -110,6 +110,7 @@ type Model struct {
 	deleteDone       bool
 	deleteResult     deleteDoneMsg
 	deleteError      string        // error message if delete unavailable
+	deleteUpdateCh   chan tea.Msg  // channel for progress/done messages from gRPC goroutine
 }
 
 // NewModel creates a new explore TUI model.
@@ -189,7 +190,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case deleteProgressMsg:
 		m.deleteProgress = msg
-		return m, m.deleteTick()
+		return m, waitForDeleteUpdate(m.deleteUpdateCh)
 
 	case deleteDoneMsg:
 		m.deleting = false
