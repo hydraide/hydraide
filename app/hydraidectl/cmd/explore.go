@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/hydraide/hydraide/app/hydraidectl/cmd/explore"
@@ -21,11 +22,15 @@ var exploreCmd = &cobra.Command{
 Interactive TUI for browsing the Sanctuary / Realm / Swamp hierarchy.
 Navigate with arrow keys, Enter to drill down, Esc to go back.
 
+When used with --instance on a running server, you can also delete
+Sanctuaries, Realms, or individual Swamps by pressing 'd'. Deletion
+requires double confirmation and uses the server's DestroyBulk API.
+
 USAGE:
-  # Direct filesystem mode (no running server needed):
+  # Direct filesystem mode (no running server needed, read-only):
   hydraidectl explore --data-path /var/hydraide/data
 
-  # Instance mode (reads data path from instance config):
+  # Instance mode (reads data path from instance config, supports deletion):
   hydraidectl explore --instance prod
 `,
 	Run: runExploreCmd,
@@ -44,13 +49,13 @@ func init() {
 }
 
 func runExploreCmd(cmd *cobra.Command, args []string) {
-	dataPath := resolveExploreDataPath()
+	dataPath, basePath := resolveExploreDataPath()
 	if dataPath == "" {
 		fmt.Println("Error: provide --data-path or --instance")
 		os.Exit(1)
 	}
 
-	model := explore.NewModel(dataPath)
+	model := explore.NewModel(dataPath, exploreInstance, basePath)
 	p := tea.NewProgram(model, tea.WithAltScreen())
 
 	if _, err := p.Run(); err != nil {
@@ -59,9 +64,9 @@ func runExploreCmd(cmd *cobra.Command, args []string) {
 	}
 }
 
-func resolveExploreDataPath() string {
+func resolveExploreDataPath() (dataPath string, basePath string) {
 	if exploreDataPath != "" {
-		return exploreDataPath
+		return exploreDataPath, ""
 	}
 	if exploreInstance != "" {
 		fs := filesystem.New()
@@ -75,7 +80,23 @@ func resolveExploreDataPath() string {
 			fmt.Printf("  Error: instance '%s' not found: %v\n", exploreInstance, err)
 			os.Exit(1)
 		}
-		return filepath.Join(instance.BasePath, "data")
+		return filepath.Join(instance.BasePath, "data"), instance.BasePath
 	}
-	return ""
+	return "", ""
+}
+
+// resolveServerAddr reads the server port from the instance .env file.
+func resolveServerAddr(basePath string) string {
+	envPath := filepath.Join(basePath, ".env")
+	port := "5554"
+	if envData, err := os.ReadFile(envPath); err == nil {
+		for _, line := range strings.Split(string(envData), "\n") {
+			if strings.HasPrefix(line, "HYDRAIDE_SERVER_PORT=") {
+				port = strings.TrimPrefix(line, "HYDRAIDE_SERVER_PORT=")
+				port = strings.TrimSpace(port)
+				break
+			}
+		}
+	}
+	return fmt.Sprintf("localhost:%s", port)
 }

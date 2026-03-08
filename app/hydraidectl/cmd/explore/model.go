@@ -36,10 +36,39 @@ type scanTickMsg struct {
 	errors  int64
 }
 
+// deleteLevel describes what scope of deletion is being performed.
+type deleteLevel int
+
+const (
+	deleteSanctuary deleteLevel = iota
+	deleteRealm
+	deleteSwamp
+)
+
+// deleteProgressMsg is sent periodically during deletion to update progress.
+type deleteProgressMsg struct {
+	destroyed int64
+	failed    int64
+	total     int64
+	lastError string
+}
+
+// deleteDoneMsg is sent when the bulk deletion finishes.
+type deleteDoneMsg struct {
+	destroyed int64
+	failed    int64
+	duration  time.Duration
+	lastError string
+}
+
 // Model is the Bubbletea model for the explore TUI.
 type Model struct {
 	explorer *explorer.Explorer
 	dataPath string
+
+	// Instance connection info (empty = offline/read-only mode)
+	instanceName string
+	basePath     string
 
 	level     viewLevel
 	cursor    int
@@ -67,16 +96,33 @@ type Model struct {
 	// Search/filter
 	searching  bool
 	searchText string
+
+	// Delete state
+	deleteMode       viewLevel     // which level initiated the delete (levelSanctuaries/levelRealms/levelSwamps/levelDetail)
+	deleteTargetName string        // human-readable target name
+	deleteSwampList  []*explorer.SwampDetail // all swamps to delete
+	deleteConfirm    int           // 0=not deleting, 1=first confirm, 2=second confirm
+	deleteCode       string        // generated confirmation code
+	deleteInput      string        // user-typed code
+	deleting         bool          // deletion in progress
+	deleteProgress   deleteProgressMsg
+	deleteTotal      int64
+	deleteDone       bool
+	deleteResult     deleteDoneMsg
+	deleteError      string        // error message if delete unavailable
 }
 
 // NewModel creates a new explore TUI model.
-func NewModel(dataPath string) Model {
+// If instanceName and basePath are non-empty, deletion is available via the running server.
+func NewModel(dataPath, instanceName, basePath string) Model {
 	return Model{
-		explorer: explorer.New(dataPath),
-		dataPath: dataPath,
-		level:    levelSanctuaries,
-		scanning: true,
-		scanInfo: "Scanning...",
+		explorer:     explorer.New(dataPath),
+		dataPath:     dataPath,
+		instanceName: instanceName,
+		basePath:     basePath,
+		level:        levelSanctuaries,
+		scanning:     true,
+		scanInfo:     "Scanning...",
 	}
 }
 
@@ -141,11 +187,50 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.sanctuaries = m.explorer.ListSanctuaries()
 		return m, nil
 
+	case deleteProgressMsg:
+		m.deleteProgress = msg
+		return m, m.deleteTick()
+
+	case deleteDoneMsg:
+		m.deleting = false
+		m.deleteDone = true
+		m.deleteResult = msg
+		return m, nil
+
 	case tea.KeyMsg:
 		if m.scanning {
 			if msg.String() == "q" || msg.String() == "ctrl+c" {
 				return m, tea.Quit
 			}
+			return m, nil
+		}
+
+		// Delete done — any key returns to normal view + rescan
+		if m.deleteDone {
+			m.deleteDone = false
+			m.deleteConfirm = 0
+			m.deleteError = ""
+			m.scanning = true
+			m.scanError = ""
+			return m, tea.Batch(m.startScan(), m.scanTick())
+		}
+
+		// Deleting in progress — block input
+		if m.deleting {
+			if msg.String() == "ctrl+c" {
+				return m, tea.Quit
+			}
+			return m, nil
+		}
+
+		// Delete confirmation input
+		if m.deleteConfirm > 0 {
+			return m.handleDeleteConfirmInput(msg)
+		}
+
+		// Delete error shown — any key dismisses
+		if m.deleteError != "" {
+			m.deleteError = ""
 			return m, nil
 		}
 
@@ -195,6 +280,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.scanning = true
 			m.scanError = ""
 			return m, m.startScan()
+
+		case "d":
+			m.initiateDelete()
 		}
 	}
 
@@ -400,6 +488,31 @@ func (m Model) View() string {
 	// Breadcrumb
 	b.WriteString("  " + m.renderBreadcrumb() + "\n")
 	b.WriteString("\n")
+
+	// Delete error overlay
+	if m.deleteError != "" {
+		b.WriteString("\n  " + errorCountStyle.Render(m.deleteError) + "\n")
+		b.WriteString("  " + labelStyle.Render("Press any key to continue"))
+		return b.String()
+	}
+
+	// Delete confirmation overlay
+	if m.deleteConfirm > 0 {
+		b.WriteString(m.renderDeleteConfirm())
+		return b.String()
+	}
+
+	// Delete in progress
+	if m.deleting {
+		b.WriteString(m.renderDeleting())
+		return b.String()
+	}
+
+	// Delete done
+	if m.deleteDone {
+		b.WriteString(m.renderDeleteDone())
+		return b.String()
+	}
 
 	// Body
 	switch m.level {
@@ -637,11 +750,17 @@ func (m Model) renderHelp() string {
 		if m.level > levelSanctuaries {
 			pairs = append([]string{"esc", "back"}, pairs...)
 		}
+		if m.instanceName != "" {
+			pairs = append(pairs, "d", "delete")
+		}
 	case levelDetail:
 		pairs = []string{
 			"esc", "back",
 			"r", "rescan",
 			"q", "quit",
+		}
+		if m.instanceName != "" {
+			pairs = append(pairs, "d", "delete")
 		}
 	}
 

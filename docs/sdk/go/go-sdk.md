@@ -210,6 +210,7 @@ including registration, validation, destruction, and real-time subscriptions.
 | IsKeyExists     | ✅ Ready | [basics_is_key_exist.go](examples/models/basics_is_key_exist.go)         |
 | Count           | ✅ Ready | [basics_count.go](examples/models/basics_count.go)                       |
 | Destroy         | ✅ Ready | [basics_destroy.go](examples/models/basics_destroy.go)                   |
+| DestroyBulk     | ✅ Ready | Bulk destroy multiple swamps via bidirectional streaming                  |
 | Subscribe       | ✅ Ready | [basics_subscribe.go](examples/models/basics_subscribe.go)               |
 
 ---

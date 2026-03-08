@@ -73,4 +73,26 @@ var (
 			BorderForeground(primaryColor).
 			Padding(0, 1).
 			MarginBottom(1)
+
+	deleteWarningStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("#000000")).
+				Background(warningColor)
+
+	deleteDangerStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(whiteColor).
+				Background(errorColor)
+
+	deleteTargetStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(errorColor)
+
+	deleteCodeStyle = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(warningColor)
+
+	deleteInputStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(whiteColor)
 )

@@ -625,14 +625,16 @@ hydraidectl telemetry --instance prod --json
 
 ## `explore` – Interactive Swamp Hierarchy Explorer
 
-The `explore` command provides an interactive TUI (Terminal User Interface) for browsing the Sanctuary / Realm / Swamp hierarchy of your HydrAIDE data. It scans `.hyd` files directly from disk and builds an in-memory index, so **no running server is needed**.
+The `explore` command provides an interactive TUI (Terminal User Interface) for browsing the Sanctuary / Realm / Swamp hierarchy of your HydrAIDE data. It scans `.hyd` files directly from disk and builds an in-memory index, so **no running server is needed** for browsing.
+
+When used with `--instance` on a running server, you can also **delete** Sanctuaries, Realms, or individual Swamps directly from the explorer.
 
 **Quick Start:**
 ```bash
-# Browse an instance's data
+# Browse an instance's data (supports deletion if server is running)
 hydraidectl explore --instance prod
 
-# Browse a data directory directly
+# Browse a data directory directly (read-only, no deletion)
 hydraidectl explore --data-path /var/hydraide/data
 ```
 
@@ -644,8 +646,8 @@ hydraidectl explore [--instance <name> | --data-path <path>]
 **Flags:**
 | Flag | Description |
 |------|-------------|
-| `--instance, -i` | Instance name (reads data path from instance config) |
-| `--data-path, -d` | Direct path to data directory (no server needed) |
+| `--instance, -i` | Instance name (reads data path from instance config, enables deletion) |
+| `--data-path, -d` | Direct path to data directory (read-only, no deletion) |
 
 **How It Works:**
 
@@ -664,6 +666,7 @@ The swamp names are parsed into a three-level hierarchy: **Sanctuary / Realm / S
 | `PgUp/PgDown` | Scroll pages |
 | `Home/End` | Jump to top/bottom |
 | `r` | Rescan data directory |
+| `d` | Delete selected item (instance mode only) |
 | `q` | Quit |
 
 **Hierarchy Levels:**
@@ -673,14 +676,33 @@ The swamp names are parsed into a three-level hierarchy: **Sanctuary / Realm / S
 3. **Swamps** — Individual swamp files. Shows file size, entry count, format version.
 4. **Detail** — Full metadata for a single swamp: file path, creation/modification time, block count, island ID.
 
+**Deletion (Instance Mode Only):**
+
+When launched with `--instance` and the server is running, you can delete data at any level by pressing `d`:
+
+- **Sanctuary level:** Deletes all Realms and all Swamps within the selected Sanctuary.
+- **Realm level:** Deletes all Swamps within the selected Realm.
+- **Swamp level / Detail:** Deletes the individual Swamp.
+
+Deletion requires **double confirmation** to prevent accidental data loss:
+
+1. **First confirmation:** Shows a summary of what will be deleted (target name, swamp count, total size) and requires typing a randomly generated 4-character code.
+2. **Second confirmation:** Shows a stronger warning emphasizing that the operation is **irreversible**, with a new random code to type.
+
+After both confirmations, the explorer uses the server's `DestroyBulk` gRPC streaming API to delete all swamps with parallel workers, showing a real-time progress bar. The Destroy operation cleans up both in-memory state and disk files, including empty parent directories.
+
+> **Warning:** Deletion is permanent and cannot be undone. The data is removed from both memory and disk.
+
+> **Note:** Deletion is not available in `--data-path` mode because the server needs to handle cleanup of in-memory state and file locks properly.
+
 **Examples:**
 
-Browse instance data interactively:
+Browse instance data interactively (with deletion support):
 ```bash
 hydraidectl explore --instance prod
 ```
 
-Browse a local data directory (useful for development/testing):
+Browse a local data directory (read-only, useful for development/testing):
 ```bash
 hydraidectl explore --data-path /tmp/hydraide-test-data
 ```

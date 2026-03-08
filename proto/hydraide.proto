@@ -189,6 +189,30 @@ service HydraideService {
   // - Full environment reset
   rpc Destroy(DestroyRequest) returns (DestroyResponse) {}
 
+  // DestroyBulk permanently deletes multiple swamps using bidirectional streaming.
+  //
+  // The client sends batches of swamp targets (IslandID + SwampName) through the stream,
+  // and the server processes them using an internal worker pool for maximum throughput.
+  // The server streams back periodic progress updates so the client can display real-time feedback.
+  //
+  // This method acquires the system-wide lock once for the entire operation,
+  // avoiding the overhead of per-call locking that would occur with individual Destroy calls.
+  //
+  // ⚠️ Warning: This operation is irreversible. All data for the targeted swamps will be permanently lost.
+  //
+  // Flow:
+  //   1. Client opens the stream and sends DestroyBulkRequest messages (each containing a batch of targets)
+  //   2. Server processes targets as they arrive using parallel workers
+  //   3. Server periodically sends DestroyBulkResponse with progress updates
+  //   4. Client closes the send side (CloseSend) when all targets have been sent
+  //   5. Server finishes remaining work, sends a final response with done=true, and closes the stream
+  //
+  // Typical use cases:
+  //   - Bulk cleanup of entire Sanctuaries or Realms (thousands of swamps)
+  //   - Mass data purge operations via CLI or management tools
+  //   - Environment teardown after large-scale testing
+  rpc DestroyBulk(stream DestroyBulkRequest) returns (stream DestroyBulkResponse) {}
+
   // Delete removes one or more treasures (key-value pairs) from the specified swamp.
   //
   // This is a precise, non-destructive swamp-level operation.
@@ -521,6 +545,36 @@ message DestroyRequest {
 message DestroyResponse {
   // Empty response. If no error is returned, the operation was successful.
   // If the swamp is protected by Automover, an error will be returned instead.
+}
+
+// DestroyBulkRequest contains a batch of swamp targets to destroy.
+// The client sends multiple messages over the stream, each containing a batch of targets.
+// Recommended batch size: 100–500 targets per message to balance throughput and memory usage.
+message DestroyBulkRequest {
+  repeated DestroyBulkTarget Targets = 1;
+}
+
+// DestroyBulkTarget identifies a single swamp to destroy.
+message DestroyBulkTarget {
+  // IslandID is the deterministic storage zone where this Swamp lives.
+  uint64 IslandID = 1;
+  // SwampName is the full Sanctuary/Realm/Swamp path to destroy.
+  string SwampName = 2;
+}
+
+// DestroyBulkResponse is sent periodically by the server to report progress.
+// The final message will have done=true, indicating all targets have been processed.
+message DestroyBulkResponse {
+  // Number of swamps successfully destroyed so far.
+  int64 Destroyed = 1;
+  // Number of swamps that failed to be destroyed so far.
+  int64 Failed = 2;
+  // Total number of targets received from the client so far.
+  int64 TotalReceived = 3;
+  // The most recent error message, if any target failed.
+  string LastError = 4;
+  // True when all received targets have been processed and no more work remains.
+  bool Done = 5;
 }
 
 message SubscribeToInfoRequest {

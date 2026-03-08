@@ -65,7 +65,7 @@ func (x SwampResponse_ErrCodeEnum) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use SwampResponse_ErrCodeEnum.Descriptor instead.
 func (SwampResponse_ErrCodeEnum) EnumDescriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{21, 0}
+	return file_hydraide_proto_rawDescGZIP(), []int{24, 0}
 }
 
 type Status_Code int32
@@ -120,7 +120,7 @@ func (x Status_Code) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use Status_Code.Descriptor instead.
 func (Status_Code) EnumDescriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{23, 0}
+	return file_hydraide_proto_rawDescGZIP(), []int{26, 0}
 }
 
 type Boolean_Type int32
@@ -166,7 +166,7 @@ func (x Boolean_Type) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use Boolean_Type.Descriptor instead.
 func (Boolean_Type) EnumDescriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{33, 0}
+	return file_hydraide_proto_rawDescGZIP(), []int{36, 0}
 }
 
 type IndexType_Type int32
@@ -254,7 +254,7 @@ func (x IndexType_Type) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use IndexType_Type.Descriptor instead.
 func (IndexType_Type) EnumDescriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{35, 0}
+	return file_hydraide_proto_rawDescGZIP(), []int{38, 0}
 }
 
 type OrderType_Type int32
@@ -300,7 +300,7 @@ func (x OrderType_Type) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use OrderType_Type.Descriptor instead.
 func (OrderType_Type) EnumDescriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{36, 0}
+	return file_hydraide_proto_rawDescGZIP(), []int{39, 0}
 }
 
 type DeleteResponse_SwampDeleteResponse_ErrorCodeEnum int32
@@ -343,7 +343,7 @@ func (x DeleteResponse_SwampDeleteResponse_ErrorCodeEnum) Number() protoreflect.
 
 // Deprecated: Use DeleteResponse_SwampDeleteResponse_ErrorCodeEnum.Descriptor instead.
 func (DeleteResponse_SwampDeleteResponse_ErrorCodeEnum) EnumDescriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{43, 0, 0}
+	return file_hydraide_proto_rawDescGZIP(), []int{46, 0, 0}
 }
 
 type Relational_Operator int32
@@ -425,7 +425,7 @@ func (x Relational_Operator) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use Relational_Operator.Descriptor instead.
 func (Relational_Operator) EnumDescriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{73, 0}
+	return file_hydraide_proto_rawDescGZIP(), []int{76, 0}
 }
 
 type EncodingFormat_Type int32
@@ -477,7 +477,7 @@ func (x EncodingFormat_Type) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use EncodingFormat_Type.Descriptor instead.
 func (EncodingFormat_Type) EnumDescriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{103, 0}
+	return file_hydraide_proto_rawDescGZIP(), []int{106, 0}
 }
 
 type FilterLogic_Type int32
@@ -523,7 +523,7 @@ func (x FilterLogic_Type) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use FilterLogic_Type.Descriptor instead.
 func (FilterLogic_Type) EnumDescriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{105, 0}
+	return file_hydraide_proto_rawDescGZIP(), []int{108, 0}
 }
 
 type HeartbeatRequest struct {
@@ -905,6 +905,191 @@ func (*DestroyResponse) Descriptor() ([]byte, []int) {
 	return file_hydraide_proto_rawDescGZIP(), []int{7}
 }
 
+// DestroyBulkRequest contains a batch of swamp targets to destroy.
+// The client sends multiple messages over the stream, each containing a batch of targets.
+// Recommended batch size: 100–500 targets per message to balance throughput and memory usage.
+type DestroyBulkRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Targets       []*DestroyBulkTarget   `protobuf:"bytes,1,rep,name=Targets,proto3" json:"Targets,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DestroyBulkRequest) Reset() {
+	*x = DestroyBulkRequest{}
+	mi := &file_hydraide_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DestroyBulkRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DestroyBulkRequest) ProtoMessage() {}
+
+func (x *DestroyBulkRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_hydraide_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DestroyBulkRequest.ProtoReflect.Descriptor instead.
+func (*DestroyBulkRequest) Descriptor() ([]byte, []int) {
+	return file_hydraide_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *DestroyBulkRequest) GetTargets() []*DestroyBulkTarget {
+	if x != nil {
+		return x.Targets
+	}
+	return nil
+}
+
+// DestroyBulkTarget identifies a single swamp to destroy.
+type DestroyBulkTarget struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// IslandID is the deterministic storage zone where this Swamp lives.
+	IslandID uint64 `protobuf:"varint,1,opt,name=IslandID,proto3" json:"IslandID,omitempty"`
+	// SwampName is the full Sanctuary/Realm/Swamp path to destroy.
+	SwampName     string `protobuf:"bytes,2,opt,name=SwampName,proto3" json:"SwampName,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DestroyBulkTarget) Reset() {
+	*x = DestroyBulkTarget{}
+	mi := &file_hydraide_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DestroyBulkTarget) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DestroyBulkTarget) ProtoMessage() {}
+
+func (x *DestroyBulkTarget) ProtoReflect() protoreflect.Message {
+	mi := &file_hydraide_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DestroyBulkTarget.ProtoReflect.Descriptor instead.
+func (*DestroyBulkTarget) Descriptor() ([]byte, []int) {
+	return file_hydraide_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *DestroyBulkTarget) GetIslandID() uint64 {
+	if x != nil {
+		return x.IslandID
+	}
+	return 0
+}
+
+func (x *DestroyBulkTarget) GetSwampName() string {
+	if x != nil {
+		return x.SwampName
+	}
+	return ""
+}
+
+// DestroyBulkResponse is sent periodically by the server to report progress.
+// The final message will have done=true, indicating all targets have been processed.
+type DestroyBulkResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Number of swamps successfully destroyed so far.
+	Destroyed int64 `protobuf:"varint,1,opt,name=Destroyed,proto3" json:"Destroyed,omitempty"`
+	// Number of swamps that failed to be destroyed so far.
+	Failed int64 `protobuf:"varint,2,opt,name=Failed,proto3" json:"Failed,omitempty"`
+	// Total number of targets received from the client so far.
+	TotalReceived int64 `protobuf:"varint,3,opt,name=TotalReceived,proto3" json:"TotalReceived,omitempty"`
+	// The most recent error message, if any target failed.
+	LastError string `protobuf:"bytes,4,opt,name=LastError,proto3" json:"LastError,omitempty"`
+	// True when all received targets have been processed and no more work remains.
+	Done          bool `protobuf:"varint,5,opt,name=Done,proto3" json:"Done,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DestroyBulkResponse) Reset() {
+	*x = DestroyBulkResponse{}
+	mi := &file_hydraide_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DestroyBulkResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DestroyBulkResponse) ProtoMessage() {}
+
+func (x *DestroyBulkResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_hydraide_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DestroyBulkResponse.ProtoReflect.Descriptor instead.
+func (*DestroyBulkResponse) Descriptor() ([]byte, []int) {
+	return file_hydraide_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *DestroyBulkResponse) GetDestroyed() int64 {
+	if x != nil {
+		return x.Destroyed
+	}
+	return 0
+}
+
+func (x *DestroyBulkResponse) GetFailed() int64 {
+	if x != nil {
+		return x.Failed
+	}
+	return 0
+}
+
+func (x *DestroyBulkResponse) GetTotalReceived() int64 {
+	if x != nil {
+		return x.TotalReceived
+	}
+	return 0
+}
+
+func (x *DestroyBulkResponse) GetLastError() string {
+	if x != nil {
+		return x.LastError
+	}
+	return ""
+}
+
+func (x *DestroyBulkResponse) GetDone() bool {
+	if x != nil {
+		return x.Done
+	}
+	return false
+}
+
 type SubscribeToInfoRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// IslandID is the deterministic storage zone (or "island") where this Swamp lives.
@@ -920,7 +1105,7 @@ type SubscribeToInfoRequest struct {
 
 func (x *SubscribeToInfoRequest) Reset() {
 	*x = SubscribeToInfoRequest{}
-	mi := &file_hydraide_proto_msgTypes[8]
+	mi := &file_hydraide_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -932,7 +1117,7 @@ func (x *SubscribeToInfoRequest) String() string {
 func (*SubscribeToInfoRequest) ProtoMessage() {}
 
 func (x *SubscribeToInfoRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[8]
+	mi := &file_hydraide_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -945,7 +1130,7 @@ func (x *SubscribeToInfoRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubscribeToInfoRequest.ProtoReflect.Descriptor instead.
 func (*SubscribeToInfoRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{8}
+	return file_hydraide_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *SubscribeToInfoRequest) GetIslandID() uint64 {
@@ -976,7 +1161,7 @@ type SubscribeToInfoResponse struct {
 
 func (x *SubscribeToInfoResponse) Reset() {
 	*x = SubscribeToInfoResponse{}
-	mi := &file_hydraide_proto_msgTypes[9]
+	mi := &file_hydraide_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -988,7 +1173,7 @@ func (x *SubscribeToInfoResponse) String() string {
 func (*SubscribeToInfoResponse) ProtoMessage() {}
 
 func (x *SubscribeToInfoResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[9]
+	mi := &file_hydraide_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1001,7 +1186,7 @@ func (x *SubscribeToInfoResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubscribeToInfoResponse.ProtoReflect.Descriptor instead.
 func (*SubscribeToInfoResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{9}
+	return file_hydraide_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *SubscribeToInfoResponse) GetSwampName() string {
@@ -1032,7 +1217,7 @@ type SubscribeToEventsRequest struct {
 
 func (x *SubscribeToEventsRequest) Reset() {
 	*x = SubscribeToEventsRequest{}
-	mi := &file_hydraide_proto_msgTypes[10]
+	mi := &file_hydraide_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1044,7 +1229,7 @@ func (x *SubscribeToEventsRequest) String() string {
 func (*SubscribeToEventsRequest) ProtoMessage() {}
 
 func (x *SubscribeToEventsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[10]
+	mi := &file_hydraide_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1057,7 +1242,7 @@ func (x *SubscribeToEventsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubscribeToEventsRequest.ProtoReflect.Descriptor instead.
 func (*SubscribeToEventsRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{10}
+	return file_hydraide_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *SubscribeToEventsRequest) GetIslandID() uint64 {
@@ -1096,7 +1281,7 @@ type SubscribeToEventsResponse struct {
 
 func (x *SubscribeToEventsResponse) Reset() {
 	*x = SubscribeToEventsResponse{}
-	mi := &file_hydraide_proto_msgTypes[11]
+	mi := &file_hydraide_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1108,7 +1293,7 @@ func (x *SubscribeToEventsResponse) String() string {
 func (*SubscribeToEventsResponse) ProtoMessage() {}
 
 func (x *SubscribeToEventsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[11]
+	mi := &file_hydraide_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1121,7 +1306,7 @@ func (x *SubscribeToEventsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubscribeToEventsResponse.ProtoReflect.Descriptor instead.
 func (*SubscribeToEventsResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{11}
+	return file_hydraide_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *SubscribeToEventsResponse) GetSwampName() string {
@@ -1185,7 +1370,7 @@ type SwampKeys struct {
 
 func (x *SwampKeys) Reset() {
 	*x = SwampKeys{}
-	mi := &file_hydraide_proto_msgTypes[12]
+	mi := &file_hydraide_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1197,7 +1382,7 @@ func (x *SwampKeys) String() string {
 func (*SwampKeys) ProtoMessage() {}
 
 func (x *SwampKeys) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[12]
+	mi := &file_hydraide_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1210,7 +1395,7 @@ func (x *SwampKeys) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SwampKeys.ProtoReflect.Descriptor instead.
 func (*SwampKeys) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{12}
+	return file_hydraide_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *SwampKeys) GetSwampName() string {
@@ -1283,7 +1468,7 @@ type RegisterSwampRequest struct {
 
 func (x *RegisterSwampRequest) Reset() {
 	*x = RegisterSwampRequest{}
-	mi := &file_hydraide_proto_msgTypes[13]
+	mi := &file_hydraide_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1295,7 +1480,7 @@ func (x *RegisterSwampRequest) String() string {
 func (*RegisterSwampRequest) ProtoMessage() {}
 
 func (x *RegisterSwampRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[13]
+	mi := &file_hydraide_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1308,7 +1493,7 @@ func (x *RegisterSwampRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterSwampRequest.ProtoReflect.Descriptor instead.
 func (*RegisterSwampRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{13}
+	return file_hydraide_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *RegisterSwampRequest) GetSwampPattern() string {
@@ -1362,7 +1547,7 @@ type RegisterSwampResponse struct {
 
 func (x *RegisterSwampResponse) Reset() {
 	*x = RegisterSwampResponse{}
-	mi := &file_hydraide_proto_msgTypes[14]
+	mi := &file_hydraide_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1374,7 +1559,7 @@ func (x *RegisterSwampResponse) String() string {
 func (*RegisterSwampResponse) ProtoMessage() {}
 
 func (x *RegisterSwampResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[14]
+	mi := &file_hydraide_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1387,7 +1572,7 @@ func (x *RegisterSwampResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterSwampResponse.ProtoReflect.Descriptor instead.
 func (*RegisterSwampResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{14}
+	return file_hydraide_proto_rawDescGZIP(), []int{17}
 }
 
 type DeRegisterSwampRequest struct {
@@ -1403,7 +1588,7 @@ type DeRegisterSwampRequest struct {
 
 func (x *DeRegisterSwampRequest) Reset() {
 	*x = DeRegisterSwampRequest{}
-	mi := &file_hydraide_proto_msgTypes[15]
+	mi := &file_hydraide_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1415,7 +1600,7 @@ func (x *DeRegisterSwampRequest) String() string {
 func (*DeRegisterSwampRequest) ProtoMessage() {}
 
 func (x *DeRegisterSwampRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[15]
+	mi := &file_hydraide_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1428,7 +1613,7 @@ func (x *DeRegisterSwampRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeRegisterSwampRequest.ProtoReflect.Descriptor instead.
 func (*DeRegisterSwampRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{15}
+	return file_hydraide_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *DeRegisterSwampRequest) GetSwampPattern() string {
@@ -1446,7 +1631,7 @@ type DeRegisterSwampResponse struct {
 
 func (x *DeRegisterSwampResponse) Reset() {
 	*x = DeRegisterSwampResponse{}
-	mi := &file_hydraide_proto_msgTypes[16]
+	mi := &file_hydraide_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1458,7 +1643,7 @@ func (x *DeRegisterSwampResponse) String() string {
 func (*DeRegisterSwampResponse) ProtoMessage() {}
 
 func (x *DeRegisterSwampResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[16]
+	mi := &file_hydraide_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1471,7 +1656,7 @@ func (x *DeRegisterSwampResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeRegisterSwampResponse.ProtoReflect.Descriptor instead.
 func (*DeRegisterSwampResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{16}
+	return file_hydraide_proto_rawDescGZIP(), []int{19}
 }
 
 type SetRequest struct {
@@ -1486,7 +1671,7 @@ type SetRequest struct {
 
 func (x *SetRequest) Reset() {
 	*x = SetRequest{}
-	mi := &file_hydraide_proto_msgTypes[17]
+	mi := &file_hydraide_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1498,7 +1683,7 @@ func (x *SetRequest) String() string {
 func (*SetRequest) ProtoMessage() {}
 
 func (x *SetRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[17]
+	mi := &file_hydraide_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1511,7 +1696,7 @@ func (x *SetRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetRequest.ProtoReflect.Descriptor instead.
 func (*SetRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{17}
+	return file_hydraide_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *SetRequest) GetSwamps() []*SwampRequest {
@@ -1578,7 +1763,7 @@ type SwampRequest struct {
 
 func (x *SwampRequest) Reset() {
 	*x = SwampRequest{}
-	mi := &file_hydraide_proto_msgTypes[18]
+	mi := &file_hydraide_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1590,7 +1775,7 @@ func (x *SwampRequest) String() string {
 func (*SwampRequest) ProtoMessage() {}
 
 func (x *SwampRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[18]
+	mi := &file_hydraide_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1603,7 +1788,7 @@ func (x *SwampRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SwampRequest.ProtoReflect.Descriptor instead.
 func (*SwampRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{18}
+	return file_hydraide_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *SwampRequest) GetIslandID() uint64 {
@@ -1700,7 +1885,7 @@ type KeyValuePair struct {
 
 func (x *KeyValuePair) Reset() {
 	*x = KeyValuePair{}
-	mi := &file_hydraide_proto_msgTypes[19]
+	mi := &file_hydraide_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1712,7 +1897,7 @@ func (x *KeyValuePair) String() string {
 func (*KeyValuePair) ProtoMessage() {}
 
 func (x *KeyValuePair) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[19]
+	mi := &file_hydraide_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1725,7 +1910,7 @@ func (x *KeyValuePair) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KeyValuePair.ProtoReflect.Descriptor instead.
 func (*KeyValuePair) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{19}
+	return file_hydraide_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *KeyValuePair) GetKey() string {
@@ -1885,7 +2070,7 @@ type SetResponse struct {
 
 func (x *SetResponse) Reset() {
 	*x = SetResponse{}
-	mi := &file_hydraide_proto_msgTypes[20]
+	mi := &file_hydraide_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1897,7 +2082,7 @@ func (x *SetResponse) String() string {
 func (*SetResponse) ProtoMessage() {}
 
 func (x *SetResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[20]
+	mi := &file_hydraide_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1910,7 +2095,7 @@ func (x *SetResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetResponse.ProtoReflect.Descriptor instead.
 func (*SetResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{20}
+	return file_hydraide_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *SetResponse) GetSwamps() []*SwampResponse {
@@ -1935,7 +2120,7 @@ type SwampResponse struct {
 
 func (x *SwampResponse) Reset() {
 	*x = SwampResponse{}
-	mi := &file_hydraide_proto_msgTypes[21]
+	mi := &file_hydraide_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1947,7 +2132,7 @@ func (x *SwampResponse) String() string {
 func (*SwampResponse) ProtoMessage() {}
 
 func (x *SwampResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[21]
+	mi := &file_hydraide_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1960,7 +2145,7 @@ func (x *SwampResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SwampResponse.ProtoReflect.Descriptor instead.
 func (*SwampResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{21}
+	return file_hydraide_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *SwampResponse) GetSwampName() string {
@@ -1996,7 +2181,7 @@ type KeyStatusPair struct {
 
 func (x *KeyStatusPair) Reset() {
 	*x = KeyStatusPair{}
-	mi := &file_hydraide_proto_msgTypes[22]
+	mi := &file_hydraide_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2008,7 +2193,7 @@ func (x *KeyStatusPair) String() string {
 func (*KeyStatusPair) ProtoMessage() {}
 
 func (x *KeyStatusPair) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[22]
+	mi := &file_hydraide_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2021,7 +2206,7 @@ func (x *KeyStatusPair) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KeyStatusPair.ProtoReflect.Descriptor instead.
 func (*KeyStatusPair) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{22}
+	return file_hydraide_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *KeyStatusPair) GetKey() string {
@@ -2046,7 +2231,7 @@ type Status struct {
 
 func (x *Status) Reset() {
 	*x = Status{}
-	mi := &file_hydraide_proto_msgTypes[23]
+	mi := &file_hydraide_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2058,7 +2243,7 @@ func (x *Status) String() string {
 func (*Status) ProtoMessage() {}
 
 func (x *Status) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[23]
+	mi := &file_hydraide_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2071,7 +2256,7 @@ func (x *Status) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Status.ProtoReflect.Descriptor instead.
 func (*Status) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{23}
+	return file_hydraide_proto_rawDescGZIP(), []int{26}
 }
 
 type GetRequest struct {
@@ -2091,7 +2276,7 @@ type GetRequest struct {
 
 func (x *GetRequest) Reset() {
 	*x = GetRequest{}
-	mi := &file_hydraide_proto_msgTypes[24]
+	mi := &file_hydraide_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2103,7 +2288,7 @@ func (x *GetRequest) String() string {
 func (*GetRequest) ProtoMessage() {}
 
 func (x *GetRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[24]
+	mi := &file_hydraide_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2116,7 +2301,7 @@ func (x *GetRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetRequest.ProtoReflect.Descriptor instead.
 func (*GetRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{24}
+	return file_hydraide_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *GetRequest) GetSwamps() []*GetSwamp {
@@ -2140,7 +2325,7 @@ type GetSwamp struct {
 
 func (x *GetSwamp) Reset() {
 	*x = GetSwamp{}
-	mi := &file_hydraide_proto_msgTypes[25]
+	mi := &file_hydraide_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2152,7 +2337,7 @@ func (x *GetSwamp) String() string {
 func (*GetSwamp) ProtoMessage() {}
 
 func (x *GetSwamp) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[25]
+	mi := &file_hydraide_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2165,7 +2350,7 @@ func (x *GetSwamp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSwamp.ProtoReflect.Descriptor instead.
 func (*GetSwamp) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{25}
+	return file_hydraide_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *GetSwamp) GetIslandID() uint64 {
@@ -2199,7 +2384,7 @@ type GetResponse struct {
 
 func (x *GetResponse) Reset() {
 	*x = GetResponse{}
-	mi := &file_hydraide_proto_msgTypes[26]
+	mi := &file_hydraide_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2211,7 +2396,7 @@ func (x *GetResponse) String() string {
 func (*GetResponse) ProtoMessage() {}
 
 func (x *GetResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[26]
+	mi := &file_hydraide_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2224,7 +2409,7 @@ func (x *GetResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetResponse.ProtoReflect.Descriptor instead.
 func (*GetResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{26}
+	return file_hydraide_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *GetResponse) GetSwamps() []*GetSwampResponse {
@@ -2251,7 +2436,7 @@ type GetSwampResponse struct {
 
 func (x *GetSwampResponse) Reset() {
 	*x = GetSwampResponse{}
-	mi := &file_hydraide_proto_msgTypes[27]
+	mi := &file_hydraide_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2263,7 +2448,7 @@ func (x *GetSwampResponse) String() string {
 func (*GetSwampResponse) ProtoMessage() {}
 
 func (x *GetSwampResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[27]
+	mi := &file_hydraide_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2276,7 +2461,7 @@ func (x *GetSwampResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSwampResponse.ProtoReflect.Descriptor instead.
 func (*GetSwampResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{27}
+	return file_hydraide_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *GetSwampResponse) GetSwampName() string {
@@ -2317,7 +2502,7 @@ type GetAllRequest struct {
 
 func (x *GetAllRequest) Reset() {
 	*x = GetAllRequest{}
-	mi := &file_hydraide_proto_msgTypes[28]
+	mi := &file_hydraide_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2329,7 +2514,7 @@ func (x *GetAllRequest) String() string {
 func (*GetAllRequest) ProtoMessage() {}
 
 func (x *GetAllRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[28]
+	mi := &file_hydraide_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2342,7 +2527,7 @@ func (x *GetAllRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAllRequest.ProtoReflect.Descriptor instead.
 func (*GetAllRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{28}
+	return file_hydraide_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *GetAllRequest) GetIslandID() uint64 {
@@ -2377,7 +2562,7 @@ type GetAllResponse struct {
 
 func (x *GetAllResponse) Reset() {
 	*x = GetAllResponse{}
-	mi := &file_hydraide_proto_msgTypes[29]
+	mi := &file_hydraide_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2389,7 +2574,7 @@ func (x *GetAllResponse) String() string {
 func (*GetAllResponse) ProtoMessage() {}
 
 func (x *GetAllResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[29]
+	mi := &file_hydraide_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2402,7 +2587,7 @@ func (x *GetAllResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAllResponse.ProtoReflect.Descriptor instead.
 func (*GetAllResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{29}
+	return file_hydraide_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *GetAllResponse) GetTreasures() []*Treasure {
@@ -2431,7 +2616,7 @@ type ShiftExpiredTreasuresRequest struct {
 
 func (x *ShiftExpiredTreasuresRequest) Reset() {
 	*x = ShiftExpiredTreasuresRequest{}
-	mi := &file_hydraide_proto_msgTypes[30]
+	mi := &file_hydraide_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2443,7 +2628,7 @@ func (x *ShiftExpiredTreasuresRequest) String() string {
 func (*ShiftExpiredTreasuresRequest) ProtoMessage() {}
 
 func (x *ShiftExpiredTreasuresRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[30]
+	mi := &file_hydraide_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2456,7 +2641,7 @@ func (x *ShiftExpiredTreasuresRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ShiftExpiredTreasuresRequest.ProtoReflect.Descriptor instead.
 func (*ShiftExpiredTreasuresRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{30}
+	return file_hydraide_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *ShiftExpiredTreasuresRequest) GetIslandID() uint64 {
@@ -2494,7 +2679,7 @@ type ShiftExpiredTreasuresResponse struct {
 
 func (x *ShiftExpiredTreasuresResponse) Reset() {
 	*x = ShiftExpiredTreasuresResponse{}
-	mi := &file_hydraide_proto_msgTypes[31]
+	mi := &file_hydraide_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2506,7 +2691,7 @@ func (x *ShiftExpiredTreasuresResponse) String() string {
 func (*ShiftExpiredTreasuresResponse) ProtoMessage() {}
 
 func (x *ShiftExpiredTreasuresResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[31]
+	mi := &file_hydraide_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2519,7 +2704,7 @@ func (x *ShiftExpiredTreasuresResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ShiftExpiredTreasuresResponse.ProtoReflect.Descriptor instead.
 func (*ShiftExpiredTreasuresResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{31}
+	return file_hydraide_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *ShiftExpiredTreasuresResponse) GetTreasures() []*Treasure {
@@ -2592,7 +2777,7 @@ type Treasure struct {
 
 func (x *Treasure) Reset() {
 	*x = Treasure{}
-	mi := &file_hydraide_proto_msgTypes[32]
+	mi := &file_hydraide_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2604,7 +2789,7 @@ func (x *Treasure) String() string {
 func (*Treasure) ProtoMessage() {}
 
 func (x *Treasure) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[32]
+	mi := &file_hydraide_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2617,7 +2802,7 @@ func (x *Treasure) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Treasure.ProtoReflect.Descriptor instead.
 func (*Treasure) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{32}
+	return file_hydraide_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *Treasure) GetKey() string {
@@ -2775,7 +2960,7 @@ type Boolean struct {
 
 func (x *Boolean) Reset() {
 	*x = Boolean{}
-	mi := &file_hydraide_proto_msgTypes[33]
+	mi := &file_hydraide_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2787,7 +2972,7 @@ func (x *Boolean) String() string {
 func (*Boolean) ProtoMessage() {}
 
 func (x *Boolean) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[33]
+	mi := &file_hydraide_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2800,7 +2985,7 @@ func (x *Boolean) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Boolean.ProtoReflect.Descriptor instead.
 func (*Boolean) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{33}
+	return file_hydraide_proto_rawDescGZIP(), []int{36}
 }
 
 type GetByIndexRequest struct {
@@ -2845,7 +3030,7 @@ type GetByIndexRequest struct {
 
 func (x *GetByIndexRequest) Reset() {
 	*x = GetByIndexRequest{}
-	mi := &file_hydraide_proto_msgTypes[34]
+	mi := &file_hydraide_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2857,7 +3042,7 @@ func (x *GetByIndexRequest) String() string {
 func (*GetByIndexRequest) ProtoMessage() {}
 
 func (x *GetByIndexRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[34]
+	mi := &file_hydraide_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2870,7 +3055,7 @@ func (x *GetByIndexRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetByIndexRequest.ProtoReflect.Descriptor instead.
 func (*GetByIndexRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{34}
+	return file_hydraide_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *GetByIndexRequest) GetIslandID() uint64 {
@@ -2937,7 +3122,7 @@ type IndexType struct {
 
 func (x *IndexType) Reset() {
 	*x = IndexType{}
-	mi := &file_hydraide_proto_msgTypes[35]
+	mi := &file_hydraide_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2949,7 +3134,7 @@ func (x *IndexType) String() string {
 func (*IndexType) ProtoMessage() {}
 
 func (x *IndexType) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[35]
+	mi := &file_hydraide_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2962,7 +3147,7 @@ func (x *IndexType) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IndexType.ProtoReflect.Descriptor instead.
 func (*IndexType) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{35}
+	return file_hydraide_proto_rawDescGZIP(), []int{38}
 }
 
 type OrderType struct {
@@ -2973,7 +3158,7 @@ type OrderType struct {
 
 func (x *OrderType) Reset() {
 	*x = OrderType{}
-	mi := &file_hydraide_proto_msgTypes[36]
+	mi := &file_hydraide_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2985,7 +3170,7 @@ func (x *OrderType) String() string {
 func (*OrderType) ProtoMessage() {}
 
 func (x *OrderType) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[36]
+	mi := &file_hydraide_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2998,7 +3183,7 @@ func (x *OrderType) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OrderType.ProtoReflect.Descriptor instead.
 func (*OrderType) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{36}
+	return file_hydraide_proto_rawDescGZIP(), []int{39}
 }
 
 type GetByIndexResponse struct {
@@ -3012,7 +3197,7 @@ type GetByIndexResponse struct {
 
 func (x *GetByIndexResponse) Reset() {
 	*x = GetByIndexResponse{}
-	mi := &file_hydraide_proto_msgTypes[37]
+	mi := &file_hydraide_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3024,7 +3209,7 @@ func (x *GetByIndexResponse) String() string {
 func (*GetByIndexResponse) ProtoMessage() {}
 
 func (x *GetByIndexResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[37]
+	mi := &file_hydraide_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3037,7 +3222,7 @@ func (x *GetByIndexResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetByIndexResponse.ProtoReflect.Descriptor instead.
 func (*GetByIndexResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{37}
+	return file_hydraide_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *GetByIndexResponse) GetTreasures() []*Treasure {
@@ -3067,7 +3252,7 @@ type GetByKeysRequest struct {
 
 func (x *GetByKeysRequest) Reset() {
 	*x = GetByKeysRequest{}
-	mi := &file_hydraide_proto_msgTypes[38]
+	mi := &file_hydraide_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3079,7 +3264,7 @@ func (x *GetByKeysRequest) String() string {
 func (*GetByKeysRequest) ProtoMessage() {}
 
 func (x *GetByKeysRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[38]
+	mi := &file_hydraide_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3092,7 +3277,7 @@ func (x *GetByKeysRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetByKeysRequest.ProtoReflect.Descriptor instead.
 func (*GetByKeysRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{38}
+	return file_hydraide_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *GetByKeysRequest) GetSwampName() string {
@@ -3130,7 +3315,7 @@ type GetByKeysResponse struct {
 
 func (x *GetByKeysResponse) Reset() {
 	*x = GetByKeysResponse{}
-	mi := &file_hydraide_proto_msgTypes[39]
+	mi := &file_hydraide_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3142,7 +3327,7 @@ func (x *GetByKeysResponse) String() string {
 func (*GetByKeysResponse) ProtoMessage() {}
 
 func (x *GetByKeysResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[39]
+	mi := &file_hydraide_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3155,7 +3340,7 @@ func (x *GetByKeysResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetByKeysResponse.ProtoReflect.Descriptor instead.
 func (*GetByKeysResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{39}
+	return file_hydraide_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *GetByKeysResponse) GetTreasures() []*Treasure {
@@ -3191,7 +3376,7 @@ type ShiftByKeysRequest struct {
 
 func (x *ShiftByKeysRequest) Reset() {
 	*x = ShiftByKeysRequest{}
-	mi := &file_hydraide_proto_msgTypes[40]
+	mi := &file_hydraide_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3203,7 +3388,7 @@ func (x *ShiftByKeysRequest) String() string {
 func (*ShiftByKeysRequest) ProtoMessage() {}
 
 func (x *ShiftByKeysRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[40]
+	mi := &file_hydraide_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3216,7 +3401,7 @@ func (x *ShiftByKeysRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ShiftByKeysRequest.ProtoReflect.Descriptor instead.
 func (*ShiftByKeysRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{40}
+	return file_hydraide_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *ShiftByKeysRequest) GetSwampName() string {
@@ -3257,7 +3442,7 @@ type ShiftByKeysResponse struct {
 
 func (x *ShiftByKeysResponse) Reset() {
 	*x = ShiftByKeysResponse{}
-	mi := &file_hydraide_proto_msgTypes[41]
+	mi := &file_hydraide_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3269,7 +3454,7 @@ func (x *ShiftByKeysResponse) String() string {
 func (*ShiftByKeysResponse) ProtoMessage() {}
 
 func (x *ShiftByKeysResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[41]
+	mi := &file_hydraide_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3282,7 +3467,7 @@ func (x *ShiftByKeysResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ShiftByKeysResponse.ProtoReflect.Descriptor instead.
 func (*ShiftByKeysResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{41}
+	return file_hydraide_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *ShiftByKeysResponse) GetTreasures() []*Treasure {
@@ -3304,7 +3489,7 @@ type DeleteRequest struct {
 
 func (x *DeleteRequest) Reset() {
 	*x = DeleteRequest{}
-	mi := &file_hydraide_proto_msgTypes[42]
+	mi := &file_hydraide_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3316,7 +3501,7 @@ func (x *DeleteRequest) String() string {
 func (*DeleteRequest) ProtoMessage() {}
 
 func (x *DeleteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[42]
+	mi := &file_hydraide_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3329,7 +3514,7 @@ func (x *DeleteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteRequest.ProtoReflect.Descriptor instead.
 func (*DeleteRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{42}
+	return file_hydraide_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *DeleteRequest) GetSwamps() []*DeleteRequest_SwampKeys {
@@ -3349,7 +3534,7 @@ type DeleteResponse struct {
 
 func (x *DeleteResponse) Reset() {
 	*x = DeleteResponse{}
-	mi := &file_hydraide_proto_msgTypes[43]
+	mi := &file_hydraide_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3361,7 +3546,7 @@ func (x *DeleteResponse) String() string {
 func (*DeleteResponse) ProtoMessage() {}
 
 func (x *DeleteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[43]
+	mi := &file_hydraide_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3374,7 +3559,7 @@ func (x *DeleteResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteResponse.ProtoReflect.Descriptor instead.
 func (*DeleteResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{43}
+	return file_hydraide_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *DeleteResponse) GetResponses() []*DeleteResponse_SwampDeleteResponse {
@@ -3396,7 +3581,7 @@ type CountRequest struct {
 
 func (x *CountRequest) Reset() {
 	*x = CountRequest{}
-	mi := &file_hydraide_proto_msgTypes[44]
+	mi := &file_hydraide_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3408,7 +3593,7 @@ func (x *CountRequest) String() string {
 func (*CountRequest) ProtoMessage() {}
 
 func (x *CountRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[44]
+	mi := &file_hydraide_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3421,7 +3606,7 @@ func (x *CountRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CountRequest.ProtoReflect.Descriptor instead.
 func (*CountRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{44}
+	return file_hydraide_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *CountRequest) GetSwamps() []*CountRequest_SwampIdentifier {
@@ -3441,7 +3626,7 @@ type CountResponse struct {
 
 func (x *CountResponse) Reset() {
 	*x = CountResponse{}
-	mi := &file_hydraide_proto_msgTypes[45]
+	mi := &file_hydraide_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3453,7 +3638,7 @@ func (x *CountResponse) String() string {
 func (*CountResponse) ProtoMessage() {}
 
 func (x *CountResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[45]
+	mi := &file_hydraide_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3466,7 +3651,7 @@ func (x *CountResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CountResponse.ProtoReflect.Descriptor instead.
 func (*CountResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{45}
+	return file_hydraide_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *CountResponse) GetSwamps() []*CountSwamp {
@@ -3490,7 +3675,7 @@ type CountSwamp struct {
 
 func (x *CountSwamp) Reset() {
 	*x = CountSwamp{}
-	mi := &file_hydraide_proto_msgTypes[46]
+	mi := &file_hydraide_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3502,7 +3687,7 @@ func (x *CountSwamp) String() string {
 func (*CountSwamp) ProtoMessage() {}
 
 func (x *CountSwamp) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[46]
+	mi := &file_hydraide_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3515,7 +3700,7 @@ func (x *CountSwamp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CountSwamp.ProtoReflect.Descriptor instead.
 func (*CountSwamp) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{46}
+	return file_hydraide_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *CountSwamp) GetSwampName() string {
@@ -3552,7 +3737,7 @@ type IncrementRequestMetadata struct {
 
 func (x *IncrementRequestMetadata) Reset() {
 	*x = IncrementRequestMetadata{}
-	mi := &file_hydraide_proto_msgTypes[47]
+	mi := &file_hydraide_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3564,7 +3749,7 @@ func (x *IncrementRequestMetadata) String() string {
 func (*IncrementRequestMetadata) ProtoMessage() {}
 
 func (x *IncrementRequestMetadata) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[47]
+	mi := &file_hydraide_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3577,7 +3762,7 @@ func (x *IncrementRequestMetadata) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementRequestMetadata.ProtoReflect.Descriptor instead.
 func (*IncrementRequestMetadata) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{47}
+	return file_hydraide_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *IncrementRequestMetadata) GetCreatedAt() bool {
@@ -3628,7 +3813,7 @@ type IncrementResponseMetadata struct {
 
 func (x *IncrementResponseMetadata) Reset() {
 	*x = IncrementResponseMetadata{}
-	mi := &file_hydraide_proto_msgTypes[48]
+	mi := &file_hydraide_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3640,7 +3825,7 @@ func (x *IncrementResponseMetadata) String() string {
 func (*IncrementResponseMetadata) ProtoMessage() {}
 
 func (x *IncrementResponseMetadata) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[48]
+	mi := &file_hydraide_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3653,7 +3838,7 @@ func (x *IncrementResponseMetadata) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementResponseMetadata.ProtoReflect.Descriptor instead.
 func (*IncrementResponseMetadata) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{48}
+	return file_hydraide_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *IncrementResponseMetadata) GetCreatedAt() *timestamppb.Timestamp {
@@ -3718,7 +3903,7 @@ type IncrementInt8Request struct {
 
 func (x *IncrementInt8Request) Reset() {
 	*x = IncrementInt8Request{}
-	mi := &file_hydraide_proto_msgTypes[49]
+	mi := &file_hydraide_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3730,7 +3915,7 @@ func (x *IncrementInt8Request) String() string {
 func (*IncrementInt8Request) ProtoMessage() {}
 
 func (x *IncrementInt8Request) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[49]
+	mi := &file_hydraide_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3743,7 +3928,7 @@ func (x *IncrementInt8Request) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementInt8Request.ProtoReflect.Descriptor instead.
 func (*IncrementInt8Request) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{49}
+	return file_hydraide_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *IncrementInt8Request) GetIslandID() uint64 {
@@ -3809,7 +3994,7 @@ type IncrementInt8Condition struct {
 
 func (x *IncrementInt8Condition) Reset() {
 	*x = IncrementInt8Condition{}
-	mi := &file_hydraide_proto_msgTypes[50]
+	mi := &file_hydraide_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3821,7 +4006,7 @@ func (x *IncrementInt8Condition) String() string {
 func (*IncrementInt8Condition) ProtoMessage() {}
 
 func (x *IncrementInt8Condition) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[50]
+	mi := &file_hydraide_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3834,7 +4019,7 @@ func (x *IncrementInt8Condition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementInt8Condition.ProtoReflect.Descriptor instead.
 func (*IncrementInt8Condition) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{50}
+	return file_hydraide_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *IncrementInt8Condition) GetRelationalOperator() Relational_Operator {
@@ -3868,7 +4053,7 @@ type IncrementInt8Response struct {
 
 func (x *IncrementInt8Response) Reset() {
 	*x = IncrementInt8Response{}
-	mi := &file_hydraide_proto_msgTypes[51]
+	mi := &file_hydraide_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3880,7 +4065,7 @@ func (x *IncrementInt8Response) String() string {
 func (*IncrementInt8Response) ProtoMessage() {}
 
 func (x *IncrementInt8Response) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[51]
+	mi := &file_hydraide_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3893,7 +4078,7 @@ func (x *IncrementInt8Response) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementInt8Response.ProtoReflect.Descriptor instead.
 func (*IncrementInt8Response) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{51}
+	return file_hydraide_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *IncrementInt8Response) GetValue() int32 {
@@ -3942,7 +4127,7 @@ type IncrementInt16Request struct {
 
 func (x *IncrementInt16Request) Reset() {
 	*x = IncrementInt16Request{}
-	mi := &file_hydraide_proto_msgTypes[52]
+	mi := &file_hydraide_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3954,7 +4139,7 @@ func (x *IncrementInt16Request) String() string {
 func (*IncrementInt16Request) ProtoMessage() {}
 
 func (x *IncrementInt16Request) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[52]
+	mi := &file_hydraide_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3967,7 +4152,7 @@ func (x *IncrementInt16Request) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementInt16Request.ProtoReflect.Descriptor instead.
 func (*IncrementInt16Request) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{52}
+	return file_hydraide_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *IncrementInt16Request) GetIslandID() uint64 {
@@ -4034,7 +4219,7 @@ type IncrementInt16Condition struct {
 
 func (x *IncrementInt16Condition) Reset() {
 	*x = IncrementInt16Condition{}
-	mi := &file_hydraide_proto_msgTypes[53]
+	mi := &file_hydraide_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4046,7 +4231,7 @@ func (x *IncrementInt16Condition) String() string {
 func (*IncrementInt16Condition) ProtoMessage() {}
 
 func (x *IncrementInt16Condition) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[53]
+	mi := &file_hydraide_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4059,7 +4244,7 @@ func (x *IncrementInt16Condition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementInt16Condition.ProtoReflect.Descriptor instead.
 func (*IncrementInt16Condition) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{53}
+	return file_hydraide_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *IncrementInt16Condition) GetRelationalOperator() Relational_Operator {
@@ -4093,7 +4278,7 @@ type IncrementInt16Response struct {
 
 func (x *IncrementInt16Response) Reset() {
 	*x = IncrementInt16Response{}
-	mi := &file_hydraide_proto_msgTypes[54]
+	mi := &file_hydraide_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4105,7 +4290,7 @@ func (x *IncrementInt16Response) String() string {
 func (*IncrementInt16Response) ProtoMessage() {}
 
 func (x *IncrementInt16Response) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[54]
+	mi := &file_hydraide_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4118,7 +4303,7 @@ func (x *IncrementInt16Response) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementInt16Response.ProtoReflect.Descriptor instead.
 func (*IncrementInt16Response) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{54}
+	return file_hydraide_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *IncrementInt16Response) GetValue() int32 {
@@ -4164,7 +4349,7 @@ type IncrementInt32Request struct {
 
 func (x *IncrementInt32Request) Reset() {
 	*x = IncrementInt32Request{}
-	mi := &file_hydraide_proto_msgTypes[55]
+	mi := &file_hydraide_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4176,7 +4361,7 @@ func (x *IncrementInt32Request) String() string {
 func (*IncrementInt32Request) ProtoMessage() {}
 
 func (x *IncrementInt32Request) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[55]
+	mi := &file_hydraide_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4189,7 +4374,7 @@ func (x *IncrementInt32Request) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementInt32Request.ProtoReflect.Descriptor instead.
 func (*IncrementInt32Request) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{55}
+	return file_hydraide_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *IncrementInt32Request) GetIslandID() uint64 {
@@ -4253,7 +4438,7 @@ type IncrementInt32Condition struct {
 
 func (x *IncrementInt32Condition) Reset() {
 	*x = IncrementInt32Condition{}
-	mi := &file_hydraide_proto_msgTypes[56]
+	mi := &file_hydraide_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4265,7 +4450,7 @@ func (x *IncrementInt32Condition) String() string {
 func (*IncrementInt32Condition) ProtoMessage() {}
 
 func (x *IncrementInt32Condition) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[56]
+	mi := &file_hydraide_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4278,7 +4463,7 @@ func (x *IncrementInt32Condition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementInt32Condition.ProtoReflect.Descriptor instead.
 func (*IncrementInt32Condition) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{56}
+	return file_hydraide_proto_rawDescGZIP(), []int{59}
 }
 
 func (x *IncrementInt32Condition) GetRelationalOperator() Relational_Operator {
@@ -4309,7 +4494,7 @@ type IncrementInt32Response struct {
 
 func (x *IncrementInt32Response) Reset() {
 	*x = IncrementInt32Response{}
-	mi := &file_hydraide_proto_msgTypes[57]
+	mi := &file_hydraide_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4321,7 +4506,7 @@ func (x *IncrementInt32Response) String() string {
 func (*IncrementInt32Response) ProtoMessage() {}
 
 func (x *IncrementInt32Response) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[57]
+	mi := &file_hydraide_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4334,7 +4519,7 @@ func (x *IncrementInt32Response) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementInt32Response.ProtoReflect.Descriptor instead.
 func (*IncrementInt32Response) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{57}
+	return file_hydraide_proto_rawDescGZIP(), []int{60}
 }
 
 func (x *IncrementInt32Response) GetValue() int32 {
@@ -4382,7 +4567,7 @@ type IncrementInt64Request struct {
 
 func (x *IncrementInt64Request) Reset() {
 	*x = IncrementInt64Request{}
-	mi := &file_hydraide_proto_msgTypes[58]
+	mi := &file_hydraide_proto_msgTypes[61]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4394,7 +4579,7 @@ func (x *IncrementInt64Request) String() string {
 func (*IncrementInt64Request) ProtoMessage() {}
 
 func (x *IncrementInt64Request) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[58]
+	mi := &file_hydraide_proto_msgTypes[61]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4407,7 +4592,7 @@ func (x *IncrementInt64Request) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementInt64Request.ProtoReflect.Descriptor instead.
 func (*IncrementInt64Request) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{58}
+	return file_hydraide_proto_rawDescGZIP(), []int{61}
 }
 
 func (x *IncrementInt64Request) GetIslandID() uint64 {
@@ -4471,7 +4656,7 @@ type IncrementInt64Condition struct {
 
 func (x *IncrementInt64Condition) Reset() {
 	*x = IncrementInt64Condition{}
-	mi := &file_hydraide_proto_msgTypes[59]
+	mi := &file_hydraide_proto_msgTypes[62]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4483,7 +4668,7 @@ func (x *IncrementInt64Condition) String() string {
 func (*IncrementInt64Condition) ProtoMessage() {}
 
 func (x *IncrementInt64Condition) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[59]
+	mi := &file_hydraide_proto_msgTypes[62]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4496,7 +4681,7 @@ func (x *IncrementInt64Condition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementInt64Condition.ProtoReflect.Descriptor instead.
 func (*IncrementInt64Condition) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{59}
+	return file_hydraide_proto_rawDescGZIP(), []int{62}
 }
 
 func (x *IncrementInt64Condition) GetRelationalOperator() Relational_Operator {
@@ -4527,7 +4712,7 @@ type IncrementInt64Response struct {
 
 func (x *IncrementInt64Response) Reset() {
 	*x = IncrementInt64Response{}
-	mi := &file_hydraide_proto_msgTypes[60]
+	mi := &file_hydraide_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4539,7 +4724,7 @@ func (x *IncrementInt64Response) String() string {
 func (*IncrementInt64Response) ProtoMessage() {}
 
 func (x *IncrementInt64Response) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[60]
+	mi := &file_hydraide_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4552,7 +4737,7 @@ func (x *IncrementInt64Response) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementInt64Response.ProtoReflect.Descriptor instead.
 func (*IncrementInt64Response) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{60}
+	return file_hydraide_proto_rawDescGZIP(), []int{63}
 }
 
 func (x *IncrementInt64Response) GetValue() int64 {
@@ -4603,7 +4788,7 @@ type IncrementUint8Request struct {
 
 func (x *IncrementUint8Request) Reset() {
 	*x = IncrementUint8Request{}
-	mi := &file_hydraide_proto_msgTypes[61]
+	mi := &file_hydraide_proto_msgTypes[64]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4615,7 +4800,7 @@ func (x *IncrementUint8Request) String() string {
 func (*IncrementUint8Request) ProtoMessage() {}
 
 func (x *IncrementUint8Request) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[61]
+	mi := &file_hydraide_proto_msgTypes[64]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4628,7 +4813,7 @@ func (x *IncrementUint8Request) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementUint8Request.ProtoReflect.Descriptor instead.
 func (*IncrementUint8Request) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{61}
+	return file_hydraide_proto_rawDescGZIP(), []int{64}
 }
 
 func (x *IncrementUint8Request) GetIslandID() uint64 {
@@ -4694,7 +4879,7 @@ type IncrementUint8Condition struct {
 
 func (x *IncrementUint8Condition) Reset() {
 	*x = IncrementUint8Condition{}
-	mi := &file_hydraide_proto_msgTypes[62]
+	mi := &file_hydraide_proto_msgTypes[65]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4706,7 +4891,7 @@ func (x *IncrementUint8Condition) String() string {
 func (*IncrementUint8Condition) ProtoMessage() {}
 
 func (x *IncrementUint8Condition) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[62]
+	mi := &file_hydraide_proto_msgTypes[65]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4719,7 +4904,7 @@ func (x *IncrementUint8Condition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementUint8Condition.ProtoReflect.Descriptor instead.
 func (*IncrementUint8Condition) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{62}
+	return file_hydraide_proto_rawDescGZIP(), []int{65}
 }
 
 func (x *IncrementUint8Condition) GetRelationalOperator() Relational_Operator {
@@ -4752,7 +4937,7 @@ type IncrementUint8Response struct {
 
 func (x *IncrementUint8Response) Reset() {
 	*x = IncrementUint8Response{}
-	mi := &file_hydraide_proto_msgTypes[63]
+	mi := &file_hydraide_proto_msgTypes[66]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4764,7 +4949,7 @@ func (x *IncrementUint8Response) String() string {
 func (*IncrementUint8Response) ProtoMessage() {}
 
 func (x *IncrementUint8Response) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[63]
+	mi := &file_hydraide_proto_msgTypes[66]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4777,7 +4962,7 @@ func (x *IncrementUint8Response) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementUint8Response.ProtoReflect.Descriptor instead.
 func (*IncrementUint8Response) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{63}
+	return file_hydraide_proto_rawDescGZIP(), []int{66}
 }
 
 func (x *IncrementUint8Response) GetValue() uint32 {
@@ -4826,7 +5011,7 @@ type IncrementUint16Request struct {
 
 func (x *IncrementUint16Request) Reset() {
 	*x = IncrementUint16Request{}
-	mi := &file_hydraide_proto_msgTypes[64]
+	mi := &file_hydraide_proto_msgTypes[67]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4838,7 +5023,7 @@ func (x *IncrementUint16Request) String() string {
 func (*IncrementUint16Request) ProtoMessage() {}
 
 func (x *IncrementUint16Request) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[64]
+	mi := &file_hydraide_proto_msgTypes[67]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4851,7 +5036,7 @@ func (x *IncrementUint16Request) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementUint16Request.ProtoReflect.Descriptor instead.
 func (*IncrementUint16Request) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{64}
+	return file_hydraide_proto_rawDescGZIP(), []int{67}
 }
 
 func (x *IncrementUint16Request) GetIslandID() uint64 {
@@ -4917,7 +5102,7 @@ type IncrementUint16Condition struct {
 
 func (x *IncrementUint16Condition) Reset() {
 	*x = IncrementUint16Condition{}
-	mi := &file_hydraide_proto_msgTypes[65]
+	mi := &file_hydraide_proto_msgTypes[68]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4929,7 +5114,7 @@ func (x *IncrementUint16Condition) String() string {
 func (*IncrementUint16Condition) ProtoMessage() {}
 
 func (x *IncrementUint16Condition) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[65]
+	mi := &file_hydraide_proto_msgTypes[68]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4942,7 +5127,7 @@ func (x *IncrementUint16Condition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementUint16Condition.ProtoReflect.Descriptor instead.
 func (*IncrementUint16Condition) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{65}
+	return file_hydraide_proto_rawDescGZIP(), []int{68}
 }
 
 func (x *IncrementUint16Condition) GetRelationalOperator() Relational_Operator {
@@ -4975,7 +5160,7 @@ type IncrementUint16Response struct {
 
 func (x *IncrementUint16Response) Reset() {
 	*x = IncrementUint16Response{}
-	mi := &file_hydraide_proto_msgTypes[66]
+	mi := &file_hydraide_proto_msgTypes[69]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4987,7 +5172,7 @@ func (x *IncrementUint16Response) String() string {
 func (*IncrementUint16Response) ProtoMessage() {}
 
 func (x *IncrementUint16Response) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[66]
+	mi := &file_hydraide_proto_msgTypes[69]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5000,7 +5185,7 @@ func (x *IncrementUint16Response) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementUint16Response.ProtoReflect.Descriptor instead.
 func (*IncrementUint16Response) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{66}
+	return file_hydraide_proto_rawDescGZIP(), []int{69}
 }
 
 func (x *IncrementUint16Response) GetValue() uint32 {
@@ -5048,7 +5233,7 @@ type IncrementUint32Request struct {
 
 func (x *IncrementUint32Request) Reset() {
 	*x = IncrementUint32Request{}
-	mi := &file_hydraide_proto_msgTypes[67]
+	mi := &file_hydraide_proto_msgTypes[70]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5060,7 +5245,7 @@ func (x *IncrementUint32Request) String() string {
 func (*IncrementUint32Request) ProtoMessage() {}
 
 func (x *IncrementUint32Request) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[67]
+	mi := &file_hydraide_proto_msgTypes[70]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5073,7 +5258,7 @@ func (x *IncrementUint32Request) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementUint32Request.ProtoReflect.Descriptor instead.
 func (*IncrementUint32Request) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{67}
+	return file_hydraide_proto_rawDescGZIP(), []int{70}
 }
 
 func (x *IncrementUint32Request) GetIslandID() uint64 {
@@ -5137,7 +5322,7 @@ type IncrementUint32Condition struct {
 
 func (x *IncrementUint32Condition) Reset() {
 	*x = IncrementUint32Condition{}
-	mi := &file_hydraide_proto_msgTypes[68]
+	mi := &file_hydraide_proto_msgTypes[71]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5149,7 +5334,7 @@ func (x *IncrementUint32Condition) String() string {
 func (*IncrementUint32Condition) ProtoMessage() {}
 
 func (x *IncrementUint32Condition) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[68]
+	mi := &file_hydraide_proto_msgTypes[71]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5162,7 +5347,7 @@ func (x *IncrementUint32Condition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementUint32Condition.ProtoReflect.Descriptor instead.
 func (*IncrementUint32Condition) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{68}
+	return file_hydraide_proto_rawDescGZIP(), []int{71}
 }
 
 func (x *IncrementUint32Condition) GetRelationalOperator() Relational_Operator {
@@ -5194,7 +5379,7 @@ type IncrementUint32Response struct {
 
 func (x *IncrementUint32Response) Reset() {
 	*x = IncrementUint32Response{}
-	mi := &file_hydraide_proto_msgTypes[69]
+	mi := &file_hydraide_proto_msgTypes[72]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5206,7 +5391,7 @@ func (x *IncrementUint32Response) String() string {
 func (*IncrementUint32Response) ProtoMessage() {}
 
 func (x *IncrementUint32Response) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[69]
+	mi := &file_hydraide_proto_msgTypes[72]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5219,7 +5404,7 @@ func (x *IncrementUint32Response) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementUint32Response.ProtoReflect.Descriptor instead.
 func (*IncrementUint32Response) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{69}
+	return file_hydraide_proto_rawDescGZIP(), []int{72}
 }
 
 func (x *IncrementUint32Response) GetValue() uint32 {
@@ -5267,7 +5452,7 @@ type IncrementUint64Request struct {
 
 func (x *IncrementUint64Request) Reset() {
 	*x = IncrementUint64Request{}
-	mi := &file_hydraide_proto_msgTypes[70]
+	mi := &file_hydraide_proto_msgTypes[73]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5279,7 +5464,7 @@ func (x *IncrementUint64Request) String() string {
 func (*IncrementUint64Request) ProtoMessage() {}
 
 func (x *IncrementUint64Request) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[70]
+	mi := &file_hydraide_proto_msgTypes[73]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5292,7 +5477,7 @@ func (x *IncrementUint64Request) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementUint64Request.ProtoReflect.Descriptor instead.
 func (*IncrementUint64Request) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{70}
+	return file_hydraide_proto_rawDescGZIP(), []int{73}
 }
 
 func (x *IncrementUint64Request) GetIslandID() uint64 {
@@ -5356,7 +5541,7 @@ type IncrementUint64Condition struct {
 
 func (x *IncrementUint64Condition) Reset() {
 	*x = IncrementUint64Condition{}
-	mi := &file_hydraide_proto_msgTypes[71]
+	mi := &file_hydraide_proto_msgTypes[74]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5368,7 +5553,7 @@ func (x *IncrementUint64Condition) String() string {
 func (*IncrementUint64Condition) ProtoMessage() {}
 
 func (x *IncrementUint64Condition) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[71]
+	mi := &file_hydraide_proto_msgTypes[74]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5381,7 +5566,7 @@ func (x *IncrementUint64Condition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementUint64Condition.ProtoReflect.Descriptor instead.
 func (*IncrementUint64Condition) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{71}
+	return file_hydraide_proto_rawDescGZIP(), []int{74}
 }
 
 func (x *IncrementUint64Condition) GetRelationalOperator() Relational_Operator {
@@ -5412,7 +5597,7 @@ type IncrementUint64Response struct {
 
 func (x *IncrementUint64Response) Reset() {
 	*x = IncrementUint64Response{}
-	mi := &file_hydraide_proto_msgTypes[72]
+	mi := &file_hydraide_proto_msgTypes[75]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5424,7 +5609,7 @@ func (x *IncrementUint64Response) String() string {
 func (*IncrementUint64Response) ProtoMessage() {}
 
 func (x *IncrementUint64Response) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[72]
+	mi := &file_hydraide_proto_msgTypes[75]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5437,7 +5622,7 @@ func (x *IncrementUint64Response) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementUint64Response.ProtoReflect.Descriptor instead.
 func (*IncrementUint64Response) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{72}
+	return file_hydraide_proto_rawDescGZIP(), []int{75}
 }
 
 func (x *IncrementUint64Response) GetValue() uint64 {
@@ -5469,7 +5654,7 @@ type Relational struct {
 
 func (x *Relational) Reset() {
 	*x = Relational{}
-	mi := &file_hydraide_proto_msgTypes[73]
+	mi := &file_hydraide_proto_msgTypes[76]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5481,7 +5666,7 @@ func (x *Relational) String() string {
 func (*Relational) ProtoMessage() {}
 
 func (x *Relational) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[73]
+	mi := &file_hydraide_proto_msgTypes[76]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5494,7 +5679,7 @@ func (x *Relational) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Relational.ProtoReflect.Descriptor instead.
 func (*Relational) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{73}
+	return file_hydraide_proto_rawDescGZIP(), []int{76}
 }
 
 type IncrementFloat32Request struct {
@@ -5521,7 +5706,7 @@ type IncrementFloat32Request struct {
 
 func (x *IncrementFloat32Request) Reset() {
 	*x = IncrementFloat32Request{}
-	mi := &file_hydraide_proto_msgTypes[74]
+	mi := &file_hydraide_proto_msgTypes[77]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5533,7 +5718,7 @@ func (x *IncrementFloat32Request) String() string {
 func (*IncrementFloat32Request) ProtoMessage() {}
 
 func (x *IncrementFloat32Request) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[74]
+	mi := &file_hydraide_proto_msgTypes[77]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5546,7 +5731,7 @@ func (x *IncrementFloat32Request) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementFloat32Request.ProtoReflect.Descriptor instead.
 func (*IncrementFloat32Request) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{74}
+	return file_hydraide_proto_rawDescGZIP(), []int{77}
 }
 
 func (x *IncrementFloat32Request) GetIslandID() uint64 {
@@ -5610,7 +5795,7 @@ type IncrementFloat32Condition struct {
 
 func (x *IncrementFloat32Condition) Reset() {
 	*x = IncrementFloat32Condition{}
-	mi := &file_hydraide_proto_msgTypes[75]
+	mi := &file_hydraide_proto_msgTypes[78]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5622,7 +5807,7 @@ func (x *IncrementFloat32Condition) String() string {
 func (*IncrementFloat32Condition) ProtoMessage() {}
 
 func (x *IncrementFloat32Condition) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[75]
+	mi := &file_hydraide_proto_msgTypes[78]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5635,7 +5820,7 @@ func (x *IncrementFloat32Condition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementFloat32Condition.ProtoReflect.Descriptor instead.
 func (*IncrementFloat32Condition) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{75}
+	return file_hydraide_proto_rawDescGZIP(), []int{78}
 }
 
 func (x *IncrementFloat32Condition) GetRelationalOperator() Relational_Operator {
@@ -5666,7 +5851,7 @@ type IncrementFloat32Response struct {
 
 func (x *IncrementFloat32Response) Reset() {
 	*x = IncrementFloat32Response{}
-	mi := &file_hydraide_proto_msgTypes[76]
+	mi := &file_hydraide_proto_msgTypes[79]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5678,7 +5863,7 @@ func (x *IncrementFloat32Response) String() string {
 func (*IncrementFloat32Response) ProtoMessage() {}
 
 func (x *IncrementFloat32Response) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[76]
+	mi := &file_hydraide_proto_msgTypes[79]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5691,7 +5876,7 @@ func (x *IncrementFloat32Response) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementFloat32Response.ProtoReflect.Descriptor instead.
 func (*IncrementFloat32Response) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{76}
+	return file_hydraide_proto_rawDescGZIP(), []int{79}
 }
 
 func (x *IncrementFloat32Response) GetValue() float32 {
@@ -5740,7 +5925,7 @@ type IncrementFloat64Request struct {
 
 func (x *IncrementFloat64Request) Reset() {
 	*x = IncrementFloat64Request{}
-	mi := &file_hydraide_proto_msgTypes[77]
+	mi := &file_hydraide_proto_msgTypes[80]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5752,7 +5937,7 @@ func (x *IncrementFloat64Request) String() string {
 func (*IncrementFloat64Request) ProtoMessage() {}
 
 func (x *IncrementFloat64Request) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[77]
+	mi := &file_hydraide_proto_msgTypes[80]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5765,7 +5950,7 @@ func (x *IncrementFloat64Request) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementFloat64Request.ProtoReflect.Descriptor instead.
 func (*IncrementFloat64Request) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{77}
+	return file_hydraide_proto_rawDescGZIP(), []int{80}
 }
 
 func (x *IncrementFloat64Request) GetIslandID() uint64 {
@@ -5829,7 +6014,7 @@ type IncrementFloat64Condition struct {
 
 func (x *IncrementFloat64Condition) Reset() {
 	*x = IncrementFloat64Condition{}
-	mi := &file_hydraide_proto_msgTypes[78]
+	mi := &file_hydraide_proto_msgTypes[81]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5841,7 +6026,7 @@ func (x *IncrementFloat64Condition) String() string {
 func (*IncrementFloat64Condition) ProtoMessage() {}
 
 func (x *IncrementFloat64Condition) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[78]
+	mi := &file_hydraide_proto_msgTypes[81]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5854,7 +6039,7 @@ func (x *IncrementFloat64Condition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementFloat64Condition.ProtoReflect.Descriptor instead.
 func (*IncrementFloat64Condition) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{78}
+	return file_hydraide_proto_rawDescGZIP(), []int{81}
 }
 
 func (x *IncrementFloat64Condition) GetRelationalOperator() Relational_Operator {
@@ -5885,7 +6070,7 @@ type IncrementFloat64Response struct {
 
 func (x *IncrementFloat64Response) Reset() {
 	*x = IncrementFloat64Response{}
-	mi := &file_hydraide_proto_msgTypes[79]
+	mi := &file_hydraide_proto_msgTypes[82]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5897,7 +6082,7 @@ func (x *IncrementFloat64Response) String() string {
 func (*IncrementFloat64Response) ProtoMessage() {}
 
 func (x *IncrementFloat64Response) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[79]
+	mi := &file_hydraide_proto_msgTypes[82]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5910,7 +6095,7 @@ func (x *IncrementFloat64Response) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IncrementFloat64Response.ProtoReflect.Descriptor instead.
 func (*IncrementFloat64Response) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{79}
+	return file_hydraide_proto_rawDescGZIP(), []int{82}
 }
 
 func (x *IncrementFloat64Response) GetValue() float64 {
@@ -5948,7 +6133,7 @@ type KeySlicePair struct {
 
 func (x *KeySlicePair) Reset() {
 	*x = KeySlicePair{}
-	mi := &file_hydraide_proto_msgTypes[80]
+	mi := &file_hydraide_proto_msgTypes[83]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5960,7 +6145,7 @@ func (x *KeySlicePair) String() string {
 func (*KeySlicePair) ProtoMessage() {}
 
 func (x *KeySlicePair) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[80]
+	mi := &file_hydraide_proto_msgTypes[83]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5973,7 +6158,7 @@ func (x *KeySlicePair) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KeySlicePair.ProtoReflect.Descriptor instead.
 func (*KeySlicePair) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{80}
+	return file_hydraide_proto_rawDescGZIP(), []int{83}
 }
 
 func (x *KeySlicePair) GetKey() string {
@@ -6005,7 +6190,7 @@ type AddToUint32SlicePushRequest struct {
 
 func (x *AddToUint32SlicePushRequest) Reset() {
 	*x = AddToUint32SlicePushRequest{}
-	mi := &file_hydraide_proto_msgTypes[81]
+	mi := &file_hydraide_proto_msgTypes[84]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6017,7 +6202,7 @@ func (x *AddToUint32SlicePushRequest) String() string {
 func (*AddToUint32SlicePushRequest) ProtoMessage() {}
 
 func (x *AddToUint32SlicePushRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[81]
+	mi := &file_hydraide_proto_msgTypes[84]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6030,7 +6215,7 @@ func (x *AddToUint32SlicePushRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddToUint32SlicePushRequest.ProtoReflect.Descriptor instead.
 func (*AddToUint32SlicePushRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{81}
+	return file_hydraide_proto_rawDescGZIP(), []int{84}
 }
 
 func (x *AddToUint32SlicePushRequest) GetIslandID() uint64 {
@@ -6064,7 +6249,7 @@ type AddToUint32SlicePushResponse struct {
 
 func (x *AddToUint32SlicePushResponse) Reset() {
 	*x = AddToUint32SlicePushResponse{}
-	mi := &file_hydraide_proto_msgTypes[82]
+	mi := &file_hydraide_proto_msgTypes[85]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6076,7 +6261,7 @@ func (x *AddToUint32SlicePushResponse) String() string {
 func (*AddToUint32SlicePushResponse) ProtoMessage() {}
 
 func (x *AddToUint32SlicePushResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[82]
+	mi := &file_hydraide_proto_msgTypes[85]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6089,7 +6274,7 @@ func (x *AddToUint32SlicePushResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddToUint32SlicePushResponse.ProtoReflect.Descriptor instead.
 func (*AddToUint32SlicePushResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{82}
+	return file_hydraide_proto_rawDescGZIP(), []int{85}
 }
 
 // Uint32SliceDeleteRequest removes one or more values from one or more uint32 slices.
@@ -6107,7 +6292,7 @@ type Uint32SliceDeleteRequest struct {
 
 func (x *Uint32SliceDeleteRequest) Reset() {
 	*x = Uint32SliceDeleteRequest{}
-	mi := &file_hydraide_proto_msgTypes[83]
+	mi := &file_hydraide_proto_msgTypes[86]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6119,7 +6304,7 @@ func (x *Uint32SliceDeleteRequest) String() string {
 func (*Uint32SliceDeleteRequest) ProtoMessage() {}
 
 func (x *Uint32SliceDeleteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[83]
+	mi := &file_hydraide_proto_msgTypes[86]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6132,7 +6317,7 @@ func (x *Uint32SliceDeleteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Uint32SliceDeleteRequest.ProtoReflect.Descriptor instead.
 func (*Uint32SliceDeleteRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{83}
+	return file_hydraide_proto_rawDescGZIP(), []int{86}
 }
 
 func (x *Uint32SliceDeleteRequest) GetIslandID() uint64 {
@@ -6166,7 +6351,7 @@ type Uint32SliceDeleteResponse struct {
 
 func (x *Uint32SliceDeleteResponse) Reset() {
 	*x = Uint32SliceDeleteResponse{}
-	mi := &file_hydraide_proto_msgTypes[84]
+	mi := &file_hydraide_proto_msgTypes[87]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6178,7 +6363,7 @@ func (x *Uint32SliceDeleteResponse) String() string {
 func (*Uint32SliceDeleteResponse) ProtoMessage() {}
 
 func (x *Uint32SliceDeleteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[84]
+	mi := &file_hydraide_proto_msgTypes[87]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6191,7 +6376,7 @@ func (x *Uint32SliceDeleteResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Uint32SliceDeleteResponse.ProtoReflect.Descriptor instead.
 func (*Uint32SliceDeleteResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{84}
+	return file_hydraide_proto_rawDescGZIP(), []int{87}
 }
 
 // Uint32SliceSizeRequest queries the size (number of elements) of a specific uint32 slice.
@@ -6209,7 +6394,7 @@ type Uint32SliceSizeRequest struct {
 
 func (x *Uint32SliceSizeRequest) Reset() {
 	*x = Uint32SliceSizeRequest{}
-	mi := &file_hydraide_proto_msgTypes[85]
+	mi := &file_hydraide_proto_msgTypes[88]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6221,7 +6406,7 @@ func (x *Uint32SliceSizeRequest) String() string {
 func (*Uint32SliceSizeRequest) ProtoMessage() {}
 
 func (x *Uint32SliceSizeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[85]
+	mi := &file_hydraide_proto_msgTypes[88]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6234,7 +6419,7 @@ func (x *Uint32SliceSizeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Uint32SliceSizeRequest.ProtoReflect.Descriptor instead.
 func (*Uint32SliceSizeRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{85}
+	return file_hydraide_proto_rawDescGZIP(), []int{88}
 }
 
 func (x *Uint32SliceSizeRequest) GetIslandID() uint64 {
@@ -6269,7 +6454,7 @@ type Uint32SliceSizeResponse struct {
 
 func (x *Uint32SliceSizeResponse) Reset() {
 	*x = Uint32SliceSizeResponse{}
-	mi := &file_hydraide_proto_msgTypes[86]
+	mi := &file_hydraide_proto_msgTypes[89]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6281,7 +6466,7 @@ func (x *Uint32SliceSizeResponse) String() string {
 func (*Uint32SliceSizeResponse) ProtoMessage() {}
 
 func (x *Uint32SliceSizeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[86]
+	mi := &file_hydraide_proto_msgTypes[89]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6294,7 +6479,7 @@ func (x *Uint32SliceSizeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Uint32SliceSizeResponse.ProtoReflect.Descriptor instead.
 func (*Uint32SliceSizeResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{86}
+	return file_hydraide_proto_rawDescGZIP(), []int{89}
 }
 
 func (x *Uint32SliceSizeResponse) GetSize() int64 {
@@ -6321,7 +6506,7 @@ type Uint32SliceIsValueExistRequest struct {
 
 func (x *Uint32SliceIsValueExistRequest) Reset() {
 	*x = Uint32SliceIsValueExistRequest{}
-	mi := &file_hydraide_proto_msgTypes[87]
+	mi := &file_hydraide_proto_msgTypes[90]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6333,7 +6518,7 @@ func (x *Uint32SliceIsValueExistRequest) String() string {
 func (*Uint32SliceIsValueExistRequest) ProtoMessage() {}
 
 func (x *Uint32SliceIsValueExistRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[87]
+	mi := &file_hydraide_proto_msgTypes[90]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6346,7 +6531,7 @@ func (x *Uint32SliceIsValueExistRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Uint32SliceIsValueExistRequest.ProtoReflect.Descriptor instead.
 func (*Uint32SliceIsValueExistRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{87}
+	return file_hydraide_proto_rawDescGZIP(), []int{90}
 }
 
 func (x *Uint32SliceIsValueExistRequest) GetIslandID() uint64 {
@@ -6388,7 +6573,7 @@ type Uint32SliceIsValueExistResponse struct {
 
 func (x *Uint32SliceIsValueExistResponse) Reset() {
 	*x = Uint32SliceIsValueExistResponse{}
-	mi := &file_hydraide_proto_msgTypes[88]
+	mi := &file_hydraide_proto_msgTypes[91]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6400,7 +6585,7 @@ func (x *Uint32SliceIsValueExistResponse) String() string {
 func (*Uint32SliceIsValueExistResponse) ProtoMessage() {}
 
 func (x *Uint32SliceIsValueExistResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[88]
+	mi := &file_hydraide_proto_msgTypes[91]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6413,7 +6598,7 @@ func (x *Uint32SliceIsValueExistResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Uint32SliceIsValueExistResponse.ProtoReflect.Descriptor instead.
 func (*Uint32SliceIsValueExistResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{88}
+	return file_hydraide_proto_rawDescGZIP(), []int{91}
 }
 
 func (x *Uint32SliceIsValueExistResponse) GetIsExist() bool {
@@ -6436,7 +6621,7 @@ type IsSwampExistRequest struct {
 
 func (x *IsSwampExistRequest) Reset() {
 	*x = IsSwampExistRequest{}
-	mi := &file_hydraide_proto_msgTypes[89]
+	mi := &file_hydraide_proto_msgTypes[92]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6448,7 +6633,7 @@ func (x *IsSwampExistRequest) String() string {
 func (*IsSwampExistRequest) ProtoMessage() {}
 
 func (x *IsSwampExistRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[89]
+	mi := &file_hydraide_proto_msgTypes[92]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6461,7 +6646,7 @@ func (x *IsSwampExistRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IsSwampExistRequest.ProtoReflect.Descriptor instead.
 func (*IsSwampExistRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{89}
+	return file_hydraide_proto_rawDescGZIP(), []int{92}
 }
 
 func (x *IsSwampExistRequest) GetIslandID() uint64 {
@@ -6489,7 +6674,7 @@ type IsSwampExistResponse struct {
 
 func (x *IsSwampExistResponse) Reset() {
 	*x = IsSwampExistResponse{}
-	mi := &file_hydraide_proto_msgTypes[90]
+	mi := &file_hydraide_proto_msgTypes[93]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6501,7 +6686,7 @@ func (x *IsSwampExistResponse) String() string {
 func (*IsSwampExistResponse) ProtoMessage() {}
 
 func (x *IsSwampExistResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[90]
+	mi := &file_hydraide_proto_msgTypes[93]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6514,7 +6699,7 @@ func (x *IsSwampExistResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IsSwampExistResponse.ProtoReflect.Descriptor instead.
 func (*IsSwampExistResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{90}
+	return file_hydraide_proto_rawDescGZIP(), []int{93}
 }
 
 func (x *IsSwampExistResponse) GetIsExist() bool {
@@ -6539,7 +6724,7 @@ type IsKeyExistRequest struct {
 
 func (x *IsKeyExistRequest) Reset() {
 	*x = IsKeyExistRequest{}
-	mi := &file_hydraide_proto_msgTypes[91]
+	mi := &file_hydraide_proto_msgTypes[94]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6551,7 +6736,7 @@ func (x *IsKeyExistRequest) String() string {
 func (*IsKeyExistRequest) ProtoMessage() {}
 
 func (x *IsKeyExistRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[91]
+	mi := &file_hydraide_proto_msgTypes[94]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6564,7 +6749,7 @@ func (x *IsKeyExistRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IsKeyExistRequest.ProtoReflect.Descriptor instead.
 func (*IsKeyExistRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{91}
+	return file_hydraide_proto_rawDescGZIP(), []int{94}
 }
 
 func (x *IsKeyExistRequest) GetIslandID() uint64 {
@@ -6599,7 +6784,7 @@ type IsKeyExistResponse struct {
 
 func (x *IsKeyExistResponse) Reset() {
 	*x = IsKeyExistResponse{}
-	mi := &file_hydraide_proto_msgTypes[92]
+	mi := &file_hydraide_proto_msgTypes[95]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6611,7 +6796,7 @@ func (x *IsKeyExistResponse) String() string {
 func (*IsKeyExistResponse) ProtoMessage() {}
 
 func (x *IsKeyExistResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[92]
+	mi := &file_hydraide_proto_msgTypes[95]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6624,7 +6809,7 @@ func (x *IsKeyExistResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IsKeyExistResponse.ProtoReflect.Descriptor instead.
 func (*IsKeyExistResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{92}
+	return file_hydraide_proto_rawDescGZIP(), []int{95}
 }
 
 func (x *IsKeyExistResponse) GetIsExist() bool {
@@ -6651,7 +6836,7 @@ type TelemetrySubscribeRequest struct {
 
 func (x *TelemetrySubscribeRequest) Reset() {
 	*x = TelemetrySubscribeRequest{}
-	mi := &file_hydraide_proto_msgTypes[93]
+	mi := &file_hydraide_proto_msgTypes[96]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6663,7 +6848,7 @@ func (x *TelemetrySubscribeRequest) String() string {
 func (*TelemetrySubscribeRequest) ProtoMessage() {}
 
 func (x *TelemetrySubscribeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[93]
+	mi := &file_hydraide_proto_msgTypes[96]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6676,7 +6861,7 @@ func (x *TelemetrySubscribeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TelemetrySubscribeRequest.ProtoReflect.Descriptor instead.
 func (*TelemetrySubscribeRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{93}
+	return file_hydraide_proto_rawDescGZIP(), []int{96}
 }
 
 func (x *TelemetrySubscribeRequest) GetErrorsOnly() bool {
@@ -6742,7 +6927,7 @@ type TelemetryEvent struct {
 
 func (x *TelemetryEvent) Reset() {
 	*x = TelemetryEvent{}
-	mi := &file_hydraide_proto_msgTypes[94]
+	mi := &file_hydraide_proto_msgTypes[97]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6754,7 +6939,7 @@ func (x *TelemetryEvent) String() string {
 func (*TelemetryEvent) ProtoMessage() {}
 
 func (x *TelemetryEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[94]
+	mi := &file_hydraide_proto_msgTypes[97]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6767,7 +6952,7 @@ func (x *TelemetryEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TelemetryEvent.ProtoReflect.Descriptor instead.
 func (*TelemetryEvent) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{94}
+	return file_hydraide_proto_rawDescGZIP(), []int{97}
 }
 
 func (x *TelemetryEvent) GetId() string {
@@ -6882,7 +7067,7 @@ type TelemetryHistoryRequest struct {
 
 func (x *TelemetryHistoryRequest) Reset() {
 	*x = TelemetryHistoryRequest{}
-	mi := &file_hydraide_proto_msgTypes[95]
+	mi := &file_hydraide_proto_msgTypes[98]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6894,7 +7079,7 @@ func (x *TelemetryHistoryRequest) String() string {
 func (*TelemetryHistoryRequest) ProtoMessage() {}
 
 func (x *TelemetryHistoryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[95]
+	mi := &file_hydraide_proto_msgTypes[98]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6907,7 +7092,7 @@ func (x *TelemetryHistoryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TelemetryHistoryRequest.ProtoReflect.Descriptor instead.
 func (*TelemetryHistoryRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{95}
+	return file_hydraide_proto_rawDescGZIP(), []int{98}
 }
 
 func (x *TelemetryHistoryRequest) GetFromTime() *timestamppb.Timestamp {
@@ -6967,7 +7152,7 @@ type TelemetryHistoryResponse struct {
 
 func (x *TelemetryHistoryResponse) Reset() {
 	*x = TelemetryHistoryResponse{}
-	mi := &file_hydraide_proto_msgTypes[96]
+	mi := &file_hydraide_proto_msgTypes[99]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6979,7 +7164,7 @@ func (x *TelemetryHistoryResponse) String() string {
 func (*TelemetryHistoryResponse) ProtoMessage() {}
 
 func (x *TelemetryHistoryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[96]
+	mi := &file_hydraide_proto_msgTypes[99]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6992,7 +7177,7 @@ func (x *TelemetryHistoryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TelemetryHistoryResponse.ProtoReflect.Descriptor instead.
 func (*TelemetryHistoryResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{96}
+	return file_hydraide_proto_rawDescGZIP(), []int{99}
 }
 
 func (x *TelemetryHistoryResponse) GetEvents() []*TelemetryEvent {
@@ -7027,7 +7212,7 @@ type ErrorDetailsRequest struct {
 
 func (x *ErrorDetailsRequest) Reset() {
 	*x = ErrorDetailsRequest{}
-	mi := &file_hydraide_proto_msgTypes[97]
+	mi := &file_hydraide_proto_msgTypes[100]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7039,7 +7224,7 @@ func (x *ErrorDetailsRequest) String() string {
 func (*ErrorDetailsRequest) ProtoMessage() {}
 
 func (x *ErrorDetailsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[97]
+	mi := &file_hydraide_proto_msgTypes[100]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7052,7 +7237,7 @@ func (x *ErrorDetailsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ErrorDetailsRequest.ProtoReflect.Descriptor instead.
 func (*ErrorDetailsRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{97}
+	return file_hydraide_proto_rawDescGZIP(), []int{100}
 }
 
 func (x *ErrorDetailsRequest) GetEventId() string {
@@ -7079,7 +7264,7 @@ type ErrorDetailsResponse struct {
 
 func (x *ErrorDetailsResponse) Reset() {
 	*x = ErrorDetailsResponse{}
-	mi := &file_hydraide_proto_msgTypes[98]
+	mi := &file_hydraide_proto_msgTypes[101]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7091,7 +7276,7 @@ func (x *ErrorDetailsResponse) String() string {
 func (*ErrorDetailsResponse) ProtoMessage() {}
 
 func (x *ErrorDetailsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[98]
+	mi := &file_hydraide_proto_msgTypes[101]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7104,7 +7289,7 @@ func (x *ErrorDetailsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ErrorDetailsResponse.ProtoReflect.Descriptor instead.
 func (*ErrorDetailsResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{98}
+	return file_hydraide_proto_rawDescGZIP(), []int{101}
 }
 
 func (x *ErrorDetailsResponse) GetEvent() *TelemetryEvent {
@@ -7146,7 +7331,7 @@ type TelemetryStatsRequest struct {
 
 func (x *TelemetryStatsRequest) Reset() {
 	*x = TelemetryStatsRequest{}
-	mi := &file_hydraide_proto_msgTypes[99]
+	mi := &file_hydraide_proto_msgTypes[102]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7158,7 +7343,7 @@ func (x *TelemetryStatsRequest) String() string {
 func (*TelemetryStatsRequest) ProtoMessage() {}
 
 func (x *TelemetryStatsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[99]
+	mi := &file_hydraide_proto_msgTypes[102]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7171,7 +7356,7 @@ func (x *TelemetryStatsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TelemetryStatsRequest.ProtoReflect.Descriptor instead.
 func (*TelemetryStatsRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{99}
+	return file_hydraide_proto_rawDescGZIP(), []int{102}
 }
 
 func (x *TelemetryStatsRequest) GetWindowMinutes() int32 {
@@ -7204,7 +7389,7 @@ type TelemetryStatsResponse struct {
 
 func (x *TelemetryStatsResponse) Reset() {
 	*x = TelemetryStatsResponse{}
-	mi := &file_hydraide_proto_msgTypes[100]
+	mi := &file_hydraide_proto_msgTypes[103]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7216,7 +7401,7 @@ func (x *TelemetryStatsResponse) String() string {
 func (*TelemetryStatsResponse) ProtoMessage() {}
 
 func (x *TelemetryStatsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[100]
+	mi := &file_hydraide_proto_msgTypes[103]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7229,7 +7414,7 @@ func (x *TelemetryStatsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TelemetryStatsResponse.ProtoReflect.Descriptor instead.
 func (*TelemetryStatsResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{100}
+	return file_hydraide_proto_rawDescGZIP(), []int{103}
 }
 
 func (x *TelemetryStatsResponse) GetTotalCalls() int64 {
@@ -7298,7 +7483,7 @@ type TelemetrySwampStats struct {
 
 func (x *TelemetrySwampStats) Reset() {
 	*x = TelemetrySwampStats{}
-	mi := &file_hydraide_proto_msgTypes[101]
+	mi := &file_hydraide_proto_msgTypes[104]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7310,7 +7495,7 @@ func (x *TelemetrySwampStats) String() string {
 func (*TelemetrySwampStats) ProtoMessage() {}
 
 func (x *TelemetrySwampStats) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[101]
+	mi := &file_hydraide_proto_msgTypes[104]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7323,7 +7508,7 @@ func (x *TelemetrySwampStats) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TelemetrySwampStats.ProtoReflect.Descriptor instead.
 func (*TelemetrySwampStats) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{101}
+	return file_hydraide_proto_rawDescGZIP(), []int{104}
 }
 
 func (x *TelemetrySwampStats) GetSwampName() string {
@@ -7373,7 +7558,7 @@ type TelemetryErrorSummary struct {
 
 func (x *TelemetryErrorSummary) Reset() {
 	*x = TelemetryErrorSummary{}
-	mi := &file_hydraide_proto_msgTypes[102]
+	mi := &file_hydraide_proto_msgTypes[105]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7385,7 +7570,7 @@ func (x *TelemetryErrorSummary) String() string {
 func (*TelemetryErrorSummary) ProtoMessage() {}
 
 func (x *TelemetryErrorSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[102]
+	mi := &file_hydraide_proto_msgTypes[105]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7398,7 +7583,7 @@ func (x *TelemetryErrorSummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TelemetryErrorSummary.ProtoReflect.Descriptor instead.
 func (*TelemetryErrorSummary) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{102}
+	return file_hydraide_proto_rawDescGZIP(), []int{105}
 }
 
 func (x *TelemetryErrorSummary) GetErrorCode() string {
@@ -7446,7 +7631,7 @@ type EncodingFormat struct {
 
 func (x *EncodingFormat) Reset() {
 	*x = EncodingFormat{}
-	mi := &file_hydraide_proto_msgTypes[103]
+	mi := &file_hydraide_proto_msgTypes[106]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7458,7 +7643,7 @@ func (x *EncodingFormat) String() string {
 func (*EncodingFormat) ProtoMessage() {}
 
 func (x *EncodingFormat) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[103]
+	mi := &file_hydraide_proto_msgTypes[106]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7471,7 +7656,7 @@ func (x *EncodingFormat) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EncodingFormat.ProtoReflect.Descriptor instead.
 func (*EncodingFormat) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{103}
+	return file_hydraide_proto_rawDescGZIP(), []int{106}
 }
 
 // TreasureFilter defines a single predicate to evaluate against a Treasure's value.
@@ -7539,7 +7724,7 @@ type TreasureFilter struct {
 
 func (x *TreasureFilter) Reset() {
 	*x = TreasureFilter{}
-	mi := &file_hydraide_proto_msgTypes[104]
+	mi := &file_hydraide_proto_msgTypes[107]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7551,7 +7736,7 @@ func (x *TreasureFilter) String() string {
 func (*TreasureFilter) ProtoMessage() {}
 
 func (x *TreasureFilter) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[104]
+	mi := &file_hydraide_proto_msgTypes[107]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7564,7 +7749,7 @@ func (x *TreasureFilter) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TreasureFilter.ProtoReflect.Descriptor instead.
 func (*TreasureFilter) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{104}
+	return file_hydraide_proto_rawDescGZIP(), []int{107}
 }
 
 func (x *TreasureFilter) GetOperator() Relational_Operator {
@@ -7833,7 +8018,7 @@ type FilterLogic struct {
 
 func (x *FilterLogic) Reset() {
 	*x = FilterLogic{}
-	mi := &file_hydraide_proto_msgTypes[105]
+	mi := &file_hydraide_proto_msgTypes[108]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7845,7 +8030,7 @@ func (x *FilterLogic) String() string {
 func (*FilterLogic) ProtoMessage() {}
 
 func (x *FilterLogic) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[105]
+	mi := &file_hydraide_proto_msgTypes[108]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7858,7 +8043,7 @@ func (x *FilterLogic) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FilterLogic.ProtoReflect.Descriptor instead.
 func (*FilterLogic) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{105}
+	return file_hydraide_proto_rawDescGZIP(), []int{108}
 }
 
 // FilterGroup is a recursive filter structure supporting nested AND/OR logic.
@@ -7891,7 +8076,7 @@ type FilterGroup struct {
 
 func (x *FilterGroup) Reset() {
 	*x = FilterGroup{}
-	mi := &file_hydraide_proto_msgTypes[106]
+	mi := &file_hydraide_proto_msgTypes[109]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7903,7 +8088,7 @@ func (x *FilterGroup) String() string {
 func (*FilterGroup) ProtoMessage() {}
 
 func (x *FilterGroup) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[106]
+	mi := &file_hydraide_proto_msgTypes[109]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7916,7 +8101,7 @@ func (x *FilterGroup) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FilterGroup.ProtoReflect.Descriptor instead.
 func (*FilterGroup) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{106}
+	return file_hydraide_proto_rawDescGZIP(), []int{109}
 }
 
 func (x *FilterGroup) GetLogic() FilterLogic_Type {
@@ -7976,7 +8161,7 @@ type PhraseFilter struct {
 
 func (x *PhraseFilter) Reset() {
 	*x = PhraseFilter{}
-	mi := &file_hydraide_proto_msgTypes[107]
+	mi := &file_hydraide_proto_msgTypes[110]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7988,7 +8173,7 @@ func (x *PhraseFilter) String() string {
 func (*PhraseFilter) ProtoMessage() {}
 
 func (x *PhraseFilter) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[107]
+	mi := &file_hydraide_proto_msgTypes[110]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8001,7 +8186,7 @@ func (x *PhraseFilter) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PhraseFilter.ProtoReflect.Descriptor instead.
 func (*PhraseFilter) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{107}
+	return file_hydraide_proto_rawDescGZIP(), []int{110}
 }
 
 func (x *PhraseFilter) GetBytesFieldPath() string {
@@ -8070,7 +8255,7 @@ type GetByIndexStreamRequest struct {
 
 func (x *GetByIndexStreamRequest) Reset() {
 	*x = GetByIndexStreamRequest{}
-	mi := &file_hydraide_proto_msgTypes[108]
+	mi := &file_hydraide_proto_msgTypes[111]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8082,7 +8267,7 @@ func (x *GetByIndexStreamRequest) String() string {
 func (*GetByIndexStreamRequest) ProtoMessage() {}
 
 func (x *GetByIndexStreamRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[108]
+	mi := &file_hydraide_proto_msgTypes[111]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8095,7 +8280,7 @@ func (x *GetByIndexStreamRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetByIndexStreamRequest.ProtoReflect.Descriptor instead.
 func (*GetByIndexStreamRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{108}
+	return file_hydraide_proto_rawDescGZIP(), []int{111}
 }
 
 func (x *GetByIndexStreamRequest) GetIslandID() uint64 {
@@ -8179,7 +8364,7 @@ type GetByIndexStreamResponse struct {
 
 func (x *GetByIndexStreamResponse) Reset() {
 	*x = GetByIndexStreamResponse{}
-	mi := &file_hydraide_proto_msgTypes[109]
+	mi := &file_hydraide_proto_msgTypes[112]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8191,7 +8376,7 @@ func (x *GetByIndexStreamResponse) String() string {
 func (*GetByIndexStreamResponse) ProtoMessage() {}
 
 func (x *GetByIndexStreamResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[109]
+	mi := &file_hydraide_proto_msgTypes[112]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8204,7 +8389,7 @@ func (x *GetByIndexStreamResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetByIndexStreamResponse.ProtoReflect.Descriptor instead.
 func (*GetByIndexStreamResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{109}
+	return file_hydraide_proto_rawDescGZIP(), []int{112}
 }
 
 func (x *GetByIndexStreamResponse) GetTreasure() *Treasure {
@@ -8235,7 +8420,7 @@ type SwampQuery struct {
 
 func (x *SwampQuery) Reset() {
 	*x = SwampQuery{}
-	mi := &file_hydraide_proto_msgTypes[110]
+	mi := &file_hydraide_proto_msgTypes[113]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8247,7 +8432,7 @@ func (x *SwampQuery) String() string {
 func (*SwampQuery) ProtoMessage() {}
 
 func (x *SwampQuery) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[110]
+	mi := &file_hydraide_proto_msgTypes[113]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8260,7 +8445,7 @@ func (x *SwampQuery) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SwampQuery.ProtoReflect.Descriptor instead.
 func (*SwampQuery) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{110}
+	return file_hydraide_proto_rawDescGZIP(), []int{113}
 }
 
 func (x *SwampQuery) GetIslandID() uint64 {
@@ -8350,7 +8535,7 @@ type GetByIndexStreamFromManyRequest struct {
 
 func (x *GetByIndexStreamFromManyRequest) Reset() {
 	*x = GetByIndexStreamFromManyRequest{}
-	mi := &file_hydraide_proto_msgTypes[111]
+	mi := &file_hydraide_proto_msgTypes[114]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8362,7 +8547,7 @@ func (x *GetByIndexStreamFromManyRequest) String() string {
 func (*GetByIndexStreamFromManyRequest) ProtoMessage() {}
 
 func (x *GetByIndexStreamFromManyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[111]
+	mi := &file_hydraide_proto_msgTypes[114]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8375,7 +8560,7 @@ func (x *GetByIndexStreamFromManyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetByIndexStreamFromManyRequest.ProtoReflect.Descriptor instead.
 func (*GetByIndexStreamFromManyRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{111}
+	return file_hydraide_proto_rawDescGZIP(), []int{114}
 }
 
 func (x *GetByIndexStreamFromManyRequest) GetQueries() []*SwampQuery {
@@ -8406,7 +8591,7 @@ type GetByIndexStreamFromManyResponse struct {
 
 func (x *GetByIndexStreamFromManyResponse) Reset() {
 	*x = GetByIndexStreamFromManyResponse{}
-	mi := &file_hydraide_proto_msgTypes[112]
+	mi := &file_hydraide_proto_msgTypes[115]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8418,7 +8603,7 @@ func (x *GetByIndexStreamFromManyResponse) String() string {
 func (*GetByIndexStreamFromManyResponse) ProtoMessage() {}
 
 func (x *GetByIndexStreamFromManyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[112]
+	mi := &file_hydraide_proto_msgTypes[115]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8431,7 +8616,7 @@ func (x *GetByIndexStreamFromManyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetByIndexStreamFromManyResponse.ProtoReflect.Descriptor instead.
 func (*GetByIndexStreamFromManyResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{112}
+	return file_hydraide_proto_rawDescGZIP(), []int{115}
 }
 
 func (x *GetByIndexStreamFromManyResponse) GetSwampName() string {
@@ -8471,7 +8656,7 @@ type ProfileSwampQuery struct {
 
 func (x *ProfileSwampQuery) Reset() {
 	*x = ProfileSwampQuery{}
-	mi := &file_hydraide_proto_msgTypes[113]
+	mi := &file_hydraide_proto_msgTypes[116]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8483,7 +8668,7 @@ func (x *ProfileSwampQuery) String() string {
 func (*ProfileSwampQuery) ProtoMessage() {}
 
 func (x *ProfileSwampQuery) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[113]
+	mi := &file_hydraide_proto_msgTypes[116]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8496,7 +8681,7 @@ func (x *ProfileSwampQuery) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProfileSwampQuery.ProtoReflect.Descriptor instead.
 func (*ProfileSwampQuery) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{113}
+	return file_hydraide_proto_rawDescGZIP(), []int{116}
 }
 
 func (x *ProfileSwampQuery) GetIslandID() uint64 {
@@ -8543,7 +8728,7 @@ type GetStreamRequest struct {
 
 func (x *GetStreamRequest) Reset() {
 	*x = GetStreamRequest{}
-	mi := &file_hydraide_proto_msgTypes[114]
+	mi := &file_hydraide_proto_msgTypes[117]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8555,7 +8740,7 @@ func (x *GetStreamRequest) String() string {
 func (*GetStreamRequest) ProtoMessage() {}
 
 func (x *GetStreamRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[114]
+	mi := &file_hydraide_proto_msgTypes[117]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8568,7 +8753,7 @@ func (x *GetStreamRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetStreamRequest.ProtoReflect.Descriptor instead.
 func (*GetStreamRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{114}
+	return file_hydraide_proto_rawDescGZIP(), []int{117}
 }
 
 func (x *GetStreamRequest) GetQueries() []*ProfileSwampQuery {
@@ -8601,7 +8786,7 @@ type GetStreamResponse struct {
 
 func (x *GetStreamResponse) Reset() {
 	*x = GetStreamResponse{}
-	mi := &file_hydraide_proto_msgTypes[115]
+	mi := &file_hydraide_proto_msgTypes[118]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8613,7 +8798,7 @@ func (x *GetStreamResponse) String() string {
 func (*GetStreamResponse) ProtoMessage() {}
 
 func (x *GetStreamResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[115]
+	mi := &file_hydraide_proto_msgTypes[118]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8626,7 +8811,7 @@ func (x *GetStreamResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetStreamResponse.ProtoReflect.Descriptor instead.
 func (*GetStreamResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{115}
+	return file_hydraide_proto_rawDescGZIP(), []int{118}
 }
 
 func (x *GetStreamResponse) GetSwampName() string {
@@ -8670,7 +8855,7 @@ type CompactSwampRequest struct {
 
 func (x *CompactSwampRequest) Reset() {
 	*x = CompactSwampRequest{}
-	mi := &file_hydraide_proto_msgTypes[116]
+	mi := &file_hydraide_proto_msgTypes[119]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8682,7 +8867,7 @@ func (x *CompactSwampRequest) String() string {
 func (*CompactSwampRequest) ProtoMessage() {}
 
 func (x *CompactSwampRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[116]
+	mi := &file_hydraide_proto_msgTypes[119]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8695,7 +8880,7 @@ func (x *CompactSwampRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompactSwampRequest.ProtoReflect.Descriptor instead.
 func (*CompactSwampRequest) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{116}
+	return file_hydraide_proto_rawDescGZIP(), []int{119}
 }
 
 func (x *CompactSwampRequest) GetIslandID() uint64 {
@@ -8722,7 +8907,7 @@ type CompactSwampResponse struct {
 
 func (x *CompactSwampResponse) Reset() {
 	*x = CompactSwampResponse{}
-	mi := &file_hydraide_proto_msgTypes[117]
+	mi := &file_hydraide_proto_msgTypes[120]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8734,7 +8919,7 @@ func (x *CompactSwampResponse) String() string {
 func (*CompactSwampResponse) ProtoMessage() {}
 
 func (x *CompactSwampResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[117]
+	mi := &file_hydraide_proto_msgTypes[120]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8747,7 +8932,7 @@ func (x *CompactSwampResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompactSwampResponse.ProtoReflect.Descriptor instead.
 func (*CompactSwampResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{117}
+	return file_hydraide_proto_rawDescGZIP(), []int{120}
 }
 
 type DeleteRequest_SwampKeys struct {
@@ -8764,7 +8949,7 @@ type DeleteRequest_SwampKeys struct {
 
 func (x *DeleteRequest_SwampKeys) Reset() {
 	*x = DeleteRequest_SwampKeys{}
-	mi := &file_hydraide_proto_msgTypes[118]
+	mi := &file_hydraide_proto_msgTypes[121]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8776,7 +8961,7 @@ func (x *DeleteRequest_SwampKeys) String() string {
 func (*DeleteRequest_SwampKeys) ProtoMessage() {}
 
 func (x *DeleteRequest_SwampKeys) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[118]
+	mi := &file_hydraide_proto_msgTypes[121]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8789,7 +8974,7 @@ func (x *DeleteRequest_SwampKeys) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteRequest_SwampKeys.ProtoReflect.Descriptor instead.
 func (*DeleteRequest_SwampKeys) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{42, 0}
+	return file_hydraide_proto_rawDescGZIP(), []int{45, 0}
 }
 
 func (x *DeleteRequest_SwampKeys) GetIslandID() uint64 {
@@ -8828,7 +9013,7 @@ type DeleteResponse_SwampDeleteResponse struct {
 
 func (x *DeleteResponse_SwampDeleteResponse) Reset() {
 	*x = DeleteResponse_SwampDeleteResponse{}
-	mi := &file_hydraide_proto_msgTypes[119]
+	mi := &file_hydraide_proto_msgTypes[122]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8840,7 +9025,7 @@ func (x *DeleteResponse_SwampDeleteResponse) String() string {
 func (*DeleteResponse_SwampDeleteResponse) ProtoMessage() {}
 
 func (x *DeleteResponse_SwampDeleteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[119]
+	mi := &file_hydraide_proto_msgTypes[122]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8853,7 +9038,7 @@ func (x *DeleteResponse_SwampDeleteResponse) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use DeleteResponse_SwampDeleteResponse.ProtoReflect.Descriptor instead.
 func (*DeleteResponse_SwampDeleteResponse) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{43, 0}
+	return file_hydraide_proto_rawDescGZIP(), []int{46, 0}
 }
 
 func (x *DeleteResponse_SwampDeleteResponse) GetSwampName() string {
@@ -8889,7 +9074,7 @@ type CountRequest_SwampIdentifier struct {
 
 func (x *CountRequest_SwampIdentifier) Reset() {
 	*x = CountRequest_SwampIdentifier{}
-	mi := &file_hydraide_proto_msgTypes[120]
+	mi := &file_hydraide_proto_msgTypes[123]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8901,7 +9086,7 @@ func (x *CountRequest_SwampIdentifier) String() string {
 func (*CountRequest_SwampIdentifier) ProtoMessage() {}
 
 func (x *CountRequest_SwampIdentifier) ProtoReflect() protoreflect.Message {
-	mi := &file_hydraide_proto_msgTypes[120]
+	mi := &file_hydraide_proto_msgTypes[123]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8914,7 +9099,7 @@ func (x *CountRequest_SwampIdentifier) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CountRequest_SwampIdentifier.ProtoReflect.Descriptor instead.
 func (*CountRequest_SwampIdentifier) Descriptor() ([]byte, []int) {
-	return file_hydraide_proto_rawDescGZIP(), []int{44, 0}
+	return file_hydraide_proto_rawDescGZIP(), []int{47, 0}
 }
 
 func (x *CountRequest_SwampIdentifier) GetIslandID() uint64 {
@@ -8952,7 +9137,18 @@ const file_hydraide_proto_rawDesc = "" +
 	"\x0eDestroyRequest\x12\x1a\n" +
 	"\bIslandID\x18\x01 \x01(\x04R\bIslandID\x12\x1c\n" +
 	"\tSwampName\x18\x02 \x01(\tR\tSwampName\"\x11\n" +
-	"\x0fDestroyResponse\"R\n" +
+	"\x0fDestroyResponse\"O\n" +
+	"\x12DestroyBulkRequest\x129\n" +
+	"\aTargets\x18\x01 \x03(\v2\x1f.hydraidepbgo.DestroyBulkTargetR\aTargets\"M\n" +
+	"\x11DestroyBulkTarget\x12\x1a\n" +
+	"\bIslandID\x18\x01 \x01(\x04R\bIslandID\x12\x1c\n" +
+	"\tSwampName\x18\x02 \x01(\tR\tSwampName\"\xa3\x01\n" +
+	"\x13DestroyBulkResponse\x12\x1c\n" +
+	"\tDestroyed\x18\x01 \x01(\x03R\tDestroyed\x12\x16\n" +
+	"\x06Failed\x18\x02 \x01(\x03R\x06Failed\x12$\n" +
+	"\rTotalReceived\x18\x03 \x01(\x03R\rTotalReceived\x12\x1c\n" +
+	"\tLastError\x18\x04 \x01(\tR\tLastError\x12\x12\n" +
+	"\x04Done\x18\x05 \x01(\bR\x04Done\"R\n" +
 	"\x16SubscribeToInfoRequest\x12\x1a\n" +
 	"\bIslandID\x18\x01 \x01(\x04R\bIslandID\x12\x1c\n" +
 	"\tSwampName\x18\x02 \x01(\tR\tSwampName\"Y\n" +
@@ -9704,7 +9900,7 @@ const file_hydraide_proto_rawDesc = "" +
 	"\x13CompactSwampRequest\x12\x1a\n" +
 	"\bIslandID\x18\x01 \x01(\x04R\bIslandID\x12\x1c\n" +
 	"\tSwampName\x18\x02 \x01(\tR\tSwampName\"\x16\n" +
-	"\x14CompactSwampResponse2\xb8\x1d\n" +
+	"\x14CompactSwampResponse2\x92\x1e\n" +
 	"\x0fHydraideService\x12N\n" +
 	"\tHeartbeat\x12\x1e.hydraidepbgo.HeartbeatRequest\x1a\x1f.hydraidepbgo.HeartbeatResponse\"\x00\x12?\n" +
 	"\x04Lock\x12\x19.hydraidepbgo.LockRequest\x1a\x1a.hydraidepbgo.LockResponse\"\x00\x12E\n" +
@@ -9719,7 +9915,8 @@ const file_hydraide_proto_rawDesc = "" +
 	"\tGetByKeys\x12\x1e.hydraidepbgo.GetByKeysRequest\x1a\x1f.hydraidepbgo.GetByKeysResponse\"\x00\x12T\n" +
 	"\vShiftByKeys\x12 .hydraidepbgo.ShiftByKeysRequest\x1a!.hydraidepbgo.ShiftByKeysResponse\"\x00\x12r\n" +
 	"\x15ShiftExpiredTreasures\x12*.hydraidepbgo.ShiftExpiredTreasuresRequest\x1a+.hydraidepbgo.ShiftExpiredTreasuresResponse\"\x00\x12H\n" +
-	"\aDestroy\x12\x1c.hydraidepbgo.DestroyRequest\x1a\x1d.hydraidepbgo.DestroyResponse\"\x00\x12E\n" +
+	"\aDestroy\x12\x1c.hydraidepbgo.DestroyRequest\x1a\x1d.hydraidepbgo.DestroyResponse\"\x00\x12X\n" +
+	"\vDestroyBulk\x12 .hydraidepbgo.DestroyBulkRequest\x1a!.hydraidepbgo.DestroyBulkResponse\"\x00(\x010\x01\x12E\n" +
 	"\x06Delete\x12\x1b.hydraidepbgo.DeleteRequest\x1a\x1c.hydraidepbgo.DeleteResponse\"\x00\x12B\n" +
 	"\x05Count\x12\x1a.hydraidepbgo.CountRequest\x1a\x1b.hydraidepbgo.CountResponse\"\x00\x12W\n" +
 	"\fIsSwampExist\x12!.hydraidepbgo.IsSwampExistRequest\x1a\".hydraidepbgo.IsSwampExistResponse\"\x00\x12Q\n" +
@@ -9763,7 +9960,7 @@ func file_hydraide_proto_rawDescGZIP() []byte {
 }
 
 var file_hydraide_proto_enumTypes = make([]protoimpl.EnumInfo, 9)
-var file_hydraide_proto_msgTypes = make([]protoimpl.MessageInfo, 122)
+var file_hydraide_proto_msgTypes = make([]protoimpl.MessageInfo, 125)
 var file_hydraide_proto_goTypes = []any{
 	(SwampResponse_ErrCodeEnum)(0), // 0: hydraidepbgo.SwampResponse.ErrCodeEnum
 	(Status_Code)(0),               // 1: hydraidepbgo.Status.Code
@@ -9782,338 +9979,344 @@ var file_hydraide_proto_goTypes = []any{
 	(*UnlockResponse)(nil),                                // 14: hydraidepbgo.UnlockResponse
 	(*DestroyRequest)(nil),                                // 15: hydraidepbgo.DestroyRequest
 	(*DestroyResponse)(nil),                               // 16: hydraidepbgo.DestroyResponse
-	(*SubscribeToInfoRequest)(nil),                        // 17: hydraidepbgo.SubscribeToInfoRequest
-	(*SubscribeToInfoResponse)(nil),                       // 18: hydraidepbgo.SubscribeToInfoResponse
-	(*SubscribeToEventsRequest)(nil),                      // 19: hydraidepbgo.SubscribeToEventsRequest
-	(*SubscribeToEventsResponse)(nil),                     // 20: hydraidepbgo.SubscribeToEventsResponse
-	(*SwampKeys)(nil),                                     // 21: hydraidepbgo.SwampKeys
-	(*RegisterSwampRequest)(nil),                          // 22: hydraidepbgo.RegisterSwampRequest
-	(*RegisterSwampResponse)(nil),                         // 23: hydraidepbgo.RegisterSwampResponse
-	(*DeRegisterSwampRequest)(nil),                        // 24: hydraidepbgo.DeRegisterSwampRequest
-	(*DeRegisterSwampResponse)(nil),                       // 25: hydraidepbgo.DeRegisterSwampResponse
-	(*SetRequest)(nil),                                    // 26: hydraidepbgo.SetRequest
-	(*SwampRequest)(nil),                                  // 27: hydraidepbgo.SwampRequest
-	(*KeyValuePair)(nil),                                  // 28: hydraidepbgo.KeyValuePair
-	(*SetResponse)(nil),                                   // 29: hydraidepbgo.SetResponse
-	(*SwampResponse)(nil),                                 // 30: hydraidepbgo.SwampResponse
-	(*KeyStatusPair)(nil),                                 // 31: hydraidepbgo.KeyStatusPair
-	(*Status)(nil),                                        // 32: hydraidepbgo.Status
-	(*GetRequest)(nil),                                    // 33: hydraidepbgo.GetRequest
-	(*GetSwamp)(nil),                                      // 34: hydraidepbgo.GetSwamp
-	(*GetResponse)(nil),                                   // 35: hydraidepbgo.GetResponse
-	(*GetSwampResponse)(nil),                              // 36: hydraidepbgo.GetSwampResponse
-	(*GetAllRequest)(nil),                                 // 37: hydraidepbgo.GetAllRequest
-	(*GetAllResponse)(nil),                                // 38: hydraidepbgo.GetAllResponse
-	(*ShiftExpiredTreasuresRequest)(nil),                  // 39: hydraidepbgo.ShiftExpiredTreasuresRequest
-	(*ShiftExpiredTreasuresResponse)(nil),                 // 40: hydraidepbgo.ShiftExpiredTreasuresResponse
-	(*Treasure)(nil),                                      // 41: hydraidepbgo.Treasure
-	(*Boolean)(nil),                                       // 42: hydraidepbgo.Boolean
-	(*GetByIndexRequest)(nil),                             // 43: hydraidepbgo.GetByIndexRequest
-	(*IndexType)(nil),                                     // 44: hydraidepbgo.IndexType
-	(*OrderType)(nil),                                     // 45: hydraidepbgo.OrderType
-	(*GetByIndexResponse)(nil),                            // 46: hydraidepbgo.GetByIndexResponse
-	(*GetByKeysRequest)(nil),                              // 47: hydraidepbgo.GetByKeysRequest
-	(*GetByKeysResponse)(nil),                             // 48: hydraidepbgo.GetByKeysResponse
-	(*ShiftByKeysRequest)(nil),                            // 49: hydraidepbgo.ShiftByKeysRequest
-	(*ShiftByKeysResponse)(nil),                           // 50: hydraidepbgo.ShiftByKeysResponse
-	(*DeleteRequest)(nil),                                 // 51: hydraidepbgo.DeleteRequest
-	(*DeleteResponse)(nil),                                // 52: hydraidepbgo.DeleteResponse
-	(*CountRequest)(nil),                                  // 53: hydraidepbgo.CountRequest
-	(*CountResponse)(nil),                                 // 54: hydraidepbgo.CountResponse
-	(*CountSwamp)(nil),                                    // 55: hydraidepbgo.CountSwamp
-	(*IncrementRequestMetadata)(nil),                      // 56: hydraidepbgo.IncrementRequestMetadata
-	(*IncrementResponseMetadata)(nil),                     // 57: hydraidepbgo.IncrementResponseMetadata
-	(*IncrementInt8Request)(nil),                          // 58: hydraidepbgo.IncrementInt8Request
-	(*IncrementInt8Condition)(nil),                        // 59: hydraidepbgo.IncrementInt8Condition
-	(*IncrementInt8Response)(nil),                         // 60: hydraidepbgo.IncrementInt8Response
-	(*IncrementInt16Request)(nil),                         // 61: hydraidepbgo.IncrementInt16Request
-	(*IncrementInt16Condition)(nil),                       // 62: hydraidepbgo.IncrementInt16Condition
-	(*IncrementInt16Response)(nil),                        // 63: hydraidepbgo.IncrementInt16Response
-	(*IncrementInt32Request)(nil),                         // 64: hydraidepbgo.IncrementInt32Request
-	(*IncrementInt32Condition)(nil),                       // 65: hydraidepbgo.IncrementInt32Condition
-	(*IncrementInt32Response)(nil),                        // 66: hydraidepbgo.IncrementInt32Response
-	(*IncrementInt64Request)(nil),                         // 67: hydraidepbgo.IncrementInt64Request
-	(*IncrementInt64Condition)(nil),                       // 68: hydraidepbgo.IncrementInt64Condition
-	(*IncrementInt64Response)(nil),                        // 69: hydraidepbgo.IncrementInt64Response
-	(*IncrementUint8Request)(nil),                         // 70: hydraidepbgo.IncrementUint8Request
-	(*IncrementUint8Condition)(nil),                       // 71: hydraidepbgo.IncrementUint8Condition
-	(*IncrementUint8Response)(nil),                        // 72: hydraidepbgo.IncrementUint8Response
-	(*IncrementUint16Request)(nil),                        // 73: hydraidepbgo.IncrementUint16Request
-	(*IncrementUint16Condition)(nil),                      // 74: hydraidepbgo.IncrementUint16Condition
-	(*IncrementUint16Response)(nil),                       // 75: hydraidepbgo.IncrementUint16Response
-	(*IncrementUint32Request)(nil),                        // 76: hydraidepbgo.IncrementUint32Request
-	(*IncrementUint32Condition)(nil),                      // 77: hydraidepbgo.IncrementUint32Condition
-	(*IncrementUint32Response)(nil),                       // 78: hydraidepbgo.IncrementUint32Response
-	(*IncrementUint64Request)(nil),                        // 79: hydraidepbgo.IncrementUint64Request
-	(*IncrementUint64Condition)(nil),                      // 80: hydraidepbgo.IncrementUint64Condition
-	(*IncrementUint64Response)(nil),                       // 81: hydraidepbgo.IncrementUint64Response
-	(*Relational)(nil),                                    // 82: hydraidepbgo.Relational
-	(*IncrementFloat32Request)(nil),                       // 83: hydraidepbgo.IncrementFloat32Request
-	(*IncrementFloat32Condition)(nil),                     // 84: hydraidepbgo.IncrementFloat32Condition
-	(*IncrementFloat32Response)(nil),                      // 85: hydraidepbgo.IncrementFloat32Response
-	(*IncrementFloat64Request)(nil),                       // 86: hydraidepbgo.IncrementFloat64Request
-	(*IncrementFloat64Condition)(nil),                     // 87: hydraidepbgo.IncrementFloat64Condition
-	(*IncrementFloat64Response)(nil),                      // 88: hydraidepbgo.IncrementFloat64Response
-	(*KeySlicePair)(nil),                                  // 89: hydraidepbgo.KeySlicePair
-	(*AddToUint32SlicePushRequest)(nil),                   // 90: hydraidepbgo.AddToUint32SlicePushRequest
-	(*AddToUint32SlicePushResponse)(nil),                  // 91: hydraidepbgo.AddToUint32SlicePushResponse
-	(*Uint32SliceDeleteRequest)(nil),                      // 92: hydraidepbgo.Uint32SliceDeleteRequest
-	(*Uint32SliceDeleteResponse)(nil),                     // 93: hydraidepbgo.Uint32SliceDeleteResponse
-	(*Uint32SliceSizeRequest)(nil),                        // 94: hydraidepbgo.Uint32SliceSizeRequest
-	(*Uint32SliceSizeResponse)(nil),                       // 95: hydraidepbgo.Uint32SliceSizeResponse
-	(*Uint32SliceIsValueExistRequest)(nil),                // 96: hydraidepbgo.Uint32SliceIsValueExistRequest
-	(*Uint32SliceIsValueExistResponse)(nil),               // 97: hydraidepbgo.Uint32SliceIsValueExistResponse
-	(*IsSwampExistRequest)(nil),                           // 98: hydraidepbgo.IsSwampExistRequest
-	(*IsSwampExistResponse)(nil),                          // 99: hydraidepbgo.IsSwampExistResponse
-	(*IsKeyExistRequest)(nil),                             // 100: hydraidepbgo.IsKeyExistRequest
-	(*IsKeyExistResponse)(nil),                            // 101: hydraidepbgo.IsKeyExistResponse
-	(*TelemetrySubscribeRequest)(nil),                     // 102: hydraidepbgo.TelemetrySubscribeRequest
-	(*TelemetryEvent)(nil),                                // 103: hydraidepbgo.TelemetryEvent
-	(*TelemetryHistoryRequest)(nil),                       // 104: hydraidepbgo.TelemetryHistoryRequest
-	(*TelemetryHistoryResponse)(nil),                      // 105: hydraidepbgo.TelemetryHistoryResponse
-	(*ErrorDetailsRequest)(nil),                           // 106: hydraidepbgo.ErrorDetailsRequest
-	(*ErrorDetailsResponse)(nil),                          // 107: hydraidepbgo.ErrorDetailsResponse
-	(*TelemetryStatsRequest)(nil),                         // 108: hydraidepbgo.TelemetryStatsRequest
-	(*TelemetryStatsResponse)(nil),                        // 109: hydraidepbgo.TelemetryStatsResponse
-	(*TelemetrySwampStats)(nil),                           // 110: hydraidepbgo.TelemetrySwampStats
-	(*TelemetryErrorSummary)(nil),                         // 111: hydraidepbgo.TelemetryErrorSummary
-	(*EncodingFormat)(nil),                                // 112: hydraidepbgo.EncodingFormat
-	(*TreasureFilter)(nil),                                // 113: hydraidepbgo.TreasureFilter
-	(*FilterLogic)(nil),                                   // 114: hydraidepbgo.FilterLogic
-	(*FilterGroup)(nil),                                   // 115: hydraidepbgo.FilterGroup
-	(*PhraseFilter)(nil),                                  // 116: hydraidepbgo.PhraseFilter
-	(*GetByIndexStreamRequest)(nil),                       // 117: hydraidepbgo.GetByIndexStreamRequest
-	(*GetByIndexStreamResponse)(nil),                      // 118: hydraidepbgo.GetByIndexStreamResponse
-	(*SwampQuery)(nil),                                    // 119: hydraidepbgo.SwampQuery
-	(*GetByIndexStreamFromManyRequest)(nil),               // 120: hydraidepbgo.GetByIndexStreamFromManyRequest
-	(*GetByIndexStreamFromManyResponse)(nil),              // 121: hydraidepbgo.GetByIndexStreamFromManyResponse
-	(*ProfileSwampQuery)(nil),                             // 122: hydraidepbgo.ProfileSwampQuery
-	(*GetStreamRequest)(nil),                              // 123: hydraidepbgo.GetStreamRequest
-	(*GetStreamResponse)(nil),                             // 124: hydraidepbgo.GetStreamResponse
-	(*CompactSwampRequest)(nil),                           // 125: hydraidepbgo.CompactSwampRequest
-	(*CompactSwampResponse)(nil),                          // 126: hydraidepbgo.CompactSwampResponse
-	(*DeleteRequest_SwampKeys)(nil),                       // 127: hydraidepbgo.DeleteRequest.SwampKeys
-	(*DeleteResponse_SwampDeleteResponse)(nil),            // 128: hydraidepbgo.DeleteResponse.SwampDeleteResponse
-	(*CountRequest_SwampIdentifier)(nil),                  // 129: hydraidepbgo.CountRequest.SwampIdentifier
-	nil,                                                   // 130: hydraidepbgo.ErrorDetailsResponse.ContextEntry
-	(*timestamppb.Timestamp)(nil),                         // 131: google.protobuf.Timestamp
+	(*DestroyBulkRequest)(nil),                            // 17: hydraidepbgo.DestroyBulkRequest
+	(*DestroyBulkTarget)(nil),                             // 18: hydraidepbgo.DestroyBulkTarget
+	(*DestroyBulkResponse)(nil),                           // 19: hydraidepbgo.DestroyBulkResponse
+	(*SubscribeToInfoRequest)(nil),                        // 20: hydraidepbgo.SubscribeToInfoRequest
+	(*SubscribeToInfoResponse)(nil),                       // 21: hydraidepbgo.SubscribeToInfoResponse
+	(*SubscribeToEventsRequest)(nil),                      // 22: hydraidepbgo.SubscribeToEventsRequest
+	(*SubscribeToEventsResponse)(nil),                     // 23: hydraidepbgo.SubscribeToEventsResponse
+	(*SwampKeys)(nil),                                     // 24: hydraidepbgo.SwampKeys
+	(*RegisterSwampRequest)(nil),                          // 25: hydraidepbgo.RegisterSwampRequest
+	(*RegisterSwampResponse)(nil),                         // 26: hydraidepbgo.RegisterSwampResponse
+	(*DeRegisterSwampRequest)(nil),                        // 27: hydraidepbgo.DeRegisterSwampRequest
+	(*DeRegisterSwampResponse)(nil),                       // 28: hydraidepbgo.DeRegisterSwampResponse
+	(*SetRequest)(nil),                                    // 29: hydraidepbgo.SetRequest
+	(*SwampRequest)(nil),                                  // 30: hydraidepbgo.SwampRequest
+	(*KeyValuePair)(nil),                                  // 31: hydraidepbgo.KeyValuePair
+	(*SetResponse)(nil),                                   // 32: hydraidepbgo.SetResponse
+	(*SwampResponse)(nil),                                 // 33: hydraidepbgo.SwampResponse
+	(*KeyStatusPair)(nil),                                 // 34: hydraidepbgo.KeyStatusPair
+	(*Status)(nil),                                        // 35: hydraidepbgo.Status
+	(*GetRequest)(nil),                                    // 36: hydraidepbgo.GetRequest
+	(*GetSwamp)(nil),                                      // 37: hydraidepbgo.GetSwamp
+	(*GetResponse)(nil),                                   // 38: hydraidepbgo.GetResponse
+	(*GetSwampResponse)(nil),                              // 39: hydraidepbgo.GetSwampResponse
+	(*GetAllRequest)(nil),                                 // 40: hydraidepbgo.GetAllRequest
+	(*GetAllResponse)(nil),                                // 41: hydraidepbgo.GetAllResponse
+	(*ShiftExpiredTreasuresRequest)(nil),                  // 42: hydraidepbgo.ShiftExpiredTreasuresRequest
+	(*ShiftExpiredTreasuresResponse)(nil),                 // 43: hydraidepbgo.ShiftExpiredTreasuresResponse
+	(*Treasure)(nil),                                      // 44: hydraidepbgo.Treasure
+	(*Boolean)(nil),                                       // 45: hydraidepbgo.Boolean
+	(*GetByIndexRequest)(nil),                             // 46: hydraidepbgo.GetByIndexRequest
+	(*IndexType)(nil),                                     // 47: hydraidepbgo.IndexType
+	(*OrderType)(nil),                                     // 48: hydraidepbgo.OrderType
+	(*GetByIndexResponse)(nil),                            // 49: hydraidepbgo.GetByIndexResponse
+	(*GetByKeysRequest)(nil),                              // 50: hydraidepbgo.GetByKeysRequest
+	(*GetByKeysResponse)(nil),                             // 51: hydraidepbgo.GetByKeysResponse
+	(*ShiftByKeysRequest)(nil),                            // 52: hydraidepbgo.ShiftByKeysRequest
+	(*ShiftByKeysResponse)(nil),                           // 53: hydraidepbgo.ShiftByKeysResponse
+	(*DeleteRequest)(nil),                                 // 54: hydraidepbgo.DeleteRequest
+	(*DeleteResponse)(nil),                                // 55: hydraidepbgo.DeleteResponse
+	(*CountRequest)(nil),                                  // 56: hydraidepbgo.CountRequest
+	(*CountResponse)(nil),                                 // 57: hydraidepbgo.CountResponse
+	(*CountSwamp)(nil),                                    // 58: hydraidepbgo.CountSwamp
+	(*IncrementRequestMetadata)(nil),                      // 59: hydraidepbgo.IncrementRequestMetadata
+	(*IncrementResponseMetadata)(nil),                     // 60: hydraidepbgo.IncrementResponseMetadata
+	(*IncrementInt8Request)(nil),                          // 61: hydraidepbgo.IncrementInt8Request
+	(*IncrementInt8Condition)(nil),                        // 62: hydraidepbgo.IncrementInt8Condition
+	(*IncrementInt8Response)(nil),                         // 63: hydraidepbgo.IncrementInt8Response
+	(*IncrementInt16Request)(nil),                         // 64: hydraidepbgo.IncrementInt16Request
+	(*IncrementInt16Condition)(nil),                       // 65: hydraidepbgo.IncrementInt16Condition
+	(*IncrementInt16Response)(nil),                        // 66: hydraidepbgo.IncrementInt16Response
+	(*IncrementInt32Request)(nil),                         // 67: hydraidepbgo.IncrementInt32Request
+	(*IncrementInt32Condition)(nil),                       // 68: hydraidepbgo.IncrementInt32Condition
+	(*IncrementInt32Response)(nil),                        // 69: hydraidepbgo.IncrementInt32Response
+	(*IncrementInt64Request)(nil),                         // 70: hydraidepbgo.IncrementInt64Request
+	(*IncrementInt64Condition)(nil),                       // 71: hydraidepbgo.IncrementInt64Condition
+	(*IncrementInt64Response)(nil),                        // 72: hydraidepbgo.IncrementInt64Response
+	(*IncrementUint8Request)(nil),                         // 73: hydraidepbgo.IncrementUint8Request
+	(*IncrementUint8Condition)(nil),                       // 74: hydraidepbgo.IncrementUint8Condition
+	(*IncrementUint8Response)(nil),                        // 75: hydraidepbgo.IncrementUint8Response
+	(*IncrementUint16Request)(nil),                        // 76: hydraidepbgo.IncrementUint16Request
+	(*IncrementUint16Condition)(nil),                      // 77: hydraidepbgo.IncrementUint16Condition
+	(*IncrementUint16Response)(nil),                       // 78: hydraidepbgo.IncrementUint16Response
+	(*IncrementUint32Request)(nil),                        // 79: hydraidepbgo.IncrementUint32Request
+	(*IncrementUint32Condition)(nil),                      // 80: hydraidepbgo.IncrementUint32Condition
+	(*IncrementUint32Response)(nil),                       // 81: hydraidepbgo.IncrementUint32Response
+	(*IncrementUint64Request)(nil),                        // 82: hydraidepbgo.IncrementUint64Request
+	(*IncrementUint64Condition)(nil),                      // 83: hydraidepbgo.IncrementUint64Condition
+	(*IncrementUint64Response)(nil),                       // 84: hydraidepbgo.IncrementUint64Response
+	(*Relational)(nil),                                    // 85: hydraidepbgo.Relational
+	(*IncrementFloat32Request)(nil),                       // 86: hydraidepbgo.IncrementFloat32Request
+	(*IncrementFloat32Condition)(nil),                     // 87: hydraidepbgo.IncrementFloat32Condition
+	(*IncrementFloat32Response)(nil),                      // 88: hydraidepbgo.IncrementFloat32Response
+	(*IncrementFloat64Request)(nil),                       // 89: hydraidepbgo.IncrementFloat64Request
+	(*IncrementFloat64Condition)(nil),                     // 90: hydraidepbgo.IncrementFloat64Condition
+	(*IncrementFloat64Response)(nil),                      // 91: hydraidepbgo.IncrementFloat64Response
+	(*KeySlicePair)(nil),                                  // 92: hydraidepbgo.KeySlicePair
+	(*AddToUint32SlicePushRequest)(nil),                   // 93: hydraidepbgo.AddToUint32SlicePushRequest
+	(*AddToUint32SlicePushResponse)(nil),                  // 94: hydraidepbgo.AddToUint32SlicePushResponse
+	(*Uint32SliceDeleteRequest)(nil),                      // 95: hydraidepbgo.Uint32SliceDeleteRequest
+	(*Uint32SliceDeleteResponse)(nil),                     // 96: hydraidepbgo.Uint32SliceDeleteResponse
+	(*Uint32SliceSizeRequest)(nil),                        // 97: hydraidepbgo.Uint32SliceSizeRequest
+	(*Uint32SliceSizeResponse)(nil),                       // 98: hydraidepbgo.Uint32SliceSizeResponse
+	(*Uint32SliceIsValueExistRequest)(nil),                // 99: hydraidepbgo.Uint32SliceIsValueExistRequest
+	(*Uint32SliceIsValueExistResponse)(nil),               // 100: hydraidepbgo.Uint32SliceIsValueExistResponse
+	(*IsSwampExistRequest)(nil),                           // 101: hydraidepbgo.IsSwampExistRequest
+	(*IsSwampExistResponse)(nil),                          // 102: hydraidepbgo.IsSwampExistResponse
+	(*IsKeyExistRequest)(nil),                             // 103: hydraidepbgo.IsKeyExistRequest
+	(*IsKeyExistResponse)(nil),                            // 104: hydraidepbgo.IsKeyExistResponse
+	(*TelemetrySubscribeRequest)(nil),                     // 105: hydraidepbgo.TelemetrySubscribeRequest
+	(*TelemetryEvent)(nil),                                // 106: hydraidepbgo.TelemetryEvent
+	(*TelemetryHistoryRequest)(nil),                       // 107: hydraidepbgo.TelemetryHistoryRequest
+	(*TelemetryHistoryResponse)(nil),                      // 108: hydraidepbgo.TelemetryHistoryResponse
+	(*ErrorDetailsRequest)(nil),                           // 109: hydraidepbgo.ErrorDetailsRequest
+	(*ErrorDetailsResponse)(nil),                          // 110: hydraidepbgo.ErrorDetailsResponse
+	(*TelemetryStatsRequest)(nil),                         // 111: hydraidepbgo.TelemetryStatsRequest
+	(*TelemetryStatsResponse)(nil),                        // 112: hydraidepbgo.TelemetryStatsResponse
+	(*TelemetrySwampStats)(nil),                           // 113: hydraidepbgo.TelemetrySwampStats
+	(*TelemetryErrorSummary)(nil),                         // 114: hydraidepbgo.TelemetryErrorSummary
+	(*EncodingFormat)(nil),                                // 115: hydraidepbgo.EncodingFormat
+	(*TreasureFilter)(nil),                                // 116: hydraidepbgo.TreasureFilter
+	(*FilterLogic)(nil),                                   // 117: hydraidepbgo.FilterLogic
+	(*FilterGroup)(nil),                                   // 118: hydraidepbgo.FilterGroup
+	(*PhraseFilter)(nil),                                  // 119: hydraidepbgo.PhraseFilter
+	(*GetByIndexStreamRequest)(nil),                       // 120: hydraidepbgo.GetByIndexStreamRequest
+	(*GetByIndexStreamResponse)(nil),                      // 121: hydraidepbgo.GetByIndexStreamResponse
+	(*SwampQuery)(nil),                                    // 122: hydraidepbgo.SwampQuery
+	(*GetByIndexStreamFromManyRequest)(nil),               // 123: hydraidepbgo.GetByIndexStreamFromManyRequest
+	(*GetByIndexStreamFromManyResponse)(nil),              // 124: hydraidepbgo.GetByIndexStreamFromManyResponse
+	(*ProfileSwampQuery)(nil),                             // 125: hydraidepbgo.ProfileSwampQuery
+	(*GetStreamRequest)(nil),                              // 126: hydraidepbgo.GetStreamRequest
+	(*GetStreamResponse)(nil),                             // 127: hydraidepbgo.GetStreamResponse
+	(*CompactSwampRequest)(nil),                           // 128: hydraidepbgo.CompactSwampRequest
+	(*CompactSwampResponse)(nil),                          // 129: hydraidepbgo.CompactSwampResponse
+	(*DeleteRequest_SwampKeys)(nil),                       // 130: hydraidepbgo.DeleteRequest.SwampKeys
+	(*DeleteResponse_SwampDeleteResponse)(nil),            // 131: hydraidepbgo.DeleteResponse.SwampDeleteResponse
+	(*CountRequest_SwampIdentifier)(nil),                  // 132: hydraidepbgo.CountRequest.SwampIdentifier
+	nil,                                                   // 133: hydraidepbgo.ErrorDetailsResponse.ContextEntry
+	(*timestamppb.Timestamp)(nil),                         // 134: google.protobuf.Timestamp
 }
 var file_hydraide_proto_depIdxs = []int32{
-	41,  // 0: hydraidepbgo.SubscribeToEventsResponse.Treasure:type_name -> hydraidepbgo.Treasure
-	41,  // 1: hydraidepbgo.SubscribeToEventsResponse.OldTreasure:type_name -> hydraidepbgo.Treasure
-	41,  // 2: hydraidepbgo.SubscribeToEventsResponse.DeletedTreasure:type_name -> hydraidepbgo.Treasure
-	131, // 3: hydraidepbgo.SubscribeToEventsResponse.EventTime:type_name -> google.protobuf.Timestamp
-	1,   // 4: hydraidepbgo.SubscribeToEventsResponse.Status:type_name -> hydraidepbgo.Status.Code
-	7,   // 5: hydraidepbgo.RegisterSwampRequest.EncodingFormat:type_name -> hydraidepbgo.EncodingFormat.Type
-	27,  // 6: hydraidepbgo.SetRequest.Swamps:type_name -> hydraidepbgo.SwampRequest
-	28,  // 7: hydraidepbgo.SwampRequest.KeyValues:type_name -> hydraidepbgo.KeyValuePair
-	2,   // 8: hydraidepbgo.KeyValuePair.BoolVal:type_name -> hydraidepbgo.Boolean.Type
-	131, // 9: hydraidepbgo.KeyValuePair.CreatedAt:type_name -> google.protobuf.Timestamp
-	131, // 10: hydraidepbgo.KeyValuePair.UpdatedAt:type_name -> google.protobuf.Timestamp
-	131, // 11: hydraidepbgo.KeyValuePair.ExpiredAt:type_name -> google.protobuf.Timestamp
-	30,  // 12: hydraidepbgo.SetResponse.Swamps:type_name -> hydraidepbgo.SwampResponse
-	31,  // 13: hydraidepbgo.SwampResponse.KeysAndStatuses:type_name -> hydraidepbgo.KeyStatusPair
-	0,   // 14: hydraidepbgo.SwampResponse.ErrorCode:type_name -> hydraidepbgo.SwampResponse.ErrCodeEnum
-	1,   // 15: hydraidepbgo.KeyStatusPair.Status:type_name -> hydraidepbgo.Status.Code
-	34,  // 16: hydraidepbgo.GetRequest.Swamps:type_name -> hydraidepbgo.GetSwamp
-	36,  // 17: hydraidepbgo.GetResponse.Swamps:type_name -> hydraidepbgo.GetSwampResponse
-	41,  // 18: hydraidepbgo.GetSwampResponse.Treasures:type_name -> hydraidepbgo.Treasure
-	41,  // 19: hydraidepbgo.GetAllResponse.Treasures:type_name -> hydraidepbgo.Treasure
-	41,  // 20: hydraidepbgo.ShiftExpiredTreasuresResponse.Treasures:type_name -> hydraidepbgo.Treasure
-	2,   // 21: hydraidepbgo.Treasure.BoolVal:type_name -> hydraidepbgo.Boolean.Type
-	131, // 22: hydraidepbgo.Treasure.CreatedAt:type_name -> google.protobuf.Timestamp
-	131, // 23: hydraidepbgo.Treasure.UpdatedAt:type_name -> google.protobuf.Timestamp
-	131, // 24: hydraidepbgo.Treasure.ExpiredAt:type_name -> google.protobuf.Timestamp
-	3,   // 25: hydraidepbgo.GetByIndexRequest.IndexType:type_name -> hydraidepbgo.IndexType.Type
-	4,   // 26: hydraidepbgo.GetByIndexRequest.OrderType:type_name -> hydraidepbgo.OrderType.Type
-	131, // 27: hydraidepbgo.GetByIndexRequest.FromTime:type_name -> google.protobuf.Timestamp
-	131, // 28: hydraidepbgo.GetByIndexRequest.ToTime:type_name -> google.protobuf.Timestamp
-	41,  // 29: hydraidepbgo.GetByIndexResponse.Treasures:type_name -> hydraidepbgo.Treasure
-	41,  // 30: hydraidepbgo.GetByKeysResponse.Treasures:type_name -> hydraidepbgo.Treasure
-	41,  // 31: hydraidepbgo.ShiftByKeysResponse.Treasures:type_name -> hydraidepbgo.Treasure
-	127, // 32: hydraidepbgo.DeleteRequest.Swamps:type_name -> hydraidepbgo.DeleteRequest.SwampKeys
-	128, // 33: hydraidepbgo.DeleteResponse.Responses:type_name -> hydraidepbgo.DeleteResponse.SwampDeleteResponse
-	129, // 34: hydraidepbgo.CountRequest.Swamps:type_name -> hydraidepbgo.CountRequest.SwampIdentifier
-	55,  // 35: hydraidepbgo.CountResponse.Swamps:type_name -> hydraidepbgo.CountSwamp
-	131, // 36: hydraidepbgo.IncrementRequestMetadata.ExpiredAt:type_name -> google.protobuf.Timestamp
-	131, // 37: hydraidepbgo.IncrementResponseMetadata.CreatedAt:type_name -> google.protobuf.Timestamp
-	131, // 38: hydraidepbgo.IncrementResponseMetadata.UpdatedAt:type_name -> google.protobuf.Timestamp
-	131, // 39: hydraidepbgo.IncrementResponseMetadata.ExpiredAt:type_name -> google.protobuf.Timestamp
-	59,  // 40: hydraidepbgo.IncrementInt8Request.Condition:type_name -> hydraidepbgo.IncrementInt8Condition
-	56,  // 41: hydraidepbgo.IncrementInt8Request.SetIfNotExist:type_name -> hydraidepbgo.IncrementRequestMetadata
-	56,  // 42: hydraidepbgo.IncrementInt8Request.SetIfExist:type_name -> hydraidepbgo.IncrementRequestMetadata
-	6,   // 43: hydraidepbgo.IncrementInt8Condition.RelationalOperator:type_name -> hydraidepbgo.Relational.Operator
-	57,  // 44: hydraidepbgo.IncrementInt8Response.Metadata:type_name -> hydraidepbgo.IncrementResponseMetadata
-	62,  // 45: hydraidepbgo.IncrementInt16Request.Condition:type_name -> hydraidepbgo.IncrementInt16Condition
-	56,  // 46: hydraidepbgo.IncrementInt16Request.SetIfNotExist:type_name -> hydraidepbgo.IncrementRequestMetadata
-	56,  // 47: hydraidepbgo.IncrementInt16Request.SetIfExist:type_name -> hydraidepbgo.IncrementRequestMetadata
-	6,   // 48: hydraidepbgo.IncrementInt16Condition.RelationalOperator:type_name -> hydraidepbgo.Relational.Operator
-	57,  // 49: hydraidepbgo.IncrementInt16Response.Metadata:type_name -> hydraidepbgo.IncrementResponseMetadata
-	65,  // 50: hydraidepbgo.IncrementInt32Request.Condition:type_name -> hydraidepbgo.IncrementInt32Condition
-	56,  // 51: hydraidepbgo.IncrementInt32Request.SetIfNotExist:type_name -> hydraidepbgo.IncrementRequestMetadata
-	56,  // 52: hydraidepbgo.IncrementInt32Request.SetIfExist:type_name -> hydraidepbgo.IncrementRequestMetadata
-	6,   // 53: hydraidepbgo.IncrementInt32Condition.RelationalOperator:type_name -> hydraidepbgo.Relational.Operator
-	57,  // 54: hydraidepbgo.IncrementInt32Response.Metadata:type_name -> hydraidepbgo.IncrementResponseMetadata
-	68,  // 55: hydraidepbgo.IncrementInt64Request.Condition:type_name -> hydraidepbgo.IncrementInt64Condition
-	56,  // 56: hydraidepbgo.IncrementInt64Request.SetIfNotExist:type_name -> hydraidepbgo.IncrementRequestMetadata
-	56,  // 57: hydraidepbgo.IncrementInt64Request.SetIfExist:type_name -> hydraidepbgo.IncrementRequestMetadata
-	6,   // 58: hydraidepbgo.IncrementInt64Condition.RelationalOperator:type_name -> hydraidepbgo.Relational.Operator
-	57,  // 59: hydraidepbgo.IncrementInt64Response.Metadata:type_name -> hydraidepbgo.IncrementResponseMetadata
-	71,  // 60: hydraidepbgo.IncrementUint8Request.Condition:type_name -> hydraidepbgo.IncrementUint8Condition
-	56,  // 61: hydraidepbgo.IncrementUint8Request.SetIfNotExist:type_name -> hydraidepbgo.IncrementRequestMetadata
-	56,  // 62: hydraidepbgo.IncrementUint8Request.SetIfExist:type_name -> hydraidepbgo.IncrementRequestMetadata
-	6,   // 63: hydraidepbgo.IncrementUint8Condition.RelationalOperator:type_name -> hydraidepbgo.Relational.Operator
-	57,  // 64: hydraidepbgo.IncrementUint8Response.Metadata:type_name -> hydraidepbgo.IncrementResponseMetadata
-	74,  // 65: hydraidepbgo.IncrementUint16Request.Condition:type_name -> hydraidepbgo.IncrementUint16Condition
-	56,  // 66: hydraidepbgo.IncrementUint16Request.SetIfNotExist:type_name -> hydraidepbgo.IncrementRequestMetadata
-	56,  // 67: hydraidepbgo.IncrementUint16Request.SetIfExist:type_name -> hydraidepbgo.IncrementRequestMetadata
-	6,   // 68: hydraidepbgo.IncrementUint16Condition.RelationalOperator:type_name -> hydraidepbgo.Relational.Operator
-	57,  // 69: hydraidepbgo.IncrementUint16Response.Metadata:type_name -> hydraidepbgo.IncrementResponseMetadata
-	77,  // 70: hydraidepbgo.IncrementUint32Request.Condition:type_name -> hydraidepbgo.IncrementUint32Condition
-	56,  // 71: hydraidepbgo.IncrementUint32Request.SetIfNotExist:type_name -> hydraidepbgo.IncrementRequestMetadata
-	56,  // 72: hydraidepbgo.IncrementUint32Request.SetIfExist:type_name -> hydraidepbgo.IncrementRequestMetadata
-	6,   // 73: hydraidepbgo.IncrementUint32Condition.RelationalOperator:type_name -> hydraidepbgo.Relational.Operator
-	57,  // 74: hydraidepbgo.IncrementUint32Response.Metadata:type_name -> hydraidepbgo.IncrementResponseMetadata
-	80,  // 75: hydraidepbgo.IncrementUint64Request.Condition:type_name -> hydraidepbgo.IncrementUint64Condition
-	56,  // 76: hydraidepbgo.IncrementUint64Request.SetIfNotExist:type_name -> hydraidepbgo.IncrementRequestMetadata
-	56,  // 77: hydraidepbgo.IncrementUint64Request.SetIfExist:type_name -> hydraidepbgo.IncrementRequestMetadata
-	6,   // 78: hydraidepbgo.IncrementUint64Condition.RelationalOperator:type_name -> hydraidepbgo.Relational.Operator
-	57,  // 79: hydraidepbgo.IncrementUint64Response.Metadata:type_name -> hydraidepbgo.IncrementResponseMetadata
-	84,  // 80: hydraidepbgo.IncrementFloat32Request.Condition:type_name -> hydraidepbgo.IncrementFloat32Condition
-	56,  // 81: hydraidepbgo.IncrementFloat32Request.SetIfNotExist:type_name -> hydraidepbgo.IncrementRequestMetadata
-	56,  // 82: hydraidepbgo.IncrementFloat32Request.SetIfExist:type_name -> hydraidepbgo.IncrementRequestMetadata
-	6,   // 83: hydraidepbgo.IncrementFloat32Condition.RelationalOperator:type_name -> hydraidepbgo.Relational.Operator
-	57,  // 84: hydraidepbgo.IncrementFloat32Response.Metadata:type_name -> hydraidepbgo.IncrementResponseMetadata
-	87,  // 85: hydraidepbgo.IncrementFloat64Request.Condition:type_name -> hydraidepbgo.IncrementFloat64Condition
-	56,  // 86: hydraidepbgo.IncrementFloat64Request.SetIfNotExist:type_name -> hydraidepbgo.IncrementRequestMetadata
-	56,  // 87: hydraidepbgo.IncrementFloat64Request.SetIfExist:type_name -> hydraidepbgo.IncrementRequestMetadata
-	6,   // 88: hydraidepbgo.IncrementFloat64Condition.RelationalOperator:type_name -> hydraidepbgo.Relational.Operator
-	57,  // 89: hydraidepbgo.IncrementFloat64Response.Metadata:type_name -> hydraidepbgo.IncrementResponseMetadata
-	89,  // 90: hydraidepbgo.AddToUint32SlicePushRequest.KeySlicePairs:type_name -> hydraidepbgo.KeySlicePair
-	89,  // 91: hydraidepbgo.Uint32SliceDeleteRequest.KeySlicePairs:type_name -> hydraidepbgo.KeySlicePair
-	131, // 92: hydraidepbgo.TelemetryEvent.timestamp:type_name -> google.protobuf.Timestamp
-	131, // 93: hydraidepbgo.TelemetryHistoryRequest.from_time:type_name -> google.protobuf.Timestamp
-	131, // 94: hydraidepbgo.TelemetryHistoryRequest.to_time:type_name -> google.protobuf.Timestamp
-	103, // 95: hydraidepbgo.TelemetryHistoryResponse.events:type_name -> hydraidepbgo.TelemetryEvent
-	103, // 96: hydraidepbgo.ErrorDetailsResponse.event:type_name -> hydraidepbgo.TelemetryEvent
-	130, // 97: hydraidepbgo.ErrorDetailsResponse.context:type_name -> hydraidepbgo.ErrorDetailsResponse.ContextEntry
-	110, // 98: hydraidepbgo.TelemetryStatsResponse.top_swamps:type_name -> hydraidepbgo.TelemetrySwampStats
-	111, // 99: hydraidepbgo.TelemetryStatsResponse.top_errors:type_name -> hydraidepbgo.TelemetryErrorSummary
-	131, // 100: hydraidepbgo.TelemetryErrorSummary.last_occurrence:type_name -> google.protobuf.Timestamp
-	6,   // 101: hydraidepbgo.TreasureFilter.Operator:type_name -> hydraidepbgo.Relational.Operator
-	2,   // 102: hydraidepbgo.TreasureFilter.BoolVal:type_name -> hydraidepbgo.Boolean.Type
-	131, // 103: hydraidepbgo.TreasureFilter.CreatedAtVal:type_name -> google.protobuf.Timestamp
-	131, // 104: hydraidepbgo.TreasureFilter.UpdatedAtVal:type_name -> google.protobuf.Timestamp
-	131, // 105: hydraidepbgo.TreasureFilter.ExpiredAtVal:type_name -> google.protobuf.Timestamp
-	8,   // 106: hydraidepbgo.FilterGroup.Logic:type_name -> hydraidepbgo.FilterLogic.Type
-	113, // 107: hydraidepbgo.FilterGroup.Filters:type_name -> hydraidepbgo.TreasureFilter
-	115, // 108: hydraidepbgo.FilterGroup.SubGroups:type_name -> hydraidepbgo.FilterGroup
-	116, // 109: hydraidepbgo.FilterGroup.PhraseFilters:type_name -> hydraidepbgo.PhraseFilter
-	3,   // 110: hydraidepbgo.GetByIndexStreamRequest.IndexType:type_name -> hydraidepbgo.IndexType.Type
-	4,   // 111: hydraidepbgo.GetByIndexStreamRequest.OrderType:type_name -> hydraidepbgo.OrderType.Type
-	131, // 112: hydraidepbgo.GetByIndexStreamRequest.FromTime:type_name -> google.protobuf.Timestamp
-	131, // 113: hydraidepbgo.GetByIndexStreamRequest.ToTime:type_name -> google.protobuf.Timestamp
-	115, // 114: hydraidepbgo.GetByIndexStreamRequest.Filters:type_name -> hydraidepbgo.FilterGroup
-	41,  // 115: hydraidepbgo.GetByIndexStreamResponse.Treasure:type_name -> hydraidepbgo.Treasure
-	3,   // 116: hydraidepbgo.SwampQuery.IndexType:type_name -> hydraidepbgo.IndexType.Type
-	4,   // 117: hydraidepbgo.SwampQuery.OrderType:type_name -> hydraidepbgo.OrderType.Type
-	131, // 118: hydraidepbgo.SwampQuery.FromTime:type_name -> google.protobuf.Timestamp
-	131, // 119: hydraidepbgo.SwampQuery.ToTime:type_name -> google.protobuf.Timestamp
-	115, // 120: hydraidepbgo.SwampQuery.Filters:type_name -> hydraidepbgo.FilterGroup
-	119, // 121: hydraidepbgo.GetByIndexStreamFromManyRequest.Queries:type_name -> hydraidepbgo.SwampQuery
-	41,  // 122: hydraidepbgo.GetByIndexStreamFromManyResponse.Treasure:type_name -> hydraidepbgo.Treasure
-	115, // 123: hydraidepbgo.ProfileSwampQuery.Filters:type_name -> hydraidepbgo.FilterGroup
-	122, // 124: hydraidepbgo.GetStreamRequest.Queries:type_name -> hydraidepbgo.ProfileSwampQuery
-	41,  // 125: hydraidepbgo.GetStreamResponse.Treasures:type_name -> hydraidepbgo.Treasure
-	5,   // 126: hydraidepbgo.DeleteResponse.SwampDeleteResponse.ErrorCode:type_name -> hydraidepbgo.DeleteResponse.SwampDeleteResponse.ErrorCodeEnum
-	31,  // 127: hydraidepbgo.DeleteResponse.SwampDeleteResponse.KeyStatuses:type_name -> hydraidepbgo.KeyStatusPair
-	9,   // 128: hydraidepbgo.HydraideService.Heartbeat:input_type -> hydraidepbgo.HeartbeatRequest
-	11,  // 129: hydraidepbgo.HydraideService.Lock:input_type -> hydraidepbgo.LockRequest
-	13,  // 130: hydraidepbgo.HydraideService.Unlock:input_type -> hydraidepbgo.UnlockRequest
-	22,  // 131: hydraidepbgo.HydraideService.RegisterSwamp:input_type -> hydraidepbgo.RegisterSwampRequest
-	24,  // 132: hydraidepbgo.HydraideService.DeRegisterSwamp:input_type -> hydraidepbgo.DeRegisterSwampRequest
-	26,  // 133: hydraidepbgo.HydraideService.Set:input_type -> hydraidepbgo.SetRequest
-	33,  // 134: hydraidepbgo.HydraideService.Get:input_type -> hydraidepbgo.GetRequest
-	37,  // 135: hydraidepbgo.HydraideService.GetAll:input_type -> hydraidepbgo.GetAllRequest
-	43,  // 136: hydraidepbgo.HydraideService.GetByIndex:input_type -> hydraidepbgo.GetByIndexRequest
-	47,  // 137: hydraidepbgo.HydraideService.GetByKeys:input_type -> hydraidepbgo.GetByKeysRequest
-	49,  // 138: hydraidepbgo.HydraideService.ShiftByKeys:input_type -> hydraidepbgo.ShiftByKeysRequest
-	39,  // 139: hydraidepbgo.HydraideService.ShiftExpiredTreasures:input_type -> hydraidepbgo.ShiftExpiredTreasuresRequest
-	15,  // 140: hydraidepbgo.HydraideService.Destroy:input_type -> hydraidepbgo.DestroyRequest
-	51,  // 141: hydraidepbgo.HydraideService.Delete:input_type -> hydraidepbgo.DeleteRequest
-	53,  // 142: hydraidepbgo.HydraideService.Count:input_type -> hydraidepbgo.CountRequest
-	98,  // 143: hydraidepbgo.HydraideService.IsSwampExist:input_type -> hydraidepbgo.IsSwampExistRequest
-	100, // 144: hydraidepbgo.HydraideService.IsKeyExist:input_type -> hydraidepbgo.IsKeyExistRequest
-	19,  // 145: hydraidepbgo.HydraideService.SubscribeToEvents:input_type -> hydraidepbgo.SubscribeToEventsRequest
-	17,  // 146: hydraidepbgo.HydraideService.SubscribeToInfo:input_type -> hydraidepbgo.SubscribeToInfoRequest
-	90,  // 147: hydraidepbgo.HydraideService.Uint32SlicePush:input_type -> hydraidepbgo.AddToUint32SlicePushRequest
-	92,  // 148: hydraidepbgo.HydraideService.Uint32SliceDelete:input_type -> hydraidepbgo.Uint32SliceDeleteRequest
-	94,  // 149: hydraidepbgo.HydraideService.Uint32SliceSize:input_type -> hydraidepbgo.Uint32SliceSizeRequest
-	96,  // 150: hydraidepbgo.HydraideService.Uint32SliceIsValueExist:input_type -> hydraidepbgo.Uint32SliceIsValueExistRequest
-	58,  // 151: hydraidepbgo.HydraideService.IncrementInt8:input_type -> hydraidepbgo.IncrementInt8Request
-	61,  // 152: hydraidepbgo.HydraideService.IncrementInt16:input_type -> hydraidepbgo.IncrementInt16Request
-	64,  // 153: hydraidepbgo.HydraideService.IncrementInt32:input_type -> hydraidepbgo.IncrementInt32Request
-	67,  // 154: hydraidepbgo.HydraideService.IncrementInt64:input_type -> hydraidepbgo.IncrementInt64Request
-	70,  // 155: hydraidepbgo.HydraideService.IncrementUint8:input_type -> hydraidepbgo.IncrementUint8Request
-	73,  // 156: hydraidepbgo.HydraideService.IncrementUint16:input_type -> hydraidepbgo.IncrementUint16Request
-	76,  // 157: hydraidepbgo.HydraideService.IncrementUint32:input_type -> hydraidepbgo.IncrementUint32Request
-	79,  // 158: hydraidepbgo.HydraideService.IncrementUint64:input_type -> hydraidepbgo.IncrementUint64Request
-	83,  // 159: hydraidepbgo.HydraideService.IncrementFloat32:input_type -> hydraidepbgo.IncrementFloat32Request
-	86,  // 160: hydraidepbgo.HydraideService.IncrementFloat64:input_type -> hydraidepbgo.IncrementFloat64Request
-	102, // 161: hydraidepbgo.HydraideService.SubscribeToTelemetry:input_type -> hydraidepbgo.TelemetrySubscribeRequest
-	104, // 162: hydraidepbgo.HydraideService.GetTelemetryHistory:input_type -> hydraidepbgo.TelemetryHistoryRequest
-	106, // 163: hydraidepbgo.HydraideService.GetErrorDetails:input_type -> hydraidepbgo.ErrorDetailsRequest
-	108, // 164: hydraidepbgo.HydraideService.GetTelemetryStats:input_type -> hydraidepbgo.TelemetryStatsRequest
-	117, // 165: hydraidepbgo.HydraideService.GetByIndexStream:input_type -> hydraidepbgo.GetByIndexStreamRequest
-	120, // 166: hydraidepbgo.HydraideService.GetByIndexStreamFromMany:input_type -> hydraidepbgo.GetByIndexStreamFromManyRequest
-	125, // 167: hydraidepbgo.HydraideService.CompactSwamp:input_type -> hydraidepbgo.CompactSwampRequest
-	123, // 168: hydraidepbgo.HydraideService.GetStream:input_type -> hydraidepbgo.GetStreamRequest
-	10,  // 169: hydraidepbgo.HydraideService.Heartbeat:output_type -> hydraidepbgo.HeartbeatResponse
-	12,  // 170: hydraidepbgo.HydraideService.Lock:output_type -> hydraidepbgo.LockResponse
-	14,  // 171: hydraidepbgo.HydraideService.Unlock:output_type -> hydraidepbgo.UnlockResponse
-	23,  // 172: hydraidepbgo.HydraideService.RegisterSwamp:output_type -> hydraidepbgo.RegisterSwampResponse
-	25,  // 173: hydraidepbgo.HydraideService.DeRegisterSwamp:output_type -> hydraidepbgo.DeRegisterSwampResponse
-	29,  // 174: hydraidepbgo.HydraideService.Set:output_type -> hydraidepbgo.SetResponse
-	35,  // 175: hydraidepbgo.HydraideService.Get:output_type -> hydraidepbgo.GetResponse
-	38,  // 176: hydraidepbgo.HydraideService.GetAll:output_type -> hydraidepbgo.GetAllResponse
-	46,  // 177: hydraidepbgo.HydraideService.GetByIndex:output_type -> hydraidepbgo.GetByIndexResponse
-	48,  // 178: hydraidepbgo.HydraideService.GetByKeys:output_type -> hydraidepbgo.GetByKeysResponse
-	50,  // 179: hydraidepbgo.HydraideService.ShiftByKeys:output_type -> hydraidepbgo.ShiftByKeysResponse
-	40,  // 180: hydraidepbgo.HydraideService.ShiftExpiredTreasures:output_type -> hydraidepbgo.ShiftExpiredTreasuresResponse
-	16,  // 181: hydraidepbgo.HydraideService.Destroy:output_type -> hydraidepbgo.DestroyResponse
-	52,  // 182: hydraidepbgo.HydraideService.Delete:output_type -> hydraidepbgo.DeleteResponse
-	54,  // 183: hydraidepbgo.HydraideService.Count:output_type -> hydraidepbgo.CountResponse
-	99,  // 184: hydraidepbgo.HydraideService.IsSwampExist:output_type -> hydraidepbgo.IsSwampExistResponse
-	101, // 185: hydraidepbgo.HydraideService.IsKeyExist:output_type -> hydraidepbgo.IsKeyExistResponse
-	20,  // 186: hydraidepbgo.HydraideService.SubscribeToEvents:output_type -> hydraidepbgo.SubscribeToEventsResponse
-	18,  // 187: hydraidepbgo.HydraideService.SubscribeToInfo:output_type -> hydraidepbgo.SubscribeToInfoResponse
-	91,  // 188: hydraidepbgo.HydraideService.Uint32SlicePush:output_type -> hydraidepbgo.AddToUint32SlicePushResponse
-	93,  // 189: hydraidepbgo.HydraideService.Uint32SliceDelete:output_type -> hydraidepbgo.Uint32SliceDeleteResponse
-	95,  // 190: hydraidepbgo.HydraideService.Uint32SliceSize:output_type -> hydraidepbgo.Uint32SliceSizeResponse
-	97,  // 191: hydraidepbgo.HydraideService.Uint32SliceIsValueExist:output_type -> hydraidepbgo.Uint32SliceIsValueExistResponse
-	60,  // 192: hydraidepbgo.HydraideService.IncrementInt8:output_type -> hydraidepbgo.IncrementInt8Response
-	63,  // 193: hydraidepbgo.HydraideService.IncrementInt16:output_type -> hydraidepbgo.IncrementInt16Response
-	66,  // 194: hydraidepbgo.HydraideService.IncrementInt32:output_type -> hydraidepbgo.IncrementInt32Response
-	69,  // 195: hydraidepbgo.HydraideService.IncrementInt64:output_type -> hydraidepbgo.IncrementInt64Response
-	72,  // 196: hydraidepbgo.HydraideService.IncrementUint8:output_type -> hydraidepbgo.IncrementUint8Response
-	75,  // 197: hydraidepbgo.HydraideService.IncrementUint16:output_type -> hydraidepbgo.IncrementUint16Response
-	78,  // 198: hydraidepbgo.HydraideService.IncrementUint32:output_type -> hydraidepbgo.IncrementUint32Response
-	81,  // 199: hydraidepbgo.HydraideService.IncrementUint64:output_type -> hydraidepbgo.IncrementUint64Response
-	85,  // 200: hydraidepbgo.HydraideService.IncrementFloat32:output_type -> hydraidepbgo.IncrementFloat32Response
-	88,  // 201: hydraidepbgo.HydraideService.IncrementFloat64:output_type -> hydraidepbgo.IncrementFloat64Response
-	103, // 202: hydraidepbgo.HydraideService.SubscribeToTelemetry:output_type -> hydraidepbgo.TelemetryEvent
-	105, // 203: hydraidepbgo.HydraideService.GetTelemetryHistory:output_type -> hydraidepbgo.TelemetryHistoryResponse
-	107, // 204: hydraidepbgo.HydraideService.GetErrorDetails:output_type -> hydraidepbgo.ErrorDetailsResponse
-	109, // 205: hydraidepbgo.HydraideService.GetTelemetryStats:output_type -> hydraidepbgo.TelemetryStatsResponse
-	118, // 206: hydraidepbgo.HydraideService.GetByIndexStream:output_type -> hydraidepbgo.GetByIndexStreamResponse
-	121, // 207: hydraidepbgo.HydraideService.GetByIndexStreamFromMany:output_type -> hydraidepbgo.GetByIndexStreamFromManyResponse
-	126, // 208: hydraidepbgo.HydraideService.CompactSwamp:output_type -> hydraidepbgo.CompactSwampResponse
-	124, // 209: hydraidepbgo.HydraideService.GetStream:output_type -> hydraidepbgo.GetStreamResponse
-	169, // [169:210] is the sub-list for method output_type
-	128, // [128:169] is the sub-list for method input_type
-	128, // [128:128] is the sub-list for extension type_name
-	128, // [128:128] is the sub-list for extension extendee
-	0,   // [0:128] is the sub-list for field type_name
+	18,  // 0: hydraidepbgo.DestroyBulkRequest.Targets:type_name -> hydraidepbgo.DestroyBulkTarget
+	44,  // 1: hydraidepbgo.SubscribeToEventsResponse.Treasure:type_name -> hydraidepbgo.Treasure
+	44,  // 2: hydraidepbgo.SubscribeToEventsResponse.OldTreasure:type_name -> hydraidepbgo.Treasure
+	44,  // 3: hydraidepbgo.SubscribeToEventsResponse.DeletedTreasure:type_name -> hydraidepbgo.Treasure
+	134, // 4: hydraidepbgo.SubscribeToEventsResponse.EventTime:type_name -> google.protobuf.Timestamp
+	1,   // 5: hydraidepbgo.SubscribeToEventsResponse.Status:type_name -> hydraidepbgo.Status.Code
+	7,   // 6: hydraidepbgo.RegisterSwampRequest.EncodingFormat:type_name -> hydraidepbgo.EncodingFormat.Type
+	30,  // 7: hydraidepbgo.SetRequest.Swamps:type_name -> hydraidepbgo.SwampRequest
+	31,  // 8: hydraidepbgo.SwampRequest.KeyValues:type_name -> hydraidepbgo.KeyValuePair
+	2,   // 9: hydraidepbgo.KeyValuePair.BoolVal:type_name -> hydraidepbgo.Boolean.Type
+	134, // 10: hydraidepbgo.KeyValuePair.CreatedAt:type_name -> google.protobuf.Timestamp
+	134, // 11: hydraidepbgo.KeyValuePair.UpdatedAt:type_name -> google.protobuf.Timestamp
+	134, // 12: hydraidepbgo.KeyValuePair.ExpiredAt:type_name -> google.protobuf.Timestamp
+	33,  // 13: hydraidepbgo.SetResponse.Swamps:type_name -> hydraidepbgo.SwampResponse
+	34,  // 14: hydraidepbgo.SwampResponse.KeysAndStatuses:type_name -> hydraidepbgo.KeyStatusPair
+	0,   // 15: hydraidepbgo.SwampResponse.ErrorCode:type_name -> hydraidepbgo.SwampResponse.ErrCodeEnum
+	1,   // 16: hydraidepbgo.KeyStatusPair.Status:type_name -> hydraidepbgo.Status.Code
+	37,  // 17: hydraidepbgo.GetRequest.Swamps:type_name -> hydraidepbgo.GetSwamp
+	39,  // 18: hydraidepbgo.GetResponse.Swamps:type_name -> hydraidepbgo.GetSwampResponse
+	44,  // 19: hydraidepbgo.GetSwampResponse.Treasures:type_name -> hydraidepbgo.Treasure
+	44,  // 20: hydraidepbgo.GetAllResponse.Treasures:type_name -> hydraidepbgo.Treasure
+	44,  // 21: hydraidepbgo.ShiftExpiredTreasuresResponse.Treasures:type_name -> hydraidepbgo.Treasure
+	2,   // 22: hydraidepbgo.Treasure.BoolVal:type_name -> hydraidepbgo.Boolean.Type
+	134, // 23: hydraidepbgo.Treasure.CreatedAt:type_name -> google.protobuf.Timestamp
+	134, // 24: hydraidepbgo.Treasure.UpdatedAt:type_name -> google.protobuf.Timestamp
+	134, // 25: hydraidepbgo.Treasure.ExpiredAt:type_name -> google.protobuf.Timestamp
+	3,   // 26: hydraidepbgo.GetByIndexRequest.IndexType:type_name -> hydraidepbgo.IndexType.Type
+	4,   // 27: hydraidepbgo.GetByIndexRequest.OrderType:type_name -> hydraidepbgo.OrderType.Type
+	134, // 28: hydraidepbgo.GetByIndexRequest.FromTime:type_name -> google.protobuf.Timestamp
+	134, // 29: hydraidepbgo.GetByIndexRequest.ToTime:type_name -> google.protobuf.Timestamp
+	44,  // 30: hydraidepbgo.GetByIndexResponse.Treasures:type_name -> hydraidepbgo.Treasure
+	44,  // 31: hydraidepbgo.GetByKeysResponse.Treasures:type_name -> hydraidepbgo.Treasure
+	44,  // 32: hydraidepbgo.ShiftByKeysResponse.Treasures:type_name -> hydraidepbgo.Treasure
+	130, // 33: hydraidepbgo.DeleteRequest.Swamps:type_name -> hydraidepbgo.DeleteRequest.SwampKeys
+	131, // 34: hydraidepbgo.DeleteResponse.Responses:type_name -> hydraidepbgo.DeleteResponse.SwampDeleteResponse
+	132, // 35: hydraidepbgo.CountRequest.Swamps:type_name -> hydraidepbgo.CountRequest.SwampIdentifier
+	58,  // 36: hydraidepbgo.CountResponse.Swamps:type_name -> hydraidepbgo.CountSwamp
+	134, // 37: hydraidepbgo.IncrementRequestMetadata.ExpiredAt:type_name -> google.protobuf.Timestamp
+	134, // 38: hydraidepbgo.IncrementResponseMetadata.CreatedAt:type_name -> google.protobuf.Timestamp
+	134, // 39: hydraidepbgo.IncrementResponseMetadata.UpdatedAt:type_name -> google.protobuf.Timestamp
+	134, // 40: hydraidepbgo.IncrementResponseMetadata.ExpiredAt:type_name -> google.protobuf.Timestamp
+	62,  // 41: hydraidepbgo.IncrementInt8Request.Condition:type_name -> hydraidepbgo.IncrementInt8Condition
+	59,  // 42: hydraidepbgo.IncrementInt8Request.SetIfNotExist:type_name -> hydraidepbgo.IncrementRequestMetadata
+	59,  // 43: hydraidepbgo.IncrementInt8Request.SetIfExist:type_name -> hydraidepbgo.IncrementRequestMetadata
+	6,   // 44: hydraidepbgo.IncrementInt8Condition.RelationalOperator:type_name -> hydraidepbgo.Relational.Operator
+	60,  // 45: hydraidepbgo.IncrementInt8Response.Metadata:type_name -> hydraidepbgo.IncrementResponseMetadata
+	65,  // 46: hydraidepbgo.IncrementInt16Request.Condition:type_name -> hydraidepbgo.IncrementInt16Condition
+	59,  // 47: hydraidepbgo.IncrementInt16Request.SetIfNotExist:type_name -> hydraidepbgo.IncrementRequestMetadata
+	59,  // 48: hydraidepbgo.IncrementInt16Request.SetIfExist:type_name -> hydraidepbgo.IncrementRequestMetadata
+	6,   // 49: hydraidepbgo.IncrementInt16Condition.RelationalOperator:type_name -> hydraidepbgo.Relational.Operator
+	60,  // 50: hydraidepbgo.IncrementInt16Response.Metadata:type_name -> hydraidepbgo.IncrementResponseMetadata
+	68,  // 51: hydraidepbgo.IncrementInt32Request.Condition:type_name -> hydraidepbgo.IncrementInt32Condition
+	59,  // 52: hydraidepbgo.IncrementInt32Request.SetIfNotExist:type_name -> hydraidepbgo.IncrementRequestMetadata
+	59,  // 53: hydraidepbgo.IncrementInt32Request.SetIfExist:type_name -> hydraidepbgo.IncrementRequestMetadata
+	6,   // 54: hydraidepbgo.IncrementInt32Condition.RelationalOperator:type_name -> hydraidepbgo.Relational.Operator
+	60,  // 55: hydraidepbgo.IncrementInt32Response.Metadata:type_name -> hydraidepbgo.IncrementResponseMetadata
+	71,  // 56: hydraidepbgo.IncrementInt64Request.Condition:type_name -> hydraidepbgo.IncrementInt64Condition
+	59,  // 57: hydraidepbgo.IncrementInt64Request.SetIfNotExist:type_name -> hydraidepbgo.IncrementRequestMetadata
+	59,  // 58: hydraidepbgo.IncrementInt64Request.SetIfExist:type_name -> hydraidepbgo.IncrementRequestMetadata
+	6,   // 59: hydraidepbgo.IncrementInt64Condition.RelationalOperator:type_name -> hydraidepbgo.Relational.Operator
+	60,  // 60: hydraidepbgo.IncrementInt64Response.Metadata:type_name -> hydraidepbgo.IncrementResponseMetadata
+	74,  // 61: hydraidepbgo.IncrementUint8Request.Condition:type_name -> hydraidepbgo.IncrementUint8Condition
+	59,  // 62: hydraidepbgo.IncrementUint8Request.SetIfNotExist:type_name -> hydraidepbgo.IncrementRequestMetadata
+	59,  // 63: hydraidepbgo.IncrementUint8Request.SetIfExist:type_name -> hydraidepbgo.IncrementRequestMetadata
+	6,   // 64: hydraidepbgo.IncrementUint8Condition.RelationalOperator:type_name -> hydraidepbgo.Relational.Operator
+	60,  // 65: hydraidepbgo.IncrementUint8Response.Metadata:type_name -> hydraidepbgo.IncrementResponseMetadata
+	77,  // 66: hydraidepbgo.IncrementUint16Request.Condition:type_name -> hydraidepbgo.IncrementUint16Condition
+	59,  // 67: hydraidepbgo.IncrementUint16Request.SetIfNotExist:type_name -> hydraidepbgo.IncrementRequestMetadata
+	59,  // 68: hydraidepbgo.IncrementUint16Request.SetIfExist:type_name -> hydraidepbgo.IncrementRequestMetadata
+	6,   // 69: hydraidepbgo.IncrementUint16Condition.RelationalOperator:type_name -> hydraidepbgo.Relational.Operator
+	60,  // 70: hydraidepbgo.IncrementUint16Response.Metadata:type_name -> hydraidepbgo.IncrementResponseMetadata
+	80,  // 71: hydraidepbgo.IncrementUint32Request.Condition:type_name -> hydraidepbgo.IncrementUint32Condition
+	59,  // 72: hydraidepbgo.IncrementUint32Request.SetIfNotExist:type_name -> hydraidepbgo.IncrementRequestMetadata
+	59,  // 73: hydraidepbgo.IncrementUint32Request.SetIfExist:type_name -> hydraidepbgo.IncrementRequestMetadata
+	6,   // 74: hydraidepbgo.IncrementUint32Condition.RelationalOperator:type_name -> hydraidepbgo.Relational.Operator
+	60,  // 75: hydraidepbgo.IncrementUint32Response.Metadata:type_name -> hydraidepbgo.IncrementResponseMetadata
+	83,  // 76: hydraidepbgo.IncrementUint64Request.Condition:type_name -> hydraidepbgo.IncrementUint64Condition
+	59,  // 77: hydraidepbgo.IncrementUint64Request.SetIfNotExist:type_name -> hydraidepbgo.IncrementRequestMetadata
+	59,  // 78: hydraidepbgo.IncrementUint64Request.SetIfExist:type_name -> hydraidepbgo.IncrementRequestMetadata
+	6,   // 79: hydraidepbgo.IncrementUint64Condition.RelationalOperator:type_name -> hydraidepbgo.Relational.Operator
+	60,  // 80: hydraidepbgo.IncrementUint64Response.Metadata:type_name -> hydraidepbgo.IncrementResponseMetadata
+	87,  // 81: hydraidepbgo.IncrementFloat32Request.Condition:type_name -> hydraidepbgo.IncrementFloat32Condition
+	59,  // 82: hydraidepbgo.IncrementFloat32Request.SetIfNotExist:type_name -> hydraidepbgo.IncrementRequestMetadata
+	59,  // 83: hydraidepbgo.IncrementFloat32Request.SetIfExist:type_name -> hydraidepbgo.IncrementRequestMetadata
+	6,   // 84: hydraidepbgo.IncrementFloat32Condition.RelationalOperator:type_name -> hydraidepbgo.Relational.Operator
+	60,  // 85: hydraidepbgo.IncrementFloat32Response.Metadata:type_name -> hydraidepbgo.IncrementResponseMetadata
+	90,  // 86: hydraidepbgo.IncrementFloat64Request.Condition:type_name -> hydraidepbgo.IncrementFloat64Condition
+	59,  // 87: hydraidepbgo.IncrementFloat64Request.SetIfNotExist:type_name -> hydraidepbgo.IncrementRequestMetadata
+	59,  // 88: hydraidepbgo.IncrementFloat64Request.SetIfExist:type_name -> hydraidepbgo.IncrementRequestMetadata
+	6,   // 89: hydraidepbgo.IncrementFloat64Condition.RelationalOperator:type_name -> hydraidepbgo.Relational.Operator
+	60,  // 90: hydraidepbgo.IncrementFloat64Response.Metadata:type_name -> hydraidepbgo.IncrementResponseMetadata
+	92,  // 91: hydraidepbgo.AddToUint32SlicePushRequest.KeySlicePairs:type_name -> hydraidepbgo.KeySlicePair
+	92,  // 92: hydraidepbgo.Uint32SliceDeleteRequest.KeySlicePairs:type_name -> hydraidepbgo.KeySlicePair
+	134, // 93: hydraidepbgo.TelemetryEvent.timestamp:type_name -> google.protobuf.Timestamp
+	134, // 94: hydraidepbgo.TelemetryHistoryRequest.from_time:type_name -> google.protobuf.Timestamp
+	134, // 95: hydraidepbgo.TelemetryHistoryRequest.to_time:type_name -> google.protobuf.Timestamp
+	106, // 96: hydraidepbgo.TelemetryHistoryResponse.events:type_name -> hydraidepbgo.TelemetryEvent
+	106, // 97: hydraidepbgo.ErrorDetailsResponse.event:type_name -> hydraidepbgo.TelemetryEvent
+	133, // 98: hydraidepbgo.ErrorDetailsResponse.context:type_name -> hydraidepbgo.ErrorDetailsResponse.ContextEntry
+	113, // 99: hydraidepbgo.TelemetryStatsResponse.top_swamps:type_name -> hydraidepbgo.TelemetrySwampStats
+	114, // 100: hydraidepbgo.TelemetryStatsResponse.top_errors:type_name -> hydraidepbgo.TelemetryErrorSummary
+	134, // 101: hydraidepbgo.TelemetryErrorSummary.last_occurrence:type_name -> google.protobuf.Timestamp
+	6,   // 102: hydraidepbgo.TreasureFilter.Operator:type_name -> hydraidepbgo.Relational.Operator
+	2,   // 103: hydraidepbgo.TreasureFilter.BoolVal:type_name -> hydraidepbgo.Boolean.Type
+	134, // 104: hydraidepbgo.TreasureFilter.CreatedAtVal:type_name -> google.protobuf.Timestamp
+	134, // 105: hydraidepbgo.TreasureFilter.UpdatedAtVal:type_name -> google.protobuf.Timestamp
+	134, // 106: hydraidepbgo.TreasureFilter.ExpiredAtVal:type_name -> google.protobuf.Timestamp
+	8,   // 107: hydraidepbgo.FilterGroup.Logic:type_name -> hydraidepbgo.FilterLogic.Type
+	116, // 108: hydraidepbgo.FilterGroup.Filters:type_name -> hydraidepbgo.TreasureFilter
+	118, // 109: hydraidepbgo.FilterGroup.SubGroups:type_name -> hydraidepbgo.FilterGroup
+	119, // 110: hydraidepbgo.FilterGroup.PhraseFilters:type_name -> hydraidepbgo.PhraseFilter
+	3,   // 111: hydraidepbgo.GetByIndexStreamRequest.IndexType:type_name -> hydraidepbgo.IndexType.Type
+	4,   // 112: hydraidepbgo.GetByIndexStreamRequest.OrderType:type_name -> hydraidepbgo.OrderType.Type
+	134, // 113: hydraidepbgo.GetByIndexStreamRequest.FromTime:type_name -> google.protobuf.Timestamp
+	134, // 114: hydraidepbgo.GetByIndexStreamRequest.ToTime:type_name -> google.protobuf.Timestamp
+	118, // 115: hydraidepbgo.GetByIndexStreamRequest.Filters:type_name -> hydraidepbgo.FilterGroup
+	44,  // 116: hydraidepbgo.GetByIndexStreamResponse.Treasure:type_name -> hydraidepbgo.Treasure
+	3,   // 117: hydraidepbgo.SwampQuery.IndexType:type_name -> hydraidepbgo.IndexType.Type
+	4,   // 118: hydraidepbgo.SwampQuery.OrderType:type_name -> hydraidepbgo.OrderType.Type
+	134, // 119: hydraidepbgo.SwampQuery.FromTime:type_name -> google.protobuf.Timestamp
+	134, // 120: hydraidepbgo.SwampQuery.ToTime:type_name -> google.protobuf.Timestamp
+	118, // 121: hydraidepbgo.SwampQuery.Filters:type_name -> hydraidepbgo.FilterGroup
+	122, // 122: hydraidepbgo.GetByIndexStreamFromManyRequest.Queries:type_name -> hydraidepbgo.SwampQuery
+	44,  // 123: hydraidepbgo.GetByIndexStreamFromManyResponse.Treasure:type_name -> hydraidepbgo.Treasure
+	118, // 124: hydraidepbgo.ProfileSwampQuery.Filters:type_name -> hydraidepbgo.FilterGroup
+	125, // 125: hydraidepbgo.GetStreamRequest.Queries:type_name -> hydraidepbgo.ProfileSwampQuery
+	44,  // 126: hydraidepbgo.GetStreamResponse.Treasures:type_name -> hydraidepbgo.Treasure
+	5,   // 127: hydraidepbgo.DeleteResponse.SwampDeleteResponse.ErrorCode:type_name -> hydraidepbgo.DeleteResponse.SwampDeleteResponse.ErrorCodeEnum
+	34,  // 128: hydraidepbgo.DeleteResponse.SwampDeleteResponse.KeyStatuses:type_name -> hydraidepbgo.KeyStatusPair
+	9,   // 129: hydraidepbgo.HydraideService.Heartbeat:input_type -> hydraidepbgo.HeartbeatRequest
+	11,  // 130: hydraidepbgo.HydraideService.Lock:input_type -> hydraidepbgo.LockRequest
+	13,  // 131: hydraidepbgo.HydraideService.Unlock:input_type -> hydraidepbgo.UnlockRequest
+	25,  // 132: hydraidepbgo.HydraideService.RegisterSwamp:input_type -> hydraidepbgo.RegisterSwampRequest
+	27,  // 133: hydraidepbgo.HydraideService.DeRegisterSwamp:input_type -> hydraidepbgo.DeRegisterSwampRequest
+	29,  // 134: hydraidepbgo.HydraideService.Set:input_type -> hydraidepbgo.SetRequest
+	36,  // 135: hydraidepbgo.HydraideService.Get:input_type -> hydraidepbgo.GetRequest
+	40,  // 136: hydraidepbgo.HydraideService.GetAll:input_type -> hydraidepbgo.GetAllRequest
+	46,  // 137: hydraidepbgo.HydraideService.GetByIndex:input_type -> hydraidepbgo.GetByIndexRequest
+	50,  // 138: hydraidepbgo.HydraideService.GetByKeys:input_type -> hydraidepbgo.GetByKeysRequest
+	52,  // 139: hydraidepbgo.HydraideService.ShiftByKeys:input_type -> hydraidepbgo.ShiftByKeysRequest
+	42,  // 140: hydraidepbgo.HydraideService.ShiftExpiredTreasures:input_type -> hydraidepbgo.ShiftExpiredTreasuresRequest
+	15,  // 141: hydraidepbgo.HydraideService.Destroy:input_type -> hydraidepbgo.DestroyRequest
+	17,  // 142: hydraidepbgo.HydraideService.DestroyBulk:input_type -> hydraidepbgo.DestroyBulkRequest
+	54,  // 143: hydraidepbgo.HydraideService.Delete:input_type -> hydraidepbgo.DeleteRequest
+	56,  // 144: hydraidepbgo.HydraideService.Count:input_type -> hydraidepbgo.CountRequest
+	101, // 145: hydraidepbgo.HydraideService.IsSwampExist:input_type -> hydraidepbgo.IsSwampExistRequest
+	103, // 146: hydraidepbgo.HydraideService.IsKeyExist:input_type -> hydraidepbgo.IsKeyExistRequest
+	22,  // 147: hydraidepbgo.HydraideService.SubscribeToEvents:input_type -> hydraidepbgo.SubscribeToEventsRequest
+	20,  // 148: hydraidepbgo.HydraideService.SubscribeToInfo:input_type -> hydraidepbgo.SubscribeToInfoRequest
+	93,  // 149: hydraidepbgo.HydraideService.Uint32SlicePush:input_type -> hydraidepbgo.AddToUint32SlicePushRequest
+	95,  // 150: hydraidepbgo.HydraideService.Uint32SliceDelete:input_type -> hydraidepbgo.Uint32SliceDeleteRequest
+	97,  // 151: hydraidepbgo.HydraideService.Uint32SliceSize:input_type -> hydraidepbgo.Uint32SliceSizeRequest
+	99,  // 152: hydraidepbgo.HydraideService.Uint32SliceIsValueExist:input_type -> hydraidepbgo.Uint32SliceIsValueExistRequest
+	61,  // 153: hydraidepbgo.HydraideService.IncrementInt8:input_type -> hydraidepbgo.IncrementInt8Request
+	64,  // 154: hydraidepbgo.HydraideService.IncrementInt16:input_type -> hydraidepbgo.IncrementInt16Request
+	67,  // 155: hydraidepbgo.HydraideService.IncrementInt32:input_type -> hydraidepbgo.IncrementInt32Request
+	70,  // 156: hydraidepbgo.HydraideService.IncrementInt64:input_type -> hydraidepbgo.IncrementInt64Request
+	73,  // 157: hydraidepbgo.HydraideService.IncrementUint8:input_type -> hydraidepbgo.IncrementUint8Request
+	76,  // 158: hydraidepbgo.HydraideService.IncrementUint16:input_type -> hydraidepbgo.IncrementUint16Request
+	79,  // 159: hydraidepbgo.HydraideService.IncrementUint32:input_type -> hydraidepbgo.IncrementUint32Request
+	82,  // 160: hydraidepbgo.HydraideService.IncrementUint64:input_type -> hydraidepbgo.IncrementUint64Request
+	86,  // 161: hydraidepbgo.HydraideService.IncrementFloat32:input_type -> hydraidepbgo.IncrementFloat32Request
+	89,  // 162: hydraidepbgo.HydraideService.IncrementFloat64:input_type -> hydraidepbgo.IncrementFloat64Request
+	105, // 163: hydraidepbgo.HydraideService.SubscribeToTelemetry:input_type -> hydraidepbgo.TelemetrySubscribeRequest
+	107, // 164: hydraidepbgo.HydraideService.GetTelemetryHistory:input_type -> hydraidepbgo.TelemetryHistoryRequest
+	109, // 165: hydraidepbgo.HydraideService.GetErrorDetails:input_type -> hydraidepbgo.ErrorDetailsRequest
+	111, // 166: hydraidepbgo.HydraideService.GetTelemetryStats:input_type -> hydraidepbgo.TelemetryStatsRequest
+	120, // 167: hydraidepbgo.HydraideService.GetByIndexStream:input_type -> hydraidepbgo.GetByIndexStreamRequest
+	123, // 168: hydraidepbgo.HydraideService.GetByIndexStreamFromMany:input_type -> hydraidepbgo.GetByIndexStreamFromManyRequest
+	128, // 169: hydraidepbgo.HydraideService.CompactSwamp:input_type -> hydraidepbgo.CompactSwampRequest
+	126, // 170: hydraidepbgo.HydraideService.GetStream:input_type -> hydraidepbgo.GetStreamRequest
+	10,  // 171: hydraidepbgo.HydraideService.Heartbeat:output_type -> hydraidepbgo.HeartbeatResponse
+	12,  // 172: hydraidepbgo.HydraideService.Lock:output_type -> hydraidepbgo.LockResponse
+	14,  // 173: hydraidepbgo.HydraideService.Unlock:output_type -> hydraidepbgo.UnlockResponse
+	26,  // 174: hydraidepbgo.HydraideService.RegisterSwamp:output_type -> hydraidepbgo.RegisterSwampResponse
+	28,  // 175: hydraidepbgo.HydraideService.DeRegisterSwamp:output_type -> hydraidepbgo.DeRegisterSwampResponse
+	32,  // 176: hydraidepbgo.HydraideService.Set:output_type -> hydraidepbgo.SetResponse
+	38,  // 177: hydraidepbgo.HydraideService.Get:output_type -> hydraidepbgo.GetResponse
+	41,  // 178: hydraidepbgo.HydraideService.GetAll:output_type -> hydraidepbgo.GetAllResponse
+	49,  // 179: hydraidepbgo.HydraideService.GetByIndex:output_type -> hydraidepbgo.GetByIndexResponse
+	51,  // 180: hydraidepbgo.HydraideService.GetByKeys:output_type -> hydraidepbgo.GetByKeysResponse
+	53,  // 181: hydraidepbgo.HydraideService.ShiftByKeys:output_type -> hydraidepbgo.ShiftByKeysResponse
+	43,  // 182: hydraidepbgo.HydraideService.ShiftExpiredTreasures:output_type -> hydraidepbgo.ShiftExpiredTreasuresResponse
+	16,  // 183: hydraidepbgo.HydraideService.Destroy:output_type -> hydraidepbgo.DestroyResponse
+	19,  // 184: hydraidepbgo.HydraideService.DestroyBulk:output_type -> hydraidepbgo.DestroyBulkResponse
+	55,  // 185: hydraidepbgo.HydraideService.Delete:output_type -> hydraidepbgo.DeleteResponse
+	57,  // 186: hydraidepbgo.HydraideService.Count:output_type -> hydraidepbgo.CountResponse
+	102, // 187: hydraidepbgo.HydraideService.IsSwampExist:output_type -> hydraidepbgo.IsSwampExistResponse
+	104, // 188: hydraidepbgo.HydraideService.IsKeyExist:output_type -> hydraidepbgo.IsKeyExistResponse
+	23,  // 189: hydraidepbgo.HydraideService.SubscribeToEvents:output_type -> hydraidepbgo.SubscribeToEventsResponse
+	21,  // 190: hydraidepbgo.HydraideService.SubscribeToInfo:output_type -> hydraidepbgo.SubscribeToInfoResponse
+	94,  // 191: hydraidepbgo.HydraideService.Uint32SlicePush:output_type -> hydraidepbgo.AddToUint32SlicePushResponse
+	96,  // 192: hydraidepbgo.HydraideService.Uint32SliceDelete:output_type -> hydraidepbgo.Uint32SliceDeleteResponse
+	98,  // 193: hydraidepbgo.HydraideService.Uint32SliceSize:output_type -> hydraidepbgo.Uint32SliceSizeResponse
+	100, // 194: hydraidepbgo.HydraideService.Uint32SliceIsValueExist:output_type -> hydraidepbgo.Uint32SliceIsValueExistResponse
+	63,  // 195: hydraidepbgo.HydraideService.IncrementInt8:output_type -> hydraidepbgo.IncrementInt8Response
+	66,  // 196: hydraidepbgo.HydraideService.IncrementInt16:output_type -> hydraidepbgo.IncrementInt16Response
+	69,  // 197: hydraidepbgo.HydraideService.IncrementInt32:output_type -> hydraidepbgo.IncrementInt32Response
+	72,  // 198: hydraidepbgo.HydraideService.IncrementInt64:output_type -> hydraidepbgo.IncrementInt64Response
+	75,  // 199: hydraidepbgo.HydraideService.IncrementUint8:output_type -> hydraidepbgo.IncrementUint8Response
+	78,  // 200: hydraidepbgo.HydraideService.IncrementUint16:output_type -> hydraidepbgo.IncrementUint16Response
+	81,  // 201: hydraidepbgo.HydraideService.IncrementUint32:output_type -> hydraidepbgo.IncrementUint32Response
+	84,  // 202: hydraidepbgo.HydraideService.IncrementUint64:output_type -> hydraidepbgo.IncrementUint64Response
+	88,  // 203: hydraidepbgo.HydraideService.IncrementFloat32:output_type -> hydraidepbgo.IncrementFloat32Response
+	91,  // 204: hydraidepbgo.HydraideService.IncrementFloat64:output_type -> hydraidepbgo.IncrementFloat64Response
+	106, // 205: hydraidepbgo.HydraideService.SubscribeToTelemetry:output_type -> hydraidepbgo.TelemetryEvent
+	108, // 206: hydraidepbgo.HydraideService.GetTelemetryHistory:output_type -> hydraidepbgo.TelemetryHistoryResponse
+	110, // 207: hydraidepbgo.HydraideService.GetErrorDetails:output_type -> hydraidepbgo.ErrorDetailsResponse
+	112, // 208: hydraidepbgo.HydraideService.GetTelemetryStats:output_type -> hydraidepbgo.TelemetryStatsResponse
+	121, // 209: hydraidepbgo.HydraideService.GetByIndexStream:output_type -> hydraidepbgo.GetByIndexStreamResponse
+	124, // 210: hydraidepbgo.HydraideService.GetByIndexStreamFromMany:output_type -> hydraidepbgo.GetByIndexStreamFromManyResponse
+	129, // 211: hydraidepbgo.HydraideService.CompactSwamp:output_type -> hydraidepbgo.CompactSwampResponse
+	127, // 212: hydraidepbgo.HydraideService.GetStream:output_type -> hydraidepbgo.GetStreamResponse
+	171, // [171:213] is the sub-list for method output_type
+	129, // [129:171] is the sub-list for method input_type
+	129, // [129:129] is the sub-list for extension type_name
+	129, // [129:129] is the sub-list for extension extendee
+	0,   // [0:129] is the sub-list for field type_name
 }
 
 func init() { file_hydraide_proto_init() }
@@ -10121,14 +10324,13 @@ func file_hydraide_proto_init() {
 	if File_hydraide_proto != nil {
 		return
 	}
-	file_hydraide_proto_msgTypes[13].OneofWrappers = []any{}
-	file_hydraide_proto_msgTypes[19].OneofWrappers = []any{}
-	file_hydraide_proto_msgTypes[21].OneofWrappers = []any{}
-	file_hydraide_proto_msgTypes[32].OneofWrappers = []any{}
-	file_hydraide_proto_msgTypes[34].OneofWrappers = []any{}
-	file_hydraide_proto_msgTypes[47].OneofWrappers = []any{}
-	file_hydraide_proto_msgTypes[48].OneofWrappers = []any{}
-	file_hydraide_proto_msgTypes[49].OneofWrappers = []any{}
+	file_hydraide_proto_msgTypes[16].OneofWrappers = []any{}
+	file_hydraide_proto_msgTypes[22].OneofWrappers = []any{}
+	file_hydraide_proto_msgTypes[24].OneofWrappers = []any{}
+	file_hydraide_proto_msgTypes[35].OneofWrappers = []any{}
+	file_hydraide_proto_msgTypes[37].OneofWrappers = []any{}
+	file_hydraide_proto_msgTypes[50].OneofWrappers = []any{}
+	file_hydraide_proto_msgTypes[51].OneofWrappers = []any{}
 	file_hydraide_proto_msgTypes[52].OneofWrappers = []any{}
 	file_hydraide_proto_msgTypes[55].OneofWrappers = []any{}
 	file_hydraide_proto_msgTypes[58].OneofWrappers = []any{}
@@ -10136,9 +10338,10 @@ func file_hydraide_proto_init() {
 	file_hydraide_proto_msgTypes[64].OneofWrappers = []any{}
 	file_hydraide_proto_msgTypes[67].OneofWrappers = []any{}
 	file_hydraide_proto_msgTypes[70].OneofWrappers = []any{}
-	file_hydraide_proto_msgTypes[74].OneofWrappers = []any{}
+	file_hydraide_proto_msgTypes[73].OneofWrappers = []any{}
 	file_hydraide_proto_msgTypes[77].OneofWrappers = []any{}
-	file_hydraide_proto_msgTypes[104].OneofWrappers = []any{
+	file_hydraide_proto_msgTypes[80].OneofWrappers = []any{}
+	file_hydraide_proto_msgTypes[107].OneofWrappers = []any{
 		(*TreasureFilter_Int8Val)(nil),
 		(*TreasureFilter_Int16Val)(nil),
 		(*TreasureFilter_Int32Val)(nil),
@@ -10155,18 +10358,18 @@ func file_hydraide_proto_init() {
 		(*TreasureFilter_UpdatedAtVal)(nil),
 		(*TreasureFilter_ExpiredAtVal)(nil),
 	}
-	file_hydraide_proto_msgTypes[107].OneofWrappers = []any{}
-	file_hydraide_proto_msgTypes[108].OneofWrappers = []any{}
 	file_hydraide_proto_msgTypes[110].OneofWrappers = []any{}
+	file_hydraide_proto_msgTypes[111].OneofWrappers = []any{}
 	file_hydraide_proto_msgTypes[113].OneofWrappers = []any{}
-	file_hydraide_proto_msgTypes[119].OneofWrappers = []any{}
+	file_hydraide_proto_msgTypes[116].OneofWrappers = []any{}
+	file_hydraide_proto_msgTypes[122].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_hydraide_proto_rawDesc), len(file_hydraide_proto_rawDesc)),
 			NumEnums:      9,
-			NumMessages:   122,
+			NumMessages:   125,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

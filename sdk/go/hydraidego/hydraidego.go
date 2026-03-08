@@ -82,6 +82,7 @@ type Hydraidego interface {
 	ProfileReadBatch(ctx context.Context, swampNames []name.Name, model any, iterator ProfileReadBatchIteratorFunc) error
 	Count(ctx context.Context, swampName name.Name) (int32, error)
 	Destroy(ctx context.Context, swampName name.Name) error
+	DestroyBulk(ctx context.Context, swampNames []name.Name, progressFn func(destroyed, failed, total int64)) error
 	Subscribe(ctx context.Context, swampName name.Name, getExistingData bool, model any, iterator SubscribeIteratorFunc) error
 
 	IncrementInt8(ctx context.Context, swampName name.Name, key string, value int8, condition *Int8Condition, setIfNotExist *IncrementMetaRequest, setIfExist *IncrementMetaRequest) (int8, *IncrementMetaResponse, error)
@@ -3755,6 +3756,104 @@ func (h *hydraidego) Destroy(ctx context.Context, swampName name.Name) error {
 	}
 
 	// Swamp successfully removed
+	return nil
+}
+
+// DestroyBulk permanently deletes multiple swamps using bidirectional streaming.
+//
+// This method groups swamp names by their target server (based on IslandID routing)
+// and opens a DestroyBulk stream to each server. Targets are sent in batches of 500.
+//
+// The optional progressFn callback is called periodically with the current totals
+// (destroyed, failed, totalReceived) across all servers. Pass nil to skip progress reporting.
+//
+// ⚠️ This operation is irreversible. All data for the targeted swamps will be permanently lost.
+//
+// Example:
+//
+//	names := []name.Name{name.New("users", "profiles", "alice"), name.New("users", "profiles", "bob")}
+//	err := h.DestroyBulk(ctx, names, func(destroyed, failed, total int64) {
+//	    fmt.Printf("Progress: %d/%d destroyed, %d failed\n", destroyed, total, failed)
+//	})
+func (h *hydraidego) DestroyBulk(ctx context.Context, swampNames []name.Name, progressFn func(destroyed, failed, total int64)) error {
+	if len(swampNames) == 0 {
+		return nil
+	}
+
+	allIslands := h.client.GetAllIslands()
+
+	// Group targets by their service client (server)
+	type target struct {
+		islandID  uint64
+		swampName string
+	}
+	groups := make(map[hydraidepbgo.HydraideServiceClient][]target)
+	for _, sn := range swampNames {
+		client := h.client.GetServiceClient(sn)
+		if client == nil {
+			continue
+		}
+		groups[client] = append(groups[client], target{
+			islandID:  sn.GetIslandID(allIslands),
+			swampName: sn.Get(),
+		})
+	}
+
+	// Process each server group
+	var totalDestroyed, totalFailed, totalReceived int64
+	for client, targets := range groups {
+		stream, err := client.DestroyBulk(ctx)
+		if err != nil {
+			return NewError(ErrCodeInternalDatabaseError, fmt.Sprintf("failed to open DestroyBulk stream: %v", err))
+		}
+
+		// Send in batches of 500
+		const batchSize = 500
+		for i := 0; i < len(targets); i += batchSize {
+			end := i + batchSize
+			if end > len(targets) {
+				end = len(targets)
+			}
+
+			req := &hydraidepbgo.DestroyBulkRequest{}
+			for _, t := range targets[i:end] {
+				req.Targets = append(req.Targets, &hydraidepbgo.DestroyBulkTarget{
+					IslandID:  t.islandID,
+					SwampName: t.swampName,
+				})
+			}
+
+			if err := stream.Send(req); err != nil {
+				return NewError(ErrCodeInternalDatabaseError, fmt.Sprintf("failed to send DestroyBulk batch: %v", err))
+			}
+		}
+
+		if err := stream.CloseSend(); err != nil {
+			return NewError(ErrCodeInternalDatabaseError, fmt.Sprintf("failed to close DestroyBulk send: %v", err))
+		}
+
+		// Read responses until done
+		for {
+			resp, err := stream.Recv()
+			if err != nil {
+				break
+			}
+			totalDestroyed = totalDestroyed - totalDestroyed + resp.Destroyed // per-server counts reset
+			totalFailed = totalFailed - totalFailed + resp.Failed
+			totalReceived = totalReceived - totalReceived + resp.TotalReceived
+			if progressFn != nil {
+				progressFn(resp.Destroyed, resp.Failed, resp.TotalReceived)
+			}
+			if resp.Done {
+				break
+			}
+		}
+	}
+
+	if totalFailed > 0 {
+		return NewError(ErrCodeInternalDatabaseError, fmt.Sprintf("DestroyBulk completed with %d failures out of %d targets", totalFailed, totalReceived))
+	}
+
 	return nil
 }
 

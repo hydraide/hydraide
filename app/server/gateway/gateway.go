@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"runtime/debug"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -989,6 +991,119 @@ func (g Gateway) Destroy(ctx context.Context, in *hydrapb.DestroyRequest) (*hydr
 
 	return &hydrapb.DestroyResponse{}, nil
 
+}
+
+func (g Gateway) DestroyBulk(stream hydrapb.HydraideService_DestroyBulkServer) error {
+	defer handlePanic()
+
+	g.ZeusInterface.GetSafeops().LockSystem()
+	defer g.ZeusInterface.GetSafeops().UnlockSystem()
+
+	hydraInterface := g.ZeusInterface.GetHydra()
+
+	var destroyed, failed, totalReceived int64
+	var lastError string
+
+	// Work channel for incoming targets
+	workCh := make(chan *hydrapb.DestroyBulkTarget, 1024)
+	// Done channel for worker results
+	type result struct {
+		ok  bool
+		err string
+	}
+	resultCh := make(chan result, 1024)
+
+	// Start workers
+	numWorkers := 8
+	var wg sync.WaitGroup
+	for i := 0; i < numWorkers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for target := range workCh {
+				swampName := name.Load(target.GetSwampName())
+				swampInterface, err := hydraInterface.SummonSwamp(stream.Context(), target.GetIslandID(), swampName)
+				if err != nil {
+					resultCh <- result{ok: false, err: fmt.Sprintf("%s: %v", target.GetSwampName(), err)}
+					continue
+				}
+				swampInterface.Destroy()
+				resultCh <- result{ok: true}
+			}
+		}()
+	}
+
+	// Progress reporter goroutine
+	progressDone := make(chan struct{})
+	go func() {
+		defer close(progressDone)
+		ticker := time.NewTicker(100 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				_ = stream.Send(&hydrapb.DestroyBulkResponse{
+					Destroyed:     destroyed,
+					Failed:        failed,
+					TotalReceived: totalReceived,
+					LastError:     lastError,
+					Done:          false,
+				})
+			case <-stream.Context().Done():
+				return
+			}
+		}
+	}()
+
+	// Result collector goroutine
+	resultDone := make(chan struct{})
+	go func() {
+		defer close(resultDone)
+		for r := range resultCh {
+			if r.ok {
+				destroyed++
+			} else {
+				failed++
+				lastError = r.err
+			}
+		}
+	}()
+
+	// Receive targets from client
+	for {
+		req, err := stream.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			close(workCh)
+			wg.Wait()
+			close(resultCh)
+			<-resultDone
+			return err
+		}
+		for _, target := range req.GetTargets() {
+			totalReceived++
+			workCh <- target
+		}
+	}
+
+	// All targets received, close work channel and wait for workers
+	close(workCh)
+	wg.Wait()
+	close(resultCh)
+	<-resultDone
+
+	// Send final response
+	_ = stream.Send(&hydrapb.DestroyBulkResponse{
+		Destroyed:     destroyed,
+		Failed:        failed,
+		TotalReceived: totalReceived,
+		LastError:     lastError,
+		Done:          true,
+	})
+
+	return nil
 }
 
 func (g Gateway) Delete(ctx context.Context, in *hydrapb.DeleteRequest) (*hydrapb.DeleteResponse, error) {

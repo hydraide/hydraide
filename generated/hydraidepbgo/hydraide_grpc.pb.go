@@ -32,6 +32,7 @@ const (
 	HydraideService_ShiftByKeys_FullMethodName              = "/hydraidepbgo.HydraideService/ShiftByKeys"
 	HydraideService_ShiftExpiredTreasures_FullMethodName    = "/hydraidepbgo.HydraideService/ShiftExpiredTreasures"
 	HydraideService_Destroy_FullMethodName                  = "/hydraidepbgo.HydraideService/Destroy"
+	HydraideService_DestroyBulk_FullMethodName              = "/hydraidepbgo.HydraideService/DestroyBulk"
 	HydraideService_Delete_FullMethodName                   = "/hydraidepbgo.HydraideService/Delete"
 	HydraideService_Count_FullMethodName                    = "/hydraidepbgo.HydraideService/Count"
 	HydraideService_IsSwampExist_FullMethodName             = "/hydraidepbgo.HydraideService/IsSwampExist"
@@ -235,6 +236,29 @@ type HydraideServiceClient interface {
 	// - User data deletion requests
 	// - Full environment reset
 	Destroy(ctx context.Context, in *DestroyRequest, opts ...grpc.CallOption) (*DestroyResponse, error)
+	// DestroyBulk permanently deletes multiple swamps using bidirectional streaming.
+	//
+	// The client sends batches of swamp targets (IslandID + SwampName) through the stream,
+	// and the server processes them using an internal worker pool for maximum throughput.
+	// The server streams back periodic progress updates so the client can display real-time feedback.
+	//
+	// This method acquires the system-wide lock once for the entire operation,
+	// avoiding the overhead of per-call locking that would occur with individual Destroy calls.
+	//
+	// ⚠️ Warning: This operation is irreversible. All data for the targeted swamps will be permanently lost.
+	//
+	// Flow:
+	//  1. Client opens the stream and sends DestroyBulkRequest messages (each containing a batch of targets)
+	//  2. Server processes targets as they arrive using parallel workers
+	//  3. Server periodically sends DestroyBulkResponse with progress updates
+	//  4. Client closes the send side (CloseSend) when all targets have been sent
+	//  5. Server finishes remaining work, sends a final response with done=true, and closes the stream
+	//
+	// Typical use cases:
+	//   - Bulk cleanup of entire Sanctuaries or Realms (thousands of swamps)
+	//   - Mass data purge operations via CLI or management tools
+	//   - Environment teardown after large-scale testing
+	DestroyBulk(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[DestroyBulkRequest, DestroyBulkResponse], error)
 	// Delete removes one or more treasures (key-value pairs) from the specified swamp.
 	//
 	// This is a precise, non-destructive swamp-level operation.
@@ -623,6 +647,19 @@ func (c *hydraideServiceClient) Destroy(ctx context.Context, in *DestroyRequest,
 	return out, nil
 }
 
+func (c *hydraideServiceClient) DestroyBulk(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[DestroyBulkRequest, DestroyBulkResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &HydraideService_ServiceDesc.Streams[0], HydraideService_DestroyBulk_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[DestroyBulkRequest, DestroyBulkResponse]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type HydraideService_DestroyBulkClient = grpc.BidiStreamingClient[DestroyBulkRequest, DestroyBulkResponse]
+
 func (c *hydraideServiceClient) Delete(ctx context.Context, in *DeleteRequest, opts ...grpc.CallOption) (*DeleteResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(DeleteResponse)
@@ -665,7 +702,7 @@ func (c *hydraideServiceClient) IsKeyExist(ctx context.Context, in *IsKeyExistRe
 
 func (c *hydraideServiceClient) SubscribeToEvents(ctx context.Context, in *SubscribeToEventsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[SubscribeToEventsResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &HydraideService_ServiceDesc.Streams[0], HydraideService_SubscribeToEvents_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &HydraideService_ServiceDesc.Streams[1], HydraideService_SubscribeToEvents_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -684,7 +721,7 @@ type HydraideService_SubscribeToEventsClient = grpc.ServerStreamingClient[Subscr
 
 func (c *hydraideServiceClient) SubscribeToInfo(ctx context.Context, in *SubscribeToInfoRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[SubscribeToInfoResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &HydraideService_ServiceDesc.Streams[1], HydraideService_SubscribeToInfo_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &HydraideService_ServiceDesc.Streams[2], HydraideService_SubscribeToInfo_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -843,7 +880,7 @@ func (c *hydraideServiceClient) IncrementFloat64(ctx context.Context, in *Increm
 
 func (c *hydraideServiceClient) SubscribeToTelemetry(ctx context.Context, in *TelemetrySubscribeRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[TelemetryEvent], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &HydraideService_ServiceDesc.Streams[2], HydraideService_SubscribeToTelemetry_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &HydraideService_ServiceDesc.Streams[3], HydraideService_SubscribeToTelemetry_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -892,7 +929,7 @@ func (c *hydraideServiceClient) GetTelemetryStats(ctx context.Context, in *Telem
 
 func (c *hydraideServiceClient) GetByIndexStream(ctx context.Context, in *GetByIndexStreamRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[GetByIndexStreamResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &HydraideService_ServiceDesc.Streams[3], HydraideService_GetByIndexStream_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &HydraideService_ServiceDesc.Streams[4], HydraideService_GetByIndexStream_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -911,7 +948,7 @@ type HydraideService_GetByIndexStreamClient = grpc.ServerStreamingClient[GetByIn
 
 func (c *hydraideServiceClient) GetByIndexStreamFromMany(ctx context.Context, in *GetByIndexStreamFromManyRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[GetByIndexStreamFromManyResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &HydraideService_ServiceDesc.Streams[4], HydraideService_GetByIndexStreamFromMany_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &HydraideService_ServiceDesc.Streams[5], HydraideService_GetByIndexStreamFromMany_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -940,7 +977,7 @@ func (c *hydraideServiceClient) CompactSwamp(ctx context.Context, in *CompactSwa
 
 func (c *hydraideServiceClient) GetStream(ctx context.Context, in *GetStreamRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[GetStreamResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &HydraideService_ServiceDesc.Streams[5], HydraideService_GetStream_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &HydraideService_ServiceDesc.Streams[6], HydraideService_GetStream_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1130,6 +1167,29 @@ type HydraideServiceServer interface {
 	// - User data deletion requests
 	// - Full environment reset
 	Destroy(context.Context, *DestroyRequest) (*DestroyResponse, error)
+	// DestroyBulk permanently deletes multiple swamps using bidirectional streaming.
+	//
+	// The client sends batches of swamp targets (IslandID + SwampName) through the stream,
+	// and the server processes them using an internal worker pool for maximum throughput.
+	// The server streams back periodic progress updates so the client can display real-time feedback.
+	//
+	// This method acquires the system-wide lock once for the entire operation,
+	// avoiding the overhead of per-call locking that would occur with individual Destroy calls.
+	//
+	// ⚠️ Warning: This operation is irreversible. All data for the targeted swamps will be permanently lost.
+	//
+	// Flow:
+	//  1. Client opens the stream and sends DestroyBulkRequest messages (each containing a batch of targets)
+	//  2. Server processes targets as they arrive using parallel workers
+	//  3. Server periodically sends DestroyBulkResponse with progress updates
+	//  4. Client closes the send side (CloseSend) when all targets have been sent
+	//  5. Server finishes remaining work, sends a final response with done=true, and closes the stream
+	//
+	// Typical use cases:
+	//   - Bulk cleanup of entire Sanctuaries or Realms (thousands of swamps)
+	//   - Mass data purge operations via CLI or management tools
+	//   - Environment teardown after large-scale testing
+	DestroyBulk(grpc.BidiStreamingServer[DestroyBulkRequest, DestroyBulkResponse]) error
 	// Delete removes one or more treasures (key-value pairs) from the specified swamp.
 	//
 	// This is a precise, non-destructive swamp-level operation.
@@ -1426,6 +1486,9 @@ func (UnimplementedHydraideServiceServer) ShiftExpiredTreasures(context.Context,
 }
 func (UnimplementedHydraideServiceServer) Destroy(context.Context, *DestroyRequest) (*DestroyResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Destroy not implemented")
+}
+func (UnimplementedHydraideServiceServer) DestroyBulk(grpc.BidiStreamingServer[DestroyBulkRequest, DestroyBulkResponse]) error {
+	return status.Errorf(codes.Unimplemented, "method DestroyBulk not implemented")
 }
 func (UnimplementedHydraideServiceServer) Delete(context.Context, *DeleteRequest) (*DeleteResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Delete not implemented")
@@ -1765,6 +1828,13 @@ func _HydraideService_Destroy_Handler(srv interface{}, ctx context.Context, dec 
 	}
 	return interceptor(ctx, in, info, handler)
 }
+
+func _HydraideService_DestroyBulk_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(HydraideServiceServer).DestroyBulk(&grpc.GenericServerStream[DestroyBulkRequest, DestroyBulkResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type HydraideService_DestroyBulkServer = grpc.BidiStreamingServer[DestroyBulkRequest, DestroyBulkResponse]
 
 func _HydraideService_Delete_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(DeleteRequest)
@@ -2377,6 +2447,12 @@ var HydraideService_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "DestroyBulk",
+			Handler:       _HydraideService_DestroyBulk_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
+		},
 		{
 			StreamName:    "SubscribeToEvents",
 			Handler:       _HydraideService_SubscribeToEvents_Handler,
