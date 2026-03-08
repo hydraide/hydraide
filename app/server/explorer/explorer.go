@@ -176,6 +176,12 @@ func (e *Explorer) ListSwamps(filter *SwampFilter) *SwampListResult {
 	return e.idx.listSwamps(filter)
 }
 
+// ListAllSwamps returns all swamps matching the given sanctuary and realm without pagination limits.
+// If realm is empty, all swamps in the sanctuary are returned.
+func (e *Explorer) ListAllSwamps(sanctuary, realm string) []*SwampDetail {
+	return e.idx.listAllSwamps(sanctuary, realm)
+}
+
 // GetSwampDetail returns detailed information about a specific swamp.
 func (e *Explorer) GetSwampDetail(sanctuary, realm, swamp string) (*SwampDetail, error) {
 	return e.idx.getSwampDetail(sanctuary, realm, swamp)

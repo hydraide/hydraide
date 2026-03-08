@@ -93,7 +93,7 @@ func (m *Model) initiateDelete() {
 	m.deleteInput = ""
 }
 
-// collectSwamps gathers all swamp details matching the given scope.
+// collectSwamps gathers all swamp details matching the given scope without pagination limits.
 func (m *Model) collectSwamps(sanctuary, realm, swamp string) []*explorer.SwampDetail {
 	if swamp != "" {
 		detail, err := m.explorer.GetSwampDetail(sanctuary, realm, swamp)
@@ -103,13 +103,7 @@ func (m *Model) collectSwamps(sanctuary, realm, swamp string) []*explorer.SwampD
 		return []*explorer.SwampDetail{detail}
 	}
 
-	filter := &explorer.SwampFilter{
-		Sanctuary: sanctuary,
-		Realm:     realm,
-		Limit:     1000000,
-	}
-	result := m.explorer.ListSwamps(filter)
-	return result.Swamps
+	return m.explorer.ListAllSwamps(sanctuary, realm)
 }
 
 // handleDeleteConfirmInput processes key input during confirmation dialogs.

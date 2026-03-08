@@ -183,6 +183,35 @@ func (idx *hierarchicalIndex) listSwamps(filter *SwampFilter) *SwampListResult {
 	}
 }
 
+// listAllSwamps returns all swamps for a sanctuary (and optionally a realm) without pagination.
+func (idx *hierarchicalIndex) listAllSwamps(sanctuary, realm string) []*SwampDetail {
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+
+	sn, ok := idx.sanctuaries[sanctuary]
+	if !ok {
+		return nil
+	}
+
+	var all []*SwampDetail
+	if realm != "" {
+		rn, ok := sn.realms[realm]
+		if !ok {
+			return nil
+		}
+		for _, sd := range rn.swamps {
+			all = append(all, sd)
+		}
+	} else {
+		for _, rn := range sn.realms {
+			for _, sd := range rn.swamps {
+				all = append(all, sd)
+			}
+		}
+	}
+	return all
+}
+
 // getSwampDetail returns details for a specific swamp.
 func (idx *hierarchicalIndex) getSwampDetail(sanctuary, realm, swamp string) (*SwampDetail, error) {
 	idx.mu.RLock()
