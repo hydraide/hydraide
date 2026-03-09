@@ -31,9 +31,6 @@ type Settings struct {
 	HydrAIDEBasePath        string
 	HydrAIDEGRPCPort        string
 	HydrAIDEHealthCheckPort string
-	SwampCloseAfterIdle     int
-	SwampWriteInterval      int
-	SwampDefaultFileSize    int64
 }
 
 type env struct {
@@ -83,9 +80,6 @@ func (e *env) Set(ctx context.Context, s *Settings) error {
 	sb.WriteString(fmt.Sprintf("GRPC_SERVER_ERROR_LOGGING=%t\n", s.GRPCServerErrorLogging))
 	sb.WriteString(fmt.Sprintf("HYDRAIDE_ROOT_PATH=%s\n", s.HydrAIDEBasePath))
 	sb.WriteString(fmt.Sprintf("HYDRAIDE_SERVER_PORT=%s\n", s.HydrAIDEGRPCPort))
-	sb.WriteString(fmt.Sprintf("HYDRAIDE_DEFAULT_CLOSE_AFTER_IDLE=%d\n", s.SwampCloseAfterIdle))
-	sb.WriteString(fmt.Sprintf("HYDRAIDE_DEFAULT_WRITE_INTERVAL=%d\n", s.SwampWriteInterval))
-	sb.WriteString(fmt.Sprintf("HYDRAIDE_DEFAULT_FILE_SIZE=%d\n", s.SwampDefaultFileSize))
 	sb.WriteString(fmt.Sprintf("HEALTH_CHECK_PORT=%s\n", s.HydrAIDEHealthCheckPort))
 	sb.WriteString("\n")
 
@@ -148,27 +142,6 @@ func (e *env) Load(ctx context.Context) (*Settings, error) {
 		}
 		if strings.HasPrefix(line, "HYDRAIDE_SERVER_PORT") {
 			settings.HydrAIDEGRPCPort = strings.TrimSpace(strings.Split(line, "=")[1])
-			continue
-		}
-		if strings.HasPrefix(line, "HYDRAIDE_DEFAULT_CLOSE_AFTER_IDLE") {
-			closeAfterIdleStr := strings.TrimSpace(strings.Split(line, "=")[1])
-			var closeAfterIdle int
-			_, _ = fmt.Sscanf(closeAfterIdleStr, "%d", &closeAfterIdle)
-			settings.SwampCloseAfterIdle = closeAfterIdle
-			continue
-		}
-		if strings.HasPrefix(line, "HYDRAIDE_DEFAULT_WRITE_INTERVAL") {
-			writeIntervalStr := strings.TrimSpace(strings.Split(line, "=")[1])
-			var writeInterval int
-			_, _ = fmt.Sscanf(writeIntervalStr, "%d", &writeInterval)
-			settings.SwampWriteInterval = writeInterval
-			continue
-		}
-		if strings.HasPrefix(line, "HYDRAIDE_DEFAULT_FILE_SIZE") {
-			fileSizeStr := strings.TrimSpace(strings.Split(line, "=")[1])
-			var fileSize int64
-			_, _ = fmt.Sscanf(fileSizeStr, "%d", &fileSize)
-			settings.SwampDefaultFileSize = fileSize
 			continue
 		}
 		if strings.HasPrefix(line, "HEALTH_CHECK_PORT") {

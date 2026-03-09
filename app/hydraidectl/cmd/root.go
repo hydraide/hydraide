@@ -38,16 +38,16 @@ MONITORING & STATUS:
   version     Display CLI and instance version information
 
 UPGRADES & MIGRATION:
-  upgrade        Upgrade an instance to the latest HydrAIDE version
-  migrate        Migrate data between storage format versions
-    v1-to-v2     Migrate V1 (multi-file) to V2 (single-file) format
-    v2-to-v3     Upgrade V2 files to V3 format (faster scanning)
-  engine         View or change storage engine version (V1/V2)
+  upgrade              Upgrade an instance to the latest HydrAIDE version
+  migrate              Migrate data between storage format versions
+    v1-to-v2           Migrate V1 (multi-file) to V2 (single-file) format
+    v2-migrate-format  Upgrade .hyd file headers (faster scanning)
+  engine               View or change storage engine version (V1/V2)
 
 DATA MANAGEMENT:
   backup      Create a backup of instance data
   restore     Restore instance data from backup
-  compact     Compact swamp files (reclaim space, auto-upgrade to V3)
+  compact     Compact swamp files (reclaim space, optimize file headers)
   cleanup     Remove orphaned/old storage files
   size        Show instance data storage size
   stats       Show detailed swamp statistics and health report
@@ -61,7 +61,7 @@ EXAMPLES:
   sudo hydraidectl start --instance prod
   sudo hydraidectl upgrade --instance prod --no-start
   hydraidectl migrate v1-to-v2 --instance prod --full
-  hydraidectl migrate v2-to-v3 --instance prod --restart
+  hydraidectl migrate v2-migrate-format --instance prod --restart
   hydraidectl telemetry --instance prod --enable
   hydraidectl observe --instance prod
   hydraidectl explore --instance prod

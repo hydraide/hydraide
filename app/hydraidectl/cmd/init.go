@@ -3,11 +3,11 @@ package cmd
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
 
 	buildmeta "github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/buildmetadata"
@@ -25,7 +25,9 @@ var initCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Run the quick install wizard to create a new HydrAIDE instance",
 	Long: `Launches the interactive quick install wizard for HydrAIDE.
-This command guides you through the process of creating a new HydrAIDE instance, including setting its service name, storage location, and configuration.`,
+This command guides you through the process of creating a new HydrAIDE instance, including setting its service name, storage location, and configuration.
+
+The instance is automatically configured with the V2 storage engine (append-only, single-file format).`,
 
 	Run: func(cmd *cobra.Command, args []string) {
 
@@ -88,6 +90,36 @@ This command guides you through the process of creating a new HydrAIDE instance,
 			}
 
 			envSettings.HydrAIDEGRPCPort = validPort
+			break
+		}
+
+		// HEALTH CHECK PORT
+		fmt.Println("\n❤️‍🩹 Health Check Endpoint")
+		fmt.Println("   Separate port for health checks and monitoring")
+
+		// Port validation loop for health check port
+		for {
+			fmt.Print("Health check port [default: 4901]: ")
+			healthPortInput, _ := reader.ReadString('\n')
+			healthPortInput = strings.TrimSpace(healthPortInput)
+
+			if healthPortInput == "" {
+				envSettings.HydrAIDEHealthCheckPort = "4901"
+				break
+			}
+
+			validPort, err := validator.ValidatePort(ctx, healthPortInput)
+			if err != nil {
+				fmt.Printf("❌ Invalid port: %v. Please try again.\n", err)
+				continue
+			}
+
+			if validPort == envSettings.HydrAIDEGRPCPort {
+				fmt.Println("❌ Health check port cannot be the same as the main port. Please choose a different port.")
+				continue
+			}
+
+			envSettings.HydrAIDEHealthCheckPort = validPort
 			break
 		}
 
@@ -194,102 +226,6 @@ This command guides you through the process of creating a new HydrAIDE instance,
 		grpcErrInput = strings.ToLower(strings.TrimSpace(grpcErrInput))
 		envSettings.GRPCServerErrorLogging = grpcErrInput != "n" && grpcErrInput != "no"
 
-		// SWAMP STORAGE SETTINGS
-		fmt.Println("\n🏞️ Swamp Storage Configuration")
-
-		// CLOSE_AFTER_IDLE
-		fmt.Println("⏱️ Auto-Close Idle Swamps")
-		fmt.Println("   Time in seconds before idle Swamps are automatically closed. Between 10 sec and 3600 sec.")
-		fmt.Print("Idle timeout [default: 10]: ")
-		idleInput, _ := reader.ReadString('\n')
-		idleInput = strings.TrimSpace(idleInput)
-		if idleInput == "" {
-			envSettings.SwampCloseAfterIdle = 10
-		} else {
-			if idle, err := strconv.Atoi(idleInput); err == nil {
-
-				envSettings.SwampCloseAfterIdle = idle
-				if envSettings.SwampCloseAfterIdle < 10 || envSettings.SwampCloseAfterIdle > 3600 {
-					fmt.Printf("⚠️ Idle timeout must be between 10 and 3600 seconds. Using default 10s.\n")
-					envSettings.SwampCloseAfterIdle = 10
-				} else {
-					fmt.Printf("✅ Idle timeout set to %d seconds.\n", envSettings.SwampCloseAfterIdle)
-				}
-
-			} else {
-				fmt.Printf("⚠️ Invalid number, using default 10s. Error: %v\n", err)
-				envSettings.SwampCloseAfterIdle = 10
-			}
-		}
-
-		// WRITE_INTERVAL
-		fmt.Println("\n⏱️ Disk Write Frequency")
-		fmt.Println("   How often (in seconds) Swamp data is written to disk")
-		fmt.Print("Write interval [default: 5]: ")
-		writeInput, _ := reader.ReadString('\n')
-		writeInput = strings.TrimSpace(writeInput)
-		if writeInput == "" {
-			envSettings.SwampWriteInterval = 5
-		} else {
-			if interval, err := strconv.Atoi(writeInput); err == nil {
-				envSettings.SwampWriteInterval = interval
-			} else {
-				fmt.Printf("⚠️ Invalid number, using default 5s. Error: %v\n", err)
-				envSettings.SwampWriteInterval = 5
-			}
-		}
-
-		// FILE_SIZE
-		fmt.Println("\n📦 Storage Fragment Size")
-		fmt.Println("   Controls the size of storage fragments for Swamp data")
-		fmt.Println("   Accepts human-readable format: 8KB, 64KB, 1MB, 512MB, 1GB")
-		fmt.Println("   Range: 8KB to 1GB [default: 8KB]")
-
-		// Fragment size validation loop
-		for {
-			fmt.Printf("Storage fragment size [default: %s]: ", "8KB")
-			sizeInput, _ := reader.ReadString('\n')
-
-			validSize, err := validator.ParseFragmentSize(ctx, sizeInput)
-			if err != nil {
-				fmt.Printf("❌ Invalid fragment size: %v. Please try again.\n", err)
-				continue
-			}
-
-			envSettings.SwampDefaultFileSize = validSize
-			break
-		}
-
-		// HEALTH CHECK PORT
-		fmt.Println("\n❤️‍🩹 Health Check Endpoint")
-		fmt.Println("   Separate port for health checks and monitoring")
-
-		// Port validation loop for health check port
-		for {
-			fmt.Print("Health check port [default: 4901]: ")
-			healthPortInput, _ := reader.ReadString('\n')
-			healthPortInput = strings.TrimSpace(healthPortInput)
-
-			if healthPortInput == "" {
-				envSettings.HydrAIDEHealthCheckPort = "4901"
-				break
-			}
-
-			validPort, err := validator.ValidatePort(ctx, healthPortInput)
-			if err != nil {
-				fmt.Printf("❌ Invalid port: %v. Please try again.\n", err)
-				continue
-			}
-
-			if validPort == envSettings.HydrAIDEGRPCPort {
-				fmt.Println("❌ Health check port cannot be the same as the main port. Please choose a different port.")
-				continue
-			}
-
-			envSettings.HydrAIDEHealthCheckPort = validPort
-			break
-		}
-
 		// CONFIGURATION SUMMARY
 		fmt.Println("\n🔧 Configuration Summary:")
 		fmt.Println("=== NETWORK ===")
@@ -313,10 +249,7 @@ This command guides you through the process of creating a new HydrAIDE instance,
 		fmt.Println("  • Error Logging:   ", envSettings.GRPCServerErrorLogging)
 
 		fmt.Println("\n=== STORAGE ===")
-		fmt.Println("  • Close After Idle: ", envSettings.SwampCloseAfterIdle, "seconds")
-		fmt.Println("  • Write Interval:   ", envSettings.SwampWriteInterval, "seconds")
-		fmt.Printf("  • File Fragment Size: %d bytes (%.2f KB)\n",
-			envSettings.SwampDefaultFileSize, float64(envSettings.SwampDefaultFileSize)/1024)
+		fmt.Println("  • Engine:           V2 (append-only, single-file)")
 
 		fmt.Println("\n=== PATHS ===")
 		fmt.Println("  • Base Path:  ", envSettings.HydrAIDEBasePath)
@@ -441,6 +374,23 @@ This command guides you through the process of creating a new HydrAIDE instance,
 		}
 
 		fmt.Println("✅ TLS certificates copied successfully.")
+
+		// Create settings.json with V2 engine
+		fmt.Println("\n⚙️ Initializing storage engine settings...")
+		settingsJSON := map[string]interface{}{
+			"engine": "V2",
+		}
+		settingsData, err := json.MarshalIndent(settingsJSON, "", "  ")
+		if err != nil {
+			fmt.Printf("❌ Error creating settings: %v\n", err)
+			return
+		}
+		settingsFilePath := filepath.Join(envSettings.HydrAIDEBasePath, "settings", "settings.json")
+		if err := fs.WriteFile(ctx, settingsFilePath, settingsData, 0644); err != nil {
+			fmt.Printf("❌ Error writing settings.json: %v\n", err)
+			return
+		}
+		fmt.Println("✅ Storage engine set to V2 (append-only, single-file format)")
 
 		// Create the .env file
 		envInterface := env.New(fs, envSettings.HydrAIDEBasePath)

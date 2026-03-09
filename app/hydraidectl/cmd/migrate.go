@@ -13,13 +13,13 @@ var migrateCmd = &cobra.Command{
 Migrate swamp data between storage format versions.
 
 SUBCOMMANDS:
-  v1-to-v2    Migrate V1 (multi-file chunks) to V2 (single-file append-only)
-  v2-to-v3    Upgrade V2 files to V3 format (swamp name in header, faster scanning)
+  v1-to-v2            Migrate V1 (multi-file chunks) to V2 (single-file append-only)
+  v2-migrate-format   Upgrade .hyd file headers (embed swamp name for faster scanning)
 
 EXAMPLES:
   hydraidectl migrate v1-to-v2 --instance prod --full
-  hydraidectl migrate v2-to-v3 --instance prod --restart
-  hydraidectl migrate v2-to-v3 --instance prod --dry-run
+  hydraidectl migrate v2-migrate-format --instance prod --restart
+  hydraidectl migrate v2-migrate-format --instance prod --dry-run
 `,
 	Run: func(cmd *cobra.Command, args []string) {
 		_ = cmd.Help()

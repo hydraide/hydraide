@@ -19,22 +19,27 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var migrateV2ToV3Cmd = &cobra.Command{
-	Use:   "v2-to-v3",
-	Short: "Upgrade V2 files to V3 format (swamp name in header, faster scanning)",
+var migrateV2MigrateFormatCmd = &cobra.Command{
+	Use:   "v2-migrate-format",
+	Short: "Upgrade .hyd file headers to embed swamp name for faster scanning",
 	Long: `
-💠 Migrate V2 → V3
+💠 V2 Migrate Format
 
-Upgrades all V2-format .hyd swamp files to V3 format. V3 stores the swamp
-name in the file header, enabling ~100x faster scanning for tools like
-'explore' and 'stats'. The instance will be stopped during the upgrade.
+Rewrites .hyd swamp file headers to embed the swamp name directly after the
+64-byte file header. This enables ~100x faster metadata scanning for tools
+like 'explore' and 'stats', because the swamp name can be read in ~100 bytes
+without decompressing any data blocks.
 
-Already-V3 files are skipped automatically.
+Files that already have the embedded name are skipped automatically.
+The instance will be stopped during the upgrade.
+
+This is a V2 engine internal format optimization — no engine version change
+is involved. The server reads both old and new format files transparently.
 
 USAGE:
-  hydraidectl migrate v2-to-v3 --instance prod
-  hydraidectl migrate v2-to-v3 --instance prod --parallel 8 --restart
-  hydraidectl migrate v2-to-v3 --instance prod --dry-run
+  hydraidectl migrate v2-migrate-format --instance prod
+  hydraidectl migrate v2-migrate-format --instance prod --parallel 8 --restart
+  hydraidectl migrate v2-migrate-format --instance prod --dry-run
 
 FLAGS:
   --instance    Instance name (required)
@@ -43,53 +48,53 @@ FLAGS:
   --dry-run     Only analyze, don't perform upgrade
   --json        Output as JSON format
 `,
-	Run: runMigrateV2ToV3,
+	Run: runMigrateV2Format,
 }
 
 var (
-	migrateV2V3InstanceName string
-	migrateV2V3Parallel     int
-	migrateV2V3Restart      bool
-	migrateV2V3DryRun       bool
-	migrateV2V3JSONOutput   bool
+	migrateV2FmtInstanceName string
+	migrateV2FmtParallel     int
+	migrateV2FmtRestart      bool
+	migrateV2FmtDryRun       bool
+	migrateV2FmtJSONOutput   bool
 )
 
 func init() {
-	migrateCmd.AddCommand(migrateV2ToV3Cmd)
+	migrateCmd.AddCommand(migrateV2MigrateFormatCmd)
 
-	migrateV2ToV3Cmd.Flags().StringVarP(&migrateV2V3InstanceName, "instance", "i", "", "Instance name (required)")
-	migrateV2ToV3Cmd.Flags().IntVarP(&migrateV2V3Parallel, "parallel", "p", 4, "Number of parallel workers")
-	migrateV2ToV3Cmd.Flags().BoolVarP(&migrateV2V3Restart, "restart", "r", false, "Restart instance after upgrade")
-	migrateV2ToV3Cmd.Flags().BoolVar(&migrateV2V3DryRun, "dry-run", false, "Only analyze, don't upgrade")
-	migrateV2ToV3Cmd.Flags().BoolVarP(&migrateV2V3JSONOutput, "json", "j", false, "Output as JSON")
-	_ = migrateV2ToV3Cmd.MarkFlagRequired("instance")
+	migrateV2MigrateFormatCmd.Flags().StringVarP(&migrateV2FmtInstanceName, "instance", "i", "", "Instance name (required)")
+	migrateV2MigrateFormatCmd.Flags().IntVarP(&migrateV2FmtParallel, "parallel", "p", 4, "Number of parallel workers")
+	migrateV2MigrateFormatCmd.Flags().BoolVarP(&migrateV2FmtRestart, "restart", "r", false, "Restart instance after upgrade")
+	migrateV2MigrateFormatCmd.Flags().BoolVar(&migrateV2FmtDryRun, "dry-run", false, "Only analyze, don't upgrade")
+	migrateV2MigrateFormatCmd.Flags().BoolVarP(&migrateV2FmtJSONOutput, "json", "j", false, "Output as JSON")
+	_ = migrateV2MigrateFormatCmd.MarkFlagRequired("instance")
 }
 
-// MigrateV2V3Report holds the complete V2→V3 migration report
-type MigrateV2V3Report struct {
-	Instance      string                  `json:"instance"`
-	StartedAt     string                  `json:"started_at"`
-	CompletedAt   string                  `json:"completed_at"`
-	Duration      string                  `json:"duration"`
-	DryRun        bool                    `json:"dry_run"`
-	TotalFiles    int                     `json:"total_files"`
-	V2Files       int                     `json:"v2_files"`
-	V3Files       int                     `json:"v3_files"`
-	UpgradedFiles int                     `json:"upgraded_files"`
-	FailedFiles   int                     `json:"failed_files"`
-	TotalOldSize  int64                   `json:"total_old_size_bytes"`
-	TotalNewSize  int64                   `json:"total_new_size_bytes"`
-	SpaceSaved    int64                   `json:"space_saved_bytes"`
-	FailedDetails []MigrateV2V3FailedInfo `json:"failed_details,omitempty"`
+// MigrateV2FmtReport holds the complete format migration report
+type MigrateV2FmtReport struct {
+	Instance        string                   `json:"instance"`
+	StartedAt       string                   `json:"started_at"`
+	CompletedAt     string                   `json:"completed_at"`
+	Duration        string                   `json:"duration"`
+	DryRun          bool                     `json:"dry_run"`
+	TotalFiles      int                      `json:"total_files"`
+	OldFormatFiles  int                      `json:"old_format_files"`
+	NewFormatFiles  int                      `json:"new_format_files"`
+	UpgradedFiles   int                      `json:"upgraded_files"`
+	FailedFiles     int                      `json:"failed_files"`
+	TotalOldSize    int64                    `json:"total_old_size_bytes"`
+	TotalNewSize    int64                    `json:"total_new_size_bytes"`
+	SpaceSaved      int64                    `json:"space_saved_bytes"`
+	FailedDetails   []MigrateV2FmtFailedInfo `json:"failed_details,omitempty"`
 }
 
-// MigrateV2V3FailedInfo contains info about a failed migration
-type MigrateV2V3FailedInfo struct {
+// MigrateV2FmtFailedInfo contains info about a failed migration
+type MigrateV2FmtFailedInfo struct {
 	Path  string `json:"path"`
 	Error string `json:"error"`
 }
 
-func runMigrateV2ToV3(_ *cobra.Command, _ []string) {
+func runMigrateV2Format(_ *cobra.Command, _ []string) {
 	fs := filesystem.New()
 	store, err := buildmeta.New(fs)
 	if err != nil {
@@ -97,9 +102,9 @@ func runMigrateV2ToV3(_ *cobra.Command, _ []string) {
 		os.Exit(1)
 	}
 
-	instance, err := store.GetInstance(migrateV2V3InstanceName)
+	instance, err := store.GetInstance(migrateV2FmtInstanceName)
 	if err != nil {
-		fmt.Printf("❌ Error: Instance '%s' not found: %v\n", migrateV2V3InstanceName, err)
+		fmt.Printf("❌ Error: Instance '%s' not found: %v\n", migrateV2FmtInstanceName, err)
 		os.Exit(1)
 	}
 
@@ -110,10 +115,10 @@ func runMigrateV2ToV3(_ *cobra.Command, _ []string) {
 	}
 
 	startTime := time.Now()
-	report := &MigrateV2V3Report{
-		Instance:  migrateV2V3InstanceName,
+	report := &MigrateV2FmtReport{
+		Instance:  migrateV2FmtInstanceName,
 		StartedAt: startTime.Format(time.RFC3339),
-		DryRun:    migrateV2V3DryRun,
+		DryRun:    migrateV2FmtDryRun,
 	}
 
 	ctx := context.Background()
@@ -121,9 +126,9 @@ func runMigrateV2ToV3(_ *cobra.Command, _ []string) {
 
 	// Stop instance if not dry-run
 	wasRunning := false
-	if !migrateV2V3DryRun {
-		fmt.Printf("🛑 Stopping instance '%s'...\n", migrateV2V3InstanceName)
-		if err := runner.StopInstance(ctx, migrateV2V3InstanceName); err != nil {
+	if !migrateV2FmtDryRun {
+		fmt.Printf("🛑 Stopping instance '%s'...\n", migrateV2FmtInstanceName)
+		if err := runner.StopInstance(ctx, migrateV2FmtInstanceName); err != nil {
 			fmt.Printf("   (Instance was not running)\n")
 		} else {
 			wasRunning = true
@@ -155,8 +160,8 @@ func runMigrateV2ToV3(_ *cobra.Command, _ []string) {
 		os.Exit(0)
 	}
 
-	// Run migration
-	runV2ToV3Migration(hydFiles, report)
+	// Run format migration
+	runV2FormatMigration(hydFiles, report)
 
 	// Calculate final stats
 	report.CompletedAt = time.Now().Format(time.RFC3339)
@@ -164,10 +169,10 @@ func runMigrateV2ToV3(_ *cobra.Command, _ []string) {
 	report.SpaceSaved = report.TotalOldSize - report.TotalNewSize
 
 	// Restart instance if requested
-	if migrateV2V3Restart && !migrateV2V3DryRun && wasRunning {
+	if migrateV2FmtRestart && !migrateV2FmtDryRun && wasRunning {
 		fmt.Println()
-		fmt.Printf("🚀 Restarting instance '%s'...\n", migrateV2V3InstanceName)
-		if err := runner.StartInstance(ctx, migrateV2V3InstanceName); err != nil {
+		fmt.Printf("🚀 Restarting instance '%s'...\n", migrateV2FmtInstanceName)
+		if err := runner.StartInstance(ctx, migrateV2FmtInstanceName); err != nil {
 			fmt.Printf("⚠️  Warning: Could not restart instance: %v\n", err)
 		} else {
 			fmt.Printf("   Instance started\n")
@@ -175,7 +180,7 @@ func runMigrateV2ToV3(_ *cobra.Command, _ []string) {
 	}
 
 	// Output
-	if migrateV2V3JSONOutput {
+	if migrateV2FmtJSONOutput {
 		data, err := json.MarshalIndent(report, "", "  ")
 		if err != nil {
 			fmt.Printf("❌ Error encoding JSON: %v\n", err)
@@ -183,13 +188,13 @@ func runMigrateV2ToV3(_ *cobra.Command, _ []string) {
 		}
 		fmt.Println(string(data))
 	} else {
-		outputV2ToV3Table(report)
+		outputV2FmtTable(report)
 	}
 }
 
-func runV2ToV3Migration(hydFiles []string, report *MigrateV2V3Report) {
+func runV2FormatMigration(hydFiles []string, report *MigrateV2FmtReport) {
 	bar := progressbar.NewOptions(len(hydFiles),
-		progressbar.OptionSetDescription("🔄 Migrating V2 → V3"),
+		progressbar.OptionSetDescription("🔄 Upgrading file headers"),
 		progressbar.OptionSetWidth(40),
 		progressbar.OptionShowCount(),
 		progressbar.OptionShowIts(),
@@ -207,39 +212,39 @@ func runV2ToV3Migration(hydFiles []string, report *MigrateV2V3Report) {
 	)
 
 	var (
-		resultsMu     sync.Mutex
-		wg            sync.WaitGroup
-		workCh        = make(chan string, len(hydFiles))
-		failed        []MigrateV2V3FailedInfo
-		v2Count       int64
-		v3Count       int64
-		upgradedCount int64
-		failedCount   int64
-		totalOldSize  int64
-		totalNewSize  int64
+		resultsMu      sync.Mutex
+		wg             sync.WaitGroup
+		workCh         = make(chan string, len(hydFiles))
+		failed         []MigrateV2FmtFailedInfo
+		oldFmtCount    int64
+		newFmtCount    int64
+		upgradedCount  int64
+		failedCount    int64
+		totalOldSize   int64
+		totalNewSize   int64
 	)
 
-	for i := 0; i < migrateV2V3Parallel; i++ {
+	for i := 0; i < migrateV2FmtParallel; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			for filePath := range workCh {
-				oldSize, newSize, wasV2, err := migrateFileV2ToV3(filePath)
+				oldSize, newSize, needsUpgrade, err := migrateFileV2Format(filePath)
 
 				resultsMu.Lock()
 				if err != nil {
 					atomic.AddInt64(&failedCount, 1)
-					failed = append(failed, MigrateV2V3FailedInfo{
+					failed = append(failed, MigrateV2FmtFailedInfo{
 						Path:  filePath,
 						Error: err.Error(),
 					})
-				} else if wasV2 {
-					atomic.AddInt64(&v2Count, 1)
+				} else if needsUpgrade {
+					atomic.AddInt64(&oldFmtCount, 1)
 					atomic.AddInt64(&upgradedCount, 1)
 					atomic.AddInt64(&totalOldSize, oldSize)
 					atomic.AddInt64(&totalNewSize, newSize)
 				} else {
-					atomic.AddInt64(&v3Count, 1)
+					atomic.AddInt64(&newFmtCount, 1)
 				}
 				resultsMu.Unlock()
 
@@ -256,8 +261,8 @@ func runV2ToV3Migration(hydFiles []string, report *MigrateV2V3Report) {
 	wg.Wait()
 	_ = bar.Finish()
 
-	report.V2Files = int(v2Count)
-	report.V3Files = int(v3Count)
+	report.OldFormatFiles = int(oldFmtCount)
+	report.NewFormatFiles = int(newFmtCount)
 	report.UpgradedFiles = int(upgradedCount)
 	report.FailedFiles = int(failedCount)
 	report.TotalOldSize = totalOldSize
@@ -265,9 +270,9 @@ func runV2ToV3Migration(hydFiles []string, report *MigrateV2V3Report) {
 	report.FailedDetails = failed
 }
 
-// migrateFileV2ToV3 migrates a single V2 file to V3 format.
-// Returns (oldSize, newSize, wasV2, error).
-func migrateFileV2ToV3(filePath string) (int64, int64, bool, error) {
+// migrateFileV2Format upgrades a single .hyd file to embed swamp name in header.
+// Returns (oldSize, newSize, needsUpgrade, error).
+func migrateFileV2Format(filePath string) (int64, int64, bool, error) {
 	reader, err := v2.NewFileReader(filePath)
 	if err != nil {
 		return 0, 0, false, err
@@ -275,14 +280,14 @@ func migrateFileV2ToV3(filePath string) (int64, int64, bool, error) {
 
 	header := reader.GetHeader()
 
-	// Already V3 — skip
+	// Already has embedded name — skip
 	if header.IsV3() {
 		reader.Close()
 		return 0, 0, false, nil
 	}
 
-	// Dry-run: just report that it's V2
-	if migrateV2V3DryRun {
+	// Dry-run: just report that it needs upgrade
+	if migrateV2FmtDryRun {
 		reader.Close()
 		info, _ := os.Stat(filePath)
 		size := int64(0)
@@ -309,11 +314,11 @@ func migrateFileV2ToV3(filePath string) (int64, int64, bool, error) {
 	reader.Close()
 
 	if swampName == "" {
-		return oldSize, 0, true, fmt.Errorf("no swamp name found in V2 file")
+		return oldSize, 0, true, fmt.Errorf("no swamp name found in file")
 	}
 
-	// Write to temp file as V3
-	tempPath := filePath + ".v3migrate"
+	// Write to temp file with embedded name in header
+	tempPath := filePath + ".fmtmigrate"
 	writer, err := v2.NewFileWriterWithName(tempPath, v2.DefaultMaxBlockSize, swampName)
 	if err != nil {
 		return oldSize, 0, true, err
@@ -351,41 +356,41 @@ func migrateFileV2ToV3(filePath string) (int64, int64, bool, error) {
 	return oldSize, newInfo.Size(), true, nil
 }
 
-func outputV2ToV3Table(report *MigrateV2V3Report) {
+func outputV2FmtTable(report *MigrateV2FmtReport) {
 	fmt.Println()
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	if report.DryRun {
-		fmt.Printf("  💠 V2 → V3 Migration Analysis (DRY-RUN) - %s\n", report.Instance)
+		fmt.Printf("  💠 V2 Format Migration Analysis (DRY-RUN) - %s\n", report.Instance)
 	} else {
-		fmt.Printf("  💠 V2 → V3 Migration Report - %s\n", report.Instance)
+		fmt.Printf("  💠 V2 Format Migration Report - %s\n", report.Instance)
 	}
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	fmt.Println()
 
 	fmt.Println("📊 SUMMARY")
 	fmt.Println(strings.Repeat("─", 60))
-	printV2V3Row("Total .hyd Files", fmt.Sprintf("%d", report.TotalFiles))
-	printV2V3Row("Already V3", fmt.Sprintf("%d", report.V3Files))
+	printV2FmtRow("Total .hyd Files", fmt.Sprintf("%d", report.TotalFiles))
+	printV2FmtRow("Already Upgraded", fmt.Sprintf("%d", report.NewFormatFiles))
 	if report.DryRun {
-		printV2V3Row("Need Migration (V2)", fmt.Sprintf("%d", report.V2Files))
+		printV2FmtRow("Need Upgrade", fmt.Sprintf("%d", report.OldFormatFiles))
 	} else {
-		printV2V3Row("Migrated (V2 → V3)", fmt.Sprintf("✅ %d", report.UpgradedFiles))
+		printV2FmtRow("Upgraded", fmt.Sprintf("✅ %d", report.UpgradedFiles))
 	}
 	if report.FailedFiles > 0 {
-		printV2V3Row("Failed", fmt.Sprintf("❌ %d", report.FailedFiles))
+		printV2FmtRow("Failed", fmt.Sprintf("❌ %d", report.FailedFiles))
 	}
-	printV2V3Row("Duration", report.Duration)
+	printV2FmtRow("Duration", report.Duration)
 	fmt.Println()
 
 	if report.UpgradedFiles > 0 && !report.DryRun {
 		fmt.Println("💾 SPACE ANALYSIS")
 		fmt.Println(strings.Repeat("─", 60))
-		printV2V3Row("Size Before", formatBytes(report.TotalOldSize))
-		printV2V3Row("Size After", formatBytes(report.TotalNewSize))
+		printV2FmtRow("Size Before", formatBytes(report.TotalOldSize))
+		printV2FmtRow("Size After", formatBytes(report.TotalNewSize))
 		if report.SpaceSaved > 0 {
-			printV2V3Row("Space Saved", fmt.Sprintf("✅ %s", formatBytes(report.SpaceSaved)))
+			printV2FmtRow("Space Saved", fmt.Sprintf("✅ %s", formatBytes(report.SpaceSaved)))
 		} else if report.SpaceSaved < 0 {
-			printV2V3Row("Size Increase", formatBytes(-report.SpaceSaved))
+			printV2FmtRow("Size Increase", formatBytes(-report.SpaceSaved))
 		}
 		fmt.Println()
 	}
@@ -395,7 +400,7 @@ func outputV2ToV3Table(report *MigrateV2V3Report) {
 		fmt.Println("❌ FAILED FILES")
 		fmt.Println(strings.Repeat("─", 70))
 		for _, f := range report.FailedDetails {
-			fmt.Printf("  • %s\n", truncateV2V3Path(f.Path, 50))
+			fmt.Printf("  • %s\n", truncateV2FmtPath(f.Path, 50))
 			fmt.Printf("    Error: %s\n", f.Error)
 		}
 		fmt.Println()
@@ -406,27 +411,27 @@ func outputV2ToV3Table(report *MigrateV2V3Report) {
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	fmt.Println()
 
-	if report.DryRun && report.V2Files > 0 {
+	if report.DryRun && report.OldFormatFiles > 0 {
 		fmt.Println("💡 RECOMMENDATION")
 		fmt.Println(strings.Repeat("─", 60))
-		fmt.Printf("   %d file(s) need migrating from V2 to V3.\n", report.V2Files)
-		fmt.Printf("   Run without --dry-run to perform the migration:\n")
-		fmt.Printf("   hydraidectl migrate v2-to-v3 --instance %s --parallel %d\n", report.Instance, migrateV2V3Parallel)
+		fmt.Printf("   %d file(s) need format upgrade.\n", report.OldFormatFiles)
+		fmt.Printf("   Run without --dry-run to perform the upgrade:\n")
+		fmt.Printf("   hydraidectl migrate v2-migrate-format --instance %s --parallel %d\n", report.Instance, migrateV2FmtParallel)
 		fmt.Println()
 	}
 
-	if !report.DryRun && !migrateV2V3Restart {
+	if !report.DryRun && !migrateV2FmtRestart {
 		fmt.Println("💡 The instance was stopped for the migration.")
 		fmt.Printf("   To start it: hydraidectl start --instance %s\n", report.Instance)
 		fmt.Println()
 	}
 }
 
-func printV2V3Row(label, value string) {
+func printV2FmtRow(label, value string) {
 	fmt.Printf("  %-28s │ %s\n", label, value)
 }
 
-func truncateV2V3Path(path string, maxLen int) string {
+func truncateV2FmtPath(path string, maxLen int) string {
 	if idx := strings.Index(path, "/data/"); idx >= 0 {
 		path = path[idx+6:]
 	}

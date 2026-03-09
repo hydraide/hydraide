@@ -27,7 +27,7 @@ V1 (legacy):  /data/sanctuary/realm/ab/swampname/   ← folder with many chunk f
 V2:           /data/sanctuary/realm/ab/swampname.hyd ← one file
 ```
 
-The `.hyd` file has a fixed structure. Starting with **V3** (server 3.3.0+), the swamp name is stored as plain text immediately after the header, enabling fast metadata scanning without decompressing any blocks:
+The `.hyd` file has a fixed structure. Starting with server 3.3.0+, the swamp name is stored as plain text immediately after the header, enabling fast metadata scanning without decompressing any blocks:
 
 ```
 V2 format (legacy):
@@ -40,7 +40,7 @@ V2 format (legacy):
 │                     COMPRESSED BLOCKS ...                     │
 └─────────────────────────────────────────────────────────────┘
 
-V3 format (current):
+V2 optimized format (current, with embedded swamp name):
 ┌─────────────────────────────────────────────────────────────┐
 │                    FILE HEADER (64 bytes)                    │
 │  Magic: "HYDR" (4B) | Version: 3 (2B) | Flags (2B)          │
@@ -54,7 +54,7 @@ V3 format (current):
 └─────────────────────────────────────────────────────────────┘
 ```
 
-The V3 format stores the swamp name (e.g., `users/profiles/alice`) in plain text right after the 64-byte header. This allows tools like `hydraidectl explore` to read only ~100 bytes per file to discover swamp names, instead of decompressing the first block. Existing V2 files are automatically upgraded to V3 during compaction. The V3 reader is fully backward-compatible with V2 files.
+The optimized format stores the swamp name (e.g., `users/profiles/alice`) in plain text right after the 64-byte header. This allows tools like `hydraidectl explore` to read only ~100 bytes per file to discover swamp names, instead of decompressing the first block. Older files are automatically upgraded during compaction. The reader is fully backward-compatible with files that don't have the embedded name.
 
 #### Entry binary format (variable size)
 
@@ -70,11 +70,11 @@ Data       (M bytes) – GOB-encoded Treasure bytes (empty for DELETE)
 
 Minimum entry size: **7 bytes** (1+2+4 with empty key and empty data — key cannot actually be empty).
 
-#### Metadata entry (V2 legacy)
+#### Metadata entry (legacy fallback)
 
-In V2 files, a special `METADATA` entry is written as the first entry in the first block, with key `__swamp_meta__` and the swamp name as data. This enables tools to reverse-map hashed folder names to human-readable swamp names.
+In older files, a special `METADATA` entry is written as the first entry in the first block, with key `__swamp_meta__` and the swamp name as data. This enables tools to reverse-map hashed folder names to human-readable swamp names.
 
-**In V3 files, this entry is no longer needed** because the swamp name is stored as plain text after the header. V2 files with metadata entries are still fully supported — the name is read from the compressed block as a fallback. During compaction, V2 files are automatically upgraded to V3 format.
+**In the optimized format, this entry is no longer needed** because the swamp name is stored as plain text after the header. Older files with metadata entries are still fully supported — the name is read from the compressed block as a fallback. During compaction, files are automatically upgraded to the optimized format.
 
 ---
 
@@ -259,14 +259,14 @@ fragmentation = (total_entry_count - live_entry_count) / total_entry_count
 2. Calculate fragmentation → skip if below threshold
 3. LoadIndex() → build map of only live entries (key → latest data)
 4. Write all live entries to a NEW temp file: swampname.hyd.compact
-   └── V3 header with swamp name in plain text (auto-upgrade from V2)
+   └── Optimized header with swamp name in plain text (auto-upgrade)
    └── Each live key written as OpInsert
 5. writer.Close() on temp file → header finalized, file synced
 6. os.Rename(swampname.hyd.compact, swampname.hyd) → atomic replacement
 7. Old file is gone; new compact file takes its place
 ```
 
-**Note:** Compaction always outputs V3 format, even when the input is V2. This means V2 files are automatically upgraded to V3 over time as they get compacted.
+**Note:** Compaction always outputs the optimized format with embedded swamp name in the header. This means older files are automatically upgraded over time as they get compacted.
 
 Example:
 ```

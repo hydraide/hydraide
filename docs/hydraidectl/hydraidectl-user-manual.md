@@ -36,7 +36,7 @@ Although `hydraidectl` is stable and production-tested, new features are under d
 * [`explore` – Interactive swamp hierarchy explorer](#explore--interactive-swamp-hierarchy-explorer)
 * [`stats` – Show detailed swamp statistics and health report](#stats--show-detailed-swamp-statistics-and-health-report)
 * [`compact` – Compact swamp files](#compact--compact-swamp-files)
-* [`migrate v2-to-v3` – Upgrade V2 files to V3 format](#migrate-v2-to-v3--upgrade-v2-files-to-v3-format)
+* [`migrate v2-migrate-format` – Upgrade .hyd file headers for faster scanning](#migrate-v2-migrate-format--upgrade-hyd-file-headers-for-faster-scanning)
 * [`cleanup` – Remove old storage files](#cleanup--remove-old-storage-files)
 * [`version` – Display CLI and optional instance metadata](#version--display-cli-and-optional-instance-metadata)
 
@@ -651,7 +651,7 @@ hydraidectl explore [--instance <name> | --data-path <path>]
 
 **How It Works:**
 
-On launch, the explorer scans all `.hyd` files in the data directory. For V3 format files, only ~100 bytes per file are read (the 64-byte header + swamp name), making the scan extremely fast even for large datasets.
+On launch, the explorer scans all `.hyd` files in the data directory. For files with embedded swamp names, only ~100 bytes per file are read (the 64-byte header + swamp name), making the scan extremely fast even for large datasets.
 
 The swamp names are parsed into a three-level hierarchy: **Sanctuary / Realm / Swamp** (e.g., `users/profiles/alice`). You can then browse this hierarchy interactively.
 
@@ -1192,9 +1192,9 @@ Fragmentation occurs when records are updated or deleted. Dead entries remain in
 
 ## `compact` – Compact Swamp Files
 
-Compacts all V2/V3 swamp files in a HydrAIDE instance to remove dead entries and reclaim disk space. The instance is automatically stopped during compaction.
+Compacts all V2 swamp files in a HydrAIDE instance to remove dead entries and reclaim disk space. The instance is automatically stopped during compaction.
 
-**Compaction also automatically upgrades V2 files to V3 format** (swamp name stored in plain text after the header for fast scanning).
+**Compaction also automatically upgrades file headers** (embeds the swamp name in plain text after the header for fast scanning).
 
 **Flags**
 | Flag | Description | Default |
@@ -1225,11 +1225,11 @@ hydraidectl compact --instance prod --parallel 8 --restart
 **The compaction process:**
 1. Stops the instance (if running)
 2. Scans all swamp files for fragmentation
-3. Compacts swamps above the threshold (outputs V3 format)
+3. Compacts swamps above the threshold (outputs optimized format with embedded name)
 4. Reports space savings
 5. Optionally restarts the instance (`--restart`)
 
-**V2 to V3 format upgrade:** Compaction always outputs V3 format files. This means running `compact` on an instance will automatically upgrade all compacted V2 files to V3. V3 stores the swamp name in plain text after the 64-byte header, which enables the `explore` command to scan metadata at ~100 bytes per file without decompressing any blocks. No manual migration step is needed — the upgrade is seamless and backward-compatible.
+**File header upgrade:** Compaction always outputs files with the swamp name embedded in the header. This means running `compact` on an instance will automatically upgrade all compacted file headers. The embedded name (stored in plain text after the 64-byte header) enables the `explore` command to scan metadata at ~100 bytes per file without decompressing any blocks. No manual migration step is needed — the upgrade is seamless and backward-compatible.
 
 ---
 
@@ -1326,11 +1326,11 @@ hydraidectl start --instance prod
 
 ---
 
-## `migrate v2-to-v3` – Upgrade V2 Files to V3 Format
+## `migrate v2-migrate-format` – Upgrade .hyd File Headers for Faster Scanning
 
-Upgrades all V2-format `.hyd` swamp files to V3 format. V3 stores the swamp name in the file header, enabling **~100x faster scanning** for tools like `explore` and `stats`. The instance is automatically stopped during the upgrade.
+Rewrites `.hyd` swamp file headers to embed the swamp name directly after the 64-byte file header. This enables **~100x faster scanning** for tools like `explore` and `stats`, because the swamp name can be read in ~100 bytes without decompressing any data blocks.
 
-Already-V3 files are skipped automatically.
+This is a V2 engine internal format optimization — no engine version change is involved. The server reads both old and new format files transparently. Files that already have the embedded name are skipped automatically.
 
 | Flag | Description | Default |
 |------|-------------|---------|
@@ -1341,41 +1341,41 @@ Already-V3 files are skipped automatically.
 | `--json, -j` | Output as JSON | `false` |
 
 ```bash
-# Check how many V2 files need upgrading
-hydraidectl migrate v2-to-v3 --instance prod --dry-run
+# Check how many files need upgrading
+hydraidectl migrate v2-migrate-format --instance prod --dry-run
 
-# Upgrade all V2 files to V3
-hydraidectl migrate v2-to-v3 --instance prod --restart
+# Upgrade all files
+hydraidectl migrate v2-migrate-format --instance prod --restart
 
 # Upgrade with more workers for faster processing
-hydraidectl migrate v2-to-v3 --instance prod --parallel 8 --restart
+hydraidectl migrate v2-migrate-format --instance prod --parallel 8 --restart
 ```
 
 **The upgrade process:**
 
 1. Stops the instance (if running)
-2. Scans all `.hyd` files and identifies V2-format files
-3. Rewrites each V2 file as V3 (swamp name stored in header)
+2. Scans all `.hyd` files and identifies files without embedded swamp name
+3. Rewrites each file with the swamp name stored in the header
 4. Reports upgrade results (files upgraded, space changes)
 5. Optionally restarts the instance
 
-> **Note:** Compaction (`hydraidectl compact`) also automatically upgrades V2 files to V3 during the compaction process. The `migrate v2-to-v3` command is useful when you want to upgrade all files without waiting for compaction thresholds.
+> **Note:** Compaction (`hydraidectl compact`) also automatically upgrades file headers during the compaction process. The `migrate v2-migrate-format` command is useful when you want to upgrade all files without waiting for compaction thresholds.
 
 ---
 
-## V3 File Format Upgrade
+## V2 File Header Optimization
 
-Starting with server **v3.3.0** and hydraidectl **v2.4.0**, HydrAIDE uses the **V3** `.hyd` file format. V3 stores the swamp name as plain text immediately after the 64-byte file header, enabling fast metadata scanning (~100 bytes per file) without decompressing any blocks.
+Starting with server **v3.3.0** and hydraidectl **v2.4.0**, HydrAIDE embeds the swamp name as plain text immediately after the 64-byte file header. This enables fast metadata scanning (~100 bytes per file) without decompressing any blocks.
 
-The upgrade from V2 to V3 happens through multiple paths:
+The header upgrade happens through multiple paths:
 
-- **New swamp files** are created in V3 format immediately.
-- **Existing V2 files** are upgraded to V3 during compaction (automatic or manual).
+- **New swamp files** are created with embedded names immediately.
+- **Existing files** are upgraded during compaction (automatic or manual).
 - **Dedicated upgrade command** for immediate, full-instance conversion:
 
 ```bash
-# Upgrade all V2 files to V3 in one step
-hydraidectl migrate v2-to-v3 --instance prod --restart
+# Upgrade all file headers in one step
+hydraidectl migrate v2-migrate-format --instance prod --restart
 ```
 
-V3 is fully backward-compatible — the server and hydraidectl can read both V2 and V3 files without any configuration changes.
+The upgrade is fully backward-compatible — the server and hydraidectl can read both old and new format files without any configuration changes.

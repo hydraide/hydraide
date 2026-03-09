@@ -307,28 +307,28 @@ The migration temporarily needs extra disk space. Solutions:
 
 ---
 
-## V2 to V3 Format Upgrade (server v3.3.0+)
+## V2 File Header Format Upgrade (server v3.3.0+)
 
-Starting with server v3.3.0, HydrAIDE uses the **V3** `.hyd` file format. V3 stores the swamp name as plain text after the file header, which enables fast metadata scanning for the `hydraidectl explore` command.
+Starting with server v3.3.0, HydrAIDE embeds the swamp name directly into the `.hyd` file header. This enables fast metadata scanning (~100 bytes per file) for the `hydraidectl explore` command without decompressing any data blocks.
 
 The upgrade happens through multiple paths:
 
-- New files are created in V3 format automatically.
-- Existing V2 files are upgraded during compaction.
+- New files are created with embedded names automatically.
+- Existing files are upgraded during compaction.
 - **Dedicated upgrade command** for immediate, full-instance conversion:
 
 ```bash
-# Check how many V2 files need upgrading
-hydraidectl migrate v2-to-v3 --instance prod --dry-run
+# Check how many files need upgrading
+hydraidectl migrate v2-migrate-format --instance prod --dry-run
 
-# Upgrade all V2 files to V3
-hydraidectl migrate v2-to-v3 --instance prod --restart
+# Upgrade all files
+hydraidectl migrate v2-migrate-format --instance prod --restart
 
 # Upgrade with more workers for faster processing
-hydraidectl migrate v2-to-v3 --instance prod --parallel 8 --restart
+hydraidectl migrate v2-migrate-format --instance prod --parallel 8 --restart
 ```
 
-V3 is fully backward-compatible with V2 — no data is lost and no rollback is needed.
+The upgrade is fully backward-compatible — no data is lost and the server reads both old and new format files transparently.
 
 ---
 

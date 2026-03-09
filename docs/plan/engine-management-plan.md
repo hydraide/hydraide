@@ -3,7 +3,7 @@
 ## Összefoglaló
 
 Ez a terv leírja a HydrAIDE storage engine kezelésének teljes körű implementációját, beleértve:
-- Globális engine beállítás (V1/V2/V3...)
+- Globális engine beállítás (V1/V2)
 - Teljes mentés és visszaállítás
 - Biztonságos migráció
 - Méret lekérdezés
