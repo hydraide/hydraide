@@ -976,6 +976,72 @@ filters := hydraidego.FilterOR(
 
 ---
 
+##### Vector Similarity Search (FilterVector)
+
+HydrAIDE supports **server-side cosine similarity filtering** for embedding vectors stored in MessagePack-encoded BytesVal fields. This enables semantic search directly inside HydrAIDE — no external vector database needed.
+
+Vectors are stored as `[]float32` fields in your struct and must be **L2-normalized** (unit length) before saving. Use `NormalizeVector()` to normalize:
+
+```go
+type DomainPayload struct {
+    Category  string    `msgpack:"Category"`
+    Language  string    `msgpack:"Language"`
+    Embedding []float32 `msgpack:"Embedding"` // 384-dim normalized vector
+}
+
+// Before saving: normalize the embedding vector
+payload.Embedding = hydraidego.NormalizeVector(rawEmbedding)
+```
+
+Use `FilterVector` to find Treasures whose vector field has cosine similarity >= a threshold with your query vector:
+
+```go
+// Generate and normalize the query vector (e.g. from an embedding model)
+queryVector := hydraidego.NormalizeVector(generateEmbedding("wellness hotel with pool"))
+
+// Combine pre-filters with vector similarity search
+filters := hydraidego.FilterAND(
+    hydraidego.FilterBytesFieldString(hydraidego.Equal, "Category", "business"),
+    hydraidego.FilterBytesFieldString(hydraidego.Equal, "Language", "hu"),
+    hydraidego.FilterVector("Embedding", queryVector, 0.70), // min similarity 0.70
+)
+
+err := h.CatalogReadManyStream(ctx, swampName, &hydraidego.Index{
+    IndexType:  hydraidego.IndexKey,
+    IndexOrder: hydraidego.IndexOrderAsc,
+}, filters, &DomainPayload{}, func(model any) error {
+    domain := model.(*DomainPayload)
+    fmt.Printf("Match: %s\n", domain.Category)
+    return nil
+})
+```
+
+**How it works:**
+1. The server decodes the MessagePack BytesVal and extracts the `[]float32` vector at `BytesFieldPath`
+2. Computes the dot product between the stored vector and the query vector (dot product = cosine similarity for normalized vectors)
+3. Returns true if the similarity score >= `MinSimilarity`
+
+**Key points:**
+- Both stored vectors and query vectors **must be L2-normalized** — use `NormalizeVector()` before saving and before searching
+- `FilterVector` works with any dimension (384, 768, etc.) — stored and query vectors must have the same dimension
+- Combinable with any other filter in `FilterAND` / `FilterOR` — pre-filter by category, language, etc. to narrow the search space before vector comparison
+- Works in both **catalog mode** and **profile mode** (with `.ForKey()`)
+- Typical similarity thresholds: `0.70` (similar), `0.80` (very similar), `0.90` (near-identical)
+
+**Performance:** Dot product on 384-dim vectors takes ~150ns. Scanning 100K pre-filtered vectors completes in ~15ms.
+
+**Utility functions:**
+
+```go
+// Normalize a vector to unit length (required before storing and searching)
+normalized := hydraidego.NormalizeVector(rawVector)
+
+// Compute cosine similarity between two vectors (for client-side validation/testing)
+score := hydraidego.CosineSimilarity(vectorA, vectorB)
+```
+
+---
+
 ##### Profile Filtering (ForKey / ProfileReadWithFilter)
 
 HydrAIDE's filter system extends to **profile reads**. In profile mode, each struct field is stored as a separate Treasure keyed by field name. Filters use the `ForKey()` method to target specific fields:
@@ -1019,6 +1085,9 @@ hydraidego.FilterBytesFieldString(hydraidego.HasKey, "Settings", "email").ForKey
 
 // Phrase filters
 hydraidego.FilterPhrase("WordIndex", "hello", "world").ForKey("Content")
+
+// Vector similarity filters
+hydraidego.FilterVector("Embedding", queryVec, 0.70).ForKey("MainProfile")
 ```
 
 ---

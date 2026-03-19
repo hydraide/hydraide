@@ -2235,6 +2235,7 @@ message FilterGroup {
   repeated TreasureFilter Filters = 2;
   repeated FilterGroup SubGroups = 3;
   repeated PhraseFilter PhraseFilters = 4;
+  repeated VectorFilter VectorFilters = 5;
 }
 
 // PhraseFilter checks if specified words appear at consecutive positions
@@ -2261,6 +2262,53 @@ message PhraseFilter {
   optional string TreasureKey = 4;
 }
 
+// VectorFilter performs cosine similarity matching against a float32 vector
+// stored in the Treasure's MessagePack-encoded BytesVal.
+//
+// The filter extracts a []float32 field from BytesVal at the given BytesFieldPath,
+// computes the dot product with the QueryVector (both must be pre-normalized to unit length),
+// and returns true if the similarity score meets or exceeds MinSimilarity.
+//
+// Pre-normalization requirement:
+//   Both the stored vectors and the QueryVector MUST be L2-normalized (unit length).
+//   When both vectors are normalized, the dot product equals cosine similarity,
+//   eliminating expensive sqrt operations during search.
+//
+// The filter returns false (no match) when:
+//   - BytesVal is nil or not MessagePack-encoded
+//   - The field at BytesFieldPath doesn't exist or is not a numeric array
+//   - The stored vector and QueryVector have different dimensions
+//   - The computed similarity is below MinSimilarity
+//
+// Example: Find domains with embedding similarity >= 0.70
+//   VectorFilter{
+//     BytesFieldPath: "Embedding",
+//     QueryVector: [0.012, -0.034, 0.056, ...],  // 384-dim normalized
+//     MinSimilarity: 0.70
+//   }
+//
+// Performance: With normalized vectors, similarity computation is a single dot product
+// (~150ns for 384 dimensions). Combined with pre-filtering (e.g. category + language),
+// scanning 100K+ vectors completes in under 15ms.
+message VectorFilter {
+  // BytesFieldPath is a dot-separated path to the []float32 vector field
+  // within the MessagePack-encoded BytesVal.
+  // Example: "Embedding" or "Metadata.Vector"
+  string BytesFieldPath = 1;
+
+  // QueryVector is the search vector to compare against.
+  // Must be L2-normalized and have the same dimensions as the stored vectors.
+  repeated float QueryVector = 2;
+
+  // MinSimilarity is the minimum cosine similarity threshold (0.0 – 1.0).
+  // Only Treasures with similarity >= MinSimilarity will match.
+  // Typical values: 0.70 (similar), 0.80 (very similar), 0.90 (near-identical).
+  float MinSimilarity = 3;
+
+  // TreasureKey is used in profile-mode filtering to specify WHICH Treasure
+  // this vector filter should be evaluated against. See TreasureFilter.TreasureKey.
+  optional string TreasureKey = 4;
+}
 
 // --- STREAMING READ REQUESTS/RESPONSES ---
 

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"path"
 	"reflect"
 	"slices"
@@ -509,6 +510,7 @@ type FilterGroup struct {
 	filters       []*Filter
 	subGroups     []*FilterGroup
 	phraseFilters []*PhraseFilter
+	vectorFilters []*VectorFilter
 }
 
 // isFilterItem marks FilterGroup as a valid FilterItem.
@@ -556,8 +558,115 @@ func FilterNotPhrase(bytesFieldPath string, words ...string) *PhraseFilter {
 	return &PhraseFilter{bytesFieldPath: bytesFieldPath, words: words, negate: true}
 }
 
+// VectorFilter performs cosine similarity matching against a float32 vector
+// stored in the Treasure's MessagePack-encoded BytesVal.
+//
+// The filter extracts a []float32 field from BytesVal at the given BytesFieldPath,
+// computes the dot product with the QueryVector (both must be pre-normalized to unit length),
+// and returns true if the similarity score meets or exceeds MinSimilarity.
+//
+// Both the stored vectors and QueryVector MUST be L2-normalized (unit length).
+// Use NormalizeVector() before storing and before searching.
+//
+// Example:
+//
+//	queryVec := hydraidego.NormalizeVector(rawQueryVector)
+//	hydraidego.FilterVector("Embedding", queryVec, 0.70)
+type VectorFilter struct {
+	bytesFieldPath string
+	queryVector    []float32
+	minSimilarity  float32
+	treasureKey    *string // Profile mode: which Treasure key this filter targets
+}
+
+// isFilterItem marks VectorFilter as a valid FilterItem.
+func (vf *VectorFilter) isFilterItem() {}
+
+// ForKey sets the TreasureKey for profile-mode vector filtering.
+// In profile mode, each struct field is stored as a separate Treasure keyed by field name.
+// This method specifies which Treasure the vector filter should evaluate against.
+//
+// Example:
+//
+//	hydraidego.FilterVector("Embedding", queryVec, 0.70).ForKey("MainProfile")
+func (vf *VectorFilter) ForKey(key string) *VectorFilter {
+	vf.treasureKey = &key
+	return vf
+}
+
+// FilterVector creates a VectorFilter that matches Treasures whose vector field
+// has cosine similarity >= minSimilarity with the given query vector.
+//
+// Parameters:
+//   - bytesFieldPath: dot-separated path to the []float32 field in BytesVal (e.g. "Embedding")
+//   - queryVector: the search vector (must be L2-normalized)
+//   - minSimilarity: minimum cosine similarity threshold (0.0 – 1.0)
+//
+// Example:
+//
+//	hydraidego.FilterAND(
+//	    hydraidego.FilterBytesFieldString(hydraidego.Equal, "Category", "business"),
+//	    hydraidego.FilterBytesFieldString(hydraidego.Equal, "Language", "hu"),
+//	    hydraidego.FilterVector("Embedding", queryVec, 0.70),
+//	)
+func FilterVector(bytesFieldPath string, queryVector []float32, minSimilarity float32) *VectorFilter {
+	return &VectorFilter{
+		bytesFieldPath: bytesFieldPath,
+		queryVector:    queryVector,
+		minSimilarity:  minSimilarity,
+	}
+}
+
+// NormalizeVector returns a new L2-normalized copy of the input vector (unit length).
+// If the input vector is a zero vector (all elements are 0), returns a zero-length slice.
+// Normalized vectors allow cosine similarity to be computed as a simple dot product.
+func NormalizeVector(v []float32) []float32 {
+	if len(v) == 0 {
+		return nil
+	}
+
+	var norm float32
+	for _, x := range v {
+		norm += x * x
+	}
+	if norm == 0 {
+		return nil
+	}
+
+	invNorm := float32(1.0 / math.Sqrt(float64(norm)))
+	result := make([]float32, len(v))
+	for i, x := range v {
+		result[i] = x * invNorm
+	}
+	return result
+}
+
+// CosineSimilarity computes the cosine similarity between two float32 vectors.
+// Returns a value between -1.0 and 1.0, where 1.0 means identical direction.
+// Returns 0 if either vector is zero or dimensions don't match.
+// This function works with non-normalized vectors (includes magnitude normalization).
+// For pre-normalized vectors, use a simple dot product instead for better performance.
+func CosineSimilarity(a, b []float32) float32 {
+	if len(a) != len(b) || len(a) == 0 {
+		return 0
+	}
+
+	var dot, normA, normB float32
+	for i := range a {
+		dot += a[i] * b[i]
+		normA += a[i] * a[i]
+		normB += b[i] * b[i]
+	}
+
+	if normA == 0 || normB == 0 {
+		return 0
+	}
+
+	return dot / float32(math.Sqrt(float64(normA))*math.Sqrt(float64(normB)))
+}
+
 // FilterAND creates a FilterGroup that requires ALL conditions to be true.
-// Accepts any combination of *Filter, *FilterGroup, and *PhraseFilter items.
+// Accepts any combination of *Filter, *FilterGroup, *PhraseFilter, and *VectorFilter items.
 func FilterAND(items ...FilterItem) *FilterGroup {
 	g := &FilterGroup{logic: FilterLogicAND}
 	for _, item := range items {
@@ -568,13 +677,15 @@ func FilterAND(items ...FilterItem) *FilterGroup {
 			g.subGroups = append(g.subGroups, v)
 		case *PhraseFilter:
 			g.phraseFilters = append(g.phraseFilters, v)
+		case *VectorFilter:
+			g.vectorFilters = append(g.vectorFilters, v)
 		}
 	}
 	return g
 }
 
 // FilterOR creates a FilterGroup that requires at least ONE condition to be true.
-// Accepts any combination of *Filter, *FilterGroup, and *PhraseFilter items.
+// Accepts any combination of *Filter, *FilterGroup, *PhraseFilter, and *VectorFilter items.
 func FilterOR(items ...FilterItem) *FilterGroup {
 	g := &FilterGroup{logic: FilterLogicOR}
 	for _, item := range items {
@@ -585,6 +696,8 @@ func FilterOR(items ...FilterItem) *FilterGroup {
 			g.subGroups = append(g.subGroups, v)
 		case *PhraseFilter:
 			g.phraseFilters = append(g.phraseFilters, v)
+		case *VectorFilter:
+			g.vectorFilters = append(g.vectorFilters, v)
 		}
 	}
 	return g
@@ -3968,6 +4081,20 @@ func convertFilterGroupToProto(group *FilterGroup) *hydraidepbgo.FilterGroup {
 				protoPF.TreasureKey = pf.treasureKey
 			}
 			pg.PhraseFilters = append(pg.PhraseFilters, protoPF)
+		}
+	}
+
+	for _, vf := range group.vectorFilters {
+		if vf != nil {
+			protoVF := &hydraidepbgo.VectorFilter{
+				BytesFieldPath: vf.bytesFieldPath,
+				QueryVector:    vf.queryVector,
+				MinSimilarity:  vf.minSimilarity,
+			}
+			if vf.treasureKey != nil {
+				protoVF.TreasureKey = vf.treasureKey
+			}
+			pg.VectorFilters = append(pg.VectorFilters, protoVF)
 		}
 	}
 

@@ -38,6 +38,7 @@ func evaluateFilterGroupWith(
 	evalFilter func(*hydrapb.TreasureFilter) bool,
 	evalSubGroup func(*hydrapb.FilterGroup) bool,
 	evalPhrase func(*hydrapb.PhraseFilter) bool,
+	evalVector func(*hydrapb.VectorFilter) bool,
 ) bool {
 	if group == nil {
 		return true
@@ -46,9 +47,10 @@ func evaluateFilterGroupWith(
 	hasFilters := len(group.Filters) > 0
 	hasSubGroups := len(group.SubGroups) > 0
 	hasPhraseFilters := len(group.PhraseFilters) > 0
+	hasVectorFilters := len(group.VectorFilters) > 0
 
 	// Empty group = no filtering = pass
-	if !hasFilters && !hasSubGroups && !hasPhraseFilters {
+	if !hasFilters && !hasSubGroups && !hasPhraseFilters && !hasVectorFilters {
 		return true
 	}
 
@@ -65,6 +67,11 @@ func evaluateFilterGroupWith(
 		}
 		for _, pf := range group.PhraseFilters {
 			if evalPhrase(pf) {
+				return true
+			}
+		}
+		for _, vf := range group.VectorFilters {
+			if evalVector(vf) {
 				return true
 			}
 		}
@@ -87,6 +94,11 @@ func evaluateFilterGroupWith(
 			return false
 		}
 	}
+	for _, vf := range group.VectorFilters {
+		if !evalVector(vf) {
+			return false
+		}
+	}
 	return true
 }
 
@@ -95,6 +107,7 @@ func evaluateFilterGroup(treasure *hydrapb.Treasure, group *hydrapb.FilterGroup)
 		func(f *hydrapb.TreasureFilter) bool { return evaluateSingleFilter(treasure, f) },
 		func(sg *hydrapb.FilterGroup) bool { return evaluateFilterGroup(treasure, sg) },
 		func(pf *hydrapb.PhraseFilter) bool { return evaluatePhraseFilter(treasure, pf) },
+		func(vf *hydrapb.VectorFilter) bool { return evaluateVectorFilter(treasure, vf) },
 	)
 }
 
@@ -676,6 +689,7 @@ func evaluateProfileFilterGroup(treasures map[string]*hydrapb.Treasure, group *h
 		func(f *hydrapb.TreasureFilter) bool { return evaluateProfileSingleFilter(treasures, f) },
 		func(sg *hydrapb.FilterGroup) bool { return evaluateProfileFilterGroup(treasures, sg) },
 		func(pf *hydrapb.PhraseFilter) bool { return evaluateProfilePhraseFilter(treasures, pf) },
+		func(vf *hydrapb.VectorFilter) bool { return evaluateProfileVectorFilter(treasures, vf) },
 	)
 }
 
@@ -705,4 +719,102 @@ func evaluateProfilePhraseFilter(treasures map[string]*hydrapb.Treasure, pf *hyd
 		return pf.Negate
 	}
 	return evaluatePhraseFilter(treasure, pf)
+}
+
+// evaluateVectorFilter extracts a float32 vector from the Treasure's MessagePack-encoded
+// BytesVal and computes cosine similarity (via dot product on normalized vectors)
+// against the query vector. Returns true if similarity >= MinSimilarity.
+func evaluateVectorFilter(treasure *hydrapb.Treasure, vf *hydrapb.VectorFilter) bool {
+	if vf == nil || len(vf.QueryVector) == 0 {
+		return true // No vector filter = pass
+	}
+
+	if treasure.BytesVal == nil || !isMsgpackEncoded(treasure.BytesVal) {
+		return false
+	}
+
+	decoded, err := decodeMsgpackToMap(unwrapMsgpack(treasure.BytesVal))
+	if err != nil {
+		return false
+	}
+
+	fieldVal := extractFieldByPath(decoded, vf.BytesFieldPath)
+	storedVector := toFloat32Slice(fieldVal)
+	if len(storedVector) == 0 || len(storedVector) != len(vf.QueryVector) {
+		return false
+	}
+
+	similarity := dotProduct(storedVector, vf.QueryVector)
+	return similarity >= vf.MinSimilarity
+}
+
+// evaluateProfileVectorFilter resolves the TreasureKey from a VectorFilter and delegates
+// to evaluateVectorFilter with the targeted Treasure.
+func evaluateProfileVectorFilter(treasures map[string]*hydrapb.Treasure, vf *hydrapb.VectorFilter) bool {
+	if vf.TreasureKey == nil || *vf.TreasureKey == "" {
+		return false // TreasureKey is required in profile mode
+	}
+	treasure, exists := treasures[*vf.TreasureKey]
+	if !exists {
+		return false
+	}
+	return evaluateVectorFilter(treasure, vf)
+}
+
+// dotProduct computes the dot product of two float32 vectors.
+// When both vectors are L2-normalized, this equals cosine similarity.
+// Uses 4-wide loop unrolling for better CPU pipeline utilization.
+func dotProduct(a, b []float32) float32 {
+	n := len(a)
+	var sum float32
+
+	// Process 4 elements at a time for pipeline-friendly execution.
+	i := 0
+	for ; i <= n-4; i += 4 {
+		sum += a[i]*b[i] + a[i+1]*b[i+1] + a[i+2]*b[i+2] + a[i+3]*b[i+3]
+	}
+
+	// Handle remaining elements.
+	for ; i < n; i++ {
+		sum += a[i] * b[i]
+	}
+
+	return sum
+}
+
+// toFloat32Slice converts a msgpack-decoded interface{} (expected []interface{})
+// to []float32. Returns nil if the value is not a numeric array.
+func toFloat32Slice(val interface{}) []float32 {
+	arr, ok := val.([]interface{})
+	if !ok {
+		return nil
+	}
+	result := make([]float32, 0, len(arr))
+	for _, item := range arr {
+		switch n := item.(type) {
+		case float32:
+			result = append(result, n)
+		case float64:
+			result = append(result, float32(n))
+		case int8:
+			result = append(result, float32(n))
+		case int16:
+			result = append(result, float32(n))
+		case int32:
+			result = append(result, float32(n))
+		case int64:
+			result = append(result, float32(n))
+		case uint8:
+			result = append(result, float32(n))
+		case uint16:
+			result = append(result, float32(n))
+		case uint32:
+			result = append(result, float32(n))
+		case uint64:
+			result = append(result, float32(n))
+		default:
+			return nil // Non-numeric element — invalid vector
+		}
+	}
+	return result
 }

@@ -56,7 +56,7 @@ That's it. No config files, no Docker required.
 | ⚡ | [O(1) Access](docs/features/o1-access.md) | Deterministic constant-time routing — no indexes needed |
 | 🔐 | [Concurrency Safety](docs/features/concurrency-safe.md) | Per-object locking with deadlock-free critical sections |
 | 🛡️ | [Business Locks](docs/features/built-in-busines-lock.md) | Distributed per-key locking with FIFO queuing and TTL |
-| 🔍 | [Server-Side Filtering](docs/sdk/go/go-sdk.md#-server-side-filtering--streaming) | AND/OR filter expressions, streaming delivery, field-level inspection |
+| 🔍 | [Server-Side Filtering](docs/sdk/go/go-sdk.md#-server-side-filtering--streaming) | AND/OR filter expressions, streaming delivery, field-level inspection, vector similarity search |
 | 🧠 | [Memory Efficiency](docs/features/memory-efficient.md) | Data lives in RAM only when accessed, auto-evicts when idle |
 | 🧹 | [Zero Garbage](docs/features/zero-garbage.md) | No daemons, no cron jobs — lifecycle is self-managed |
 | 🌐 | [Scaling](docs/features/scaing-without-orchestrator.md) | Deterministic distribution — no orchestrators, just spawn instances |

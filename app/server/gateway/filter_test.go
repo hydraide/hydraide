@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -1155,3 +1156,538 @@ func TestExtractFieldByPath_NestedPath(t *testing.T) {
 func boolPtr(v hydrapb.Boolean_Type) *hydrapb.Boolean_Type { return &v }
 
 func int32Ptr(v int32) *int32 { return &v }
+
+// --- Vector Filter Tests ---
+
+// makeNormalizedVector creates a unit-length vector with the given values
+// (normalized so the dot product equals cosine similarity).
+func makeNormalizedVector(vals ...float32) []interface{} {
+	var norm float32
+	for _, v := range vals {
+		norm += v * v
+	}
+	if norm > 0 {
+		n := float32(1.0 / float64(norm) * float64(norm)) // placeholder
+		_ = n
+		// Compute proper norm
+		normF := float32(0)
+		for _, v := range vals {
+			normF += v * v
+		}
+		invNorm := float32(1.0 / math.Sqrt(float64(normF)))
+		result := make([]interface{}, len(vals))
+		for i, v := range vals {
+			result[i] = float64(v * invNorm) // msgpack decodes float32 as float64
+		}
+		return result
+	}
+	result := make([]interface{}, len(vals))
+	for i, v := range vals {
+		result[i] = float64(v)
+	}
+	return result
+}
+
+// normalizeFloat32 normalizes a float32 slice to unit length.
+func normalizeFloat32(vals []float32) []float32 {
+	var norm float32
+	for _, v := range vals {
+		norm += v * v
+	}
+	if norm == 0 {
+		return vals
+	}
+	invNorm := float32(1.0 / math.Sqrt(float64(norm)))
+	result := make([]float32, len(vals))
+	for i, v := range vals {
+		result[i] = v * invNorm
+	}
+	return result
+}
+
+func TestEvaluateVectorFilter_ExactMatch(t *testing.T) {
+	vec := makeNormalizedVector(1.0, 0.0, 0.0, 0.0)
+	treasure := &hydrapb.Treasure{
+		Key:      "domain1",
+		BytesVal: makeMsgpackBytesVal(t, map[string]interface{}{"Embedding": vec}),
+	}
+
+	queryVec := normalizeFloat32([]float32{1.0, 0.0, 0.0, 0.0})
+
+	vf := &hydrapb.VectorFilter{
+		BytesFieldPath: "Embedding",
+		QueryVector:    queryVec,
+		MinSimilarity:  0.99,
+	}
+
+	if !evaluateVectorFilter(treasure, vf) {
+		t.Error("expected identical normalized vectors to have similarity ~1.0")
+	}
+}
+
+func TestEvaluateVectorFilter_Orthogonal(t *testing.T) {
+	// Two orthogonal vectors: dot product = 0
+	storedVec := makeNormalizedVector(1.0, 0.0, 0.0, 0.0)
+	treasure := &hydrapb.Treasure{
+		Key:      "domain2",
+		BytesVal: makeMsgpackBytesVal(t, map[string]interface{}{"Embedding": storedVec}),
+	}
+
+	queryVec := normalizeFloat32([]float32{0.0, 1.0, 0.0, 0.0})
+
+	vf := &hydrapb.VectorFilter{
+		BytesFieldPath: "Embedding",
+		QueryVector:    queryVec,
+		MinSimilarity:  0.01, // Even very low threshold
+	}
+
+	if evaluateVectorFilter(treasure, vf) {
+		t.Error("expected orthogonal vectors to NOT match (similarity ~0.0)")
+	}
+}
+
+func TestEvaluateVectorFilter_BelowThreshold(t *testing.T) {
+	storedVec := makeNormalizedVector(1.0, 0.5, 0.0, 0.0)
+	treasure := &hydrapb.Treasure{
+		Key:      "domain3",
+		BytesVal: makeMsgpackBytesVal(t, map[string]interface{}{"Embedding": storedVec}),
+	}
+
+	queryVec := normalizeFloat32([]float32{0.5, 1.0, 0.0, 0.0})
+
+	vf := &hydrapb.VectorFilter{
+		BytesFieldPath: "Embedding",
+		QueryVector:    queryVec,
+		MinSimilarity:  0.99, // Very high threshold
+	}
+
+	if evaluateVectorFilter(treasure, vf) {
+		t.Error("expected vectors to NOT match with high threshold")
+	}
+}
+
+func TestEvaluateVectorFilter_AboveThreshold(t *testing.T) {
+	// Similar but not identical vectors
+	storedVec := makeNormalizedVector(1.0, 0.9, 0.1, 0.0)
+	treasure := &hydrapb.Treasure{
+		Key:      "domain4",
+		BytesVal: makeMsgpackBytesVal(t, map[string]interface{}{"Embedding": storedVec}),
+	}
+
+	queryVec := normalizeFloat32([]float32{1.0, 0.8, 0.2, 0.0})
+
+	vf := &hydrapb.VectorFilter{
+		BytesFieldPath: "Embedding",
+		QueryVector:    queryVec,
+		MinSimilarity:  0.90, // Reasonable threshold
+	}
+
+	if !evaluateVectorFilter(treasure, vf) {
+		t.Error("expected similar vectors to match with reasonable threshold")
+	}
+}
+
+func TestEvaluateVectorFilter_DimensionMismatch(t *testing.T) {
+	storedVec := makeNormalizedVector(1.0, 0.0, 0.0) // 3 dimensions
+	treasure := &hydrapb.Treasure{
+		Key:      "domain5",
+		BytesVal: makeMsgpackBytesVal(t, map[string]interface{}{"Embedding": storedVec}),
+	}
+
+	queryVec := normalizeFloat32([]float32{1.0, 0.0, 0.0, 0.0}) // 4 dimensions
+
+	vf := &hydrapb.VectorFilter{
+		BytesFieldPath: "Embedding",
+		QueryVector:    queryVec,
+		MinSimilarity:  0.5,
+	}
+
+	if evaluateVectorFilter(treasure, vf) {
+		t.Error("expected dimension mismatch to NOT match")
+	}
+}
+
+func TestEvaluateVectorFilter_NilBytesVal(t *testing.T) {
+	treasure := &hydrapb.Treasure{Key: "domain6"}
+
+	queryVec := normalizeFloat32([]float32{1.0, 0.0, 0.0, 0.0})
+
+	vf := &hydrapb.VectorFilter{
+		BytesFieldPath: "Embedding",
+		QueryVector:    queryVec,
+		MinSimilarity:  0.5,
+	}
+
+	if evaluateVectorFilter(treasure, vf) {
+		t.Error("expected nil BytesVal to NOT match")
+	}
+}
+
+func TestEvaluateVectorFilter_EmptyVector(t *testing.T) {
+	treasure := &hydrapb.Treasure{
+		Key:      "domain7",
+		BytesVal: makeMsgpackBytesVal(t, map[string]interface{}{"Embedding": []interface{}{}}),
+	}
+
+	queryVec := normalizeFloat32([]float32{1.0, 0.0, 0.0, 0.0})
+
+	vf := &hydrapb.VectorFilter{
+		BytesFieldPath: "Embedding",
+		QueryVector:    queryVec,
+		MinSimilarity:  0.5,
+	}
+
+	if evaluateVectorFilter(treasure, vf) {
+		t.Error("expected empty stored vector to NOT match")
+	}
+}
+
+func TestEvaluateVectorFilter_GobEncoded(t *testing.T) {
+	// GOB-encoded BytesVal (no MsgPack magic bytes) → should not match
+	treasure := &hydrapb.Treasure{
+		Key:      "domain8",
+		BytesVal: []byte{0x01, 0x02, 0x03, 0x04}, // Not MsgPack
+	}
+
+	queryVec := normalizeFloat32([]float32{1.0, 0.0, 0.0, 0.0})
+
+	vf := &hydrapb.VectorFilter{
+		BytesFieldPath: "Embedding",
+		QueryVector:    queryVec,
+		MinSimilarity:  0.5,
+	}
+
+	if evaluateVectorFilter(treasure, vf) {
+		t.Error("expected GOB-encoded data to NOT match vector filter")
+	}
+}
+
+func TestEvaluateVectorFilter_NestedPath(t *testing.T) {
+	storedVec := makeNormalizedVector(1.0, 0.0, 0.0, 0.0)
+	treasure := &hydrapb.Treasure{
+		Key: "domain9",
+		BytesVal: makeMsgpackBytesVal(t, map[string]interface{}{
+			"Metadata": map[string]interface{}{
+				"Vector": storedVec,
+			},
+		}),
+	}
+
+	queryVec := normalizeFloat32([]float32{1.0, 0.0, 0.0, 0.0})
+
+	vf := &hydrapb.VectorFilter{
+		BytesFieldPath: "Metadata.Vector",
+		QueryVector:    queryVec,
+		MinSimilarity:  0.99,
+	}
+
+	if !evaluateVectorFilter(treasure, vf) {
+		t.Error("expected nested path vector filter to match")
+	}
+}
+
+func TestEvaluateVectorFilter_MissingField(t *testing.T) {
+	treasure := &hydrapb.Treasure{
+		Key:      "domain10",
+		BytesVal: makeMsgpackBytesVal(t, map[string]interface{}{"Category": "business"}),
+	}
+
+	queryVec := normalizeFloat32([]float32{1.0, 0.0, 0.0, 0.0})
+
+	vf := &hydrapb.VectorFilter{
+		BytesFieldPath: "Embedding",
+		QueryVector:    queryVec,
+		MinSimilarity:  0.5,
+	}
+
+	if evaluateVectorFilter(treasure, vf) {
+		t.Error("expected missing vector field to NOT match")
+	}
+}
+
+func TestEvaluateVectorFilter_NonNumericArray(t *testing.T) {
+	treasure := &hydrapb.Treasure{
+		Key: "domain11",
+		BytesVal: makeMsgpackBytesVal(t, map[string]interface{}{
+			"Embedding": []interface{}{"not", "a", "vector"},
+		}),
+	}
+
+	queryVec := normalizeFloat32([]float32{1.0, 0.0, 0.0, 0.0})
+
+	vf := &hydrapb.VectorFilter{
+		BytesFieldPath: "Embedding",
+		QueryVector:    queryVec,
+		MinSimilarity:  0.5,
+	}
+
+	if evaluateVectorFilter(treasure, vf) {
+		t.Error("expected non-numeric array to NOT match vector filter")
+	}
+}
+
+func TestEvaluateVectorFilter_NilFilter(t *testing.T) {
+	treasure := &hydrapb.Treasure{Key: "domain12"}
+
+	// Nil vector filter should pass (no filtering)
+	if !evaluateVectorFilter(treasure, nil) {
+		t.Error("expected nil vector filter to pass")
+	}
+}
+
+func TestEvaluateVectorFilter_EmptyQueryVector(t *testing.T) {
+	treasure := &hydrapb.Treasure{Key: "domain13"}
+
+	vf := &hydrapb.VectorFilter{
+		BytesFieldPath: "Embedding",
+		QueryVector:    []float32{},
+		MinSimilarity:  0.5,
+	}
+
+	// Empty query vector = no filtering = pass
+	if !evaluateVectorFilter(treasure, vf) {
+		t.Error("expected empty query vector to pass (no filtering)")
+	}
+}
+
+func TestEvaluateVectorFilter_CombinedWithOtherFilters_AND(t *testing.T) {
+	storedVec := makeNormalizedVector(1.0, 0.0, 0.0, 0.0)
+	treasure := &hydrapb.Treasure{
+		Key:      "domain-combined",
+		Int32Val: int32Ptr(42),
+		BytesVal: makeMsgpackBytesVal(t, map[string]interface{}{
+			"Embedding": storedVec,
+			"Category":  "business",
+		}),
+	}
+
+	queryVec := normalizeFloat32([]float32{1.0, 0.0, 0.0, 0.0})
+	categoryPath := "Category"
+
+	group := &hydrapb.FilterGroup{
+		Logic: hydrapb.FilterLogic_AND,
+		Filters: []*hydrapb.TreasureFilter{
+			{
+				Operator:     hydrapb.Relational_EQUAL,
+				CompareValue: &hydrapb.TreasureFilter_Int32Val{Int32Val: 42},
+			},
+			{
+				Operator:       hydrapb.Relational_EQUAL,
+				CompareValue:   &hydrapb.TreasureFilter_StringVal{StringVal: "business"},
+				BytesFieldPath: &categoryPath,
+			},
+		},
+		VectorFilters: []*hydrapb.VectorFilter{
+			{
+				BytesFieldPath: "Embedding",
+				QueryVector:    queryVec,
+				MinSimilarity:  0.99,
+			},
+		},
+	}
+
+	if !evaluateFilterGroup(treasure, group) {
+		t.Error("expected AND group to match (Int32==42 AND Category==business AND vector match)")
+	}
+
+	// Now with non-matching vector threshold
+	group.VectorFilters[0].MinSimilarity = 1.01 // impossible threshold
+	if evaluateFilterGroup(treasure, group) {
+		t.Error("expected AND group to NOT match with impossible vector threshold")
+	}
+}
+
+func TestEvaluateVectorFilter_CombinedWithOtherFilters_OR(t *testing.T) {
+	storedVec := makeNormalizedVector(1.0, 0.0, 0.0, 0.0)
+	treasure := &hydrapb.Treasure{
+		Key:      "domain-or",
+		Int32Val: int32Ptr(99), // Doesn't match filter
+		BytesVal: makeMsgpackBytesVal(t, map[string]interface{}{
+			"Embedding": storedVec,
+		}),
+	}
+
+	queryVec := normalizeFloat32([]float32{1.0, 0.0, 0.0, 0.0})
+
+	group := &hydrapb.FilterGroup{
+		Logic: hydrapb.FilterLogic_OR,
+		Filters: []*hydrapb.TreasureFilter{
+			{
+				Operator:     hydrapb.Relational_EQUAL,
+				CompareValue: &hydrapb.TreasureFilter_Int32Val{Int32Val: 42},
+			},
+		},
+		VectorFilters: []*hydrapb.VectorFilter{
+			{
+				BytesFieldPath: "Embedding",
+				QueryVector:    queryVec,
+				MinSimilarity:  0.99,
+			},
+		},
+	}
+
+	if !evaluateFilterGroup(treasure, group) {
+		t.Error("expected OR group to match (Int32!=42 but vector matches)")
+	}
+}
+
+// --- Profile mode vector filter tests ---
+
+func TestProfileVectorFilter_Match(t *testing.T) {
+	storedVec := makeNormalizedVector(1.0, 0.0, 0.0, 0.0)
+	treasures := map[string]*hydrapb.Treasure{
+		"MainProfile": {
+			Key:      "MainProfile",
+			BytesVal: makeMsgpackBytesVal(t, map[string]interface{}{"Embedding": storedVec}),
+		},
+	}
+
+	queryVec := normalizeFloat32([]float32{1.0, 0.0, 0.0, 0.0})
+	key := "MainProfile"
+
+	group := &hydrapb.FilterGroup{
+		Logic: hydrapb.FilterLogic_AND,
+		VectorFilters: []*hydrapb.VectorFilter{
+			{
+				BytesFieldPath: "Embedding",
+				QueryVector:    queryVec,
+				MinSimilarity:  0.99,
+				TreasureKey:    &key,
+			},
+		},
+	}
+
+	if !evaluateProfileFilterGroup(treasures, group) {
+		t.Error("expected profile vector filter to match")
+	}
+}
+
+func TestProfileVectorFilter_MissingTreasure(t *testing.T) {
+	treasures := map[string]*hydrapb.Treasure{
+		"Name": {Key: "Name", StringVal: stringPtr("test")},
+	}
+
+	queryVec := normalizeFloat32([]float32{1.0, 0.0, 0.0, 0.0})
+	key := "MainProfile"
+
+	group := &hydrapb.FilterGroup{
+		Logic: hydrapb.FilterLogic_AND,
+		VectorFilters: []*hydrapb.VectorFilter{
+			{
+				BytesFieldPath: "Embedding",
+				QueryVector:    queryVec,
+				MinSimilarity:  0.5,
+				TreasureKey:    &key,
+			},
+		},
+	}
+
+	if evaluateProfileFilterGroup(treasures, group) {
+		t.Error("expected vector filter to fail when Treasure is missing")
+	}
+}
+
+func TestProfileVectorFilter_NoTreasureKey(t *testing.T) {
+	treasures := map[string]*hydrapb.Treasure{
+		"MainProfile": {
+			Key:      "MainProfile",
+			BytesVal: makeMsgpackBytesVal(t, map[string]interface{}{"Embedding": makeNormalizedVector(1.0, 0.0)}),
+		},
+	}
+
+	queryVec := normalizeFloat32([]float32{1.0, 0.0})
+
+	group := &hydrapb.FilterGroup{
+		Logic: hydrapb.FilterLogic_AND,
+		VectorFilters: []*hydrapb.VectorFilter{
+			{
+				BytesFieldPath: "Embedding",
+				QueryVector:    queryVec,
+				MinSimilarity:  0.5,
+				// No TreasureKey
+			},
+		},
+	}
+
+	if evaluateProfileFilterGroup(treasures, group) {
+		t.Error("expected vector filter without TreasureKey to fail in profile mode")
+	}
+}
+
+// --- Dot product unit tests ---
+
+func TestDotProduct_IdenticalNormalized(t *testing.T) {
+	v := normalizeFloat32([]float32{1.0, 2.0, 3.0, 4.0})
+	result := dotProduct(v, v)
+	if result < 0.999 || result > 1.001 {
+		t.Errorf("dot product of identical normalized vectors should be ~1.0, got %f", result)
+	}
+}
+
+func TestDotProduct_Orthogonal(t *testing.T) {
+	a := normalizeFloat32([]float32{1.0, 0.0, 0.0})
+	b := normalizeFloat32([]float32{0.0, 1.0, 0.0})
+	result := dotProduct(a, b)
+	if result < -0.001 || result > 0.001 {
+		t.Errorf("dot product of orthogonal vectors should be ~0.0, got %f", result)
+	}
+}
+
+func TestDotProduct_Opposite(t *testing.T) {
+	a := normalizeFloat32([]float32{1.0, 0.0, 0.0})
+	b := normalizeFloat32([]float32{-1.0, 0.0, 0.0})
+	result := dotProduct(a, b)
+	if result < -1.001 || result > -0.999 {
+		t.Errorf("dot product of opposite vectors should be ~-1.0, got %f", result)
+	}
+}
+
+func TestDotProduct_Empty(t *testing.T) {
+	result := dotProduct([]float32{}, []float32{})
+	if result != 0 {
+		t.Errorf("dot product of empty vectors should be 0, got %f", result)
+	}
+}
+
+// --- toFloat32Slice tests ---
+
+func TestToFloat32Slice_Float64(t *testing.T) {
+	input := []interface{}{float64(1.0), float64(2.0), float64(3.0)}
+	result := toFloat32Slice(input)
+	if len(result) != 3 {
+		t.Fatalf("expected 3 elements, got %d", len(result))
+	}
+	if result[0] != 1.0 || result[1] != 2.0 || result[2] != 3.0 {
+		t.Errorf("unexpected values: %v", result)
+	}
+}
+
+func TestToFloat32Slice_MixedNumeric(t *testing.T) {
+	input := []interface{}{int64(1), uint8(2), float32(3.5)}
+	result := toFloat32Slice(input)
+	if len(result) != 3 {
+		t.Fatalf("expected 3 elements, got %d", len(result))
+	}
+}
+
+func TestToFloat32Slice_NonNumeric(t *testing.T) {
+	input := []interface{}{float64(1.0), "not-a-number", float64(3.0)}
+	result := toFloat32Slice(input)
+	if result != nil {
+		t.Error("expected nil for array with non-numeric element")
+	}
+}
+
+func TestToFloat32Slice_Nil(t *testing.T) {
+	result := toFloat32Slice(nil)
+	if result != nil {
+		t.Error("expected nil for nil input")
+	}
+}
+
+func TestToFloat32Slice_NotArray(t *testing.T) {
+	result := toFloat32Slice("not-an-array")
+	if result != nil {
+		t.Error("expected nil for non-array input")
+	}
+}

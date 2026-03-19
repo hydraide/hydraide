@@ -1540,3 +1540,30 @@ Download them — and you can start using them right away!
 **Question:** Is the Docker version of HydrAIDE supported?
 
 **Answer:** Currently, no official Docker image is provided or supported. You are free to build your own Docker image if desired. If you would like to see an official Docker installation supported in the future, please open an issue in our repository to let us know.
+
+---
+
+**Question:** Can HydrAIDE perform vector similarity search (e.g. for embeddings)?
+
+**Answer:** Yes. HydrAIDE supports **server-side cosine similarity filtering** via `VectorFilter`, which is part of the standard `FilterGroup` system. You can store embedding vectors as `[]float32` fields in MessagePack-encoded BytesVal, and search them with `FilterVector()`.
+
+### How it works:
+
+1. Store your embedding vectors as `[]float32` fields in your struct (must be **L2-normalized** before saving)
+2. Use `FilterVector("Embedding", queryVector, 0.70)` to find Treasures with cosine similarity >= threshold
+3. Combine with any other filter in `FilterAND` / `FilterOR` — e.g. pre-filter by category + language, then apply vector similarity
+
+### Key characteristics:
+
+- **No external vector database needed** — everything runs inside HydrAIDE
+- **Brute-force dot product** on normalized vectors (~150ns per 384-dim comparison)
+- **Works with pre-filtering** — use deterministic filters (category, language) to narrow the search space before vector comparison
+- **Combinable** — vector filters sit alongside `TreasureFilter`, `PhraseFilter` in the same `FilterGroup`
+- **Both catalog and profile mode** supported (use `.ForKey()` for profile mode)
+- **Performance**: 100K vectors in ~15ms (384 dimensions, pre-filtered)
+
+### When to use HydrAIDE vs. a dedicated vector database:
+
+- **HydrAIDE** is ideal for up to ~500K vectors with strong pre-filtering (e.g. category + language reduces 500K to 50-100K)
+- For 10M+ vectors without pre-filtering, a dedicated ANN index (HNSW, IVF) would be faster
+- HydrAIDE's advantage: **single system** for metadata filtering + vector search + phrase search, no orchestration needed

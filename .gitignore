@@ -56,3 +56,7 @@ app/server/e2etests/data/
 
 # Claude Code
 CLAUDE.md
+
+# Local planning docs (not for git)
+VECTOR_SEARCH_PLAN.md
+EMBEDDING_SIMILARITY_SEARCH_TERV.md
