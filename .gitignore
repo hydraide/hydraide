@@ -60,3 +60,6 @@ CLAUDE.md
 # Local planning docs (not for git)
 VECTOR_SEARCH_PLAN.md
 EMBEDDING_SIMILARITY_SEARCH_TERV.md
+
+# Build artifacts
+server
