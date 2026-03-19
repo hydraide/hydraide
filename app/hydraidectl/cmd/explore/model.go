@@ -725,6 +725,7 @@ func (m Model) renderDetail() string {
 		{"Modified", d.ModifiedAt.Format("2006-01-02 15:04:05")},
 		{"Entries", fmt.Sprintf("%d", d.EntryCount)},
 		{"Blocks", fmt.Sprintf("%d", d.BlockCount)},
+		{"Memory (est.)", formatSize(int64(d.EstimatedMemorySize))},
 		{"Island", d.IslandID},
 	}
 

@@ -137,18 +137,68 @@ func (e *Explorer) scanFile(filePath string) (*SwampDetail, error) {
 	// Extract island ID from path
 	islandID := extractIslandID(e.dataPath, filePath)
 
+	entryCount := header.EntryCount
+	blockCount := header.BlockCount
+	var estimatedMemorySize uint64
+
+	// Memory estimation formula (calculated purely from file block headers, no decompression needed):
+	//
+	//   EstimatedMemory = UncompressedDataSize + (EntryCount × GoOverheadPerEntry)
+	//
+	// Component 1 — UncompressedDataSize:
+	//   Sum of BlockHeader.UncompressedSize across all blocks. On disk the data is Snappy-compressed;
+	//   this value represents the actual decompressed payload (GOB-encoded treasures + entry headers).
+	//   When loaded, the GOB data is decoded into Go structs whose size is roughly similar to the
+	//   encoded form, so the uncompressed size is a good approximation of the data portion in RAM.
+	//
+	// Component 2 — Go object overhead per entry (512 bytes):
+	//   Each treasure loaded into memory carries fixed struct overhead that is NOT part of the
+	//   serialized data. Breakdown:
+	//     treasure struct:
+	//       sync.RWMutex            24 B
+	//       Model (strings/int64s) 120 B   (string headers 16B each, int64s 8B each)
+	//       guard.Guard             80 B   (RWMutex + Cond ptr + slice header + fields)
+	//       saveMethod func         16 B
+	//       10 bool flags + padding 10 B
+	//     Content struct           144 B   (14 pointer fields × 8B + []byte slice 24B + padding)
+	//     Go map entry overhead     50 B   (hash bucket, key/value pointers, tophash)
+	//     Safety margin / alignment 68 B
+	//                             ------
+	//     Total                    512 B per entry
+	//
+	// Example: 15 GB compressed file, ~2x Snappy ratio, 1M entries
+	//   Decompressed data:  ~30 GB
+	//   Go overhead:        1M × 512 B = 0.5 GB
+	//   Estimated RAM:      ~30.5 GB
+	const goOverheadPerEntry uint64 = 512
+
+	// Scan block headers to get accurate entry/block counts and memory estimate.
+	// This also handles stale file headers (writer not yet closed → 0/0 in header).
+	// Only 16 bytes per block are read + a seek over the compressed data — no decompression.
+	if info.Size() > header.DataStartOffset() {
+		scanResult, err := reader.ScanBlockHeaders()
+		if err == nil && scanResult != nil {
+			if entryCount == 0 && blockCount == 0 {
+				entryCount = scanResult.TotalEntryCount
+				blockCount = scanResult.BlockCount
+			}
+			estimatedMemorySize = scanResult.TotalUncompressedSize + entryCount*goOverheadPerEntry
+		}
+	}
+
 	return &SwampDetail{
-		Sanctuary:  parts[0],
-		Realm:      parts[1],
-		Swamp:      parts[2],
-		FilePath:   filePath,
-		FileSize:   info.Size(),
-		CreatedAt:  time.Unix(0, header.CreatedAt),
-		ModifiedAt: time.Unix(0, header.ModifiedAt),
-		EntryCount: header.EntryCount,
-		BlockCount: header.BlockCount,
-		IslandID:   islandID,
-		Version:    header.Version,
+		Sanctuary:           parts[0],
+		Realm:               parts[1],
+		Swamp:               parts[2],
+		FilePath:            filePath,
+		FileSize:            info.Size(),
+		CreatedAt:           time.Unix(0, header.CreatedAt),
+		ModifiedAt:          time.Unix(0, header.ModifiedAt),
+		EntryCount:          entryCount,
+		BlockCount:          blockCount,
+		IslandID:            islandID,
+		Version:             header.Version,
+		EstimatedMemorySize: estimatedMemorySize,
 	}, nil
 }
 

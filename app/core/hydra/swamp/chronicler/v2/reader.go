@@ -153,6 +153,55 @@ func (fr *FileReader) readNextBlock() (*Block, error) {
 	return block, nil
 }
 
+// BlockScanResult contains aggregated statistics from scanning block headers.
+// No decompression is performed — only the 16-byte block headers are read.
+type BlockScanResult struct {
+	BlockCount            uint64
+	TotalEntryCount       uint64
+	TotalUncompressedSize uint64
+}
+
+// ScanBlockHeaders reads all block headers without decompressing block data.
+// This is used to get accurate block/entry counts and estimated memory size
+// when the file header has stale values (e.g., writer not yet closed).
+func (fr *FileReader) ScanBlockHeaders() (*BlockScanResult, error) {
+	if _, err := fr.file.Seek(fr.header.DataStartOffset(), io.SeekStart); err != nil {
+		return nil, err
+	}
+
+	result := &BlockScanResult{}
+	headerBuf := make([]byte, BlockHeaderSize)
+
+	for {
+		n, err := fr.file.Read(headerBuf)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			return nil, err
+		}
+		if n < BlockHeaderSize {
+			break
+		}
+
+		var bh BlockHeader
+		if err := bh.Deserialize(headerBuf); err != nil {
+			return nil, err
+		}
+
+		result.BlockCount++
+		result.TotalEntryCount += uint64(bh.EntryCount)
+		result.TotalUncompressedSize += uint64(bh.UncompressedSize)
+
+		// Skip compressed data without reading it
+		if _, err := fr.file.Seek(int64(bh.CompressedSize), io.SeekCurrent); err != nil {
+			return nil, err
+		}
+	}
+
+	return result, nil
+}
+
 // Close closes the file
 func (fr *FileReader) Close() error {
 	if fr.file != nil {

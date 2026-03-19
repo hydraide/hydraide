@@ -64,8 +64,9 @@ type SwampDetail struct {
 	ModifiedAt time.Time
 	EntryCount uint64
 	BlockCount uint64
-	IslandID   string
-	Version    uint16
+	IslandID            string
+	Version             uint16
+	EstimatedMemorySize uint64
 }
 
 // SwampFilter specifies filtering and pagination for swamp listing.

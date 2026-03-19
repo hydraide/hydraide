@@ -219,9 +219,28 @@ func (fw *FileWriter) flushLocked() error {
 		return err
 	}
 
-	// Update counts
+	// Update in-memory counts
 	fw.blockCount++
 	fw.entryCount += uint64(header.EntryCount)
+
+	// Update file header on disk so EntryCount/BlockCount are always current.
+	// This avoids stale 0/0 values when the file is read before Close()/Sync().
+	// Cost: 2 seeks + 64B write per block, no fsync.
+	fw.header.BlockCount = fw.blockCount
+	fw.header.EntryCount = fw.entryCount
+	currentPos, err := fw.file.Seek(0, io.SeekCurrent)
+	if err != nil {
+		return err
+	}
+	if _, err := fw.file.Seek(0, io.SeekStart); err != nil {
+		return err
+	}
+	if _, err := fw.file.Write(fw.header.Serialize()); err != nil {
+		return err
+	}
+	if _, err := fw.file.Seek(currentPos, io.SeekStart); err != nil {
+		return err
+	}
 
 	return nil
 }
