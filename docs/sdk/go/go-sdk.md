@@ -1042,6 +1042,73 @@ score := hydraidego.CosineSimilarity(vectorA, vectorB)
 
 ---
 
+##### Geographic Distance Search (GeoDistance)
+
+HydrAIDE supports **server-side geographic distance filtering** using the Haversine formula. This enables location-based queries directly inside HydrAIDE — no external GIS database needed.
+
+Coordinates are stored as `float64` latitude/longitude fields (WGS84 decimal degrees) in your MessagePack-encoded BytesVal struct:
+
+```go
+type DomainPayload struct {
+    Category     string  `msgpack:"Category"`
+    GeoLatitude  float64 `msgpack:"geo_latitude"`
+    GeoLongitude float64 `msgpack:"geo_longitude"`
+}
+```
+
+Use `GeoDistance` to find Treasures within or beyond a specified radius from a reference point:
+
+```go
+// Find all domains within 50 km of Budapest
+filters := hydraidego.FilterAND(
+    hydraidego.GeoDistance("geo_latitude", "geo_longitude", 47.4979, 19.0402, 50.0, hydraidego.GeoInside),
+)
+
+// Find all domains MORE than 200 km from Budapest
+filters := hydraidego.FilterAND(
+    hydraidego.GeoDistance("geo_latitude", "geo_longitude", 47.4979, 19.0402, 200.0, hydraidego.GeoOutside),
+)
+
+// Band filter: 50–150 km from Budapest (combine two GeoDistance filters)
+filters := hydraidego.FilterAND(
+    hydraidego.GeoDistance("geo_latitude", "geo_longitude", 47.4979, 19.0402, 50.0, hydraidego.GeoOutside),
+    hydraidego.GeoDistance("geo_latitude", "geo_longitude", 47.4979, 19.0402, 150.0, hydraidego.GeoInside),
+)
+
+// Combine with other filters: category + geo
+filters := hydraidego.FilterAND(
+    hydraidego.FilterBytesFieldString(hydraidego.Equal, "Category", "business"),
+    hydraidego.GeoDistance("geo_latitude", "geo_longitude", 47.4979, 19.0402, 50.0, hydraidego.GeoInside),
+)
+
+err := h.CatalogReadManyStream(ctx, swampName, &hydraidego.Index{
+    IndexType:  hydraidego.IndexKey,
+    IndexOrder: hydraidego.IndexOrderAsc,
+}, filters, DomainPayload{}, func(model any) error {
+    domain := model.(*DomainPayload)
+    fmt.Printf("Nearby: %s (%.4f, %.4f)\n", domain.Category, domain.GeoLatitude, domain.GeoLongitude)
+    return nil
+})
+```
+
+**How it works:**
+1. The server decodes the MessagePack BytesVal and extracts the latitude/longitude `float64` fields at the given paths
+2. A **bounding box pre-filter** quickly eliminates obviously out-of-range points using simple float comparisons (~2ns)
+3. For points inside the bounding box, the **Haversine formula** computes the exact great-circle distance (~86ns)
+4. `GeoInside` matches when distance <= radius; `GeoOutside` matches when distance > radius
+
+**Key points:**
+- Coordinates must be **WGS84 decimal degrees** (standard GPS format used by Google Maps, OpenStreetMap, etc.)
+- Records with `lat == 0 AND lng == 0` (**Null Island**) are automatically excluded — this handles missing coordinate data gracefully
+- Supports **dot-separated field paths** for nested structs (e.g., `"Location.Lat"`, `"Location.Lng"`)
+- Combinable with any other filter in `FilterAND` / `FilterOR`
+- Works in both **catalog mode** and **profile mode** (with `.ForKey()`)
+- The Haversine formula accuracy is ~0.5% of real distance — sufficient for most use cases
+
+**Performance:** Bounding box check: ~2ns. Haversine computation: ~86ns. Full filter pipeline (including MessagePack decode): ~1.7µs per Treasure.
+
+---
+
 ##### Profile Filtering (ForKey / ProfileReadWithFilter)
 
 HydrAIDE's filter system extends to **profile reads**. In profile mode, each struct field is stored as a separate Treasure keyed by field name. Filters use the `ForKey()` method to target specific fields:

@@ -1585,3 +1585,318 @@ func TestToFloat32Slice_NotArray(t *testing.T) {
 		t.Error("expected nil for non-array input")
 	}
 }
+
+// --- GeoDistance tests ---
+
+func makeGeoTreasure(t *testing.T, lat, lng float64) treasure.Treasure {
+	t.Helper()
+	bytesVal := makeMsgpackBytesVal(t, map[string]interface{}{
+		"geo_latitude":  lat,
+		"geo_longitude": lng,
+	})
+	return newTreasureWithBytes(bytesVal)
+}
+
+func geoFilter(refLat, refLng, radiusKm float64, mode hydrapb.GeoDistanceMode_Type) *hydrapb.GeoDistanceFilter {
+	return &hydrapb.GeoDistanceFilter{
+		LatFieldPath: "geo_latitude",
+		LngFieldPath: "geo_longitude",
+		RefLatitude:  refLat,
+		RefLongitude: refLng,
+		RadiusKm:     radiusKm,
+		Mode:         mode,
+	}
+}
+
+func TestGeoDistance_InsideRadius(t *testing.T) {
+	// Budapest → Székesfehérvár ~60km
+	tr := makeGeoTreasure(t, 47.1860, 18.4221)
+	gf := geoFilter(47.4979, 19.0402, 100.0, hydrapb.GeoDistanceMode_INSIDE)
+	if !evaluateNativeGeoDistanceFilter(tr, gf) {
+		t.Error("expected Székesfehérvár (~60km) to be inside 100km radius from Budapest")
+	}
+}
+
+func TestGeoDistance_OutsideRadius(t *testing.T) {
+	// Budapest → Székesfehérvár ~60km, but radius is only 30km
+	tr := makeGeoTreasure(t, 47.1860, 18.4221)
+	gf := geoFilter(47.4979, 19.0402, 30.0, hydrapb.GeoDistanceMode_INSIDE)
+	if evaluateNativeGeoDistanceFilter(tr, gf) {
+		t.Error("expected Székesfehérvár (~60km) to NOT be inside 30km radius from Budapest")
+	}
+}
+
+func TestGeoDistance_OutsideMode(t *testing.T) {
+	// Budapest → Debrecen ~194km, OUTSIDE 150km → match
+	tr := makeGeoTreasure(t, 47.5316, 21.6273)
+	gf := geoFilter(47.4979, 19.0402, 150.0, hydrapb.GeoDistanceMode_OUTSIDE)
+	if !evaluateNativeGeoDistanceFilter(tr, gf) {
+		t.Error("expected Debrecen (~194km) to be outside 150km radius from Budapest")
+	}
+}
+
+func TestGeoDistance_OutsideMode_TooClose(t *testing.T) {
+	// Budapest → Székesfehérvár ~60km, OUTSIDE 200km → no match
+	tr := makeGeoTreasure(t, 47.1860, 18.4221)
+	gf := geoFilter(47.4979, 19.0402, 200.0, hydrapb.GeoDistanceMode_OUTSIDE)
+	if evaluateNativeGeoDistanceFilter(tr, gf) {
+		t.Error("expected Székesfehérvár (~60km) to NOT be outside 200km radius from Budapest")
+	}
+}
+
+func TestGeoDistance_NullIsland(t *testing.T) {
+	tr := makeGeoTreasure(t, 0, 0)
+	// INSIDE mode
+	gf := geoFilter(47.4979, 19.0402, 50000.0, hydrapb.GeoDistanceMode_INSIDE)
+	if evaluateNativeGeoDistanceFilter(tr, gf) {
+		t.Error("expected Null Island (0,0) to be excluded in INSIDE mode")
+	}
+	// OUTSIDE mode
+	gf2 := geoFilter(47.4979, 19.0402, 1.0, hydrapb.GeoDistanceMode_OUTSIDE)
+	if evaluateNativeGeoDistanceFilter(tr, gf2) {
+		t.Error("expected Null Island (0,0) to be excluded in OUTSIDE mode")
+	}
+}
+
+func TestGeoDistance_MissingField(t *testing.T) {
+	bytesVal := makeMsgpackBytesVal(t, map[string]interface{}{"other_field": 42})
+	tr := newTreasureWithBytes(bytesVal)
+	gf := geoFilter(47.4979, 19.0402, 50.0, hydrapb.GeoDistanceMode_INSIDE)
+	if evaluateNativeGeoDistanceFilter(tr, gf) {
+		t.Error("expected false when lat/lng fields are missing")
+	}
+}
+
+func TestGeoDistance_NonMsgpack(t *testing.T) {
+	tr := newTreasureWithString("not bytes")
+	gf := geoFilter(47.4979, 19.0402, 50.0, hydrapb.GeoDistanceMode_INSIDE)
+	if evaluateNativeGeoDistanceFilter(tr, gf) {
+		t.Error("expected false for non-byte-array content")
+	}
+}
+
+func TestGeoDistance_Band(t *testing.T) {
+	// Budapest → Győr ~120km, band 50–150km → match
+	tr := makeGeoTreasure(t, 47.6875, 17.6504)
+	group := &hydrapb.FilterGroup{
+		Logic: hydrapb.FilterLogic_AND,
+		GeoDistanceFilters: []*hydrapb.GeoDistanceFilter{
+			geoFilter(47.4979, 19.0402, 50.0, hydrapb.GeoDistanceMode_OUTSIDE),
+			geoFilter(47.4979, 19.0402, 150.0, hydrapb.GeoDistanceMode_INSIDE),
+		},
+	}
+	if !evaluateNativeFilterGroup(tr, group) {
+		t.Error("expected Győr (~120km) to be within 50–150km band from Budapest")
+	}
+
+	// Budapest → Székesfehérvár ~60km, band 100–200km → no match (too close)
+	tr2 := makeGeoTreasure(t, 47.1860, 18.4221)
+	group2 := &hydrapb.FilterGroup{
+		Logic: hydrapb.FilterLogic_AND,
+		GeoDistanceFilters: []*hydrapb.GeoDistanceFilter{
+			geoFilter(47.4979, 19.0402, 100.0, hydrapb.GeoDistanceMode_OUTSIDE),
+			geoFilter(47.4979, 19.0402, 200.0, hydrapb.GeoDistanceMode_INSIDE),
+		},
+	}
+	if evaluateNativeFilterGroup(tr2, group2) {
+		t.Error("expected Székesfehérvár (~60km) to NOT be within 100–200km band")
+	}
+}
+
+func TestGeoDistance_SamePoint(t *testing.T) {
+	tr := makeGeoTreasure(t, 47.4979, 19.0402)
+	gf := geoFilter(47.4979, 19.0402, 1.0, hydrapb.GeoDistanceMode_INSIDE)
+	if !evaluateNativeGeoDistanceFilter(tr, gf) {
+		t.Error("expected same point to be inside any radius")
+	}
+}
+
+func TestGeoDistance_LargeDistance(t *testing.T) {
+	// Budapest → Sydney ~15000km
+	tr := makeGeoTreasure(t, -33.8688, 151.2093)
+	gf := geoFilter(47.4979, 19.0402, 16000.0, hydrapb.GeoDistanceMode_INSIDE)
+	if !evaluateNativeGeoDistanceFilter(tr, gf) {
+		t.Error("expected Sydney to be inside 16000km radius from Budapest")
+	}
+	gf2 := geoFilter(47.4979, 19.0402, 14000.0, hydrapb.GeoDistanceMode_INSIDE)
+	if evaluateNativeGeoDistanceFilter(tr, gf2) {
+		t.Error("expected Sydney to NOT be inside 14000km radius from Budapest")
+	}
+}
+
+func TestGeoDistance_NegativeCoords(t *testing.T) {
+	// Buenos Aires (southern hemisphere)
+	tr := makeGeoTreasure(t, -34.6037, -58.3816)
+	gf := geoFilter(-34.6037, -58.3816, 1.0, hydrapb.GeoDistanceMode_INSIDE)
+	if !evaluateNativeGeoDistanceFilter(tr, gf) {
+		t.Error("expected same point with negative coords to match")
+	}
+}
+
+func TestGeoDistance_NilFilter(t *testing.T) {
+	tr := makeGeoTreasure(t, 47.4979, 19.0402)
+	if !evaluateNativeGeoDistanceFilter(tr, nil) {
+		t.Error("expected nil filter to pass (no filtering)")
+	}
+}
+
+func TestGeoDistance_ZeroRadius(t *testing.T) {
+	tr := makeGeoTreasure(t, 47.4979, 19.0402)
+	gf := geoFilter(47.4979, 19.0402, 0.0, hydrapb.GeoDistanceMode_INSIDE)
+	if !evaluateNativeGeoDistanceFilter(tr, gf) {
+		t.Error("expected exact same point to match with 0 radius")
+	}
+
+	// Slightly different point with 0 radius → no match
+	tr2 := makeGeoTreasure(t, 47.498, 19.0402)
+	if evaluateNativeGeoDistanceFilter(tr2, gf) {
+		t.Error("expected different point to NOT match with 0 radius")
+	}
+}
+
+func TestGeoDistance_CombinedWithOtherFilters(t *testing.T) {
+	bytesVal := makeMsgpackBytesVal(t, map[string]interface{}{
+		"geo_latitude":  47.1860,
+		"geo_longitude": 18.4221,
+		"Category":      "business",
+	})
+	tr := newTreasureWithBytes(bytesVal)
+
+	categoryPath := "Category"
+	group := &hydrapb.FilterGroup{
+		Logic: hydrapb.FilterLogic_AND,
+		Filters: []*hydrapb.TreasureFilter{
+			{
+				Operator:       hydrapb.Relational_EQUAL,
+				BytesFieldPath: &categoryPath,
+				CompareValue:   &hydrapb.TreasureFilter_StringVal{StringVal: "business"},
+			},
+		},
+		GeoDistanceFilters: []*hydrapb.GeoDistanceFilter{
+			geoFilter(47.4979, 19.0402, 100.0, hydrapb.GeoDistanceMode_INSIDE),
+		},
+	}
+	if !evaluateNativeFilterGroup(tr, group) {
+		t.Error("expected combined filter (category + geo) to match")
+	}
+
+	// Wrong category → no match despite geo match
+	group.Filters[0].CompareValue = &hydrapb.TreasureFilter_StringVal{StringVal: "sports"}
+	if evaluateNativeFilterGroup(tr, group) {
+		t.Error("expected combined filter to NOT match when category doesn't match")
+	}
+}
+
+func TestGeoDistance_ProfileMode(t *testing.T) {
+	bytesVal := makeMsgpackBytesVal(t, map[string]interface{}{
+		"geo_latitude":  47.1860,
+		"geo_longitude": 18.4221,
+	})
+	tr := newTreasureWithBytes(bytesVal)
+	key := "Location"
+	treasures := map[string]treasure.Treasure{key: tr}
+
+	gf := geoFilter(47.4979, 19.0402, 100.0, hydrapb.GeoDistanceMode_INSIDE)
+	gf.TreasureKey = &key
+
+	if !evaluateNativeProfileGeoDistanceFilter(treasures, gf) {
+		t.Error("expected profile geo filter to match")
+	}
+
+	// Missing treasure key
+	missingKey := "NonExistent"
+	gf2 := geoFilter(47.4979, 19.0402, 100.0, hydrapb.GeoDistanceMode_INSIDE)
+	gf2.TreasureKey = &missingKey
+	if evaluateNativeProfileGeoDistanceFilter(treasures, gf2) {
+		t.Error("expected profile geo filter to fail for missing treasure key")
+	}
+}
+
+func TestGeoDistance_NestedFieldPath(t *testing.T) {
+	bytesVal := makeMsgpackBytesVal(t, map[string]interface{}{
+		"Location": map[string]interface{}{
+			"Lat": 47.1860,
+			"Lng": 18.4221,
+		},
+	})
+	tr := newTreasureWithBytes(bytesVal)
+
+	gf := &hydrapb.GeoDistanceFilter{
+		LatFieldPath: "Location.Lat",
+		LngFieldPath: "Location.Lng",
+		RefLatitude:  47.4979,
+		RefLongitude: 19.0402,
+		RadiusKm:     100.0,
+		Mode:         hydrapb.GeoDistanceMode_INSIDE,
+	}
+	if !evaluateNativeGeoDistanceFilter(tr, gf) {
+		t.Error("expected nested field path geo filter to match")
+	}
+}
+
+// --- Haversine unit tests ---
+
+func TestHaversine_KnownDistance(t *testing.T) {
+	// Budapest → Vienna ~215km
+	dist := haversineDistance(47.4979, 19.0402, 48.2082, 16.3738)
+	if math.Abs(dist-215.0) > 10.0 {
+		t.Errorf("Budapest→Vienna expected ~215km, got %.1fkm", dist)
+	}
+}
+
+func TestHaversine_SamePoint(t *testing.T) {
+	dist := haversineDistance(47.4979, 19.0402, 47.4979, 19.0402)
+	if dist != 0 {
+		t.Errorf("expected 0 distance for same point, got %f", dist)
+	}
+}
+
+func TestHaversine_Antipodal(t *testing.T) {
+	// Antipodal points should be ~20015km (half Earth circumference)
+	dist := haversineDistance(0, 0, 0, 180)
+	if math.Abs(dist-20015.0) > 100.0 {
+		t.Errorf("expected ~20015km for antipodal points, got %.1fkm", dist)
+	}
+}
+
+func TestBoundingBox_Contains(t *testing.T) {
+	bb := newGeoBoundingBox(47.4979, 19.0402, 50.0)
+	// Budapest itself should be inside
+	if !bb.contains(47.4979, 19.0402) {
+		t.Error("expected center point to be inside bounding box")
+	}
+	// Far away point should be outside
+	if bb.contains(40.0, 19.0) {
+		t.Error("expected far point to be outside bounding box")
+	}
+}
+
+// --- Benchmark ---
+
+func BenchmarkHaversine(b *testing.B) {
+	for b.Loop() {
+		haversineDistance(47.4979, 19.0402, 47.1860, 18.4221)
+	}
+}
+
+func BenchmarkBoundingBox(b *testing.B) {
+	bb := newGeoBoundingBox(47.4979, 19.0402, 50.0)
+	for b.Loop() {
+		bb.contains(47.1860, 18.4221)
+	}
+}
+
+func BenchmarkGeoDistanceFilter(b *testing.B) {
+	data := map[string]interface{}{
+		"geo_latitude":  47.1860,
+		"geo_longitude": 18.4221,
+	}
+	encoded, _ := msgpack.Marshal(data)
+	bytesVal := append([]byte{msgpackMagic0, msgpackMagic1}, encoded...)
+	tr := newTreasureWithBytes(bytesVal)
+	gf := geoFilter(47.4979, 19.0402, 100.0, hydrapb.GeoDistanceMode_INSIDE)
+
+	for b.Loop() {
+		evaluateNativeGeoDistanceFilter(tr, gf)
+	}
+}

@@ -16,6 +16,7 @@ func evaluateNativeFilterGroup(t treasure.Treasure, group *hydrapb.FilterGroup) 
 		func(sg *hydrapb.FilterGroup) bool { return evaluateNativeFilterGroup(t, sg) },
 		func(pf *hydrapb.PhraseFilter) bool { return evaluateNativePhraseFilter(t, pf) },
 		func(vf *hydrapb.VectorFilter) bool { return evaluateNativeVectorFilter(t, vf) },
+		func(gf *hydrapb.GeoDistanceFilter) bool { return evaluateNativeGeoDistanceFilter(t, gf) },
 	)
 }
 
@@ -422,6 +423,9 @@ func evaluateNativeProfileFilterGroup(treasures map[string]treasure.Treasure, gr
 		func(sg *hydrapb.FilterGroup) bool { return evaluateNativeProfileFilterGroup(treasures, sg) },
 		func(pf *hydrapb.PhraseFilter) bool { return evaluateNativeProfilePhraseFilter(treasures, pf) },
 		func(vf *hydrapb.VectorFilter) bool { return evaluateNativeProfileVectorFilter(treasures, vf) },
+		func(gf *hydrapb.GeoDistanceFilter) bool {
+			return evaluateNativeProfileGeoDistanceFilter(treasures, gf)
+		},
 	)
 }
 
@@ -456,4 +460,73 @@ func evaluateNativeProfileVectorFilter(treasures map[string]treasure.Treasure, v
 		return false
 	}
 	return evaluateNativeVectorFilter(t, vf)
+}
+
+// evaluateNativeGeoDistanceFilter computes geographic distance against the treasure's
+// byte array content using the Haversine formula with bounding box pre-filtering.
+func evaluateNativeGeoDistanceFilter(t treasure.Treasure, gf *hydrapb.GeoDistanceFilter) bool {
+	if gf == nil {
+		return true
+	}
+
+	if t.GetContentType() != treasure.ContentTypeByteArray {
+		return false
+	}
+
+	bytesVal, err := t.GetContentByteArray()
+	if err != nil || bytesVal == nil || !isMsgpackEncoded(bytesVal) {
+		return false
+	}
+
+	decoded, err := decodeMsgpackToMap(unwrapMsgpack(bytesVal))
+	if err != nil {
+		return false
+	}
+
+	latVal := extractFieldByPath(decoded, gf.LatFieldPath)
+	lngVal := extractFieldByPath(decoded, gf.LngFieldPath)
+	if latVal == nil || lngVal == nil {
+		return false
+	}
+
+	lat, latOk := toFloat64(latVal)
+	lng, lngOk := toFloat64(lngVal)
+	if !latOk || !lngOk {
+		return false
+	}
+
+	// Null Island — missing data
+	if lat == 0 && lng == 0 {
+		return false
+	}
+
+	// Bounding box pre-filter
+	bb := newGeoBoundingBox(gf.RefLatitude, gf.RefLongitude, gf.RadiusKm)
+	insideBox := bb.contains(lat, lng)
+
+	if gf.Mode == hydrapb.GeoDistanceMode_INSIDE && !insideBox {
+		return false
+	}
+	if gf.Mode == hydrapb.GeoDistanceMode_OUTSIDE && !insideBox {
+		return true
+	}
+
+	// Exact Haversine
+	distance := haversineDistance(gf.RefLatitude, gf.RefLongitude, lat, lng)
+
+	if gf.Mode == hydrapb.GeoDistanceMode_INSIDE {
+		return distance <= gf.RadiusKm
+	}
+	return distance > gf.RadiusKm
+}
+
+func evaluateNativeProfileGeoDistanceFilter(treasures map[string]treasure.Treasure, gf *hydrapb.GeoDistanceFilter) bool {
+	if gf == nil || gf.TreasureKey == nil || *gf.TreasureKey == "" {
+		return true
+	}
+	t, exists := treasures[*gf.TreasureKey]
+	if !exists {
+		return false
+	}
+	return evaluateNativeGeoDistanceFilter(t, gf)
 }

@@ -58,6 +58,7 @@ app/server/e2etests/data/
 CLAUDE.md
 
 # Local planning docs (not for git)
+plan/
 VECTOR_SEARCH_PLAN.md
 EMBEDDING_SIMILARITY_SEARCH_TERV.md
 EXPLORER_FIX_PLAN.md

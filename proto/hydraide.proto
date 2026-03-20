@@ -2236,6 +2236,7 @@ message FilterGroup {
   repeated FilterGroup SubGroups = 3;
   repeated PhraseFilter PhraseFilters = 4;
   repeated VectorFilter VectorFilters = 5;
+  repeated GeoDistanceFilter GeoDistanceFilters = 6;
 }
 
 // PhraseFilter checks if specified words appear at consecutive positions
@@ -2308,6 +2309,69 @@ message VectorFilter {
   // TreasureKey is used in profile-mode filtering to specify WHICH Treasure
   // this vector filter should be evaluated against. See TreasureFilter.TreasureKey.
   optional string TreasureKey = 4;
+}
+
+// GeoDistanceMode defines whether a GeoDistanceFilter matches points
+// inside or outside the specified radius.
+message GeoDistanceMode {
+  enum Type {
+    // INSIDE matches Treasures within RadiusKm of the reference point (distance <= RadiusKm).
+    INSIDE = 0;
+    // OUTSIDE matches Treasures beyond RadiusKm from the reference point (distance > RadiusKm).
+    OUTSIDE = 1;
+  }
+}
+
+// GeoDistanceFilter performs geographic distance filtering using the Haversine formula.
+// It extracts latitude and longitude (float64) from the Treasure's MessagePack-encoded
+// BytesVal and computes the great-circle distance from a reference point.
+//
+// Invalid coordinates (lat == 0 AND lng == 0, i.e. Null Island) are automatically
+// excluded — the filter returns false for such records regardless of mode.
+//
+// Example: Find all domains within 50 km of Budapest
+//   GeoDistanceFilter{
+//     LatFieldPath: "geo_latitude",
+//     LngFieldPath: "geo_longitude",
+//     RefLatitude:  47.4979,
+//     RefLongitude: 19.0402,
+//     RadiusKm:     50.0,
+//     Mode:         GeoDistanceMode.INSIDE,
+//   }
+//
+// Example: Band filter (50-150 km) using two filters in AND group:
+//   FilterGroup{Logic: AND, GeoDistanceFilters: [
+//     {LatFieldPath: "geo_latitude", LngFieldPath: "geo_longitude",
+//      RefLatitude: 47.4979, RefLongitude: 19.0402, RadiusKm: 50.0, Mode: OUTSIDE},
+//     {LatFieldPath: "geo_latitude", LngFieldPath: "geo_longitude",
+//      RefLatitude: 47.4979, RefLongitude: 19.0402, RadiusKm: 150.0, Mode: INSIDE},
+//   ]}
+message GeoDistanceFilter {
+  // LatFieldPath is a dot-separated path to the latitude (float64) field
+  // within the MessagePack-encoded BytesVal.
+  // Example: "geo_latitude" or "Location.Lat"
+  string LatFieldPath = 1;
+
+  // LngFieldPath is a dot-separated path to the longitude (float64) field
+  // within the MessagePack-encoded BytesVal.
+  // Example: "geo_longitude" or "Location.Lng"
+  string LngFieldPath = 2;
+
+  // RefLatitude is the reference point's latitude in WGS84 decimal degrees.
+  double RefLatitude = 3;
+
+  // RefLongitude is the reference point's longitude in WGS84 decimal degrees.
+  double RefLongitude = 4;
+
+  // RadiusKm is the distance threshold in kilometers.
+  double RadiusKm = 5;
+
+  // Mode determines whether to match inside or outside the radius.
+  GeoDistanceMode.Type Mode = 6;
+
+  // TreasureKey is used in profile-mode filtering to specify WHICH Treasure
+  // this geo filter should be evaluated against. See TreasureFilter.TreasureKey.
+  optional string TreasureKey = 7;
 }
 
 // --- STREAMING READ REQUESTS/RESPONSES ---

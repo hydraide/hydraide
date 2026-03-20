@@ -506,11 +506,12 @@ func (f *Filter) isFilterItem() {}
 //	    ),
 //	)
 type FilterGroup struct {
-	logic         FilterLogic
-	filters       []*Filter
-	subGroups     []*FilterGroup
-	phraseFilters []*PhraseFilter
-	vectorFilters []*VectorFilter
+	logic              FilterLogic
+	filters            []*Filter
+	subGroups          []*FilterGroup
+	phraseFilters      []*PhraseFilter
+	vectorFilters      []*VectorFilter
+	geoDistanceFilters []*GeoDistanceFilter
 }
 
 // isFilterItem marks FilterGroup as a valid FilterItem.
@@ -617,6 +618,70 @@ func FilterVector(bytesFieldPath string, queryVector []float32, minSimilarity fl
 	}
 }
 
+// GeoMode determines whether a GeoDistance filter matches inside or outside the radius.
+type GeoMode int
+
+const (
+	// GeoInside matches Treasures within the specified radius (distance <= radius).
+	GeoInside GeoMode = iota
+	// GeoOutside matches Treasures beyond the specified radius (distance > radius).
+	GeoOutside
+)
+
+// GeoDistanceFilter performs geographic distance filtering using the Haversine formula.
+type GeoDistanceFilter struct {
+	latFieldPath string
+	lngFieldPath string
+	refLatitude  float64
+	refLongitude float64
+	radiusKm     float64
+	mode         GeoMode
+	treasureKey  *string
+}
+
+// isFilterItem marks GeoDistanceFilter as a valid FilterItem.
+func (gf *GeoDistanceFilter) isFilterItem() {}
+
+// ForKey sets the TreasureKey for profile-mode geo distance filtering.
+func (gf *GeoDistanceFilter) ForKey(key string) *GeoDistanceFilter {
+	gf.treasureKey = &key
+	return gf
+}
+
+// GeoDistance creates a GeoDistanceFilter that matches Treasures based on their
+// geographic distance from a reference point using the Haversine formula.
+//
+// Parameters:
+//   - latFieldPath: dot-separated path to the latitude (float64) field in BytesVal
+//   - lngFieldPath: dot-separated path to the longitude (float64) field in BytesVal
+//   - refLat: reference point latitude in WGS84 degrees
+//   - refLng: reference point longitude in WGS84 degrees
+//   - radiusKm: distance threshold in kilometers
+//   - mode: GeoInside (within radius) or GeoOutside (beyond radius)
+//
+// Records with lat == 0 AND lng == 0 (Null Island / missing data) are automatically excluded.
+//
+// Example — find domains within 50 km of Budapest:
+//
+//	hydraidego.GeoDistance("geo_latitude", "geo_longitude", 47.4979, 19.0402, 50.0, hydraidego.GeoInside)
+//
+// Example — 50-150 km band:
+//
+//	hydraidego.FilterAND(
+//	    hydraidego.GeoDistance("geo_latitude", "geo_longitude", 47.4979, 19.0402, 50.0, hydraidego.GeoOutside),
+//	    hydraidego.GeoDistance("geo_latitude", "geo_longitude", 47.4979, 19.0402, 150.0, hydraidego.GeoInside),
+//	)
+func GeoDistance(latFieldPath, lngFieldPath string, refLat, refLng, radiusKm float64, mode GeoMode) *GeoDistanceFilter {
+	return &GeoDistanceFilter{
+		latFieldPath: latFieldPath,
+		lngFieldPath: lngFieldPath,
+		refLatitude:  refLat,
+		refLongitude: refLng,
+		radiusKm:     radiusKm,
+		mode:         mode,
+	}
+}
+
 // NormalizeVector returns a new L2-normalized copy of the input vector (unit length).
 // If the input vector is a zero vector (all elements are 0), returns a zero-length slice.
 // Normalized vectors allow cosine similarity to be computed as a simple dot product.
@@ -666,7 +731,7 @@ func CosineSimilarity(a, b []float32) float32 {
 }
 
 // FilterAND creates a FilterGroup that requires ALL conditions to be true.
-// Accepts any combination of *Filter, *FilterGroup, *PhraseFilter, and *VectorFilter items.
+// Accepts any combination of *Filter, *FilterGroup, *PhraseFilter, *VectorFilter, and *GeoDistanceFilter items.
 func FilterAND(items ...FilterItem) *FilterGroup {
 	g := &FilterGroup{logic: FilterLogicAND}
 	for _, item := range items {
@@ -679,13 +744,15 @@ func FilterAND(items ...FilterItem) *FilterGroup {
 			g.phraseFilters = append(g.phraseFilters, v)
 		case *VectorFilter:
 			g.vectorFilters = append(g.vectorFilters, v)
+		case *GeoDistanceFilter:
+			g.geoDistanceFilters = append(g.geoDistanceFilters, v)
 		}
 	}
 	return g
 }
 
 // FilterOR creates a FilterGroup that requires at least ONE condition to be true.
-// Accepts any combination of *Filter, *FilterGroup, *PhraseFilter, and *VectorFilter items.
+// Accepts any combination of *Filter, *FilterGroup, *PhraseFilter, *VectorFilter, and *GeoDistanceFilter items.
 func FilterOR(items ...FilterItem) *FilterGroup {
 	g := &FilterGroup{logic: FilterLogicOR}
 	for _, item := range items {
@@ -698,6 +765,8 @@ func FilterOR(items ...FilterItem) *FilterGroup {
 			g.phraseFilters = append(g.phraseFilters, v)
 		case *VectorFilter:
 			g.vectorFilters = append(g.vectorFilters, v)
+		case *GeoDistanceFilter:
+			g.geoDistanceFilters = append(g.geoDistanceFilters, v)
 		}
 	}
 	return g
@@ -4095,6 +4164,25 @@ func convertFilterGroupToProto(group *FilterGroup) *hydraidepbgo.FilterGroup {
 				protoVF.TreasureKey = vf.treasureKey
 			}
 			pg.VectorFilters = append(pg.VectorFilters, protoVF)
+		}
+	}
+
+	for _, gf := range group.geoDistanceFilters {
+		if gf != nil {
+			protoGF := &hydraidepbgo.GeoDistanceFilter{
+				LatFieldPath: gf.latFieldPath,
+				LngFieldPath: gf.lngFieldPath,
+				RefLatitude:  gf.refLatitude,
+				RefLongitude: gf.refLongitude,
+				RadiusKm:     gf.radiusKm,
+			}
+			if gf.mode == GeoOutside {
+				protoGF.Mode = hydraidepbgo.GeoDistanceMode_OUTSIDE
+			}
+			if gf.treasureKey != nil {
+				protoGF.TreasureKey = gf.treasureKey
+			}
+			pg.GeoDistanceFilters = append(pg.GeoDistanceFilters, protoGF)
 		}
 	}
 

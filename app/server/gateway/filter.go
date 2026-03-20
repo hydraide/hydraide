@@ -2,12 +2,57 @@ package gateway
 
 import (
 	"cmp"
+	"math"
 	"sort"
 	"strings"
 
 	hydrapb "github.com/hydraide/hydraide/generated/hydraidepbgo"
 	"github.com/vmihailenco/msgpack/v5"
 )
+
+const earthRadiusKm = 6371.0
+
+// haversineDistance computes the great-circle distance in km between two points
+// specified in decimal degrees (WGS84).
+func haversineDistance(lat1, lng1, lat2, lng2 float64) float64 {
+	const degToRad = math.Pi / 180.0
+	dLat := (lat2 - lat1) * degToRad
+	dLng := (lng2 - lng1) * degToRad
+
+	lat1Rad := lat1 * degToRad
+	lat2Rad := lat2 * degToRad
+
+	a := math.Sin(dLat/2)*math.Sin(dLat/2) +
+		math.Cos(lat1Rad)*math.Cos(lat2Rad)*
+			math.Sin(dLng/2)*math.Sin(dLng/2)
+
+	c := 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
+	return earthRadiusKm * c
+}
+
+// geoBoundingBox is a lat/lng rectangle for fast rejection before Haversine computation.
+type geoBoundingBox struct {
+	minLat, maxLat float64
+	minLng, maxLng float64
+}
+
+func newGeoBoundingBox(lat, lng, radiusKm float64) geoBoundingBox {
+	const degToRad = math.Pi / 180.0
+	dLat := radiusKm / 111.32
+	dLng := radiusKm / (111.32 * math.Cos(lat*degToRad))
+
+	return geoBoundingBox{
+		minLat: lat - dLat,
+		maxLat: lat + dLat,
+		minLng: lng - dLng,
+		maxLng: lng + dLng,
+	}
+}
+
+func (bb geoBoundingBox) contains(lat, lng float64) bool {
+	return lat >= bb.minLat && lat <= bb.maxLat &&
+		lng >= bb.minLng && lng <= bb.maxLng
+}
 
 // msgpack format detection constants (must match SDK values).
 const (
@@ -32,6 +77,7 @@ func evaluateFilterGroupWith(
 	evalSubGroup func(*hydrapb.FilterGroup) bool,
 	evalPhrase func(*hydrapb.PhraseFilter) bool,
 	evalVector func(*hydrapb.VectorFilter) bool,
+	evalGeoDistance func(*hydrapb.GeoDistanceFilter) bool,
 ) bool {
 	if group == nil {
 		return true
@@ -41,9 +87,10 @@ func evaluateFilterGroupWith(
 	hasSubGroups := len(group.SubGroups) > 0
 	hasPhraseFilters := len(group.PhraseFilters) > 0
 	hasVectorFilters := len(group.VectorFilters) > 0
+	hasGeoDistanceFilters := len(group.GeoDistanceFilters) > 0
 
 	// Empty group = no filtering = pass
-	if !hasFilters && !hasSubGroups && !hasPhraseFilters && !hasVectorFilters {
+	if !hasFilters && !hasSubGroups && !hasPhraseFilters && !hasVectorFilters && !hasGeoDistanceFilters {
 		return true
 	}
 
@@ -68,6 +115,11 @@ func evaluateFilterGroupWith(
 				return true
 			}
 		}
+		for _, gf := range group.GeoDistanceFilters {
+			if evalGeoDistance(gf) {
+				return true
+			}
+		}
 		return false
 	}
 
@@ -89,6 +141,11 @@ func evaluateFilterGroupWith(
 	}
 	for _, vf := range group.VectorFilters {
 		if !evalVector(vf) {
+			return false
+		}
+	}
+	for _, gf := range group.GeoDistanceFilters {
+		if !evalGeoDistance(gf) {
 			return false
 		}
 	}
