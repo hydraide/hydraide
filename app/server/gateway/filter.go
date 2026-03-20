@@ -7,7 +7,6 @@ import (
 
 	hydrapb "github.com/hydraide/hydraide/generated/hydraidepbgo"
 	"github.com/vmihailenco/msgpack/v5"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // msgpack format detection constants (must match SDK values).
@@ -24,15 +23,9 @@ func unwrapMsgpack(data []byte) []byte {
 	return data[2:]
 }
 
-// evaluateFilterGroup recursively evaluates a FilterGroup against a Treasure.
-//
-// A FilterGroup combines leaf filters and nested sub-groups using AND or OR logic:
-//   - AND (default): ALL leaf filters AND ALL sub-groups must evaluate to true
-//   - OR: at least ONE leaf filter OR ONE sub-group must evaluate to true
-//
-// Returns true if the group is nil or empty (no filtering applied).
 // evaluateFilterGroupWith is the generic AND/OR evaluator for filter groups.
-// The three callbacks determine how individual filters, sub-groups, and phrase filters are evaluated.
+// The four callbacks determine how individual filters, sub-groups, phrase filters,
+// and vector filters are evaluated.
 func evaluateFilterGroupWith(
 	group *hydrapb.FilterGroup,
 	evalFilter func(*hydrapb.TreasureFilter) bool,
@@ -100,269 +93,6 @@ func evaluateFilterGroupWith(
 		}
 	}
 	return true
-}
-
-func evaluateFilterGroup(treasure *hydrapb.Treasure, group *hydrapb.FilterGroup) bool {
-	return evaluateFilterGroupWith(group,
-		func(f *hydrapb.TreasureFilter) bool { return evaluateSingleFilter(treasure, f) },
-		func(sg *hydrapb.FilterGroup) bool { return evaluateFilterGroup(treasure, sg) },
-		func(pf *hydrapb.PhraseFilter) bool { return evaluatePhraseFilter(treasure, pf) },
-		func(vf *hydrapb.VectorFilter) bool { return evaluateVectorFilter(treasure, vf) },
-	)
-}
-
-// evaluateSingleFilter evaluates one TreasureFilter against a Treasure.
-// The oneof CompareValue determines which Treasure field to compare.
-// If BytesFieldPath is set, the filter extracts from BytesVal instead.
-func evaluateSingleFilter(treasure *hydrapb.Treasure, filter *hydrapb.TreasureFilter) bool {
-	op := filter.GetOperator()
-
-	// If BytesFieldPath is set, extract the value from MessagePack-encoded BytesVal.
-	// An empty string path ("") is valid in profile mode — it means the entire BytesVal is the target.
-	if filter.BytesFieldPath != nil {
-		return evaluateBytesFieldFilter(treasure, filter)
-	}
-
-	// IS_EMPTY / IS_NOT_EMPTY: check whether the Treasure field is nil (or empty string for strings).
-	// The CompareValue oneof determines which field to check; the actual value is ignored.
-	if op == hydrapb.Relational_IS_EMPTY || op == hydrapb.Relational_IS_NOT_EMPTY {
-		var isEmpty bool
-		switch filter.GetCompareValue().(type) {
-		case *hydrapb.TreasureFilter_Int8Val:
-			isEmpty = treasure.Int8Val == nil
-		case *hydrapb.TreasureFilter_Int16Val:
-			isEmpty = treasure.Int16Val == nil
-		case *hydrapb.TreasureFilter_Int32Val:
-			isEmpty = treasure.Int32Val == nil
-		case *hydrapb.TreasureFilter_Int64Val:
-			isEmpty = treasure.Int64Val == nil
-		case *hydrapb.TreasureFilter_Uint8Val:
-			isEmpty = treasure.Uint8Val == nil
-		case *hydrapb.TreasureFilter_Uint16Val:
-			isEmpty = treasure.Uint16Val == nil
-		case *hydrapb.TreasureFilter_Uint32Val:
-			isEmpty = treasure.Uint32Val == nil
-		case *hydrapb.TreasureFilter_Uint64Val:
-			isEmpty = treasure.Uint64Val == nil
-		case *hydrapb.TreasureFilter_Float32Val:
-			isEmpty = treasure.Float32Val == nil
-		case *hydrapb.TreasureFilter_Float64Val:
-			isEmpty = treasure.Float64Val == nil
-		case *hydrapb.TreasureFilter_StringVal:
-			isEmpty = treasure.StringVal == nil || *treasure.StringVal == ""
-		case *hydrapb.TreasureFilter_BoolVal:
-			isEmpty = treasure.BoolVal == nil
-		case *hydrapb.TreasureFilter_CreatedAtVal:
-			isEmpty = treasure.CreatedAt == nil
-		case *hydrapb.TreasureFilter_UpdatedAtVal:
-			isEmpty = treasure.UpdatedAt == nil
-		case *hydrapb.TreasureFilter_ExpiredAtVal:
-			isEmpty = treasure.ExpiredAt == nil
-		default:
-			isEmpty = true
-		}
-		if op == hydrapb.Relational_IS_EMPTY {
-			return isEmpty
-		}
-		return !isEmpty
-	}
-
-	switch cv := filter.GetCompareValue().(type) {
-	case *hydrapb.TreasureFilter_Int8Val:
-		if treasure.Int8Val == nil {
-			return false
-		}
-		return compareOrdered(*treasure.Int8Val, op, cv.Int8Val)
-
-	case *hydrapb.TreasureFilter_Int16Val:
-		if treasure.Int16Val == nil {
-			return false
-		}
-		return compareOrdered(*treasure.Int16Val, op, cv.Int16Val)
-
-	case *hydrapb.TreasureFilter_Int32Val:
-		if treasure.Int32Val == nil {
-			return false
-		}
-		return compareOrdered(*treasure.Int32Val, op, cv.Int32Val)
-
-	case *hydrapb.TreasureFilter_Int64Val:
-		if treasure.Int64Val == nil {
-			return false
-		}
-		return compareOrdered(*treasure.Int64Val, op, cv.Int64Val)
-
-	case *hydrapb.TreasureFilter_Uint8Val:
-		if treasure.Uint8Val == nil {
-			return false
-		}
-		return compareOrdered(*treasure.Uint8Val, op, cv.Uint8Val)
-
-	case *hydrapb.TreasureFilter_Uint16Val:
-		if treasure.Uint16Val == nil {
-			return false
-		}
-		return compareOrdered(*treasure.Uint16Val, op, cv.Uint16Val)
-
-	case *hydrapb.TreasureFilter_Uint32Val:
-		if treasure.Uint32Val == nil {
-			return false
-		}
-		return compareOrdered(*treasure.Uint32Val, op, cv.Uint32Val)
-
-	case *hydrapb.TreasureFilter_Uint64Val:
-		if treasure.Uint64Val == nil {
-			return false
-		}
-		return compareOrdered(*treasure.Uint64Val, op, cv.Uint64Val)
-
-	case *hydrapb.TreasureFilter_Float32Val:
-		if treasure.Float32Val == nil {
-			return false
-		}
-		return compareOrdered(*treasure.Float32Val, op, cv.Float32Val)
-
-	case *hydrapb.TreasureFilter_Float64Val:
-		if treasure.Float64Val == nil {
-			return false
-		}
-		return compareOrdered(*treasure.Float64Val, op, cv.Float64Val)
-
-	case *hydrapb.TreasureFilter_StringVal:
-		if treasure.StringVal == nil {
-			return false
-		}
-		return compareString(*treasure.StringVal, op, cv.StringVal)
-
-	case *hydrapb.TreasureFilter_BoolVal:
-		if treasure.BoolVal == nil {
-			return false
-		}
-		return compareBool(*treasure.BoolVal, op, cv.BoolVal)
-
-	case *hydrapb.TreasureFilter_CreatedAtVal:
-		return compareTimestamp(treasure.CreatedAt, op, cv.CreatedAtVal)
-
-	case *hydrapb.TreasureFilter_UpdatedAtVal:
-		return compareTimestamp(treasure.UpdatedAt, op, cv.UpdatedAtVal)
-
-	case *hydrapb.TreasureFilter_ExpiredAtVal:
-		return compareTimestamp(treasure.ExpiredAt, op, cv.ExpiredAtVal)
-
-	default:
-		// Unknown filter type — skip (don't match)
-		return false
-	}
-}
-
-// evaluateBytesFieldFilter extracts a field from MessagePack-encoded BytesVal
-// and applies the filter to the extracted value.
-// Returns false if BytesVal is nil, not MessagePack-encoded, or the field path doesn't exist.
-// Exception: IS_EMPTY returns true when the field doesn't exist.
-func evaluateBytesFieldFilter(treasure *hydrapb.Treasure, filter *hydrapb.TreasureFilter) bool {
-	op := filter.GetOperator()
-
-	if treasure.BytesVal == nil || !isMsgpackEncoded(treasure.BytesVal) {
-		// No inspectable data — field doesn't exist
-		return op == hydrapb.Relational_IS_EMPTY
-	}
-
-	decoded, err := decodeMsgpackToMap(unwrapMsgpack(treasure.BytesVal))
-	if err != nil {
-		return op == hydrapb.Relational_IS_EMPTY
-	}
-
-	fieldVal := extractFieldByPath(decoded, *filter.BytesFieldPath)
-
-	// IS_EMPTY / IS_NOT_EMPTY: check existence and emptiness
-	if op == hydrapb.Relational_IS_EMPTY || op == hydrapb.Relational_IS_NOT_EMPTY {
-		isEmpty := fieldVal == nil
-		if !isEmpty {
-			if s, ok := fieldVal.(string); ok {
-				isEmpty = s == ""
-			}
-		}
-		if op == hydrapb.Relational_IS_EMPTY {
-			return isEmpty
-		}
-		return !isEmpty
-	}
-
-	// HAS_KEY / HAS_NOT_KEY: check if a key exists in a map
-	if op == hydrapb.Relational_HAS_KEY || op == hydrapb.Relational_HAS_NOT_KEY {
-		mapVal, ok := fieldVal.(map[string]interface{})
-		if !ok {
-			return op == hydrapb.Relational_HAS_NOT_KEY
-		}
-		cv, ok := filter.GetCompareValue().(*hydrapb.TreasureFilter_StringVal)
-		if !ok {
-			return false
-		}
-		_, exists := mapVal[cv.StringVal]
-		if op == hydrapb.Relational_HAS_KEY {
-			return exists
-		}
-		return !exists
-	}
-
-	if fieldVal == nil {
-		return false
-	}
-
-	// Match the extracted value against the filter's CompareValue
-	switch cv := filter.GetCompareValue().(type) {
-	case *hydrapb.TreasureFilter_Int8Val:
-		if v, ok := toInt64(fieldVal); ok {
-			return compareOrdered(v, op, int64(cv.Int8Val))
-		}
-	case *hydrapb.TreasureFilter_Int16Val:
-		if v, ok := toInt64(fieldVal); ok {
-			return compareOrdered(v, op, int64(cv.Int16Val))
-		}
-	case *hydrapb.TreasureFilter_Int32Val:
-		if v, ok := toInt64(fieldVal); ok {
-			return compareOrdered(v, op, int64(cv.Int32Val))
-		}
-	case *hydrapb.TreasureFilter_Int64Val:
-		if v, ok := toInt64(fieldVal); ok {
-			return compareOrdered(v, op, cv.Int64Val)
-		}
-	case *hydrapb.TreasureFilter_Uint8Val:
-		if v, ok := toUint64(fieldVal); ok {
-			return compareOrdered(v, op, uint64(cv.Uint8Val))
-		}
-	case *hydrapb.TreasureFilter_Uint16Val:
-		if v, ok := toUint64(fieldVal); ok {
-			return compareOrdered(v, op, uint64(cv.Uint16Val))
-		}
-	case *hydrapb.TreasureFilter_Uint32Val:
-		if v, ok := toUint64(fieldVal); ok {
-			return compareOrdered(v, op, uint64(cv.Uint32Val))
-		}
-	case *hydrapb.TreasureFilter_Uint64Val:
-		if v, ok := toUint64(fieldVal); ok {
-			return compareOrdered(v, op, cv.Uint64Val)
-		}
-	case *hydrapb.TreasureFilter_Float32Val:
-		if v, ok := toFloat64(fieldVal); ok {
-			return compareOrdered(v, op, float64(cv.Float32Val))
-		}
-	case *hydrapb.TreasureFilter_Float64Val:
-		if v, ok := toFloat64(fieldVal); ok {
-			return compareOrdered(v, op, cv.Float64Val)
-		}
-	case *hydrapb.TreasureFilter_StringVal:
-		if v, ok := fieldVal.(string); ok {
-			return compareString(v, op, cv.StringVal)
-		}
-	case *hydrapb.TreasureFilter_BoolVal:
-		if v, ok := fieldVal.(bool); ok {
-			ref := cv.BoolVal == hydrapb.Boolean_TRUE
-			return compareBoolRaw(v, op, ref)
-		}
-	}
-
-	return false
 }
 
 // decodeMsgpackToMap decodes MessagePack bytes into a map[string]interface{}.
@@ -498,11 +228,8 @@ func toFloat64(v interface{}) (float64, bool) {
 }
 
 // --- Typed comparison functions ---
-// All use Relational.Operator (EQUAL, NOT_EQUAL, GREATER_THAN, etc.)
 
-// compareOrdered is a generic comparison function for all ordered types
-// (int32, int64, uint32, uint64, float32, float64, string).
-// It handles EQ, NEQ, GT, GTE, LT, LTE operators.
+// compareOrdered is a generic comparison function for all ordered types.
 func compareOrdered[T cmp.Ordered](actual T, op hydrapb.Relational_Operator, ref T) bool {
 	switch op {
 	case hydrapb.Relational_EQUAL:
@@ -522,8 +249,7 @@ func compareOrdered[T cmp.Ordered](actual T, op hydrapb.Relational_Operator, ref
 	}
 }
 
-// compareString handles string comparison with additional string-specific operators
-// (Contains, NotContains, StartsWith, EndsWith) on top of the standard ordered comparison.
+// compareString handles string comparison with additional string-specific operators.
 func compareString(actual string, op hydrapb.Relational_Operator, ref string) bool {
 	switch op {
 	case hydrapb.Relational_CONTAINS:
@@ -539,19 +265,7 @@ func compareString(actual string, op hydrapb.Relational_Operator, ref string) bo
 	}
 }
 
-func compareBool(actual hydrapb.Boolean_Type, op hydrapb.Relational_Operator, ref hydrapb.Boolean_Type) bool {
-	switch op {
-	case hydrapb.Relational_EQUAL:
-		return actual == ref
-	case hydrapb.Relational_NOT_EQUAL:
-		return actual != ref
-	default:
-		// GT/LT/GTE/LTE don't make sense for booleans
-		return false
-	}
-}
-
-// compareBoolRaw compares raw Go booleans (used for BytesField extraction).
+// compareBoolRaw compares raw Go booleans.
 func compareBoolRaw(actual bool, op hydrapb.Relational_Operator, ref bool) bool {
 	switch op {
 	case hydrapb.Relational_EQUAL:
@@ -561,73 +275,6 @@ func compareBoolRaw(actual bool, op hydrapb.Relational_Operator, ref bool) bool 
 	default:
 		return false
 	}
-}
-
-// compareTimestamp compares two protobuf Timestamps using nanosecond precision.
-func compareTimestamp(actual *timestamppb.Timestamp, op hydrapb.Relational_Operator, ref *timestamppb.Timestamp) bool {
-	if actual == nil || ref == nil {
-		return false
-	}
-	return compareOrdered(actual.AsTime().UnixNano(), op, ref.AsTime().UnixNano())
-}
-
-// evaluatePhraseFilter checks if the specified words appear at consecutive positions
-// in a word-index map (map[string][]int) stored in the Treasure's BytesVal.
-func evaluatePhraseFilter(treasure *hydrapb.Treasure, pf *hydrapb.PhraseFilter) bool {
-	if pf == nil || len(pf.Words) == 0 {
-		return true
-	}
-
-	if treasure.BytesVal == nil || !isMsgpackEncoded(treasure.BytesVal) {
-		if pf.Negate {
-			return true
-		}
-		return false
-	}
-
-	decoded, err := decodeMsgpackToMap(unwrapMsgpack(treasure.BytesVal))
-	if err != nil {
-		if pf.Negate {
-			return true
-		}
-		return false
-	}
-
-	fieldVal := extractFieldByPath(decoded, pf.BytesFieldPath)
-	wordIndex, ok := fieldVal.(map[string]interface{})
-	if !ok {
-		if pf.Negate {
-			return true
-		}
-		return false
-	}
-
-	// Collect position lists for each word
-	wordPositions := make([][]int64, len(pf.Words))
-	for i, word := range pf.Words {
-		posVal, exists := wordIndex[word]
-		if !exists {
-			if pf.Negate {
-				return true
-			}
-			return false
-		}
-		positions := toInt64Slice(posVal)
-		if len(positions) == 0 {
-			if pf.Negate {
-				return true
-			}
-			return false
-		}
-		sort.Slice(positions, func(a, b int) bool { return positions[a] < positions[b] })
-		wordPositions[i] = positions
-	}
-
-	found := hasConsecutivePositions(wordPositions)
-	if pf.Negate {
-		return !found
-	}
-	return found
 }
 
 // toInt64Slice converts a msgpack-decoded interface{} (expected []interface{}) to []int64.
@@ -646,8 +293,7 @@ func toInt64Slice(val interface{}) []int64 {
 }
 
 // hasConsecutivePositions checks if there exists a sequence of consecutive positions
-// across the word position lists. For each starting position of the first word,
-// checks if subsequent words have pos+1, pos+2, etc.
+// across the word position lists.
 func hasConsecutivePositions(wordPositions [][]int64) bool {
 	if len(wordPositions) == 0 {
 		return true
@@ -677,90 +323,6 @@ func sortedContains(sorted []int64, target int64) bool {
 	return i < len(sorted) && sorted[i] == target
 }
 
-// evaluateProfileFilterGroup evaluates a FilterGroup against a profile's Treasures.
-//
-// In profile mode, each struct field is stored as a separate Treasure keyed by field name.
-// Filters use TreasureKey to specify which Treasure to evaluate against.
-// If TreasureKey is not set on a filter, it evaluates to false (required in profile mode).
-//
-// Returns true if the group is nil or empty (no filtering applied).
-func evaluateProfileFilterGroup(treasures map[string]*hydrapb.Treasure, group *hydrapb.FilterGroup) bool {
-	return evaluateFilterGroupWith(group,
-		func(f *hydrapb.TreasureFilter) bool { return evaluateProfileSingleFilter(treasures, f) },
-		func(sg *hydrapb.FilterGroup) bool { return evaluateProfileFilterGroup(treasures, sg) },
-		func(pf *hydrapb.PhraseFilter) bool { return evaluateProfilePhraseFilter(treasures, pf) },
-		func(vf *hydrapb.VectorFilter) bool { return evaluateProfileVectorFilter(treasures, vf) },
-	)
-}
-
-// evaluateProfileSingleFilter resolves the TreasureKey from a filter and delegates
-// to evaluateSingleFilter with the targeted Treasure.
-func evaluateProfileSingleFilter(treasures map[string]*hydrapb.Treasure, filter *hydrapb.TreasureFilter) bool {
-	if filter.TreasureKey == nil || *filter.TreasureKey == "" {
-		return false // TreasureKey is required in profile mode
-	}
-	treasure, exists := treasures[*filter.TreasureKey]
-	if !exists {
-		// Missing key: only IS_EMPTY should return true
-		return filter.GetOperator() == hydrapb.Relational_IS_EMPTY
-	}
-	return evaluateSingleFilter(treasure, filter)
-}
-
-// evaluateProfilePhraseFilter resolves the TreasureKey from a PhraseFilter and delegates
-// to evaluatePhraseFilter with the targeted Treasure.
-func evaluateProfilePhraseFilter(treasures map[string]*hydrapb.Treasure, pf *hydrapb.PhraseFilter) bool {
-	if pf.TreasureKey == nil || *pf.TreasureKey == "" {
-		return false // TreasureKey is required in profile mode
-	}
-	treasure, exists := treasures[*pf.TreasureKey]
-	if !exists {
-		// Missing treasure: negated phrase filter should match (phrase not found)
-		return pf.Negate
-	}
-	return evaluatePhraseFilter(treasure, pf)
-}
-
-// evaluateVectorFilter extracts a float32 vector from the Treasure's MessagePack-encoded
-// BytesVal and computes cosine similarity (via dot product on normalized vectors)
-// against the query vector. Returns true if similarity >= MinSimilarity.
-func evaluateVectorFilter(treasure *hydrapb.Treasure, vf *hydrapb.VectorFilter) bool {
-	if vf == nil || len(vf.QueryVector) == 0 {
-		return true // No vector filter = pass
-	}
-
-	if treasure.BytesVal == nil || !isMsgpackEncoded(treasure.BytesVal) {
-		return false
-	}
-
-	decoded, err := decodeMsgpackToMap(unwrapMsgpack(treasure.BytesVal))
-	if err != nil {
-		return false
-	}
-
-	fieldVal := extractFieldByPath(decoded, vf.BytesFieldPath)
-	storedVector := toFloat32Slice(fieldVal)
-	if len(storedVector) == 0 || len(storedVector) != len(vf.QueryVector) {
-		return false
-	}
-
-	similarity := dotProduct(storedVector, vf.QueryVector)
-	return similarity >= vf.MinSimilarity
-}
-
-// evaluateProfileVectorFilter resolves the TreasureKey from a VectorFilter and delegates
-// to evaluateVectorFilter with the targeted Treasure.
-func evaluateProfileVectorFilter(treasures map[string]*hydrapb.Treasure, vf *hydrapb.VectorFilter) bool {
-	if vf.TreasureKey == nil || *vf.TreasureKey == "" {
-		return false // TreasureKey is required in profile mode
-	}
-	treasure, exists := treasures[*vf.TreasureKey]
-	if !exists {
-		return false
-	}
-	return evaluateVectorFilter(treasure, vf)
-}
-
 // dotProduct computes the dot product of two float32 vectors.
 // When both vectors are L2-normalized, this equals cosine similarity.
 // Uses 4-wide loop unrolling for better CPU pipeline utilization.
@@ -768,13 +330,11 @@ func dotProduct(a, b []float32) float32 {
 	n := len(a)
 	var sum float32
 
-	// Process 4 elements at a time for pipeline-friendly execution.
 	i := 0
 	for ; i <= n-4; i += 4 {
 		sum += a[i]*b[i] + a[i+1]*b[i+1] + a[i+2]*b[i+2] + a[i+3]*b[i+3]
 	}
 
-	// Handle remaining elements.
 	for ; i < n; i++ {
 		sum += a[i] * b[i]
 	}

@@ -9,7 +9,6 @@ import (
 	"github.com/vmihailenco/msgpack/v5"
 )
 
-// makeRandomNormalizedFloat32 creates a random unit-length float32 vector.
 func makeRandomNormalizedFloat32(rng *rand.Rand, dim int) []float32 {
 	v := make([]float32, dim)
 	var norm float32
@@ -24,7 +23,6 @@ func makeRandomNormalizedFloat32(rng *rand.Rand, dim int) []float32 {
 	return v
 }
 
-// makeRandomMsgpackBytesVal creates a BytesVal with a random normalized vector field.
 func makeRandomMsgpackBytesVal(rng *rand.Rand, dim int) []byte {
 	vec := makeRandomNormalizedFloat32(rng, dim)
 	floats := make([]interface{}, len(vec))
@@ -60,15 +58,12 @@ func BenchmarkDotProduct768(b *testing.B) {
 	}
 }
 
-func BenchmarkEvaluateVectorFilter_384(b *testing.B) {
+func BenchmarkEvaluateNativeVectorFilter_384(b *testing.B) {
 	rng := rand.New(rand.NewSource(42))
 	bytesVal := makeRandomMsgpackBytesVal(rng, 384)
 	queryVec := makeRandomNormalizedFloat32(rng, 384)
 
-	treasure := &hydrapb.Treasure{
-		Key:      "bench-domain",
-		BytesVal: bytesVal,
-	}
+	tr := newTreasureWithBytes(bytesVal)
 
 	vf := &hydrapb.VectorFilter{
 		BytesFieldPath: "Embedding",
@@ -78,20 +73,16 @@ func BenchmarkEvaluateVectorFilter_384(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		evaluateVectorFilter(treasure, vf)
+		evaluateNativeVectorFilter(tr, vf)
 	}
 }
 
-func BenchmarkEvaluateVectorFilter_WithPreFilter(b *testing.B) {
+func BenchmarkEvaluateNativeVectorFilter_WithPreFilter(b *testing.B) {
 	rng := rand.New(rand.NewSource(42))
 	bytesVal := makeRandomMsgpackBytesVal(rng, 384)
 	queryVec := makeRandomNormalizedFloat32(rng, 384)
 
-	treasure := &hydrapb.Treasure{
-		Key:      "bench-domain-combined",
-		Int32Val: int32Ptr(1), // category match
-		BytesVal: bytesVal,
-	}
+	tr := newTreasureWithBytes(bytesVal)
 
 	categoryPath := "Category"
 	group := &hydrapb.FilterGroup{
@@ -114,11 +105,10 @@ func BenchmarkEvaluateVectorFilter_WithPreFilter(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		evaluateFilterGroup(treasure, group)
+		evaluateNativeFilterGroup(tr, group)
 	}
 }
 
-// BenchmarkDotProduct384_Batch simulates scanning 10K vectors.
 func BenchmarkDotProduct384_Batch10K(b *testing.B) {
 	rng := rand.New(rand.NewSource(42))
 	query := makeRandomNormalizedFloat32(rng, 384)

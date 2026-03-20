@@ -5,12 +5,18 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hydraide/hydraide/app/core/hydra/swamp/treasure"
+	"github.com/hydraide/hydraide/app/core/hydra/swamp/treasure/guard"
 	hydrapb "github.com/hydraide/hydraide/generated/hydraidepbgo"
 	"github.com/vmihailenco/msgpack/v5"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// --- Helper: create msgpack-encoded BytesVal with magic prefix ---
+func timestamppbNew(t time.Time) *timestamppb.Timestamp {
+	return timestamppb.New(t)
+}
+
+// --- Test helpers ---
 
 func makeMsgpackBytesVal(t *testing.T, data map[string]interface{}) []byte {
 	t.Helper()
@@ -21,175 +27,204 @@ func makeMsgpackBytesVal(t *testing.T, data map[string]interface{}) []byte {
 	return append([]byte{msgpackMagic0, msgpackMagic1}, encoded...)
 }
 
-// --- Timestamp Filter Tests ---
-
-func TestCompareTimestamp_AllOperators(t *testing.T) {
-	earlier := timestamppb.New(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC))
-	middle := timestamppb.New(time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC))
-	later := timestamppb.New(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))
-
-	tests := []struct {
-		name     string
-		actual   *timestamppb.Timestamp
-		op       hydrapb.Relational_Operator
-		ref      *timestamppb.Timestamp
-		expected bool
-	}{
-		{"equal_same", middle, hydrapb.Relational_EQUAL, middle, true},
-		{"equal_different", middle, hydrapb.Relational_EQUAL, later, false},
-		{"not_equal_different", middle, hydrapb.Relational_NOT_EQUAL, later, true},
-		{"not_equal_same", middle, hydrapb.Relational_NOT_EQUAL, middle, false},
-		{"gt_true", later, hydrapb.Relational_GREATER_THAN, earlier, true},
-		{"gt_false", earlier, hydrapb.Relational_GREATER_THAN, later, false},
-		{"gt_equal", middle, hydrapb.Relational_GREATER_THAN, middle, false},
-		{"gte_greater", later, hydrapb.Relational_GREATER_THAN_OR_EQUAL, earlier, true},
-		{"gte_equal", middle, hydrapb.Relational_GREATER_THAN_OR_EQUAL, middle, true},
-		{"gte_less", earlier, hydrapb.Relational_GREATER_THAN_OR_EQUAL, later, false},
-		{"lt_true", earlier, hydrapb.Relational_LESS_THAN, later, true},
-		{"lt_false", later, hydrapb.Relational_LESS_THAN, earlier, false},
-		{"lt_equal", middle, hydrapb.Relational_LESS_THAN, middle, false},
-		{"lte_less", earlier, hydrapb.Relational_LESS_THAN_OR_EQUAL, later, true},
-		{"lte_equal", middle, hydrapb.Relational_LESS_THAN_OR_EQUAL, middle, true},
-		{"lte_greater", later, hydrapb.Relational_LESS_THAN_OR_EQUAL, earlier, false},
-		{"nil_actual", nil, hydrapb.Relational_EQUAL, middle, false},
-		{"nil_ref", middle, hydrapb.Relational_EQUAL, nil, false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := compareTimestamp(tt.actual, tt.op, tt.ref)
-			if result != tt.expected {
-				t.Errorf("compareTimestamp() = %v, want %v", result, tt.expected)
-			}
-		})
-	}
+func noopSave(t treasure.Treasure, guardID guard.ID) treasure.TreasureStatus {
+	return treasure.StatusVoid
 }
 
-func TestTimestampFilter_CreatedAt(t *testing.T) {
+func newTreasureWithInt32(val int32) treasure.Treasure {
+	tr := treasure.New(noopSave)
+	gid := tr.StartTreasureGuard(true)
+	tr.SetContentInt32(gid, val)
+	tr.ReleaseTreasureGuard(gid)
+	return tr
+}
+
+func newTreasureWithInt64(val int64) treasure.Treasure {
+	tr := treasure.New(noopSave)
+	gid := tr.StartTreasureGuard(true)
+	tr.SetContentInt64(gid, val)
+	tr.ReleaseTreasureGuard(gid)
+	return tr
+}
+
+func newTreasureWithString(val string) treasure.Treasure {
+	tr := treasure.New(noopSave)
+	gid := tr.StartTreasureGuard(true)
+	tr.SetContentString(gid, val)
+	tr.ReleaseTreasureGuard(gid)
+	return tr
+}
+
+func newTreasureWithBool(val bool) treasure.Treasure {
+	tr := treasure.New(noopSave)
+	gid := tr.StartTreasureGuard(true)
+	tr.SetContentBool(gid, val)
+	tr.ReleaseTreasureGuard(gid)
+	return tr
+}
+
+func newTreasureWithBytes(val []byte) treasure.Treasure {
+	tr := treasure.New(noopSave)
+	gid := tr.StartTreasureGuard(true)
+	tr.SetContentByteArray(gid, val)
+	tr.ReleaseTreasureGuard(gid)
+	return tr
+}
+
+func newTreasureWithCreatedAt(ts time.Time) treasure.Treasure {
+	tr := treasure.New(noopSave)
+	gid := tr.StartTreasureGuard(true)
+	tr.SetCreatedAt(gid, ts)
+	tr.ReleaseTreasureGuard(gid)
+	return tr
+}
+
+func newTreasureWithModifiedAt(ts time.Time) treasure.Treasure {
+	tr := treasure.New(noopSave)
+	gid := tr.StartTreasureGuard(true)
+	tr.SetModifiedAt(gid, ts)
+	tr.ReleaseTreasureGuard(gid)
+	return tr
+}
+
+func newTreasureWithExpiration(ts time.Time) treasure.Treasure {
+	tr := treasure.New(noopSave)
+	gid := tr.StartTreasureGuard(true)
+	tr.SetExpirationTime(gid, ts)
+	tr.ReleaseTreasureGuard(gid)
+	return tr
+}
+
+func newTreasureWithInt32AndBytes(intVal int32, bytesVal []byte) treasure.Treasure {
+	tr := treasure.New(noopSave)
+	gid := tr.StartTreasureGuard(true)
+	tr.SetContentInt32(gid, intVal)
+	tr.ReleaseTreasureGuard(gid)
+	// Int32 and ByteArray are in the same Content struct, only one can be set.
+	// For combined tests we need bytes — the int32 filter won't work on bytes treasures.
+	// This helper is actually for testing filter groups where we need both.
+	// Since a treasure can only hold one content type, we'll use bytes and test int32 via separate treasures.
+	return tr
+}
+
+func newEmptyTreasure() treasure.Treasure {
+	return treasure.New(noopSave)
+}
+
+func stringPtr(s string) *string { return &s }
+
+// --- Timestamp Filter Tests ---
+
+func TestNativeTimestampFilter_CreatedAt(t *testing.T) {
 	now := time.Now()
 	cutoff := now.Add(-24 * time.Hour)
 
-	treasure := &hydrapb.Treasure{
-		Key:       "test1",
-		CreatedAt: timestamppb.New(now),
-	}
+	tr := newTreasureWithCreatedAt(now)
 
 	filter := &hydrapb.TreasureFilter{
 		Operator: hydrapb.Relational_GREATER_THAN,
 		CompareValue: &hydrapb.TreasureFilter_CreatedAtVal{
-			CreatedAtVal: timestamppb.New(cutoff),
+			CreatedAtVal: timestamppbNew(cutoff),
 		},
 	}
 
-	if !evaluateSingleFilter(treasure, filter) {
+	if !evaluateNativeSingleFilter(tr, filter) {
 		t.Error("expected CreatedAt filter to match (now > 24h ago)")
 	}
 
-	// Should not match with LT
 	filter.Operator = hydrapb.Relational_LESS_THAN
-	if evaluateSingleFilter(treasure, filter) {
+	if evaluateNativeSingleFilter(tr, filter) {
 		t.Error("expected CreatedAt filter NOT to match (now < 24h ago)")
 	}
 }
 
-func TestTimestampFilter_UpdatedAt(t *testing.T) {
+func TestNativeTimestampFilter_UpdatedAt(t *testing.T) {
 	ts := time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC)
-	treasure := &hydrapb.Treasure{
-		Key:       "test2",
-		UpdatedAt: timestamppb.New(ts),
-	}
+	tr := newTreasureWithModifiedAt(ts)
 
 	filter := &hydrapb.TreasureFilter{
 		Operator: hydrapb.Relational_EQUAL,
 		CompareValue: &hydrapb.TreasureFilter_UpdatedAtVal{
-			UpdatedAtVal: timestamppb.New(ts),
+			UpdatedAtVal: timestamppbNew(ts),
 		},
 	}
 
-	if !evaluateSingleFilter(treasure, filter) {
+	if !evaluateNativeSingleFilter(tr, filter) {
 		t.Error("expected UpdatedAt filter to match (same timestamp)")
 	}
 }
 
-func TestTimestampFilter_ExpiredAt(t *testing.T) {
+func TestNativeTimestampFilter_ExpiredAt(t *testing.T) {
 	past := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	now := time.Now()
 
-	treasure := &hydrapb.Treasure{
-		Key:       "test3",
-		ExpiredAt: timestamppb.New(past),
-	}
+	tr := newTreasureWithExpiration(past)
 
 	filter := &hydrapb.TreasureFilter{
 		Operator: hydrapb.Relational_LESS_THAN,
 		CompareValue: &hydrapb.TreasureFilter_ExpiredAtVal{
-			ExpiredAtVal: timestamppb.New(now),
+			ExpiredAtVal: timestamppbNew(now),
 		},
 	}
 
-	if !evaluateSingleFilter(treasure, filter) {
+	if !evaluateNativeSingleFilter(tr, filter) {
 		t.Error("expected ExpiredAt filter to match (past < now)")
 	}
 }
 
-func TestTimestampFilter_IsEmpty(t *testing.T) {
-	// Treasure with no ExpiredAt
-	treasure := &hydrapb.Treasure{
-		Key:       "no-expiry",
-		CreatedAt: timestamppb.Now(),
-	}
+func TestNativeTimestampFilter_IsEmpty(t *testing.T) {
+	tr := newTreasureWithCreatedAt(time.Now())
 
+	// ExpiredAt IS_EMPTY (no expiration set)
 	filter := &hydrapb.TreasureFilter{
 		Operator: hydrapb.Relational_IS_EMPTY,
 		CompareValue: &hydrapb.TreasureFilter_ExpiredAtVal{
-			ExpiredAtVal: timestamppb.Now(),
+			ExpiredAtVal: timestamppbNew(time.Now()),
 		},
 	}
 
-	if !evaluateSingleFilter(treasure, filter) {
-		t.Error("expected IS_EMPTY to be true for nil ExpiredAt")
+	if !evaluateNativeSingleFilter(tr, filter) {
+		t.Error("expected IS_EMPTY to be true for unset ExpiredAt")
 	}
 
 	// CreatedAt IS_NOT_EMPTY
 	filter2 := &hydrapb.TreasureFilter{
 		Operator: hydrapb.Relational_IS_NOT_EMPTY,
 		CompareValue: &hydrapb.TreasureFilter_CreatedAtVal{
-			CreatedAtVal: timestamppb.Now(),
+			CreatedAtVal: timestamppbNew(time.Now()),
 		},
 	}
 
-	if !evaluateSingleFilter(treasure, filter2) {
-		t.Error("expected IS_NOT_EMPTY to be true for non-nil CreatedAt")
+	if !evaluateNativeSingleFilter(tr, filter2) {
+		t.Error("expected IS_NOT_EMPTY to be true for set CreatedAt")
 	}
 }
 
-func TestTimestampFilter_NilTreasureTimestamp(t *testing.T) {
-	treasure := &hydrapb.Treasure{Key: "empty"}
+func TestNativeTimestampFilter_NilTreasureTimestamp(t *testing.T) {
+	tr := newEmptyTreasure()
 
 	filter := &hydrapb.TreasureFilter{
 		Operator: hydrapb.Relational_GREATER_THAN,
 		CompareValue: &hydrapb.TreasureFilter_CreatedAtVal{
-			CreatedAtVal: timestamppb.Now(),
+			CreatedAtVal: timestamppbNew(time.Now()),
 		},
 	}
 
-	if evaluateSingleFilter(treasure, filter) {
-		t.Error("expected filter to NOT match when treasure CreatedAt is nil")
+	if evaluateNativeSingleFilter(tr, filter) {
+		t.Error("expected filter to NOT match when treasure CreatedAt is 0")
 	}
 }
 
 // --- HAS_KEY / HAS_NOT_KEY Tests ---
 
-func TestHasKey_KeyExists(t *testing.T) {
-	treasure := &hydrapb.Treasure{
-		Key: "user1",
-		BytesVal: makeMsgpackBytesVal(t, map[string]interface{}{
-			"UserData": map[string]interface{}{
-				"email": "user@example.com",
-				"name":  "John",
-			},
-		}),
-	}
+func TestNativeHasKey_KeyExists(t *testing.T) {
+	bytesVal := makeMsgpackBytesVal(t, map[string]interface{}{
+		"UserData": map[string]interface{}{
+			"email": "user@example.com",
+			"name":  "John",
+		},
+	})
+	tr := newTreasureWithBytes(bytesVal)
 
 	fieldPath := "UserData"
 	filter := &hydrapb.TreasureFilter{
@@ -198,20 +233,18 @@ func TestHasKey_KeyExists(t *testing.T) {
 		BytesFieldPath: &fieldPath,
 	}
 
-	if !evaluateSingleFilter(treasure, filter) {
+	if !evaluateNativeSingleFilter(tr, filter) {
 		t.Error("expected HAS_KEY to match for existing key 'email'")
 	}
 }
 
-func TestHasKey_KeyNotExists(t *testing.T) {
-	treasure := &hydrapb.Treasure{
-		Key: "user2",
-		BytesVal: makeMsgpackBytesVal(t, map[string]interface{}{
-			"UserData": map[string]interface{}{
-				"name": "John",
-			},
-		}),
-	}
+func TestNativeHasKey_KeyNotExists(t *testing.T) {
+	bytesVal := makeMsgpackBytesVal(t, map[string]interface{}{
+		"UserData": map[string]interface{}{
+			"name": "John",
+		},
+	})
+	tr := newTreasureWithBytes(bytesVal)
 
 	fieldPath := "UserData"
 	filter := &hydrapb.TreasureFilter{
@@ -220,20 +253,18 @@ func TestHasKey_KeyNotExists(t *testing.T) {
 		BytesFieldPath: &fieldPath,
 	}
 
-	if evaluateSingleFilter(treasure, filter) {
+	if evaluateNativeSingleFilter(tr, filter) {
 		t.Error("expected HAS_KEY NOT to match for non-existing key 'email'")
 	}
 }
 
-func TestHasNotKey_KeyExists(t *testing.T) {
-	treasure := &hydrapb.Treasure{
-		Key: "user3",
-		BytesVal: makeMsgpackBytesVal(t, map[string]interface{}{
-			"UserData": map[string]interface{}{
-				"email": "user@example.com",
-			},
-		}),
-	}
+func TestNativeHasNotKey_KeyExists(t *testing.T) {
+	bytesVal := makeMsgpackBytesVal(t, map[string]interface{}{
+		"UserData": map[string]interface{}{
+			"email": "user@example.com",
+		},
+	})
+	tr := newTreasureWithBytes(bytesVal)
 
 	fieldPath := "UserData"
 	filter := &hydrapb.TreasureFilter{
@@ -242,20 +273,18 @@ func TestHasNotKey_KeyExists(t *testing.T) {
 		BytesFieldPath: &fieldPath,
 	}
 
-	if evaluateSingleFilter(treasure, filter) {
+	if evaluateNativeSingleFilter(tr, filter) {
 		t.Error("expected HAS_NOT_KEY NOT to match for existing key 'email'")
 	}
 }
 
-func TestHasNotKey_KeyNotExists(t *testing.T) {
-	treasure := &hydrapb.Treasure{
-		Key: "user4",
-		BytesVal: makeMsgpackBytesVal(t, map[string]interface{}{
-			"UserData": map[string]interface{}{
-				"name": "John",
-			},
-		}),
-	}
+func TestNativeHasNotKey_KeyNotExists(t *testing.T) {
+	bytesVal := makeMsgpackBytesVal(t, map[string]interface{}{
+		"UserData": map[string]interface{}{
+			"name": "John",
+		},
+	})
+	tr := newTreasureWithBytes(bytesVal)
 
 	fieldPath := "UserData"
 	filter := &hydrapb.TreasureFilter{
@@ -264,18 +293,16 @@ func TestHasNotKey_KeyNotExists(t *testing.T) {
 		BytesFieldPath: &fieldPath,
 	}
 
-	if !evaluateSingleFilter(treasure, filter) {
+	if !evaluateNativeSingleFilter(tr, filter) {
 		t.Error("expected HAS_NOT_KEY to match for non-existing key 'email'")
 	}
 }
 
-func TestHasKey_NotAMap(t *testing.T) {
-	treasure := &hydrapb.Treasure{
-		Key: "user5",
-		BytesVal: makeMsgpackBytesVal(t, map[string]interface{}{
-			"UserData": "not-a-map",
-		}),
-	}
+func TestNativeHasKey_NotAMap(t *testing.T) {
+	bytesVal := makeMsgpackBytesVal(t, map[string]interface{}{
+		"UserData": "not-a-map",
+	})
+	tr := newTreasureWithBytes(bytesVal)
 
 	fieldPath := "UserData"
 	filter := &hydrapb.TreasureFilter{
@@ -284,16 +311,13 @@ func TestHasKey_NotAMap(t *testing.T) {
 		BytesFieldPath: &fieldPath,
 	}
 
-	if evaluateSingleFilter(treasure, filter) {
+	if evaluateNativeSingleFilter(tr, filter) {
 		t.Error("expected HAS_KEY NOT to match when field is not a map")
 	}
 }
 
-func TestHasKey_NilBytesVal(t *testing.T) {
-	treasure := &hydrapb.Treasure{
-		Key:      "user6",
-		BytesVal: nil,
-	}
+func TestNativeHasKey_NilBytesVal(t *testing.T) {
+	tr := newEmptyTreasure()
 
 	fieldPath := "UserData"
 	filter := &hydrapb.TreasureFilter{
@@ -302,16 +326,13 @@ func TestHasKey_NilBytesVal(t *testing.T) {
 		BytesFieldPath: &fieldPath,
 	}
 
-	if evaluateSingleFilter(treasure, filter) {
-		t.Error("expected HAS_KEY NOT to match when BytesVal is nil")
+	if evaluateNativeSingleFilter(tr, filter) {
+		t.Error("expected HAS_KEY NOT to match when content is empty")
 	}
 }
 
-func TestHasNotKey_NilBytesVal(t *testing.T) {
-	treasure := &hydrapb.Treasure{
-		Key:      "user7",
-		BytesVal: nil,
-	}
+func TestNativeHasNotKey_NilBytesVal(t *testing.T) {
+	tr := newEmptyTreasure()
 
 	fieldPath := "UserData"
 	filter := &hydrapb.TreasureFilter{
@@ -320,28 +341,22 @@ func TestHasNotKey_NilBytesVal(t *testing.T) {
 		BytesFieldPath: &fieldPath,
 	}
 
-	// When BytesVal is nil, evaluateBytesFieldFilter falls through to
-	// the IS_EMPTY check: op == HAS_NOT_KEY != IS_EMPTY → false
-	// This is correct: we can't determine key non-existence without data
-	if evaluateSingleFilter(treasure, filter) {
-		t.Error("expected HAS_NOT_KEY NOT to match when BytesVal is nil (no data to inspect)")
+	if evaluateNativeSingleFilter(tr, filter) {
+		t.Error("expected HAS_NOT_KEY NOT to match when content is empty (no data to inspect)")
 	}
 }
 
 // --- PhraseFilter Tests ---
 
-func TestPhraseFilter_ConsecutiveWords(t *testing.T) {
-	// "altalanos szerzodesi feltetelek" at positions 5,6,7
-	treasure := &hydrapb.Treasure{
-		Key: "doc1",
-		BytesVal: makeMsgpackBytesVal(t, map[string]interface{}{
-			"WordIndex": map[string]interface{}{
-				"altalanos":   []interface{}{int64(5), int64(20)},
-				"szerzodesi":  []interface{}{int64(6), int64(30)},
-				"feltetelek":  []interface{}{int64(7), int64(40)},
-			},
-		}),
-	}
+func TestNativePhraseFilter_ConsecutiveWords(t *testing.T) {
+	bytesVal := makeMsgpackBytesVal(t, map[string]interface{}{
+		"WordIndex": map[string]interface{}{
+			"altalanos":  []interface{}{int64(5), int64(20)},
+			"szerzodesi": []interface{}{int64(6), int64(30)},
+			"feltetelek": []interface{}{int64(7), int64(40)},
+		},
+	})
+	tr := newTreasureWithBytes(bytesVal)
 
 	pf := &hydrapb.PhraseFilter{
 		BytesFieldPath: "WordIndex",
@@ -349,23 +364,20 @@ func TestPhraseFilter_ConsecutiveWords(t *testing.T) {
 		Negate:         false,
 	}
 
-	if !evaluatePhraseFilter(treasure, pf) {
+	if !evaluateNativePhraseFilter(tr, pf) {
 		t.Error("expected phrase filter to match consecutive positions 5,6,7")
 	}
 }
 
-func TestPhraseFilter_NonConsecutiveWords(t *testing.T) {
-	// Words exist but not at consecutive positions
-	treasure := &hydrapb.Treasure{
-		Key: "doc2",
-		BytesVal: makeMsgpackBytesVal(t, map[string]interface{}{
-			"WordIndex": map[string]interface{}{
-				"altalanos":   []interface{}{int64(5), int64(20)},
-				"szerzodesi":  []interface{}{int64(8), int64(30)},  // gap: 5→8 (not 6)
-				"feltetelek":  []interface{}{int64(12), int64(40)}, // gap: 8→12 (not 9)
-			},
-		}),
-	}
+func TestNativePhraseFilter_NonConsecutiveWords(t *testing.T) {
+	bytesVal := makeMsgpackBytesVal(t, map[string]interface{}{
+		"WordIndex": map[string]interface{}{
+			"altalanos":  []interface{}{int64(5), int64(20)},
+			"szerzodesi": []interface{}{int64(8), int64(30)},
+			"feltetelek": []interface{}{int64(12), int64(40)},
+		},
+	})
+	tr := newTreasureWithBytes(bytesVal)
 
 	pf := &hydrapb.PhraseFilter{
 		BytesFieldPath: "WordIndex",
@@ -373,22 +385,19 @@ func TestPhraseFilter_NonConsecutiveWords(t *testing.T) {
 		Negate:         false,
 	}
 
-	if evaluatePhraseFilter(treasure, pf) {
+	if evaluateNativePhraseFilter(tr, pf) {
 		t.Error("expected phrase filter NOT to match non-consecutive positions")
 	}
 }
 
-func TestPhraseFilter_Negated(t *testing.T) {
-	// Consecutive words found, but Negate=true → should NOT match
-	treasure := &hydrapb.Treasure{
-		Key: "doc3",
-		BytesVal: makeMsgpackBytesVal(t, map[string]interface{}{
-			"WordIndex": map[string]interface{}{
-				"hello": []interface{}{int64(1)},
-				"world": []interface{}{int64(2)},
-			},
-		}),
-	}
+func TestNativePhraseFilter_Negated(t *testing.T) {
+	bytesVal := makeMsgpackBytesVal(t, map[string]interface{}{
+		"WordIndex": map[string]interface{}{
+			"hello": []interface{}{int64(1)},
+			"world": []interface{}{int64(2)},
+		},
+	})
+	tr := newTreasureWithBytes(bytesVal)
 
 	pf := &hydrapb.PhraseFilter{
 		BytesFieldPath: "WordIndex",
@@ -396,22 +405,19 @@ func TestPhraseFilter_Negated(t *testing.T) {
 		Negate:         true,
 	}
 
-	if evaluatePhraseFilter(treasure, pf) {
+	if evaluateNativePhraseFilter(tr, pf) {
 		t.Error("expected negated phrase filter NOT to match when phrase is found")
 	}
 }
 
-func TestPhraseFilter_NegatedNoMatch(t *testing.T) {
-	// Non-consecutive words + Negate=true → SHOULD match
-	treasure := &hydrapb.Treasure{
-		Key: "doc4",
-		BytesVal: makeMsgpackBytesVal(t, map[string]interface{}{
-			"WordIndex": map[string]interface{}{
-				"hello": []interface{}{int64(1)},
-				"world": []interface{}{int64(5)}, // not consecutive
-			},
-		}),
-	}
+func TestNativePhraseFilter_NegatedNoMatch(t *testing.T) {
+	bytesVal := makeMsgpackBytesVal(t, map[string]interface{}{
+		"WordIndex": map[string]interface{}{
+			"hello": []interface{}{int64(1)},
+			"world": []interface{}{int64(5)},
+		},
+	})
+	tr := newTreasureWithBytes(bytesVal)
 
 	pf := &hydrapb.PhraseFilter{
 		BytesFieldPath: "WordIndex",
@@ -419,20 +425,18 @@ func TestPhraseFilter_NegatedNoMatch(t *testing.T) {
 		Negate:         true,
 	}
 
-	if !evaluatePhraseFilter(treasure, pf) {
+	if !evaluateNativePhraseFilter(tr, pf) {
 		t.Error("expected negated phrase filter to match when phrase is NOT found")
 	}
 }
 
-func TestPhraseFilter_SingleWord(t *testing.T) {
-	treasure := &hydrapb.Treasure{
-		Key: "doc5",
-		BytesVal: makeMsgpackBytesVal(t, map[string]interface{}{
-			"WordIndex": map[string]interface{}{
-				"hello": []interface{}{int64(1), int64(5), int64(10)},
-			},
-		}),
-	}
+func TestNativePhraseFilter_SingleWord(t *testing.T) {
+	bytesVal := makeMsgpackBytesVal(t, map[string]interface{}{
+		"WordIndex": map[string]interface{}{
+			"hello": []interface{}{int64(1), int64(5), int64(10)},
+		},
+	})
+	tr := newTreasureWithBytes(bytesVal)
 
 	pf := &hydrapb.PhraseFilter{
 		BytesFieldPath: "WordIndex",
@@ -440,20 +444,18 @@ func TestPhraseFilter_SingleWord(t *testing.T) {
 		Negate:         false,
 	}
 
-	if !evaluatePhraseFilter(treasure, pf) {
+	if !evaluateNativePhraseFilter(tr, pf) {
 		t.Error("expected single-word phrase filter to match")
 	}
 }
 
-func TestPhraseFilter_MissingWord(t *testing.T) {
-	treasure := &hydrapb.Treasure{
-		Key: "doc6",
-		BytesVal: makeMsgpackBytesVal(t, map[string]interface{}{
-			"WordIndex": map[string]interface{}{
-				"hello": []interface{}{int64(1)},
-			},
-		}),
-	}
+func TestNativePhraseFilter_MissingWord(t *testing.T) {
+	bytesVal := makeMsgpackBytesVal(t, map[string]interface{}{
+		"WordIndex": map[string]interface{}{
+			"hello": []interface{}{int64(1)},
+		},
+	})
+	tr := newTreasureWithBytes(bytesVal)
 
 	pf := &hydrapb.PhraseFilter{
 		BytesFieldPath: "WordIndex",
@@ -461,22 +463,19 @@ func TestPhraseFilter_MissingWord(t *testing.T) {
 		Negate:         false,
 	}
 
-	if evaluatePhraseFilter(treasure, pf) {
+	if evaluateNativePhraseFilter(tr, pf) {
 		t.Error("expected phrase filter NOT to match when a word is missing from index")
 	}
 }
 
-func TestPhraseFilter_MultipleOccurrences(t *testing.T) {
-	// "hello world" appears at positions (3,4) even though there are other occurrences
-	treasure := &hydrapb.Treasure{
-		Key: "doc7",
-		BytesVal: makeMsgpackBytesVal(t, map[string]interface{}{
-			"WordIndex": map[string]interface{}{
-				"hello": []interface{}{int64(1), int64(3), int64(10)},
-				"world": []interface{}{int64(4), int64(8), int64(15)},
-			},
-		}),
-	}
+func TestNativePhraseFilter_MultipleOccurrences(t *testing.T) {
+	bytesVal := makeMsgpackBytesVal(t, map[string]interface{}{
+		"WordIndex": map[string]interface{}{
+			"hello": []interface{}{int64(1), int64(3), int64(10)},
+			"world": []interface{}{int64(4), int64(8), int64(15)},
+		},
+	})
+	tr := newTreasureWithBytes(bytesVal)
 
 	pf := &hydrapb.PhraseFilter{
 		BytesFieldPath: "WordIndex",
@@ -484,21 +483,19 @@ func TestPhraseFilter_MultipleOccurrences(t *testing.T) {
 		Negate:         false,
 	}
 
-	if !evaluatePhraseFilter(treasure, pf) {
+	if !evaluateNativePhraseFilter(tr, pf) {
 		t.Error("expected phrase filter to find consecutive occurrence at positions 3,4")
 	}
 }
 
-func TestPhraseFilter_EmptyPositions(t *testing.T) {
-	treasure := &hydrapb.Treasure{
-		Key: "doc8",
-		BytesVal: makeMsgpackBytesVal(t, map[string]interface{}{
-			"WordIndex": map[string]interface{}{
-				"hello": []interface{}{},
-				"world": []interface{}{int64(1)},
-			},
-		}),
-	}
+func TestNativePhraseFilter_EmptyPositions(t *testing.T) {
+	bytesVal := makeMsgpackBytesVal(t, map[string]interface{}{
+		"WordIndex": map[string]interface{}{
+			"hello": []interface{}{},
+			"world": []interface{}{int64(1)},
+		},
+	})
+	tr := newTreasureWithBytes(bytesVal)
 
 	pf := &hydrapb.PhraseFilter{
 		BytesFieldPath: "WordIndex",
@@ -506,16 +503,14 @@ func TestPhraseFilter_EmptyPositions(t *testing.T) {
 		Negate:         false,
 	}
 
-	if evaluatePhraseFilter(treasure, pf) {
+	if evaluateNativePhraseFilter(tr, pf) {
 		t.Error("expected phrase filter NOT to match when a word has empty position list")
 	}
 }
 
-func TestPhraseFilter_EmptyWords(t *testing.T) {
-	treasure := &hydrapb.Treasure{
-		Key:      "doc9",
-		BytesVal: makeMsgpackBytesVal(t, map[string]interface{}{"WordIndex": map[string]interface{}{}}),
-	}
+func TestNativePhraseFilter_EmptyWords(t *testing.T) {
+	bytesVal := makeMsgpackBytesVal(t, map[string]interface{}{"WordIndex": map[string]interface{}{}})
+	tr := newTreasureWithBytes(bytesVal)
 
 	pf := &hydrapb.PhraseFilter{
 		BytesFieldPath: "WordIndex",
@@ -523,13 +518,13 @@ func TestPhraseFilter_EmptyWords(t *testing.T) {
 		Negate:         false,
 	}
 
-	if !evaluatePhraseFilter(treasure, pf) {
+	if !evaluateNativePhraseFilter(tr, pf) {
 		t.Error("expected empty words phrase filter to pass (vacuously true)")
 	}
 }
 
-func TestPhraseFilter_NilBytesVal(t *testing.T) {
-	treasure := &hydrapb.Treasure{Key: "doc10"}
+func TestNativePhraseFilter_NilBytesVal(t *testing.T) {
+	tr := newEmptyTreasure()
 
 	pf := &hydrapb.PhraseFilter{
 		BytesFieldPath: "WordIndex",
@@ -537,13 +532,13 @@ func TestPhraseFilter_NilBytesVal(t *testing.T) {
 		Negate:         false,
 	}
 
-	if evaluatePhraseFilter(treasure, pf) {
-		t.Error("expected phrase filter NOT to match when BytesVal is nil")
+	if evaluateNativePhraseFilter(tr, pf) {
+		t.Error("expected phrase filter NOT to match when content is empty")
 	}
 }
 
-func TestPhraseFilter_NilBytesValNegated(t *testing.T) {
-	treasure := &hydrapb.Treasure{Key: "doc11"}
+func TestNativePhraseFilter_NilBytesValNegated(t *testing.T) {
+	tr := newEmptyTreasure()
 
 	pf := &hydrapb.PhraseFilter{
 		BytesFieldPath: "WordIndex",
@@ -551,31 +546,31 @@ func TestPhraseFilter_NilBytesValNegated(t *testing.T) {
 		Negate:         true,
 	}
 
-	if !evaluatePhraseFilter(treasure, pf) {
-		t.Error("expected negated phrase filter to match when BytesVal is nil (phrase can't exist)")
+	if !evaluateNativePhraseFilter(tr, pf) {
+		t.Error("expected negated phrase filter to match when content is empty (phrase can't exist)")
 	}
 }
 
 // --- FilterGroup integration tests ---
 
-func TestPhraseFilter_InFilterGroup_AND(t *testing.T) {
-	treasure := &hydrapb.Treasure{
-		Key:      "doc-and",
-		Int32Val: int32Ptr(42),
-		BytesVal: makeMsgpackBytesVal(t, map[string]interface{}{
-			"WordIndex": map[string]interface{}{
-				"hello": []interface{}{int64(1)},
-				"world": []interface{}{int64(2)},
-			},
-		}),
-	}
+func TestNativePhraseFilter_InFilterGroup_AND(t *testing.T) {
+	bytesVal := makeMsgpackBytesVal(t, map[string]interface{}{
+		"WordIndex": map[string]interface{}{
+			"hello": []interface{}{int64(1)},
+			"world": []interface{}{int64(2)},
+		},
+		"Score": int64(42),
+	})
+	tr := newTreasureWithBytes(bytesVal)
 
+	scorePath := "Score"
 	group := &hydrapb.FilterGroup{
 		Logic: hydrapb.FilterLogic_AND,
 		Filters: []*hydrapb.TreasureFilter{
 			{
-				Operator:     hydrapb.Relational_EQUAL,
-				CompareValue: &hydrapb.TreasureFilter_Int32Val{Int32Val: 42},
+				Operator:       hydrapb.Relational_EQUAL,
+				CompareValue:   &hydrapb.TreasureFilter_Int64Val{Int64Val: 42},
+				BytesFieldPath: &scorePath,
 			},
 		},
 		PhraseFilters: []*hydrapb.PhraseFilter{
@@ -586,35 +581,35 @@ func TestPhraseFilter_InFilterGroup_AND(t *testing.T) {
 		},
 	}
 
-	if !evaluateFilterGroup(treasure, group) {
-		t.Error("expected AND group to match (Int32Val==42 AND phrase found)")
+	if !evaluateNativeFilterGroup(tr, group) {
+		t.Error("expected AND group to match (Score==42 AND phrase found)")
 	}
 
-	// Change Int32Val to not match
-	treasure.Int32Val = int32Ptr(99)
-	if evaluateFilterGroup(treasure, group) {
-		t.Error("expected AND group NOT to match (Int32Val!=42)")
+	// Change score filter to not match
+	group.Filters[0].CompareValue = &hydrapb.TreasureFilter_Int64Val{Int64Val: 99}
+	if evaluateNativeFilterGroup(tr, group) {
+		t.Error("expected AND group NOT to match (Score!=42)")
 	}
 }
 
-func TestPhraseFilter_InFilterGroup_OR(t *testing.T) {
-	treasure := &hydrapb.Treasure{
-		Key:      "doc-or",
-		Int32Val: int32Ptr(99), // doesn't match filter
-		BytesVal: makeMsgpackBytesVal(t, map[string]interface{}{
-			"WordIndex": map[string]interface{}{
-				"hello": []interface{}{int64(1)},
-				"world": []interface{}{int64(2)},
-			},
-		}),
-	}
+func TestNativePhraseFilter_InFilterGroup_OR(t *testing.T) {
+	bytesVal := makeMsgpackBytesVal(t, map[string]interface{}{
+		"WordIndex": map[string]interface{}{
+			"hello": []interface{}{int64(1)},
+			"world": []interface{}{int64(2)},
+		},
+		"Score": int64(99),
+	})
+	tr := newTreasureWithBytes(bytesVal)
 
+	scorePath := "Score"
 	group := &hydrapb.FilterGroup{
 		Logic: hydrapb.FilterLogic_OR,
 		Filters: []*hydrapb.TreasureFilter{
 			{
-				Operator:     hydrapb.Relational_EQUAL,
-				CompareValue: &hydrapb.TreasureFilter_Int32Val{Int32Val: 42},
+				Operator:       hydrapb.Relational_EQUAL,
+				CompareValue:   &hydrapb.TreasureFilter_Int64Val{Int64Val: 42},
+				BytesFieldPath: &scorePath,
 			},
 		},
 		PhraseFilters: []*hydrapb.PhraseFilter{
@@ -625,20 +620,18 @@ func TestPhraseFilter_InFilterGroup_OR(t *testing.T) {
 		},
 	}
 
-	if !evaluateFilterGroup(treasure, group) {
-		t.Error("expected OR group to match (Int32Val!=42 but phrase found)")
+	if !evaluateNativeFilterGroup(tr, group) {
+		t.Error("expected OR group to match (Score!=42 but phrase found)")
 	}
 }
 
 // --- Profile FilterGroup Tests ---
 
-func stringPtr(s string) *string { return &s }
-
-func TestProfileFilterGroup_AND_AllMatch(t *testing.T) {
-	treasures := map[string]*hydrapb.Treasure{
-		"Age":    {Key: "Age", Int32Val: int32Ptr(30)},
-		"Name":   {Key: "Name", StringVal: stringPtr("Alice")},
-		"Active": {Key: "Active", BoolVal: boolPtr(hydrapb.Boolean_TRUE)},
+func TestNativeProfileFilterGroup_AND_AllMatch(t *testing.T) {
+	treasures := map[string]treasure.Treasure{
+		"Age":    newTreasureWithInt32(30),
+		"Name":   newTreasureWithString("Alice"),
+		"Active": newTreasureWithBool(true),
 	}
 
 	ageKey := "Age"
@@ -654,15 +647,15 @@ func TestProfileFilterGroup_AND_AllMatch(t *testing.T) {
 		},
 	}
 
-	if !evaluateProfileFilterGroup(treasures, group) {
+	if !evaluateNativeProfileFilterGroup(treasures, group) {
 		t.Error("expected AND group to match when all filters pass")
 	}
 }
 
-func TestProfileFilterGroup_AND_OneFails(t *testing.T) {
-	treasures := map[string]*hydrapb.Treasure{
-		"Age":  {Key: "Age", Int32Val: int32Ptr(15)},
-		"Name": {Key: "Name", StringVal: stringPtr("Bob")},
+func TestNativeProfileFilterGroup_AND_OneFails(t *testing.T) {
+	treasures := map[string]treasure.Treasure{
+		"Age":  newTreasureWithInt32(15),
+		"Name": newTreasureWithString("Bob"),
 	}
 
 	ageKey := "Age"
@@ -676,15 +669,15 @@ func TestProfileFilterGroup_AND_OneFails(t *testing.T) {
 		},
 	}
 
-	if evaluateProfileFilterGroup(treasures, group) {
+	if evaluateNativeProfileFilterGroup(treasures, group) {
 		t.Error("expected AND group to fail when Age < 18")
 	}
 }
 
-func TestProfileFilterGroup_OR_OneMatch(t *testing.T) {
-	treasures := map[string]*hydrapb.Treasure{
-		"Status": {Key: "Status", StringVal: stringPtr("inactive")},
-		"Age":    {Key: "Age", Int32Val: int32Ptr(25)},
+func TestNativeProfileFilterGroup_OR_OneMatch(t *testing.T) {
+	treasures := map[string]treasure.Treasure{
+		"Status": newTreasureWithString("inactive"),
+		"Age":    newTreasureWithInt32(25),
 	}
 
 	statusKey := "Status"
@@ -698,15 +691,15 @@ func TestProfileFilterGroup_OR_OneMatch(t *testing.T) {
 		},
 	}
 
-	if !evaluateProfileFilterGroup(treasures, group) {
+	if !evaluateNativeProfileFilterGroup(treasures, group) {
 		t.Error("expected OR group to match because Age > 20")
 	}
 }
 
-func TestProfileFilterGroup_OR_NoneMatch(t *testing.T) {
-	treasures := map[string]*hydrapb.Treasure{
-		"Status": {Key: "Status", StringVal: stringPtr("inactive")},
-		"Age":    {Key: "Age", Int32Val: int32Ptr(10)},
+func TestNativeProfileFilterGroup_OR_NoneMatch(t *testing.T) {
+	treasures := map[string]treasure.Treasure{
+		"Status": newTreasureWithString("inactive"),
+		"Age":    newTreasureWithInt32(10),
 	}
 
 	statusKey := "Status"
@@ -720,14 +713,14 @@ func TestProfileFilterGroup_OR_NoneMatch(t *testing.T) {
 		},
 	}
 
-	if evaluateProfileFilterGroup(treasures, group) {
+	if evaluateNativeProfileFilterGroup(treasures, group) {
 		t.Error("expected OR group to fail when neither filter matches")
 	}
 }
 
-func TestProfileFilterGroup_MissingKey(t *testing.T) {
-	treasures := map[string]*hydrapb.Treasure{
-		"Name": {Key: "Name", StringVal: stringPtr("Alice")},
+func TestNativeProfileFilterGroup_MissingKey(t *testing.T) {
+	treasures := map[string]treasure.Treasure{
+		"Name": newTreasureWithString("Alice"),
 	}
 
 	ageKey := "Age"
@@ -739,14 +732,14 @@ func TestProfileFilterGroup_MissingKey(t *testing.T) {
 		},
 	}
 
-	if evaluateProfileFilterGroup(treasures, group) {
+	if evaluateNativeProfileFilterGroup(treasures, group) {
 		t.Error("expected filter to fail when TreasureKey does not exist in map")
 	}
 }
 
-func TestProfileFilterGroup_MissingKey_IsEmpty(t *testing.T) {
-	treasures := map[string]*hydrapb.Treasure{
-		"Name": {Key: "Name", StringVal: stringPtr("Alice")},
+func TestNativeProfileFilterGroup_MissingKey_IsEmpty(t *testing.T) {
+	treasures := map[string]treasure.Treasure{
+		"Name": newTreasureWithString("Alice"),
 	}
 
 	ageKey := "Age"
@@ -758,21 +751,21 @@ func TestProfileFilterGroup_MissingKey_IsEmpty(t *testing.T) {
 		},
 	}
 
-	if !evaluateProfileFilterGroup(treasures, group) {
+	if !evaluateNativeProfileFilterGroup(treasures, group) {
 		t.Error("expected IS_EMPTY to return true when TreasureKey is missing")
 	}
 }
 
-func TestProfileFilterGroup_PhraseFilter(t *testing.T) {
-	wordIndex := map[string]interface{}{
+func TestNativeProfileFilterGroup_PhraseFilter(t *testing.T) {
+	bytesVal := makeMsgpackBytesVal(t, map[string]interface{}{
 		"WordIndex": map[string]interface{}{
 			"hello": []interface{}{int64(1), int64(5)},
 			"world": []interface{}{int64(2), int64(6)},
 		},
-	}
+	})
 
-	treasures := map[string]*hydrapb.Treasure{
-		"Content": {Key: "Content", BytesVal: makeMsgpackBytesVal(t, wordIndex)},
+	treasures := map[string]treasure.Treasure{
+		"Content": newTreasureWithBytes(bytesVal),
 	}
 
 	contentKey := "Content"
@@ -784,16 +777,16 @@ func TestProfileFilterGroup_PhraseFilter(t *testing.T) {
 		},
 	}
 
-	if !evaluateProfileFilterGroup(treasures, group) {
+	if !evaluateNativeProfileFilterGroup(treasures, group) {
 		t.Error("expected phrase filter to match consecutive positions 1,2")
 	}
 }
 
-func TestProfileFilterGroup_SubGroups(t *testing.T) {
-	treasures := map[string]*hydrapb.Treasure{
-		"Age":    {Key: "Age", Int32Val: int32Ptr(25)},
-		"Status": {Key: "Status", StringVal: stringPtr("pending")},
-		"Role":   {Key: "Role", StringVal: stringPtr("admin")},
+func TestNativeProfileFilterGroup_SubGroups(t *testing.T) {
+	treasures := map[string]treasure.Treasure{
+		"Age":    newTreasureWithInt32(25),
+		"Status": newTreasureWithString("pending"),
+		"Role":   newTreasureWithString("admin"),
 	}
 
 	ageKey := "Age"
@@ -817,39 +810,38 @@ func TestProfileFilterGroup_SubGroups(t *testing.T) {
 		},
 	}
 
-	if !evaluateProfileFilterGroup(treasures, group) {
+	if !evaluateNativeProfileFilterGroup(treasures, group) {
 		t.Error("expected nested AND(OR) to match: Age>18 AND (Status=active OR Role=admin)")
 	}
 }
 
-func TestProfileFilterGroup_EmptyGroup(t *testing.T) {
-	treasures := map[string]*hydrapb.Treasure{
-		"Name": {Key: "Name", StringVal: stringPtr("Alice")},
+func TestNativeProfileFilterGroup_EmptyGroup(t *testing.T) {
+	treasures := map[string]treasure.Treasure{
+		"Name": newTreasureWithString("Alice"),
 	}
 
 	group := &hydrapb.FilterGroup{}
 
-	if !evaluateProfileFilterGroup(treasures, group) {
+	if !evaluateNativeProfileFilterGroup(treasures, group) {
 		t.Error("expected empty filter group to pass all profiles")
 	}
 }
 
-func TestProfileFilterGroup_NilGroup(t *testing.T) {
-	treasures := map[string]*hydrapb.Treasure{
-		"Name": {Key: "Name", StringVal: stringPtr("Alice")},
+func TestNativeProfileFilterGroup_NilGroup(t *testing.T) {
+	treasures := map[string]treasure.Treasure{
+		"Name": newTreasureWithString("Alice"),
 	}
 
-	if !evaluateProfileFilterGroup(treasures, nil) {
+	if !evaluateNativeProfileFilterGroup(treasures, nil) {
 		t.Error("expected nil filter group to pass all profiles")
 	}
 }
 
-func TestProfileFilterGroup_NoTreasureKey(t *testing.T) {
-	treasures := map[string]*hydrapb.Treasure{
-		"Age": {Key: "Age", Int32Val: int32Ptr(25)},
+func TestNativeProfileFilterGroup_NoTreasureKey(t *testing.T) {
+	treasures := map[string]treasure.Treasure{
+		"Age": newTreasureWithInt32(25),
 	}
 
-	// Filter without TreasureKey — should return false in profile mode
 	group := &hydrapb.FilterGroup{
 		Logic: hydrapb.FilterLogic_AND,
 		Filters: []*hydrapb.TreasureFilter{
@@ -857,19 +849,19 @@ func TestProfileFilterGroup_NoTreasureKey(t *testing.T) {
 		},
 	}
 
-	if evaluateProfileFilterGroup(treasures, group) {
+	if evaluateNativeProfileFilterGroup(treasures, group) {
 		t.Error("expected filter without TreasureKey to fail in profile mode")
 	}
 }
 
-func TestProfileFilterGroup_PhraseFilter_NoTreasureKey(t *testing.T) {
-	treasures := map[string]*hydrapb.Treasure{
-		"Content": {Key: "Content", BytesVal: makeMsgpackBytesVal(t, map[string]interface{}{
-			"WordIndex": map[string]interface{}{"hello": []interface{}{int64(1)}},
-		})},
+func TestNativeProfileFilterGroup_PhraseFilter_NoTreasureKey(t *testing.T) {
+	bytesVal := makeMsgpackBytesVal(t, map[string]interface{}{
+		"WordIndex": map[string]interface{}{"hello": []interface{}{int64(1)}},
+	})
+	treasures := map[string]treasure.Treasure{
+		"Content": newTreasureWithBytes(bytesVal),
 	}
 
-	// PhraseFilter without TreasureKey — should return false in profile mode
 	group := &hydrapb.FilterGroup{
 		Logic: hydrapb.FilterLogic_AND,
 		PhraseFilters: []*hydrapb.PhraseFilter{
@@ -877,19 +869,18 @@ func TestProfileFilterGroup_PhraseFilter_NoTreasureKey(t *testing.T) {
 		},
 	}
 
-	if evaluateProfileFilterGroup(treasures, group) {
+	if evaluateNativeProfileFilterGroup(treasures, group) {
 		t.Error("expected phrase filter without TreasureKey to fail in profile mode")
 	}
 }
 
-func TestProfileFilterGroup_PhraseFilter_MissingTreasure(t *testing.T) {
-	treasures := map[string]*hydrapb.Treasure{
-		"Name": {Key: "Name", StringVal: stringPtr("Alice")},
+func TestNativeProfileFilterGroup_PhraseFilter_MissingTreasure(t *testing.T) {
+	treasures := map[string]treasure.Treasure{
+		"Name": newTreasureWithString("Alice"),
 	}
 
 	contentKey := "Content"
 
-	// Non-negated phrase filter targeting missing Treasure
 	group := &hydrapb.FilterGroup{
 		Logic: hydrapb.FilterLogic_AND,
 		PhraseFilters: []*hydrapb.PhraseFilter{
@@ -897,11 +888,10 @@ func TestProfileFilterGroup_PhraseFilter_MissingTreasure(t *testing.T) {
 		},
 	}
 
-	if evaluateProfileFilterGroup(treasures, group) {
+	if evaluateNativeProfileFilterGroup(treasures, group) {
 		t.Error("expected non-negated phrase filter to fail when Treasure is missing")
 	}
 
-	// Negated phrase filter targeting missing Treasure — should match
 	groupNeg := &hydrapb.FilterGroup{
 		Logic: hydrapb.FilterLogic_AND,
 		PhraseFilters: []*hydrapb.PhraseFilter{
@@ -909,20 +899,17 @@ func TestProfileFilterGroup_PhraseFilter_MissingTreasure(t *testing.T) {
 		},
 	}
 
-	if !evaluateProfileFilterGroup(treasures, groupNeg) {
+	if !evaluateNativeProfileFilterGroup(treasures, groupNeg) {
 		t.Error("expected negated phrase filter to match when Treasure is missing")
 	}
 }
 
 // --- Profile ForKey Integration Tests ---
-// These tests simulate the exact scenarios reported as failing in production:
-// Profile fields stored as separate Treasures, filtered with ForKey().
 
-// TestProfileForKey_BoolFilter verifies that FilterBool + ForKey works on a profile bool Treasure.
-func TestProfileForKey_BoolFilter(t *testing.T) {
-	treasures := map[string]*hydrapb.Treasure{
-		"IsHttps": {Key: "IsHttps", BoolVal: boolPtr(hydrapb.Boolean_TRUE)},
-		"Name":    {Key: "Name", StringVal: stringPtr("example.com")},
+func TestNativeProfileForKey_BoolFilter(t *testing.T) {
+	treasures := map[string]treasure.Treasure{
+		"IsHttps": newTreasureWithBool(true),
+		"Name":    newTreasureWithString("example.com"),
 	}
 
 	key := "IsHttps"
@@ -933,15 +920,14 @@ func TestProfileForKey_BoolFilter(t *testing.T) {
 		},
 	}
 
-	if !evaluateProfileFilterGroup(treasures, group) {
+	if !evaluateNativeProfileFilterGroup(treasures, group) {
 		t.Error("expected FilterBool(EQUAL, true).ForKey('IsHttps') to match")
 	}
 }
 
-// TestProfileForKey_Int32Filter verifies that FilterInt32 + ForKey works on a profile int32 Treasure.
-func TestProfileForKey_Int32Filter(t *testing.T) {
-	treasures := map[string]*hydrapb.Treasure{
-		"Engine": {Key: "Engine", Int32Val: int32Ptr(10)},
+func TestNativeProfileForKey_Int32Filter(t *testing.T) {
+	treasures := map[string]treasure.Treasure{
+		"Engine": newTreasureWithInt32(10),
 	}
 
 	key := "Engine"
@@ -952,23 +938,18 @@ func TestProfileForKey_Int32Filter(t *testing.T) {
 		},
 	}
 
-	if !evaluateProfileFilterGroup(treasures, group) {
+	if !evaluateNativeProfileFilterGroup(treasures, group) {
 		t.Error("expected FilterInt32(EQUAL, 10).ForKey('Engine') to match")
 	}
 }
 
-// TestProfileForKey_BytesFieldHasKey verifies FilterBytesFieldString(HasKey) + ForKey
-// on a profile Treasure where BytesVal contains a map (e.g., map[string]bool).
-// This was broken because BytesFieldPath="" caused evaluateSingleFilter to skip BytesField evaluation.
-func TestProfileForKey_BytesFieldHasKey(t *testing.T) {
-	treasures := map[string]*hydrapb.Treasure{
-		"PluginDomains": {
-			Key: "PluginDomains",
-			BytesVal: makeMsgpackBytesVal(t, map[string]interface{}{
-				"analytics.google.com": true,
-				"cdn.example.com":     true,
-			}),
-		},
+func TestNativeProfileForKey_BytesFieldHasKey(t *testing.T) {
+	bytesVal := makeMsgpackBytesVal(t, map[string]interface{}{
+		"analytics.google.com": true,
+		"cdn.example.com":      true,
+	})
+	treasures := map[string]treasure.Treasure{
+		"PluginDomains": newTreasureWithBytes(bytesVal),
 	}
 
 	key := "PluginDomains"
@@ -985,11 +966,10 @@ func TestProfileForKey_BytesFieldHasKey(t *testing.T) {
 		},
 	}
 
-	if !evaluateProfileFilterGroup(treasures, group) {
-		t.Error("expected FilterBytesFieldString(HAS_KEY, '', 'analytics.google.com').ForKey('PluginDomains') to match")
+	if !evaluateNativeProfileFilterGroup(treasures, group) {
+		t.Error("expected HAS_KEY to match for existing key")
 	}
 
-	// Verify non-existent key does NOT match
 	groupMiss := &hydrapb.FilterGroup{
 		Logic: hydrapb.FilterLogic_AND,
 		Filters: []*hydrapb.TreasureFilter{
@@ -1002,94 +982,69 @@ func TestProfileForKey_BytesFieldHasKey(t *testing.T) {
 		},
 	}
 
-	if evaluateProfileFilterGroup(treasures, groupMiss) {
+	if evaluateNativeProfileFilterGroup(treasures, groupMiss) {
 		t.Error("expected HAS_KEY for non-existent key to NOT match")
 	}
 }
 
-// TestProfileForKey_PhraseFilter verifies FilterPhrase + ForKey
-// on a profile Treasure where BytesVal contains a word index map (map[string][]int).
-// This was broken because extractFieldByPath("") returned nil instead of the root map.
-func TestProfileForKey_PhraseFilter(t *testing.T) {
-	treasures := map[string]*hydrapb.Treasure{
-		"WordPositions": {
-			Key: "WordPositions",
-			BytesVal: makeMsgpackBytesVal(t, map[string]interface{}{
-				"wordpress": []interface{}{int64(0), int64(5)},
-				"plugin":    []interface{}{int64(1), int64(6)},
-				"install":   []interface{}{int64(2)},
-			}),
-		},
+func TestNativeProfileForKey_PhraseFilter(t *testing.T) {
+	bytesVal := makeMsgpackBytesVal(t, map[string]interface{}{
+		"wordpress": []interface{}{int64(0), int64(5)},
+		"plugin":    []interface{}{int64(1), int64(6)},
+		"install":   []interface{}{int64(2)},
+	})
+	treasures := map[string]treasure.Treasure{
+		"WordPositions": newTreasureWithBytes(bytesVal),
 	}
 
-	// Single word phrase search
 	key := "WordPositions"
 	group := &hydrapb.FilterGroup{
 		Logic: hydrapb.FilterLogic_AND,
 		PhraseFilters: []*hydrapb.PhraseFilter{
-			{
-				BytesFieldPath: "",
-				Words:          []string{"wordpress"},
-				TreasureKey:    &key,
-			},
+			{BytesFieldPath: "", Words: []string{"wordpress"}, TreasureKey: &key},
 		},
 	}
 
-	if !evaluateProfileFilterGroup(treasures, group) {
-		t.Error("expected FilterPhrase('', 'wordpress').ForKey('WordPositions') to match")
+	if !evaluateNativeProfileFilterGroup(treasures, group) {
+		t.Error("expected single word phrase filter to match")
 	}
 
-	// Multi-word consecutive phrase: "wordpress plugin" at positions 0,1 or 5,6
 	groupPhrase := &hydrapb.FilterGroup{
 		Logic: hydrapb.FilterLogic_AND,
 		PhraseFilters: []*hydrapb.PhraseFilter{
-			{
-				BytesFieldPath: "",
-				Words:          []string{"wordpress", "plugin"},
-				TreasureKey:    &key,
-			},
+			{BytesFieldPath: "", Words: []string{"wordpress", "plugin"}, TreasureKey: &key},
 		},
 	}
 
-	if !evaluateProfileFilterGroup(treasures, groupPhrase) {
-		t.Error("expected FilterPhrase('', 'wordpress', 'plugin').ForKey('WordPositions') to match consecutive positions")
+	if !evaluateNativeProfileFilterGroup(treasures, groupPhrase) {
+		t.Error("expected multi-word phrase filter to match consecutive positions")
 	}
 
-	// Non-existent word
 	groupMiss := &hydrapb.FilterGroup{
 		Logic: hydrapb.FilterLogic_AND,
 		PhraseFilters: []*hydrapb.PhraseFilter{
-			{
-				BytesFieldPath: "",
-				Words:          []string{"nonexistent"},
-				TreasureKey:    &key,
-			},
+			{BytesFieldPath: "", Words: []string{"nonexistent"}, TreasureKey: &key},
 		},
 	}
 
-	if evaluateProfileFilterGroup(treasures, groupMiss) {
-		t.Error("expected FilterPhrase for non-existent word to NOT match")
+	if evaluateNativeProfileFilterGroup(treasures, groupMiss) {
+		t.Error("expected phrase filter for non-existent word to NOT match")
 	}
 }
 
-// TestProfileForKey_CombinedAND verifies that multiple ForKey filters in a single AND group
-// work correctly together — the exact scenario the user reported as failing.
-func TestProfileForKey_CombinedAND(t *testing.T) {
-	treasures := map[string]*hydrapb.Treasure{
-		"IsHttps": {Key: "IsHttps", BoolVal: boolPtr(hydrapb.Boolean_TRUE)},
-		"Engine":  {Key: "Engine", Int32Val: int32Ptr(10)},
-		"PluginDomains": {
-			Key: "PluginDomains",
-			BytesVal: makeMsgpackBytesVal(t, map[string]interface{}{
-				"analytics.google.com": true,
-			}),
-		},
-		"WordPositions": {
-			Key: "WordPositions",
-			BytesVal: makeMsgpackBytesVal(t, map[string]interface{}{
-				"wordpress": []interface{}{int64(0)},
-			}),
-		},
+func TestNativeProfileForKey_CombinedAND(t *testing.T) {
+	pluginBytesVal := makeMsgpackBytesVal(t, map[string]interface{}{
+		"analytics.google.com": true,
+	})
+	wordBytesVal := makeMsgpackBytesVal(t, map[string]interface{}{
+		"wordpress": []interface{}{int64(0)},
+	})
+
+	treasures := map[string]treasure.Treasure{
+		"IsHttps":       newTreasureWithBool(true),
+		"Engine":        newTreasureWithInt32(10),
+		"PluginDomains": newTreasureWithBytes(pluginBytesVal),
+		"WordPositions": newTreasureWithBytes(wordBytesVal),
 	}
 
 	boolKey := "IsHttps"
@@ -1110,12 +1065,13 @@ func TestProfileForKey_CombinedAND(t *testing.T) {
 		},
 	}
 
-	if !evaluateProfileFilterGroup(treasures, group) {
+	if !evaluateNativeProfileFilterGroup(treasures, group) {
 		t.Error("expected combined AND group with bool, int32, HAS_KEY, and phrase to all match")
 	}
 }
 
-// TestExtractFieldByPath_EmptyPath verifies the fix for empty path returning root map.
+// --- Utility Tests ---
+
 func TestExtractFieldByPath_EmptyPath(t *testing.T) {
 	m := map[string]interface{}{
 		"key1": "value1",
@@ -1137,7 +1093,6 @@ func TestExtractFieldByPath_EmptyPath(t *testing.T) {
 	}
 }
 
-// TestExtractFieldByPath_NestedPath verifies that normal nested paths still work.
 func TestExtractFieldByPath_NestedPath(t *testing.T) {
 	m := map[string]interface{}{
 		"Address": map[string]interface{}{
@@ -1151,44 +1106,21 @@ func TestExtractFieldByPath_NestedPath(t *testing.T) {
 	}
 }
 
-// --- Helper functions ---
-
-func boolPtr(v hydrapb.Boolean_Type) *hydrapb.Boolean_Type { return &v }
-
-func int32Ptr(v int32) *int32 { return &v }
-
 // --- Vector Filter Tests ---
 
-// makeNormalizedVector creates a unit-length vector with the given values
-// (normalized so the dot product equals cosine similarity).
 func makeNormalizedVector(vals ...float32) []interface{} {
-	var norm float32
+	var normF float32
 	for _, v := range vals {
-		norm += v * v
+		normF += v * v
 	}
-	if norm > 0 {
-		n := float32(1.0 / float64(norm) * float64(norm)) // placeholder
-		_ = n
-		// Compute proper norm
-		normF := float32(0)
-		for _, v := range vals {
-			normF += v * v
-		}
-		invNorm := float32(1.0 / math.Sqrt(float64(normF)))
-		result := make([]interface{}, len(vals))
-		for i, v := range vals {
-			result[i] = float64(v * invNorm) // msgpack decodes float32 as float64
-		}
-		return result
-	}
+	invNorm := float32(1.0 / math.Sqrt(float64(normF)))
 	result := make([]interface{}, len(vals))
 	for i, v := range vals {
-		result[i] = float64(v)
+		result[i] = float64(v * invNorm)
 	}
 	return result
 }
 
-// normalizeFloat32 normalizes a float32 slice to unit length.
 func normalizeFloat32(vals []float32) []float32 {
 	var norm float32
 	for _, v := range vals {
@@ -1205,12 +1137,10 @@ func normalizeFloat32(vals []float32) []float32 {
 	return result
 }
 
-func TestEvaluateVectorFilter_ExactMatch(t *testing.T) {
+func TestNativeVectorFilter_ExactMatch(t *testing.T) {
 	vec := makeNormalizedVector(1.0, 0.0, 0.0, 0.0)
-	treasure := &hydrapb.Treasure{
-		Key:      "domain1",
-		BytesVal: makeMsgpackBytesVal(t, map[string]interface{}{"Embedding": vec}),
-	}
+	bytesVal := makeMsgpackBytesVal(t, map[string]interface{}{"Embedding": vec})
+	tr := newTreasureWithBytes(bytesVal)
 
 	queryVec := normalizeFloat32([]float32{1.0, 0.0, 0.0, 0.0})
 
@@ -1220,81 +1150,71 @@ func TestEvaluateVectorFilter_ExactMatch(t *testing.T) {
 		MinSimilarity:  0.99,
 	}
 
-	if !evaluateVectorFilter(treasure, vf) {
+	if !evaluateNativeVectorFilter(tr, vf) {
 		t.Error("expected identical normalized vectors to have similarity ~1.0")
 	}
 }
 
-func TestEvaluateVectorFilter_Orthogonal(t *testing.T) {
-	// Two orthogonal vectors: dot product = 0
+func TestNativeVectorFilter_Orthogonal(t *testing.T) {
 	storedVec := makeNormalizedVector(1.0, 0.0, 0.0, 0.0)
-	treasure := &hydrapb.Treasure{
-		Key:      "domain2",
-		BytesVal: makeMsgpackBytesVal(t, map[string]interface{}{"Embedding": storedVec}),
-	}
+	bytesVal := makeMsgpackBytesVal(t, map[string]interface{}{"Embedding": storedVec})
+	tr := newTreasureWithBytes(bytesVal)
 
 	queryVec := normalizeFloat32([]float32{0.0, 1.0, 0.0, 0.0})
 
 	vf := &hydrapb.VectorFilter{
 		BytesFieldPath: "Embedding",
 		QueryVector:    queryVec,
-		MinSimilarity:  0.01, // Even very low threshold
+		MinSimilarity:  0.01,
 	}
 
-	if evaluateVectorFilter(treasure, vf) {
+	if evaluateNativeVectorFilter(tr, vf) {
 		t.Error("expected orthogonal vectors to NOT match (similarity ~0.0)")
 	}
 }
 
-func TestEvaluateVectorFilter_BelowThreshold(t *testing.T) {
+func TestNativeVectorFilter_BelowThreshold(t *testing.T) {
 	storedVec := makeNormalizedVector(1.0, 0.5, 0.0, 0.0)
-	treasure := &hydrapb.Treasure{
-		Key:      "domain3",
-		BytesVal: makeMsgpackBytesVal(t, map[string]interface{}{"Embedding": storedVec}),
-	}
+	bytesVal := makeMsgpackBytesVal(t, map[string]interface{}{"Embedding": storedVec})
+	tr := newTreasureWithBytes(bytesVal)
 
 	queryVec := normalizeFloat32([]float32{0.5, 1.0, 0.0, 0.0})
 
 	vf := &hydrapb.VectorFilter{
 		BytesFieldPath: "Embedding",
 		QueryVector:    queryVec,
-		MinSimilarity:  0.99, // Very high threshold
+		MinSimilarity:  0.99,
 	}
 
-	if evaluateVectorFilter(treasure, vf) {
+	if evaluateNativeVectorFilter(tr, vf) {
 		t.Error("expected vectors to NOT match with high threshold")
 	}
 }
 
-func TestEvaluateVectorFilter_AboveThreshold(t *testing.T) {
-	// Similar but not identical vectors
+func TestNativeVectorFilter_AboveThreshold(t *testing.T) {
 	storedVec := makeNormalizedVector(1.0, 0.9, 0.1, 0.0)
-	treasure := &hydrapb.Treasure{
-		Key:      "domain4",
-		BytesVal: makeMsgpackBytesVal(t, map[string]interface{}{"Embedding": storedVec}),
-	}
+	bytesVal := makeMsgpackBytesVal(t, map[string]interface{}{"Embedding": storedVec})
+	tr := newTreasureWithBytes(bytesVal)
 
 	queryVec := normalizeFloat32([]float32{1.0, 0.8, 0.2, 0.0})
 
 	vf := &hydrapb.VectorFilter{
 		BytesFieldPath: "Embedding",
 		QueryVector:    queryVec,
-		MinSimilarity:  0.90, // Reasonable threshold
+		MinSimilarity:  0.90,
 	}
 
-	if !evaluateVectorFilter(treasure, vf) {
+	if !evaluateNativeVectorFilter(tr, vf) {
 		t.Error("expected similar vectors to match with reasonable threshold")
 	}
 }
 
-func TestEvaluateVectorFilter_DimensionMismatch(t *testing.T) {
-	storedVec := makeNormalizedVector(1.0, 0.0, 0.0) // 3 dimensions
-	treasure := &hydrapb.Treasure{
-		Key:      "domain5",
-		BytesVal: makeMsgpackBytesVal(t, map[string]interface{}{"Embedding": storedVec}),
-	}
+func TestNativeVectorFilter_DimensionMismatch(t *testing.T) {
+	storedVec := makeNormalizedVector(1.0, 0.0, 0.0)
+	bytesVal := makeMsgpackBytesVal(t, map[string]interface{}{"Embedding": storedVec})
+	tr := newTreasureWithBytes(bytesVal)
 
-	queryVec := normalizeFloat32([]float32{1.0, 0.0, 0.0, 0.0}) // 4 dimensions
+	queryVec := normalizeFloat32([]float32{1.0, 0.0, 0.0, 0.0})
 
 	vf := &hydrapb.VectorFilter{
 		BytesFieldPath: "Embedding",
@@ -1302,13 +1222,13 @@ func TestEvaluateVectorFilter_DimensionMismatch(t *testing.T) {
 		MinSimilarity:  0.5,
 	}
 
-	if evaluateVectorFilter(treasure, vf) {
+	if evaluateNativeVectorFilter(tr, vf) {
 		t.Error("expected dimension mismatch to NOT match")
 	}
 }
 
-func TestEvaluateVectorFilter_NilBytesVal(t *testing.T) {
-	treasure := &hydrapb.Treasure{Key: "domain6"}
+func TestNativeVectorFilter_NilBytesVal(t *testing.T) {
+	tr := newEmptyTreasure()
 
 	queryVec := normalizeFloat32([]float32{1.0, 0.0, 0.0, 0.0})
 
@@ -1318,16 +1238,14 @@ func TestEvaluateVectorFilter_NilBytesVal(t *testing.T) {
 		MinSimilarity:  0.5,
 	}
 
-	if evaluateVectorFilter(treasure, vf) {
-		t.Error("expected nil BytesVal to NOT match")
+	if evaluateNativeVectorFilter(tr, vf) {
+		t.Error("expected empty content to NOT match")
 	}
 }
 
-func TestEvaluateVectorFilter_EmptyVector(t *testing.T) {
-	treasure := &hydrapb.Treasure{
-		Key:      "domain7",
-		BytesVal: makeMsgpackBytesVal(t, map[string]interface{}{"Embedding": []interface{}{}}),
-	}
+func TestNativeVectorFilter_EmptyVector(t *testing.T) {
+	bytesVal := makeMsgpackBytesVal(t, map[string]interface{}{"Embedding": []interface{}{}})
+	tr := newTreasureWithBytes(bytesVal)
 
 	queryVec := normalizeFloat32([]float32{1.0, 0.0, 0.0, 0.0})
 
@@ -1337,17 +1255,13 @@ func TestEvaluateVectorFilter_EmptyVector(t *testing.T) {
 		MinSimilarity:  0.5,
 	}
 
-	if evaluateVectorFilter(treasure, vf) {
+	if evaluateNativeVectorFilter(tr, vf) {
 		t.Error("expected empty stored vector to NOT match")
 	}
 }
 
-func TestEvaluateVectorFilter_GobEncoded(t *testing.T) {
-	// GOB-encoded BytesVal (no MsgPack magic bytes) → should not match
-	treasure := &hydrapb.Treasure{
-		Key:      "domain8",
-		BytesVal: []byte{0x01, 0x02, 0x03, 0x04}, // Not MsgPack
-	}
+func TestNativeVectorFilter_GobEncoded(t *testing.T) {
+	tr := newTreasureWithBytes([]byte{0x01, 0x02, 0x03, 0x04})
 
 	queryVec := normalizeFloat32([]float32{1.0, 0.0, 0.0, 0.0})
 
@@ -1357,21 +1271,19 @@ func TestEvaluateVectorFilter_GobEncoded(t *testing.T) {
 		MinSimilarity:  0.5,
 	}
 
-	if evaluateVectorFilter(treasure, vf) {
+	if evaluateNativeVectorFilter(tr, vf) {
 		t.Error("expected GOB-encoded data to NOT match vector filter")
 	}
 }
 
-func TestEvaluateVectorFilter_NestedPath(t *testing.T) {
+func TestNativeVectorFilter_NestedPath(t *testing.T) {
 	storedVec := makeNormalizedVector(1.0, 0.0, 0.0, 0.0)
-	treasure := &hydrapb.Treasure{
-		Key: "domain9",
-		BytesVal: makeMsgpackBytesVal(t, map[string]interface{}{
-			"Metadata": map[string]interface{}{
-				"Vector": storedVec,
-			},
-		}),
-	}
+	bytesVal := makeMsgpackBytesVal(t, map[string]interface{}{
+		"Metadata": map[string]interface{}{
+			"Vector": storedVec,
+		},
+	})
+	tr := newTreasureWithBytes(bytesVal)
 
 	queryVec := normalizeFloat32([]float32{1.0, 0.0, 0.0, 0.0})
 
@@ -1381,16 +1293,14 @@ func TestEvaluateVectorFilter_NestedPath(t *testing.T) {
 		MinSimilarity:  0.99,
 	}
 
-	if !evaluateVectorFilter(treasure, vf) {
+	if !evaluateNativeVectorFilter(tr, vf) {
 		t.Error("expected nested path vector filter to match")
 	}
 }
 
-func TestEvaluateVectorFilter_MissingField(t *testing.T) {
-	treasure := &hydrapb.Treasure{
-		Key:      "domain10",
-		BytesVal: makeMsgpackBytesVal(t, map[string]interface{}{"Category": "business"}),
-	}
+func TestNativeVectorFilter_MissingField(t *testing.T) {
+	bytesVal := makeMsgpackBytesVal(t, map[string]interface{}{"Category": "business"})
+	tr := newTreasureWithBytes(bytesVal)
 
 	queryVec := normalizeFloat32([]float32{1.0, 0.0, 0.0, 0.0})
 
@@ -1400,18 +1310,16 @@ func TestEvaluateVectorFilter_MissingField(t *testing.T) {
 		MinSimilarity:  0.5,
 	}
 
-	if evaluateVectorFilter(treasure, vf) {
+	if evaluateNativeVectorFilter(tr, vf) {
 		t.Error("expected missing vector field to NOT match")
 	}
 }
 
-func TestEvaluateVectorFilter_NonNumericArray(t *testing.T) {
-	treasure := &hydrapb.Treasure{
-		Key: "domain11",
-		BytesVal: makeMsgpackBytesVal(t, map[string]interface{}{
-			"Embedding": []interface{}{"not", "a", "vector"},
-		}),
-	}
+func TestNativeVectorFilter_NonNumericArray(t *testing.T) {
+	bytesVal := makeMsgpackBytesVal(t, map[string]interface{}{
+		"Embedding": []interface{}{"not", "a", "vector"},
+	})
+	tr := newTreasureWithBytes(bytesVal)
 
 	queryVec := normalizeFloat32([]float32{1.0, 0.0, 0.0, 0.0})
 
@@ -1421,22 +1329,21 @@ func TestEvaluateVectorFilter_NonNumericArray(t *testing.T) {
 		MinSimilarity:  0.5,
 	}
 
-	if evaluateVectorFilter(treasure, vf) {
+	if evaluateNativeVectorFilter(tr, vf) {
 		t.Error("expected non-numeric array to NOT match vector filter")
 	}
 }
 
-func TestEvaluateVectorFilter_NilFilter(t *testing.T) {
-	treasure := &hydrapb.Treasure{Key: "domain12"}
+func TestNativeVectorFilter_NilFilter(t *testing.T) {
+	tr := newEmptyTreasure()
 
-	// Nil vector filter should pass (no filtering)
-	if !evaluateVectorFilter(treasure, nil) {
+	if !evaluateNativeVectorFilter(tr, nil) {
 		t.Error("expected nil vector filter to pass")
 	}
 }
 
-func TestEvaluateVectorFilter_EmptyQueryVector(t *testing.T) {
-	treasure := &hydrapb.Treasure{Key: "domain13"}
+func TestNativeVectorFilter_EmptyQueryVector(t *testing.T) {
+	tr := newEmptyTreasure()
 
 	vf := &hydrapb.VectorFilter{
 		BytesFieldPath: "Embedding",
@@ -1444,22 +1351,18 @@ func TestEvaluateVectorFilter_EmptyQueryVector(t *testing.T) {
 		MinSimilarity:  0.5,
 	}
 
-	// Empty query vector = no filtering = pass
-	if !evaluateVectorFilter(treasure, vf) {
+	if !evaluateNativeVectorFilter(tr, vf) {
 		t.Error("expected empty query vector to pass (no filtering)")
 	}
 }
 
-func TestEvaluateVectorFilter_CombinedWithOtherFilters_AND(t *testing.T) {
+func TestNativeVectorFilter_CombinedWithOtherFilters_AND(t *testing.T) {
 	storedVec := makeNormalizedVector(1.0, 0.0, 0.0, 0.0)
-	treasure := &hydrapb.Treasure{
-		Key:      "domain-combined",
-		Int32Val: int32Ptr(42),
-		BytesVal: makeMsgpackBytesVal(t, map[string]interface{}{
-			"Embedding": storedVec,
-			"Category":  "business",
-		}),
-	}
+	bytesVal := makeMsgpackBytesVal(t, map[string]interface{}{
+		"Embedding": storedVec,
+		"Category":  "business",
+	})
+	tr := newTreasureWithBytes(bytesVal)
 
 	queryVec := normalizeFloat32([]float32{1.0, 0.0, 0.0, 0.0})
 	categoryPath := "Category"
@@ -1467,10 +1370,6 @@ func TestEvaluateVectorFilter_CombinedWithOtherFilters_AND(t *testing.T) {
 	group := &hydrapb.FilterGroup{
 		Logic: hydrapb.FilterLogic_AND,
 		Filters: []*hydrapb.TreasureFilter{
-			{
-				Operator:     hydrapb.Relational_EQUAL,
-				CompareValue: &hydrapb.TreasureFilter_Int32Val{Int32Val: 42},
-			},
 			{
 				Operator:       hydrapb.Relational_EQUAL,
 				CompareValue:   &hydrapb.TreasureFilter_StringVal{StringVal: "business"},
@@ -1486,35 +1385,34 @@ func TestEvaluateVectorFilter_CombinedWithOtherFilters_AND(t *testing.T) {
 		},
 	}
 
-	if !evaluateFilterGroup(treasure, group) {
-		t.Error("expected AND group to match (Int32==42 AND Category==business AND vector match)")
+	if !evaluateNativeFilterGroup(tr, group) {
+		t.Error("expected AND group to match (Category==business AND vector match)")
 	}
 
-	// Now with non-matching vector threshold
-	group.VectorFilters[0].MinSimilarity = 1.01 // impossible threshold
-	if evaluateFilterGroup(treasure, group) {
+	group.VectorFilters[0].MinSimilarity = 1.01
+	if evaluateNativeFilterGroup(tr, group) {
 		t.Error("expected AND group to NOT match with impossible vector threshold")
 	}
 }
 
-func TestEvaluateVectorFilter_CombinedWithOtherFilters_OR(t *testing.T) {
+func TestNativeVectorFilter_CombinedWithOtherFilters_OR(t *testing.T) {
 	storedVec := makeNormalizedVector(1.0, 0.0, 0.0, 0.0)
-	treasure := &hydrapb.Treasure{
-		Key:      "domain-or",
-		Int32Val: int32Ptr(99), // Doesn't match filter
-		BytesVal: makeMsgpackBytesVal(t, map[string]interface{}{
-			"Embedding": storedVec,
-		}),
-	}
+	bytesVal := makeMsgpackBytesVal(t, map[string]interface{}{
+		"Embedding": storedVec,
+		"Score":     int64(99),
+	})
+	tr := newTreasureWithBytes(bytesVal)
 
 	queryVec := normalizeFloat32([]float32{1.0, 0.0, 0.0, 0.0})
+	scorePath := "Score"
 
 	group := &hydrapb.FilterGroup{
 		Logic: hydrapb.FilterLogic_OR,
 		Filters: []*hydrapb.TreasureFilter{
 			{
-				Operator:     hydrapb.Relational_EQUAL,
-				CompareValue: &hydrapb.TreasureFilter_Int32Val{Int32Val: 42},
+				Operator:       hydrapb.Relational_EQUAL,
+				CompareValue:   &hydrapb.TreasureFilter_Int64Val{Int64Val: 42},
+				BytesFieldPath: &scorePath,
 			},
 		},
 		VectorFilters: []*hydrapb.VectorFilter{
@@ -1526,20 +1424,19 @@ func TestEvaluateVectorFilter_CombinedWithOtherFilters_OR(t *testing.T) {
 		},
 	}
 
-	if !evaluateFilterGroup(treasure, group) {
-		t.Error("expected OR group to match (Int32!=42 but vector matches)")
+	if !evaluateNativeFilterGroup(tr, group) {
+		t.Error("expected OR group to match (Score!=42 but vector matches)")
 	}
 }
 
 // --- Profile mode vector filter tests ---
 
-func TestProfileVectorFilter_Match(t *testing.T) {
+func TestNativeProfileVectorFilter_Match(t *testing.T) {
 	storedVec := makeNormalizedVector(1.0, 0.0, 0.0, 0.0)
-	treasures := map[string]*hydrapb.Treasure{
-		"MainProfile": {
-			Key:      "MainProfile",
-			BytesVal: makeMsgpackBytesVal(t, map[string]interface{}{"Embedding": storedVec}),
-		},
+	bytesVal := makeMsgpackBytesVal(t, map[string]interface{}{"Embedding": storedVec})
+
+	treasures := map[string]treasure.Treasure{
+		"MainProfile": newTreasureWithBytes(bytesVal),
 	}
 
 	queryVec := normalizeFloat32([]float32{1.0, 0.0, 0.0, 0.0})
@@ -1557,14 +1454,14 @@ func TestProfileVectorFilter_Match(t *testing.T) {
 		},
 	}
 
-	if !evaluateProfileFilterGroup(treasures, group) {
+	if !evaluateNativeProfileFilterGroup(treasures, group) {
 		t.Error("expected profile vector filter to match")
 	}
 }
 
-func TestProfileVectorFilter_MissingTreasure(t *testing.T) {
-	treasures := map[string]*hydrapb.Treasure{
-		"Name": {Key: "Name", StringVal: stringPtr("test")},
+func TestNativeProfileVectorFilter_MissingTreasure(t *testing.T) {
+	treasures := map[string]treasure.Treasure{
+		"Name": newTreasureWithString("test"),
 	}
 
 	queryVec := normalizeFloat32([]float32{1.0, 0.0, 0.0, 0.0})
@@ -1582,17 +1479,15 @@ func TestProfileVectorFilter_MissingTreasure(t *testing.T) {
 		},
 	}
 
-	if evaluateProfileFilterGroup(treasures, group) {
+	if evaluateNativeProfileFilterGroup(treasures, group) {
 		t.Error("expected vector filter to fail when Treasure is missing")
 	}
 }
 
-func TestProfileVectorFilter_NoTreasureKey(t *testing.T) {
-	treasures := map[string]*hydrapb.Treasure{
-		"MainProfile": {
-			Key:      "MainProfile",
-			BytesVal: makeMsgpackBytesVal(t, map[string]interface{}{"Embedding": makeNormalizedVector(1.0, 0.0)}),
-		},
+func TestNativeProfileVectorFilter_NoTreasureKey(t *testing.T) {
+	bytesVal := makeMsgpackBytesVal(t, map[string]interface{}{"Embedding": makeNormalizedVector(1.0, 0.0)})
+	treasures := map[string]treasure.Treasure{
+		"MainProfile": newTreasureWithBytes(bytesVal),
 	}
 
 	queryVec := normalizeFloat32([]float32{1.0, 0.0})
@@ -1604,12 +1499,11 @@ func TestProfileVectorFilter_NoTreasureKey(t *testing.T) {
 				BytesFieldPath: "Embedding",
 				QueryVector:    queryVec,
 				MinSimilarity:  0.5,
-				// No TreasureKey
 			},
 		},
 	}
 
-	if evaluateProfileFilterGroup(treasures, group) {
+	if evaluateNativeProfileFilterGroup(treasures, group) {
 		t.Error("expected vector filter without TreasureKey to fail in profile mode")
 	}
 }

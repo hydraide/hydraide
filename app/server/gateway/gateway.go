@@ -618,12 +618,12 @@ func (g Gateway) GetByIndexStream(in *hydrapb.GetByIndexStreamRequest, stream hy
 			return stream.Context().Err()
 		}
 
-		t := &hydrapb.Treasure{}
-		treasureToKeyValuePair(treasureInterface, t)
-
-		if !evaluateFilterGroup(t, filters) {
+		if !evaluateNativeFilterGroup(treasureInterface, filters) {
 			continue
 		}
+
+		t := &hydrapb.Treasure{}
+		treasureToKeyValuePair(treasureInterface, t)
 
 		if err := stream.Send(&hydrapb.GetByIndexStreamResponse{
 			Treasure: t,
@@ -691,12 +691,12 @@ func (g Gateway) GetByIndexStreamFromMany(in *hydrapb.GetByIndexStreamFromManyRe
 				return stream.Context().Err()
 			}
 
-			t := &hydrapb.Treasure{}
-			treasureToKeyValuePair(treasureInterface, t)
-
-			if !evaluateFilterGroup(t, filters) {
+			if !evaluateNativeFilterGroup(treasureInterface, filters) {
 				continue
 			}
+
+			t := &hydrapb.Treasure{}
+			treasureToKeyValuePair(treasureInterface, t)
 
 			if err := stream.Send(&hydrapb.GetByIndexStreamFromManyResponse{
 				SwampName: query.SwampName,
@@ -790,31 +790,39 @@ func (g Gateway) GetStream(in *hydrapb.GetStreamRequest, stream hydrapb.Hydraide
 
 		swampInterface.BeginVigil()
 
-		// Fetch all requested keys and build the treasure map
-		treasureMap := make(map[string]*hydrapb.Treasure)
-		var treasureList []*hydrapb.Treasure
 		swampExists := true
 
-		for _, key := range query.GetKeys() {
-			t := &hydrapb.Treasure{
-				Key:     key,
-				IsExist: true,
-			}
+		// First pass: collect native treasures for filtering (no proto conversion)
+		nativeTreasures := make(map[string]treasure.Treasure, len(query.GetKeys()))
+		missingKeys := make(map[string]bool)
 
+		for _, key := range query.GetKeys() {
 			treasureInterface, getErr := swampInterface.GetTreasure(key)
 			if getErr != nil {
-				t.IsExist = false
+				missingKeys[key] = true
 			} else {
-				treasureToKeyValuePair(treasureInterface, t)
+				nativeTreasures[key] = treasureInterface
 			}
-
-			treasureMap[key] = t
-			treasureList = append(treasureList, t)
 		}
 
-		// Evaluate profile filters against the treasure map
+		// Evaluate profile filters against native treasures (no proto overhead)
 		filters := query.GetFilters()
-		if evaluateProfileFilterGroup(treasureMap, filters) {
+		if evaluateNativeProfileFilterGroup(nativeTreasures, filters) {
+			// Filter passed — now convert to proto for the response
+			var treasureList []*hydrapb.Treasure
+			for _, key := range query.GetKeys() {
+				t := &hydrapb.Treasure{
+					Key:     key,
+					IsExist: true,
+				}
+				if missingKeys[key] {
+					t.IsExist = false
+				} else {
+					treasureToKeyValuePair(nativeTreasures[key], t)
+				}
+				treasureList = append(treasureList, t)
+			}
+
 			if err := stream.Send(&hydrapb.GetStreamResponse{
 				SwampName: query.SwampName,
 				Treasures: treasureList,
