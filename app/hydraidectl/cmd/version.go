@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"runtime"
@@ -13,6 +14,7 @@ import (
 	"github.com/Masterminds/semver/v3"
 	buildmeta "github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/buildmetadata"
 	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/filesystem"
+	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/updatecache"
 	"github.com/spf13/cobra"
 
 	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/ptr"
@@ -176,39 +178,59 @@ func checkForUpdates(ctx context.Context, currentVersion string, includePre bool
 		info.Channel = "all"
 	}
 
-	// Create HTTP client with timeout
-	client := &http.Client{
-		Timeout: timeout,
-	}
-
-	// Fetch releases from GitHub API
-	url := "https://api.github.com/repos/hydraide/hydraide/releases"
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		info.Error = fmt.Sprintf("failed to create request: %v", err)
-		return info
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		info.Error = fmt.Sprintf("failed to check for updates: %v", err)
-		return info
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		if resp.StatusCode == http.StatusForbidden {
-			info.Error = "GitHub API rate limit exceeded. Try again later"
-		} else {
-			info.Error = fmt.Sprintf("GitHub API returned status %d", resp.StatusCode)
-		}
-		return info
-	}
+	const cacheKey = "github-releases-list"
 
 	var releases []GitHubRelease
-	if err := json.NewDecoder(resp.Body).Decode(&releases); err != nil {
-		info.Error = fmt.Sprintf("failed to parse GitHub response: %v", err)
-		return info
+
+	// Try cache first
+	if cached, err := updatecache.LoadGitHubCache(cacheKey); err == nil {
+		if err := json.Unmarshal(cached.Body, &releases); err != nil {
+			releases = nil // fall through to HTTP fetch
+		}
+	}
+
+	// Cache miss or invalid — fetch from GitHub
+	if releases == nil {
+		client := &http.Client{
+			Timeout: timeout,
+		}
+
+		apiURL := "https://api.github.com/repos/hydraide/hydraide/releases"
+		req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
+		if err != nil {
+			info.Error = fmt.Sprintf("failed to create request: %v", err)
+			return info
+		}
+
+		resp, err := client.Do(req)
+		if err != nil {
+			info.Error = fmt.Sprintf("failed to check for updates: %v", err)
+			return info
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			if resp.StatusCode == http.StatusForbidden {
+				info.Error = "GitHub API rate limit exceeded. Try again later"
+			} else {
+				info.Error = fmt.Sprintf("GitHub API returned status %d", resp.StatusCode)
+			}
+			return info
+		}
+
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			info.Error = fmt.Sprintf("failed to read GitHub response: %v", err)
+			return info
+		}
+
+		if err := json.Unmarshal(body, &releases); err != nil {
+			info.Error = fmt.Sprintf("failed to parse GitHub response: %v", err)
+			return info
+		}
+
+		// Save to cache (best-effort)
+		_ = updatecache.SaveGitHubCache(cacheKey, body)
 	}
 
 	// Find the latest release

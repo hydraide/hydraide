@@ -18,6 +18,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/updatecache"
 )
 
 var logger = slog.New(slog.NewTextHandler(os.Stdout, nil))
@@ -252,25 +254,9 @@ func (d *DefaultDownloader) GetLatestVersionWithoutServerPrefix() string {
 //	}
 //	fmt.Println("Latest server version:", version)
 func (d *DefaultDownloader) GetLatestVersionByPrefix(prefix string) (string, error) {
-	githubURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases?per_page=100", OWNER, REPO)
-	resp, err := d.githubGET(githubURL)
+	releases, err := d.fetchReleasesListCached()
 	if err != nil {
-		logger.Error("Failed to fetch releases list", "error", err)
-		return "", fmt.Errorf("failed to fetch releases list: %w", err)
-	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			logger.Error("Failed to close response body", "error", err)
-		}
-	}()
-	if resp.StatusCode != http.StatusOK {
-		logger.Error("GitHub API returned error status when listing releases", "status", resp.StatusCode)
-		return "", fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
-	}
-	var releases []GitHubRelease
-	if err := json.NewDecoder(resp.Body).Decode(&releases); err != nil {
-		logger.Error("Failed to decode releases list", "error", err)
-		return "", fmt.Errorf("failed to decode releases list: %w", err)
+		return "", err
 	}
 	for _, r := range releases {
 		if r.Draft || r.Prerelease {
@@ -281,6 +267,52 @@ func (d *DefaultDownloader) GetLatestVersionByPrefix(prefix string) (string, err
 		}
 	}
 	return "", fmt.Errorf("no release found with prefix %q", prefix)
+}
+
+// fetchReleasesListCached returns the releases list, using a file cache with 5-minute TTL.
+func (d *DefaultDownloader) fetchReleasesListCached() ([]GitHubRelease, error) {
+	const cacheKey = "github-releases-list"
+
+	// Try cache first
+	if cached, err := updatecache.LoadGitHubCache(cacheKey); err == nil {
+		var releases []GitHubRelease
+		if err := json.Unmarshal(cached.Body, &releases); err == nil {
+			return releases, nil
+		}
+	}
+
+	// Cache miss or invalid — fetch from GitHub
+	githubURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases?per_page=100", OWNER, REPO)
+	resp, err := d.githubGET(githubURL)
+	if err != nil {
+		logger.Error("Failed to fetch releases list", "error", err)
+		return nil, fmt.Errorf("failed to fetch releases list: %w", err)
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			logger.Error("Failed to close response body", "error", err)
+		}
+	}()
+	if resp.StatusCode != http.StatusOK {
+		logger.Error("GitHub API returned error status when listing releases", "status", resp.StatusCode)
+		return nil, fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read releases response: %w", err)
+	}
+
+	var releases []GitHubRelease
+	if err := json.Unmarshal(body, &releases); err != nil {
+		logger.Error("Failed to decode releases list", "error", err)
+		return nil, fmt.Errorf("failed to decode releases list: %w", err)
+	}
+
+	// Save to cache (best-effort)
+	_ = updatecache.SaveGitHubCache(cacheKey, body)
+
+	return releases, nil
 }
 
 // DownloadHydraServer downloads and installs the HydrAIDE server binary
@@ -507,6 +539,18 @@ func (d *DefaultDownloader) githubGET(u string) (*http.Response, error) {
 // - Logs an error if fetching fails.
 // - Logs info when release is successfully fetched with asset count.
 func (d *DefaultDownloader) getReleaseByTag(tag string) (*GitHubRelease, error) {
+	cacheKey := "github-release-tag-" + tag
+
+	// Try cache first
+	if cached, err := updatecache.LoadGitHubCache(cacheKey); err == nil {
+		var release GitHubRelease
+		if err := json.Unmarshal(cached.Body, &release); err == nil {
+			logger.Info("Using cached release info", "tag", release.TagName, "assets_count", len(release.Assets))
+			return &release, nil
+		}
+	}
+
+	// Cache miss or invalid — fetch from GitHub
 	githubURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/tags/%s", OWNER, REPO, url.PathEscape(tag))
 	resp, err := d.githubGET(githubURL)
 	if err != nil {
@@ -524,10 +568,20 @@ func (d *DefaultDownloader) getReleaseByTag(tag string) (*GitHubRelease, error) 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("GitHub API returned status %d for release %s", resp.StatusCode, tag)
 	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read release response: %w", err)
+	}
+
 	var release GitHubRelease
-	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+	if err := json.Unmarshal(body, &release); err != nil {
 		return nil, fmt.Errorf("failed to decode release response: %w", err)
 	}
+
+	// Save to cache (best-effort)
+	_ = updatecache.SaveGitHubCache(cacheKey, body)
+
 	logger.Info("Fetched hydraserver release by tag", "tag", release.TagName, "assets_count", len(release.Assets))
 	return &release, nil
 }
