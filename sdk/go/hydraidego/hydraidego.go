@@ -468,6 +468,92 @@ func FilterBytesFieldBool(op RelationalOperator, fieldPath string, value bool) *
 	return &Filter{operator: op, bytesFieldPath: &fieldPath, boolVal: &value}
 }
 
+// --- Slice Contains filters ---
+
+// FilterBytesFieldSliceContainsInt8 checks if the []int8 slice at fieldPath contains value.
+func FilterBytesFieldSliceContainsInt8(bytesFieldPath string, value int8) *Filter {
+	return &Filter{operator: SliceContains, bytesFieldPath: &bytesFieldPath, int8Val: &value}
+}
+
+// FilterBytesFieldSliceContainsInt32 checks if the []int32 slice at fieldPath contains value.
+func FilterBytesFieldSliceContainsInt32(bytesFieldPath string, value int32) *Filter {
+	return &Filter{operator: SliceContains, bytesFieldPath: &bytesFieldPath, int32Val: &value}
+}
+
+// FilterBytesFieldSliceContainsInt64 checks if the []int64 slice at fieldPath contains value.
+func FilterBytesFieldSliceContainsInt64(bytesFieldPath string, value int64) *Filter {
+	return &Filter{operator: SliceContains, bytesFieldPath: &bytesFieldPath, int64Val: &value}
+}
+
+// FilterBytesFieldSliceContainsString checks if the []string slice at fieldPath contains value (exact, case-sensitive).
+func FilterBytesFieldSliceContainsString(bytesFieldPath string, value string) *Filter {
+	return &Filter{operator: SliceContains, bytesFieldPath: &bytesFieldPath, stringVal: &value}
+}
+
+// --- Slice NotContains filters ---
+
+// FilterBytesFieldSliceNotContainsInt8 checks that the []int8 slice at fieldPath does NOT contain value.
+func FilterBytesFieldSliceNotContainsInt8(bytesFieldPath string, value int8) *Filter {
+	return &Filter{operator: SliceNotContains, bytesFieldPath: &bytesFieldPath, int8Val: &value}
+}
+
+// FilterBytesFieldSliceNotContainsInt32 checks that the []int32 slice at fieldPath does NOT contain value.
+func FilterBytesFieldSliceNotContainsInt32(bytesFieldPath string, value int32) *Filter {
+	return &Filter{operator: SliceNotContains, bytesFieldPath: &bytesFieldPath, int32Val: &value}
+}
+
+// FilterBytesFieldSliceNotContainsInt64 checks that the []int64 slice at fieldPath does NOT contain value.
+func FilterBytesFieldSliceNotContainsInt64(bytesFieldPath string, value int64) *Filter {
+	return &Filter{operator: SliceNotContains, bytesFieldPath: &bytesFieldPath, int64Val: &value}
+}
+
+// FilterBytesFieldSliceNotContainsString checks that the []string slice at fieldPath does NOT contain value.
+func FilterBytesFieldSliceNotContainsString(bytesFieldPath string, value string) *Filter {
+	return &Filter{operator: SliceNotContains, bytesFieldPath: &bytesFieldPath, stringVal: &value}
+}
+
+// --- Slice Substring filters ---
+
+// FilterBytesFieldSliceContainsSubstring checks if any string element in the slice contains substring (case-insensitive).
+func FilterBytesFieldSliceContainsSubstring(bytesFieldPath string, substring string) *Filter {
+	return &Filter{operator: SliceContainsSubstring, bytesFieldPath: &bytesFieldPath, stringVal: &substring}
+}
+
+// FilterBytesFieldSliceNotContainsSubstring checks that no string element in the slice contains substring (case-insensitive).
+func FilterBytesFieldSliceNotContainsSubstring(bytesFieldPath string, substring string) *Filter {
+	return &Filter{operator: SliceNotContainsSubstring, bytesFieldPath: &bytesFieldPath, stringVal: &substring}
+}
+
+// --- Slice Length filter ---
+
+// FilterBytesFieldSliceLen compares the length of the slice at bytesFieldPath using the given operator.
+// Uses the #len pseudo-field internally.
+func FilterBytesFieldSliceLen(op RelationalOperator, bytesFieldPath string, length int32) *Filter {
+	lenPath := bytesFieldPath + ".#len"
+	return &Filter{operator: op, bytesFieldPath: &lenPath, int32Val: &length}
+}
+
+// --- Nested Slice Any filters ---
+
+// FilterBytesFieldNestedSliceAnyString checks if ANY element in the struct slice has a fieldName matching the condition.
+// Uses the [*] wildcard syntax internally.
+func FilterBytesFieldNestedSliceAnyString(slicePath string, fieldName string, op RelationalOperator, value string) *Filter {
+	anyPath := slicePath + "[*]." + fieldName
+	return &Filter{operator: op, bytesFieldPath: &anyPath, stringVal: &value}
+}
+
+// FilterBytesFieldNestedSliceAnyInt8 checks if ANY element in the struct slice has a fieldName matching the condition.
+func FilterBytesFieldNestedSliceAnyInt8(slicePath string, fieldName string, op RelationalOperator, value int8) *Filter {
+	anyPath := slicePath + "[*]." + fieldName
+	return &Filter{operator: op, bytesFieldPath: &anyPath, int8Val: &value}
+}
+
+// FilterBytesFieldNestedSliceAnyBool checks if ANY element in the struct slice has a fieldName matching the condition.
+func FilterBytesFieldNestedSliceAnyBool(slicePath string, fieldName string, op RelationalOperator, value bool) *Filter {
+	anyPath := slicePath + "[*]." + fieldName
+	return &Filter{operator: op, bytesFieldPath: &anyPath, boolVal: &value}
+}
+
 // FilterLogic defines how conditions within a FilterGroup are combined.
 type FilterLogic int
 
@@ -4639,6 +4725,18 @@ const (
 
 	// HasNotKey means "BytesVal map does NOT contain the specified key" (uses StringVal as key name, requires BytesFieldPath)
 	HasNotKey
+
+	// SliceContains means "BytesVal slice contains the exact value" (requires BytesFieldPath)
+	SliceContains
+
+	// SliceNotContains means "BytesVal slice does NOT contain the exact value" (requires BytesFieldPath)
+	SliceNotContains
+
+	// SliceContainsSubstring means "any string element in BytesVal slice contains substring" (case-insensitive, requires BytesFieldPath)
+	SliceContainsSubstring
+
+	// SliceNotContainsSubstring means "no string element in BytesVal slice contains substring" (case-insensitive, requires BytesFieldPath)
+	SliceNotContainsSubstring
 )
 
 // IncrementMetaRequest defines optional metadata to be set when performing
@@ -7494,6 +7592,14 @@ func convertRelationalOperatorToProtoOperator(operator RelationalOperator) hydra
 		return hydraidepbgo.Relational_HAS_KEY
 	case HasNotKey:
 		return hydraidepbgo.Relational_HAS_NOT_KEY
+	case SliceContains:
+		return hydraidepbgo.Relational_SLICE_CONTAINS
+	case SliceNotContains:
+		return hydraidepbgo.Relational_SLICE_NOT_CONTAINS
+	case SliceContainsSubstring:
+		return hydraidepbgo.Relational_SLICE_CONTAINS_SUBSTRING
+	case SliceNotContainsSubstring:
+		return hydraidepbgo.Relational_SLICE_NOT_CONTAINS_SUBSTRING
 	case Equal:
 		fallthrough
 	default:

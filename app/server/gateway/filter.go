@@ -68,6 +68,13 @@ func unwrapMsgpack(data []byte) []byte {
 	return data[2:]
 }
 
+// anyMatchSlice is a sentinel type returned by extractFieldByPath when the path
+// contains a [*] wildcard. The evaluator iterates over values and returns true
+// if ANY value matches the filter condition.
+type anyMatchSlice struct {
+	values []interface{}
+}
+
 // evaluateFilterGroupWith is the generic AND/OR evaluator for filter groups.
 // The four callbacks determine how individual filters, sub-groups, phrase filters,
 // and vector filters are evaluated.
@@ -164,13 +171,60 @@ func decodeMsgpackToMap(data []byte) (map[string]interface{}, error) {
 // extractFieldByPath navigates a dot-separated path in a nested map.
 // Example: "Address.City" extracts m["Address"].(map)["City"].
 // An empty path returns the root map itself (used in profile mode where the entire BytesVal is the target).
+//
+// Special path segments:
+//   - "#len" — returns the length of the current slice or map as int64
+//   - "Field[*]" — iterates slice elements, extracts remaining path from each,
+//     and returns an anyMatchSlice sentinel for any-match evaluation
 func extractFieldByPath(m map[string]interface{}, path string) interface{} {
 	if path == "" {
 		return m
 	}
 	parts := strings.Split(path, ".")
 	var current interface{} = m
-	for _, part := range parts {
+
+	for i, part := range parts {
+		// #len pseudo-field: return length of current value as int64
+		if part == "#len" {
+			switch v := current.(type) {
+			case []interface{}:
+				return int64(len(v))
+			case map[string]interface{}:
+				return int64(len(v))
+			default:
+				return nil
+			}
+		}
+
+		// [*] wildcard: iterate slice, extract remaining path from each element
+		if strings.HasSuffix(part, "[*]") {
+			fieldName := strings.TrimSuffix(part, "[*]")
+			if fieldName != "" {
+				cm, ok := current.(map[string]interface{})
+				if !ok {
+					return nil
+				}
+				current = cm[fieldName]
+			}
+			arr, ok := current.([]interface{})
+			if !ok {
+				return nil
+			}
+			remainingPath := strings.Join(parts[i+1:], ".")
+			values := make([]interface{}, 0, len(arr))
+			for _, elem := range arr {
+				if remainingPath == "" {
+					values = append(values, elem)
+				} else if em, ok := elem.(map[string]interface{}); ok {
+					if v := extractFieldByPath(em, remainingPath); v != nil {
+						values = append(values, v)
+					}
+				}
+			}
+			return anyMatchSlice{values: values}
+		}
+
+		// Normal navigation
 		cm, ok := current.(map[string]interface{})
 		if !ok {
 			return nil
@@ -434,4 +488,141 @@ func toFloat32Slice(val interface{}) []float32 {
 		}
 	}
 	return result
+}
+
+// evaluateSliceContains checks if a slice ([]interface{}) contains (or not) the
+// value specified in the filter's CompareValue. Handles exact match for int/string
+// types and case-insensitive substring match for string slices.
+func evaluateSliceContains(fieldVal interface{}, op hydrapb.Relational_Operator, filter *hydrapb.TreasureFilter) bool {
+	arr, ok := fieldVal.([]interface{})
+	if !ok {
+		return op == hydrapb.Relational_SLICE_NOT_CONTAINS || op == hydrapb.Relational_SLICE_NOT_CONTAINS_SUBSTRING
+	}
+
+	isSubstring := op == hydrapb.Relational_SLICE_CONTAINS_SUBSTRING || op == hydrapb.Relational_SLICE_NOT_CONTAINS_SUBSTRING
+	negate := op == hydrapb.Relational_SLICE_NOT_CONTAINS || op == hydrapb.Relational_SLICE_NOT_CONTAINS_SUBSTRING
+
+	found := false
+	if isSubstring {
+		cv, ok := filter.GetCompareValue().(*hydrapb.TreasureFilter_StringVal)
+		if !ok {
+			return negate
+		}
+		lowerRef := strings.ToLower(cv.StringVal)
+		for _, elem := range arr {
+			if s, ok := elem.(string); ok && strings.Contains(strings.ToLower(s), lowerRef) {
+				found = true
+				break
+			}
+		}
+	} else {
+		switch cv := filter.GetCompareValue().(type) {
+		case *hydrapb.TreasureFilter_Int8Val:
+			ref := int64(cv.Int8Val)
+			for _, elem := range arr {
+				if v, ok := toInt64(elem); ok && v == ref {
+					found = true
+					break
+				}
+			}
+		case *hydrapb.TreasureFilter_Int32Val:
+			ref := int64(cv.Int32Val)
+			for _, elem := range arr {
+				if v, ok := toInt64(elem); ok && v == ref {
+					found = true
+					break
+				}
+			}
+		case *hydrapb.TreasureFilter_Int64Val:
+			ref := cv.Int64Val
+			for _, elem := range arr {
+				if v, ok := toInt64(elem); ok && v == ref {
+					found = true
+					break
+				}
+			}
+		case *hydrapb.TreasureFilter_StringVal:
+			for _, elem := range arr {
+				if s, ok := elem.(string); ok && s == cv.StringVal {
+					found = true
+					break
+				}
+			}
+		default:
+			return negate
+		}
+	}
+
+	if negate {
+		return !found
+	}
+	return found
+}
+
+// evaluateAnyMatch returns true if ANY value in the anyMatchSlice satisfies
+// the filter's operator and compare value.
+func evaluateAnyMatch(ams anyMatchSlice, op hydrapb.Relational_Operator, filter *hydrapb.TreasureFilter) bool {
+	if len(ams.values) == 0 {
+		return op == hydrapb.Relational_IS_EMPTY
+	}
+
+	if op == hydrapb.Relational_IS_NOT_EMPTY {
+		for _, v := range ams.values {
+			if v != nil {
+				if s, ok := v.(string); ok && s == "" {
+					continue
+				}
+				return true
+			}
+		}
+		return false
+	}
+
+	if op == hydrapb.Relational_IS_EMPTY {
+		for _, v := range ams.values {
+			if v != nil {
+				if s, ok := v.(string); ok && s == "" {
+					continue
+				}
+				return false
+			}
+		}
+		return true
+	}
+
+	for _, v := range ams.values {
+		if v == nil {
+			continue
+		}
+		switch cv := filter.GetCompareValue().(type) {
+		case *hydrapb.TreasureFilter_StringVal:
+			if s, ok := v.(string); ok && compareString(s, op, cv.StringVal) {
+				return true
+			}
+		case *hydrapb.TreasureFilter_Int8Val:
+			if n, ok := toInt64(v); ok && compareOrdered(n, op, int64(cv.Int8Val)) {
+				return true
+			}
+		case *hydrapb.TreasureFilter_Int32Val:
+			if n, ok := toInt64(v); ok && compareOrdered(n, op, int64(cv.Int32Val)) {
+				return true
+			}
+		case *hydrapb.TreasureFilter_Int64Val:
+			if n, ok := toInt64(v); ok && compareOrdered(n, op, cv.Int64Val) {
+				return true
+			}
+		case *hydrapb.TreasureFilter_BoolVal:
+			if b, ok := v.(bool); ok {
+				ref := cv.BoolVal == hydrapb.Boolean_TRUE
+				if compareBoolRaw(b, op, ref) {
+					return true
+				}
+			}
+		case *hydrapb.TreasureFilter_Float64Val:
+			if n, ok := toFloat64(v); ok && compareOrdered(n, op, cv.Float64Val) {
+				return true
+			}
+		}
+	}
+	return false
 }

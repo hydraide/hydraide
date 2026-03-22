@@ -349,20 +349,24 @@ func (DeleteResponse_SwampDeleteResponse_ErrorCodeEnum) EnumDescriptor() ([]byte
 type Relational_Operator int32
 
 const (
-	Relational_EQUAL                 Relational_Operator = 0  // value == reference
-	Relational_GREATER_THAN          Relational_Operator = 1  // value > reference
-	Relational_GREATER_THAN_OR_EQUAL Relational_Operator = 2  // value >= reference
-	Relational_LESS_THAN             Relational_Operator = 3  // value < reference
-	Relational_LESS_THAN_OR_EQUAL    Relational_Operator = 4  // value <= reference
-	Relational_NOT_EQUAL             Relational_Operator = 5  // value != reference
-	Relational_CONTAINS              Relational_Operator = 6  // string contains substring (case-sensitive)
-	Relational_NOT_CONTAINS          Relational_Operator = 7  // string does NOT contain substring (case-sensitive)
-	Relational_STARTS_WITH           Relational_Operator = 8  // string starts with prefix (case-sensitive)
-	Relational_ENDS_WITH             Relational_Operator = 9  // string ends with suffix (case-sensitive)
-	Relational_IS_EMPTY              Relational_Operator = 10 // field is nil/unset or empty string (CompareValue ignored)
-	Relational_IS_NOT_EMPTY          Relational_Operator = 11 // field exists and is non-empty (CompareValue ignored)
-	Relational_HAS_KEY               Relational_Operator = 12 // BytesVal map contains the specified key (uses StringVal as key name)
-	Relational_HAS_NOT_KEY           Relational_Operator = 13 // BytesVal map does NOT contain the specified key (uses StringVal as key name)
+	Relational_EQUAL                        Relational_Operator = 0  // value == reference
+	Relational_GREATER_THAN                 Relational_Operator = 1  // value > reference
+	Relational_GREATER_THAN_OR_EQUAL        Relational_Operator = 2  // value >= reference
+	Relational_LESS_THAN                    Relational_Operator = 3  // value < reference
+	Relational_LESS_THAN_OR_EQUAL           Relational_Operator = 4  // value <= reference
+	Relational_NOT_EQUAL                    Relational_Operator = 5  // value != reference
+	Relational_CONTAINS                     Relational_Operator = 6  // string contains substring (case-sensitive)
+	Relational_NOT_CONTAINS                 Relational_Operator = 7  // string does NOT contain substring (case-sensitive)
+	Relational_STARTS_WITH                  Relational_Operator = 8  // string starts with prefix (case-sensitive)
+	Relational_ENDS_WITH                    Relational_Operator = 9  // string ends with suffix (case-sensitive)
+	Relational_IS_EMPTY                     Relational_Operator = 10 // field is nil/unset or empty string (CompareValue ignored)
+	Relational_IS_NOT_EMPTY                 Relational_Operator = 11 // field exists and is non-empty (CompareValue ignored)
+	Relational_HAS_KEY                      Relational_Operator = 12 // BytesVal map contains the specified key (uses StringVal as key name)
+	Relational_HAS_NOT_KEY                  Relational_Operator = 13 // BytesVal map does NOT contain the specified key (uses StringVal as key name)
+	Relational_SLICE_CONTAINS               Relational_Operator = 14 // BytesVal slice contains the exact value (int or string)
+	Relational_SLICE_NOT_CONTAINS           Relational_Operator = 15 // BytesVal slice does NOT contain the exact value
+	Relational_SLICE_CONTAINS_SUBSTRING     Relational_Operator = 16 // any string element in BytesVal slice contains substring (case-insensitive)
+	Relational_SLICE_NOT_CONTAINS_SUBSTRING Relational_Operator = 17 // no string element in BytesVal slice contains substring (case-insensitive)
 )
 
 // Enum value maps for Relational_Operator.
@@ -382,22 +386,30 @@ var (
 		11: "IS_NOT_EMPTY",
 		12: "HAS_KEY",
 		13: "HAS_NOT_KEY",
+		14: "SLICE_CONTAINS",
+		15: "SLICE_NOT_CONTAINS",
+		16: "SLICE_CONTAINS_SUBSTRING",
+		17: "SLICE_NOT_CONTAINS_SUBSTRING",
 	}
 	Relational_Operator_value = map[string]int32{
-		"EQUAL":                 0,
-		"GREATER_THAN":          1,
-		"GREATER_THAN_OR_EQUAL": 2,
-		"LESS_THAN":             3,
-		"LESS_THAN_OR_EQUAL":    4,
-		"NOT_EQUAL":             5,
-		"CONTAINS":              6,
-		"NOT_CONTAINS":          7,
-		"STARTS_WITH":           8,
-		"ENDS_WITH":             9,
-		"IS_EMPTY":              10,
-		"IS_NOT_EMPTY":          11,
-		"HAS_KEY":               12,
-		"HAS_NOT_KEY":           13,
+		"EQUAL":                        0,
+		"GREATER_THAN":                 1,
+		"GREATER_THAN_OR_EQUAL":        2,
+		"LESS_THAN":                    3,
+		"LESS_THAN_OR_EQUAL":           4,
+		"NOT_EQUAL":                    5,
+		"CONTAINS":                     6,
+		"NOT_CONTAINS":                 7,
+		"STARTS_WITH":                  8,
+		"ENDS_WITH":                    9,
+		"IS_EMPTY":                     10,
+		"IS_NOT_EMPTY":                 11,
+		"HAS_KEY":                      12,
+		"HAS_NOT_KEY":                  13,
+		"SLICE_CONTAINS":               14,
+		"SLICE_NOT_CONTAINS":           15,
+		"SLICE_CONTAINS_SUBSTRING":     16,
+		"SLICE_NOT_CONTAINS_SUBSTRING": 17,
 	}
 )
 
@@ -9955,9 +9967,9 @@ const file_hydraide_proto_rawDesc = "" +
 	"\x17IncrementUint64Response\x12\x14\n" +
 	"\x05Value\x18\x01 \x01(\x04R\x05Value\x12$\n" +
 	"\rIsIncremented\x18\x02 \x01(\bR\rIsIncremented\x12C\n" +
-	"\bMetadata\x18\x03 \x01(\v2'.hydraidepbgo.IncrementResponseMetadataR\bMetadata\"\x85\x02\n" +
+	"\bMetadata\x18\x03 \x01(\v2'.hydraidepbgo.IncrementResponseMetadataR\bMetadata\"\xf1\x02\n" +
 	"\n" +
-	"Relational\"\xf6\x01\n" +
+	"Relational\"\xe2\x02\n" +
 	"\bOperator\x12\t\n" +
 	"\x05EQUAL\x10\x00\x12\x10\n" +
 	"\fGREATER_THAN\x10\x01\x12\x19\n" +
@@ -9973,7 +9985,11 @@ const file_hydraide_proto_rawDesc = "" +
 	"\x12\x10\n" +
 	"\fIS_NOT_EMPTY\x10\v\x12\v\n" +
 	"\aHAS_KEY\x10\f\x12\x0f\n" +
-	"\vHAS_NOT_KEY\x10\r\"\x8f\x03\n" +
+	"\vHAS_NOT_KEY\x10\r\x12\x12\n" +
+	"\x0eSLICE_CONTAINS\x10\x0e\x12\x16\n" +
+	"\x12SLICE_NOT_CONTAINS\x10\x0f\x12\x1c\n" +
+	"\x18SLICE_CONTAINS_SUBSTRING\x10\x10\x12 \n" +
+	"\x1cSLICE_NOT_CONTAINS_SUBSTRING\x10\x11\"\x8f\x03\n" +
 	"\x17IncrementFloat32Request\x12\x1a\n" +
 	"\bIslandID\x18\x01 \x01(\x04R\bIslandID\x12\x1c\n" +
 	"\tSwampName\x18\x02 \x01(\tR\tSwampName\x12\x10\n" +

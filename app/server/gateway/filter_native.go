@@ -248,6 +248,11 @@ func evaluateNativeBytesFieldFilter(t treasure.Treasure, filter *hydrapb.Treasur
 
 	fieldVal := extractFieldByPath(decoded, *filter.BytesFieldPath)
 
+	// [*] wildcard: any-match iteration over nested slice elements
+	if ams, ok := fieldVal.(anyMatchSlice); ok {
+		return evaluateAnyMatch(ams, op, filter)
+	}
+
 	// IS_EMPTY / IS_NOT_EMPTY
 	if op == hydrapb.Relational_IS_EMPTY || op == hydrapb.Relational_IS_NOT_EMPTY {
 		isEmpty := fieldVal == nil
@@ -277,6 +282,12 @@ func evaluateNativeBytesFieldFilter(t treasure.Treasure, filter *hydrapb.Treasur
 			return exists
 		}
 		return !exists
+	}
+
+	// SLICE_CONTAINS / SLICE_NOT_CONTAINS / SLICE_CONTAINS_SUBSTRING / SLICE_NOT_CONTAINS_SUBSTRING
+	if op == hydrapb.Relational_SLICE_CONTAINS || op == hydrapb.Relational_SLICE_NOT_CONTAINS ||
+		op == hydrapb.Relational_SLICE_CONTAINS_SUBSTRING || op == hydrapb.Relational_SLICE_NOT_CONTAINS_SUBSTRING {
+		return evaluateSliceContains(fieldVal, op, filter)
 	}
 
 	if fieldVal == nil {

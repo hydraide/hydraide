@@ -1730,6 +1730,10 @@ message Relational {
     IS_NOT_EMPTY = 11;          // field exists and is non-empty (CompareValue ignored)
     HAS_KEY = 12;               // BytesVal map contains the specified key (uses StringVal as key name)
     HAS_NOT_KEY = 13;           // BytesVal map does NOT contain the specified key (uses StringVal as key name)
+    SLICE_CONTAINS = 14;                // BytesVal slice contains the exact value (int or string)
+    SLICE_NOT_CONTAINS = 15;            // BytesVal slice does NOT contain the exact value
+    SLICE_CONTAINS_SUBSTRING = 16;      // any string element in BytesVal slice contains substring (case-insensitive)
+    SLICE_NOT_CONTAINS_SUBSTRING = 17;  // no string element in BytesVal slice contains substring (case-insensitive)
   }
 }
 

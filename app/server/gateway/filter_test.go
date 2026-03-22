@@ -1900,3 +1900,621 @@ func BenchmarkGeoDistanceFilter(b *testing.B) {
 		evaluateNativeGeoDistanceFilter(tr, gf)
 	}
 }
+
+// =============================================================================
+// Slice filter tests
+// =============================================================================
+
+func makeSliceTreasure(t *testing.T, data map[string]interface{}) treasure.Treasure {
+	t.Helper()
+	return newTreasureWithBytes(makeMsgpackBytesVal(t, data))
+}
+
+func sliceFilterGroup(op hydrapb.Relational_Operator, path string, cv interface{}) *hydrapb.FilterGroup {
+	f := &hydrapb.TreasureFilter{
+		Operator:       op,
+		BytesFieldPath: &path,
+	}
+	switch v := cv.(type) {
+	case int8:
+		f.CompareValue = &hydrapb.TreasureFilter_Int8Val{Int8Val: int32(v)}
+	case int32:
+		f.CompareValue = &hydrapb.TreasureFilter_Int32Val{Int32Val: v}
+	case int64:
+		f.CompareValue = &hydrapb.TreasureFilter_Int64Val{Int64Val: v}
+	case string:
+		f.CompareValue = &hydrapb.TreasureFilter_StringVal{StringVal: v}
+	}
+	return &hydrapb.FilterGroup{
+		Logic:   hydrapb.FilterLogic_AND,
+		Filters: []*hydrapb.TreasureFilter{f},
+	}
+}
+
+// --- SLICE_CONTAINS tests ---
+
+func TestSliceContainsInt8_Found(t *testing.T) {
+	tr := makeSliceTreasure(t, map[string]interface{}{"Funcs": []interface{}{int8(1), int8(7), int8(2)}})
+	fg := sliceFilterGroup(hydrapb.Relational_SLICE_CONTAINS, "Funcs", int8(7))
+	if !evaluateNativeFilterGroup(tr, fg) {
+		t.Error("expected SLICE_CONTAINS to find int8(7)")
+	}
+}
+
+func TestSliceContainsInt8_NotFound(t *testing.T) {
+	tr := makeSliceTreasure(t, map[string]interface{}{"Funcs": []interface{}{int8(1), int8(7), int8(2)}})
+	fg := sliceFilterGroup(hydrapb.Relational_SLICE_CONTAINS, "Funcs", int8(5))
+	if evaluateNativeFilterGroup(tr, fg) {
+		t.Error("expected SLICE_CONTAINS to not find int8(5)")
+	}
+}
+
+func TestSliceContainsInt32_Found(t *testing.T) {
+	tr := makeSliceTreasure(t, map[string]interface{}{"IDs": []interface{}{int32(100), int32(200)}})
+	fg := sliceFilterGroup(hydrapb.Relational_SLICE_CONTAINS, "IDs", int32(200))
+	if !evaluateNativeFilterGroup(tr, fg) {
+		t.Error("expected SLICE_CONTAINS to find int32(200)")
+	}
+}
+
+func TestSliceContainsInt64_Found(t *testing.T) {
+	tr := makeSliceTreasure(t, map[string]interface{}{"BigIDs": []interface{}{int64(999999)}})
+	fg := sliceFilterGroup(hydrapb.Relational_SLICE_CONTAINS, "BigIDs", int64(999999))
+	if !evaluateNativeFilterGroup(tr, fg) {
+		t.Error("expected SLICE_CONTAINS to find int64")
+	}
+}
+
+func TestSliceContainsString_Found(t *testing.T) {
+	tr := makeSliceTreasure(t, map[string]interface{}{"Providers": []interface{}{"Barion", "PayPal"}})
+	fg := sliceFilterGroup(hydrapb.Relational_SLICE_CONTAINS, "Providers", "Barion")
+	if !evaluateNativeFilterGroup(tr, fg) {
+		t.Error("expected SLICE_CONTAINS to find 'Barion'")
+	}
+}
+
+func TestSliceContainsString_NotFound(t *testing.T) {
+	tr := makeSliceTreasure(t, map[string]interface{}{"Providers": []interface{}{"Barion", "PayPal"}})
+	fg := sliceFilterGroup(hydrapb.Relational_SLICE_CONTAINS, "Providers", "Stripe")
+	if evaluateNativeFilterGroup(tr, fg) {
+		t.Error("expected SLICE_CONTAINS to not find 'Stripe'")
+	}
+}
+
+func TestSliceContainsString_CaseSensitive(t *testing.T) {
+	tr := makeSliceTreasure(t, map[string]interface{}{"Providers": []interface{}{"Barion"}})
+	fg := sliceFilterGroup(hydrapb.Relational_SLICE_CONTAINS, "Providers", "barion")
+	if evaluateNativeFilterGroup(tr, fg) {
+		t.Error("SLICE_CONTAINS exact match should be case-sensitive")
+	}
+}
+
+func TestSliceContains_EmptySlice(t *testing.T) {
+	tr := makeSliceTreasure(t, map[string]interface{}{"Funcs": []interface{}{}})
+	fg := sliceFilterGroup(hydrapb.Relational_SLICE_CONTAINS, "Funcs", int8(1))
+	if evaluateNativeFilterGroup(tr, fg) {
+		t.Error("expected SLICE_CONTAINS on empty slice to return false")
+	}
+}
+
+func TestSliceContains_NilField(t *testing.T) {
+	tr := makeSliceTreasure(t, map[string]interface{}{"Other": "value"})
+	fg := sliceFilterGroup(hydrapb.Relational_SLICE_CONTAINS, "Funcs", int8(1))
+	if evaluateNativeFilterGroup(tr, fg) {
+		t.Error("expected SLICE_CONTAINS on missing field to return false")
+	}
+}
+
+func TestSliceContains_NotASlice(t *testing.T) {
+	tr := makeSliceTreasure(t, map[string]interface{}{"Funcs": "not-a-slice"})
+	fg := sliceFilterGroup(hydrapb.Relational_SLICE_CONTAINS, "Funcs", int8(1))
+	if evaluateNativeFilterGroup(tr, fg) {
+		t.Error("expected SLICE_CONTAINS on non-slice to return false")
+	}
+}
+
+// --- SLICE_NOT_CONTAINS tests ---
+
+func TestSliceNotContainsInt8_Found(t *testing.T) {
+	tr := makeSliceTreasure(t, map[string]interface{}{"Funcs": []interface{}{int8(1), int8(7), int8(2)}})
+	fg := sliceFilterGroup(hydrapb.Relational_SLICE_NOT_CONTAINS, "Funcs", int8(7))
+	if evaluateNativeFilterGroup(tr, fg) {
+		t.Error("expected SLICE_NOT_CONTAINS to return false when value IS in slice")
+	}
+}
+
+func TestSliceNotContainsInt8_NotFound(t *testing.T) {
+	tr := makeSliceTreasure(t, map[string]interface{}{"Funcs": []interface{}{int8(1), int8(7), int8(2)}})
+	fg := sliceFilterGroup(hydrapb.Relational_SLICE_NOT_CONTAINS, "Funcs", int8(5))
+	if !evaluateNativeFilterGroup(tr, fg) {
+		t.Error("expected SLICE_NOT_CONTAINS to return true when value is NOT in slice")
+	}
+}
+
+func TestSliceNotContainsString_NotFound(t *testing.T) {
+	tr := makeSliceTreasure(t, map[string]interface{}{"Providers": []interface{}{"Barion", "PayPal"}})
+	fg := sliceFilterGroup(hydrapb.Relational_SLICE_NOT_CONTAINS, "Providers", "Stripe")
+	if !evaluateNativeFilterGroup(tr, fg) {
+		t.Error("expected SLICE_NOT_CONTAINS to return true for absent value")
+	}
+}
+
+func TestSliceNotContains_EmptySlice(t *testing.T) {
+	tr := makeSliceTreasure(t, map[string]interface{}{"Funcs": []interface{}{}})
+	fg := sliceFilterGroup(hydrapb.Relational_SLICE_NOT_CONTAINS, "Funcs", int8(1))
+	if !evaluateNativeFilterGroup(tr, fg) {
+		t.Error("expected SLICE_NOT_CONTAINS on empty slice to return true")
+	}
+}
+
+func TestSliceNotContains_NilField(t *testing.T) {
+	tr := makeSliceTreasure(t, map[string]interface{}{"Other": "value"})
+	fg := sliceFilterGroup(hydrapb.Relational_SLICE_NOT_CONTAINS, "Funcs", int8(1))
+	if !evaluateNativeFilterGroup(tr, fg) {
+		t.Error("expected SLICE_NOT_CONTAINS on missing field to return true")
+	}
+}
+
+// --- SLICE_CONTAINS_SUBSTRING tests ---
+
+func TestSliceContainsSubstring_Found(t *testing.T) {
+	tr := makeSliceTreasure(t, map[string]interface{}{
+		"Activities": []interface{}{"custom tattoo design", "piercing services"},
+	})
+	fg := sliceFilterGroup(hydrapb.Relational_SLICE_CONTAINS_SUBSTRING, "Activities", "tattoo")
+	if !evaluateNativeFilterGroup(tr, fg) {
+		t.Error("expected SLICE_CONTAINS_SUBSTRING to find 'tattoo'")
+	}
+}
+
+func TestSliceContainsSubstring_CaseInsensitive(t *testing.T) {
+	tr := makeSliceTreasure(t, map[string]interface{}{
+		"Activities": []interface{}{"custom tattoo design"},
+	})
+	fg := sliceFilterGroup(hydrapb.Relational_SLICE_CONTAINS_SUBSTRING, "Activities", "TATTOO")
+	if !evaluateNativeFilterGroup(tr, fg) {
+		t.Error("expected SLICE_CONTAINS_SUBSTRING to be case-insensitive")
+	}
+}
+
+func TestSliceContainsSubstring_NotFound(t *testing.T) {
+	tr := makeSliceTreasure(t, map[string]interface{}{
+		"Activities": []interface{}{"custom tattoo design", "piercing"},
+	})
+	fg := sliceFilterGroup(hydrapb.Relational_SLICE_CONTAINS_SUBSTRING, "Activities", "laser")
+	if evaluateNativeFilterGroup(tr, fg) {
+		t.Error("expected SLICE_CONTAINS_SUBSTRING to not find 'laser'")
+	}
+}
+
+func TestSliceContainsSubstring_EmptySlice(t *testing.T) {
+	tr := makeSliceTreasure(t, map[string]interface{}{"Activities": []interface{}{}})
+	fg := sliceFilterGroup(hydrapb.Relational_SLICE_CONTAINS_SUBSTRING, "Activities", "tattoo")
+	if evaluateNativeFilterGroup(tr, fg) {
+		t.Error("expected SLICE_CONTAINS_SUBSTRING on empty slice to return false")
+	}
+}
+
+func TestSliceContainsSubstring_PartialMatch(t *testing.T) {
+	tr := makeSliceTreasure(t, map[string]interface{}{
+		"Activities": []interface{}{"body-art studio"},
+	})
+	fg := sliceFilterGroup(hydrapb.Relational_SLICE_CONTAINS_SUBSTRING, "Activities", "art")
+	if !evaluateNativeFilterGroup(tr, fg) {
+		t.Error("expected SLICE_CONTAINS_SUBSTRING to find partial match 'art'")
+	}
+}
+
+// --- SLICE_NOT_CONTAINS_SUBSTRING tests ---
+
+func TestSliceNotContainsSubstring_Found(t *testing.T) {
+	tr := makeSliceTreasure(t, map[string]interface{}{
+		"Activities": []interface{}{"custom tattoo design"},
+	})
+	fg := sliceFilterGroup(hydrapb.Relational_SLICE_NOT_CONTAINS_SUBSTRING, "Activities", "tattoo")
+	if evaluateNativeFilterGroup(tr, fg) {
+		t.Error("expected SLICE_NOT_CONTAINS_SUBSTRING to return false when substring is present")
+	}
+}
+
+func TestSliceNotContainsSubstring_NotFound(t *testing.T) {
+	tr := makeSliceTreasure(t, map[string]interface{}{
+		"Activities": []interface{}{"custom tattoo design"},
+	})
+	fg := sliceFilterGroup(hydrapb.Relational_SLICE_NOT_CONTAINS_SUBSTRING, "Activities", "laser")
+	if !evaluateNativeFilterGroup(tr, fg) {
+		t.Error("expected SLICE_NOT_CONTAINS_SUBSTRING to return true when substring is absent")
+	}
+}
+
+// --- #len pseudo-field tests ---
+
+func TestSliceLen_GreaterThan_Pass(t *testing.T) {
+	tr := makeSliceTreasure(t, map[string]interface{}{
+		"Contacts": []interface{}{"a", "b", "c"},
+	})
+	path := "Contacts.#len"
+	fg := sliceFilterGroup(hydrapb.Relational_GREATER_THAN, path, int32(0))
+	if !evaluateNativeFilterGroup(tr, fg) {
+		t.Error("expected #len > 0 to pass for 3-element slice")
+	}
+}
+
+func TestSliceLen_GreaterThan_Fail(t *testing.T) {
+	tr := makeSliceTreasure(t, map[string]interface{}{
+		"Contacts": []interface{}{},
+	})
+	path := "Contacts.#len"
+	fg := sliceFilterGroup(hydrapb.Relational_GREATER_THAN, path, int32(0))
+	if evaluateNativeFilterGroup(tr, fg) {
+		t.Error("expected #len > 0 to fail for empty slice")
+	}
+}
+
+func TestSliceLen_Equal_Pass(t *testing.T) {
+	tr := makeSliceTreasure(t, map[string]interface{}{
+		"Sectors": []interface{}{int8(1), int8(6), int8(3)},
+	})
+	path := "Sectors.#len"
+	fg := sliceFilterGroup(hydrapb.Relational_EQUAL, path, int32(3))
+	if !evaluateNativeFilterGroup(tr, fg) {
+		t.Error("expected #len == 3 to pass")
+	}
+}
+
+func TestSliceLen_Equal_Fail(t *testing.T) {
+	tr := makeSliceTreasure(t, map[string]interface{}{
+		"Sectors": []interface{}{int8(1), int8(6), int8(3)},
+	})
+	path := "Sectors.#len"
+	fg := sliceFilterGroup(hydrapb.Relational_EQUAL, path, int32(5))
+	if evaluateNativeFilterGroup(tr, fg) {
+		t.Error("expected #len == 5 to fail for 3-element slice")
+	}
+}
+
+func TestSliceLen_NilField(t *testing.T) {
+	tr := makeSliceTreasure(t, map[string]interface{}{"Other": "x"})
+	path := "Missing.#len"
+	fg := sliceFilterGroup(hydrapb.Relational_GREATER_THAN, path, int32(0))
+	if evaluateNativeFilterGroup(tr, fg) {
+		t.Error("expected #len on missing field to return false")
+	}
+}
+
+func TestSliceLen_LessThan(t *testing.T) {
+	tr := makeSliceTreasure(t, map[string]interface{}{
+		"Items": []interface{}{"a", "b"},
+	})
+	path := "Items.#len"
+	fg := sliceFilterGroup(hydrapb.Relational_LESS_THAN, path, int32(5))
+	if !evaluateNativeFilterGroup(tr, fg) {
+		t.Error("expected #len < 5 to pass for 2-element slice")
+	}
+}
+
+func TestSliceLen_MapLen(t *testing.T) {
+	tr := makeSliceTreasure(t, map[string]interface{}{
+		"Meta": map[string]interface{}{"a": 1, "b": 2, "c": 3},
+	})
+	path := "Meta.#len"
+	fg := sliceFilterGroup(hydrapb.Relational_EQUAL, path, int32(3))
+	if !evaluateNativeFilterGroup(tr, fg) {
+		t.Error("expected #len == 3 for map with 3 keys")
+	}
+}
+
+// --- [*] wildcard (NestedSliceAny) tests ---
+
+func makeContactsTreasure(t *testing.T, contacts []map[string]interface{}) treasure.Treasure {
+	t.Helper()
+	contactSlice := make([]interface{}, len(contacts))
+	for i, c := range contacts {
+		contactSlice[i] = c
+	}
+	return makeSliceTreasure(t, map[string]interface{}{"Contacts": contactSlice})
+}
+
+func TestNestedSliceAny_IsNotEmpty_Pass(t *testing.T) {
+	tr := makeContactsTreasure(t, []map[string]interface{}{
+		{"Email": "john@example.com", "Role": "CEO"},
+		{"Email": "", "Role": "CTO"},
+	})
+	path := "Contacts[*].Email"
+	f := &hydrapb.TreasureFilter{
+		Operator:       hydrapb.Relational_IS_NOT_EMPTY,
+		BytesFieldPath: &path,
+		CompareValue:   &hydrapb.TreasureFilter_StringVal{StringVal: ""},
+	}
+	fg := &hydrapb.FilterGroup{Logic: hydrapb.FilterLogic_AND, Filters: []*hydrapb.TreasureFilter{f}}
+	if !evaluateNativeFilterGroup(tr, fg) {
+		t.Error("expected [*].Email IS_NOT_EMPTY to pass when at least one has email")
+	}
+}
+
+func TestNestedSliceAny_IsNotEmpty_Fail(t *testing.T) {
+	tr := makeContactsTreasure(t, []map[string]interface{}{
+		{"Email": "", "Role": "CEO"},
+		{"Email": "", "Role": "CTO"},
+	})
+	path := "Contacts[*].Email"
+	f := &hydrapb.TreasureFilter{
+		Operator:       hydrapb.Relational_IS_NOT_EMPTY,
+		BytesFieldPath: &path,
+		CompareValue:   &hydrapb.TreasureFilter_StringVal{StringVal: ""},
+	}
+	fg := &hydrapb.FilterGroup{Logic: hydrapb.FilterLogic_AND, Filters: []*hydrapb.TreasureFilter{f}}
+	if evaluateNativeFilterGroup(tr, fg) {
+		t.Error("expected [*].Email IS_NOT_EMPTY to fail when all emails are empty")
+	}
+}
+
+func TestNestedSliceAny_Equal_Pass(t *testing.T) {
+	tr := makeContactsTreasure(t, []map[string]interface{}{
+		{"Email": "john@example.com", "Role": "CEO"},
+		{"Email": "jane@example.com", "Role": "CTO"},
+	})
+	path := "Contacts[*].Role"
+	fg := sliceFilterGroup(hydrapb.Relational_EQUAL, path, "CEO")
+	if !evaluateNativeFilterGroup(tr, fg) {
+		t.Error("expected [*].Role == CEO to pass")
+	}
+}
+
+func TestNestedSliceAny_Equal_Fail(t *testing.T) {
+	tr := makeContactsTreasure(t, []map[string]interface{}{
+		{"Email": "john@example.com", "Role": "Developer"},
+		{"Email": "jane@example.com", "Role": "CTO"},
+	})
+	path := "Contacts[*].Role"
+	fg := sliceFilterGroup(hydrapb.Relational_EQUAL, path, "CEO")
+	if evaluateNativeFilterGroup(tr, fg) {
+		t.Error("expected [*].Role == CEO to fail when no CEO exists")
+	}
+}
+
+func TestNestedSliceAny_Contains_Pass(t *testing.T) {
+	tr := makeContactsTreasure(t, []map[string]interface{}{
+		{"Email": "john@company.com"},
+		{"Email": "jane@gmail.com"},
+	})
+	path := "Contacts[*].Email"
+	fg := sliceFilterGroup(hydrapb.Relational_CONTAINS, path, "@company.com")
+	if !evaluateNativeFilterGroup(tr, fg) {
+		t.Error("expected [*].Email CONTAINS @company.com to pass")
+	}
+}
+
+func TestNestedSliceAny_EmptySlice(t *testing.T) {
+	tr := makeSliceTreasure(t, map[string]interface{}{"Contacts": []interface{}{}})
+	path := "Contacts[*].Email"
+	f := &hydrapb.TreasureFilter{
+		Operator:       hydrapb.Relational_IS_NOT_EMPTY,
+		BytesFieldPath: &path,
+		CompareValue:   &hydrapb.TreasureFilter_StringVal{StringVal: ""},
+	}
+	fg := &hydrapb.FilterGroup{Logic: hydrapb.FilterLogic_AND, Filters: []*hydrapb.TreasureFilter{f}}
+	if evaluateNativeFilterGroup(tr, fg) {
+		t.Error("expected [*] on empty slice to return false for IS_NOT_EMPTY")
+	}
+}
+
+// --- Compound filter tests ---
+
+func TestCompound_SliceContainsAND_GeoDistance(t *testing.T) {
+	tr := makeSliceTreasure(t, map[string]interface{}{
+		"SiteFunctions": []interface{}{int8(1), int8(7)},
+		"geo_latitude":  47.497,
+		"geo_longitude": 19.040,
+	})
+	slicePath := "SiteFunctions"
+	sliceF := &hydrapb.TreasureFilter{
+		Operator:       hydrapb.Relational_SLICE_CONTAINS,
+		BytesFieldPath: &slicePath,
+		CompareValue:   &hydrapb.TreasureFilter_Int8Val{Int8Val: 7},
+	}
+	gf := geoFilter(47.497, 19.040, 50.0, hydrapb.GeoDistanceMode_INSIDE)
+	fg := &hydrapb.FilterGroup{
+		Logic:              hydrapb.FilterLogic_AND,
+		Filters:            []*hydrapb.TreasureFilter{sliceF},
+		GeoDistanceFilters: []*hydrapb.GeoDistanceFilter{gf},
+	}
+	if !evaluateNativeFilterGroup(tr, fg) {
+		t.Error("expected slice contains 7 AND geo inside to pass")
+	}
+}
+
+func TestCompound_SliceContainsOR(t *testing.T) {
+	tr := makeSliceTreasure(t, map[string]interface{}{
+		"Sectors": []interface{}{int8(6)},
+	})
+	path := "Sectors"
+	f1 := &hydrapb.TreasureFilter{
+		Operator:       hydrapb.Relational_SLICE_CONTAINS,
+		BytesFieldPath: &path,
+		CompareValue:   &hydrapb.TreasureFilter_Int8Val{Int8Val: 1},
+	}
+	f2 := &hydrapb.TreasureFilter{
+		Operator:       hydrapb.Relational_SLICE_CONTAINS,
+		BytesFieldPath: &path,
+		CompareValue:   &hydrapb.TreasureFilter_Int8Val{Int8Val: 6},
+	}
+	fg := &hydrapb.FilterGroup{
+		Logic:   hydrapb.FilterLogic_OR,
+		Filters: []*hydrapb.TreasureFilter{f1, f2},
+	}
+	if !evaluateNativeFilterGroup(tr, fg) {
+		t.Error("expected OR(contains 1, contains 6) to pass when slice has 6")
+	}
+}
+
+func TestCompound_SliceContainsAND_NotContainsSubstring(t *testing.T) {
+	tr := makeSliceTreasure(t, map[string]interface{}{
+		"Activities": []interface{}{"custom tattoo design", "body art"},
+	})
+	actPath := "Activities"
+	f1 := &hydrapb.TreasureFilter{
+		Operator:       hydrapb.Relational_SLICE_CONTAINS_SUBSTRING,
+		BytesFieldPath: &actPath,
+		CompareValue:   &hydrapb.TreasureFilter_StringVal{StringVal: "tattoo"},
+	}
+	f2 := &hydrapb.TreasureFilter{
+		Operator:       hydrapb.Relational_SLICE_NOT_CONTAINS_SUBSTRING,
+		BytesFieldPath: &actPath,
+		CompareValue:   &hydrapb.TreasureFilter_StringVal{StringVal: "permanent makeup"},
+	}
+	fg := &hydrapb.FilterGroup{
+		Logic:   hydrapb.FilterLogic_AND,
+		Filters: []*hydrapb.TreasureFilter{f1, f2},
+	}
+	if !evaluateNativeFilterGroup(tr, fg) {
+		t.Error("expected tattoo AND NOT permanent makeup to pass")
+	}
+}
+
+func TestCompound_SliceLenAND_SliceContains(t *testing.T) {
+	tr := makeSliceTreasure(t, map[string]interface{}{
+		"Contacts":  []interface{}{"a@b.com"},
+		"Providers": []interface{}{"Barion", "PayPal"},
+	})
+	lenPath := "Contacts.#len"
+	provPath := "Providers"
+	f1 := &hydrapb.TreasureFilter{
+		Operator:       hydrapb.Relational_GREATER_THAN,
+		BytesFieldPath: &lenPath,
+		CompareValue:   &hydrapb.TreasureFilter_Int32Val{Int32Val: 0},
+	}
+	f2 := &hydrapb.TreasureFilter{
+		Operator:       hydrapb.Relational_SLICE_CONTAINS,
+		BytesFieldPath: &provPath,
+		CompareValue:   &hydrapb.TreasureFilter_StringVal{StringVal: "Barion"},
+	}
+	fg := &hydrapb.FilterGroup{
+		Logic:   hydrapb.FilterLogic_AND,
+		Filters: []*hydrapb.TreasureFilter{f1, f2},
+	}
+	if !evaluateNativeFilterGroup(tr, fg) {
+		t.Error("expected #len > 0 AND contains Barion to pass")
+	}
+}
+
+func TestCompound_NestedAnyAND_SliceContains(t *testing.T) {
+	contactSlice := []interface{}{
+		map[string]interface{}{"Email": "john@example.com", "Role": "CEO"},
+	}
+	tr := makeSliceTreasure(t, map[string]interface{}{
+		"Contacts":      contactSlice,
+		"SiteFunctions": []interface{}{int8(7)},
+	})
+	emailPath := "Contacts[*].Email"
+	funcPath := "SiteFunctions"
+	f1 := &hydrapb.TreasureFilter{
+		Operator:       hydrapb.Relational_IS_NOT_EMPTY,
+		BytesFieldPath: &emailPath,
+		CompareValue:   &hydrapb.TreasureFilter_StringVal{StringVal: ""},
+	}
+	f2 := &hydrapb.TreasureFilter{
+		Operator:       hydrapb.Relational_SLICE_CONTAINS,
+		BytesFieldPath: &funcPath,
+		CompareValue:   &hydrapb.TreasureFilter_Int8Val{Int8Val: 7},
+	}
+	fg := &hydrapb.FilterGroup{
+		Logic:   hydrapb.FilterLogic_AND,
+		Filters: []*hydrapb.TreasureFilter{f1, f2},
+	}
+	if !evaluateNativeFilterGroup(tr, fg) {
+		t.Error("expected nested email IS_NOT_EMPTY AND slice contains 7 to pass")
+	}
+}
+
+// --- Slice filter benchmarks ---
+
+func BenchmarkSliceContainsInt8_Small(b *testing.B) {
+	data := map[string]interface{}{"Funcs": []interface{}{int8(1), int8(3), int8(5), int8(7), int8(9)}}
+	encoded, _ := msgpack.Marshal(data)
+	bytesVal := append([]byte{msgpackMagic0, msgpackMagic1}, encoded...)
+	tr := newTreasureWithBytes(bytesVal)
+	path := "Funcs"
+	f := &hydrapb.TreasureFilter{
+		Operator:       hydrapb.Relational_SLICE_CONTAINS,
+		BytesFieldPath: &path,
+		CompareValue:   &hydrapb.TreasureFilter_Int8Val{Int8Val: 7},
+	}
+	for b.Loop() {
+		evaluateNativeBytesFieldFilter(tr, f)
+	}
+}
+
+func BenchmarkSliceContainsString_Small(b *testing.B) {
+	data := map[string]interface{}{"P": []interface{}{"Barion", "PayPal", "Stripe", "Square", "Klarna"}}
+	encoded, _ := msgpack.Marshal(data)
+	bytesVal := append([]byte{msgpackMagic0, msgpackMagic1}, encoded...)
+	tr := newTreasureWithBytes(bytesVal)
+	path := "P"
+	f := &hydrapb.TreasureFilter{
+		Operator:       hydrapb.Relational_SLICE_CONTAINS,
+		BytesFieldPath: &path,
+		CompareValue:   &hydrapb.TreasureFilter_StringVal{StringVal: "Klarna"},
+	}
+	for b.Loop() {
+		evaluateNativeBytesFieldFilter(tr, f)
+	}
+}
+
+func BenchmarkSliceContainsSubstring(b *testing.B) {
+	acts := make([]interface{}, 10)
+	for i := range acts {
+		acts[i] = "some long activity description number " + string(rune('A'+i))
+	}
+	acts[7] = "custom tattoo design"
+	data := map[string]interface{}{"A": acts}
+	encoded, _ := msgpack.Marshal(data)
+	bytesVal := append([]byte{msgpackMagic0, msgpackMagic1}, encoded...)
+	tr := newTreasureWithBytes(bytesVal)
+	path := "A"
+	f := &hydrapb.TreasureFilter{
+		Operator:       hydrapb.Relational_SLICE_CONTAINS_SUBSTRING,
+		BytesFieldPath: &path,
+		CompareValue:   &hydrapb.TreasureFilter_StringVal{StringVal: "tattoo"},
+	}
+	for b.Loop() {
+		evaluateNativeBytesFieldFilter(tr, f)
+	}
+}
+
+func BenchmarkSliceLen(b *testing.B) {
+	data := map[string]interface{}{"C": []interface{}{"a", "b", "c"}}
+	encoded, _ := msgpack.Marshal(data)
+	bytesVal := append([]byte{msgpackMagic0, msgpackMagic1}, encoded...)
+	tr := newTreasureWithBytes(bytesVal)
+	path := "C.#len"
+	f := &hydrapb.TreasureFilter{
+		Operator:       hydrapb.Relational_GREATER_THAN,
+		BytesFieldPath: &path,
+		CompareValue:   &hydrapb.TreasureFilter_Int32Val{Int32Val: 0},
+	}
+	for b.Loop() {
+		evaluateNativeBytesFieldFilter(tr, f)
+	}
+}
+
+func BenchmarkNestedSliceAny(b *testing.B) {
+	contacts := []interface{}{
+		map[string]interface{}{"Email": "a@x.com", "Role": "Dev"},
+		map[string]interface{}{"Email": "b@x.com", "Role": "CEO"},
+		map[string]interface{}{"Email": "", "Role": "CTO"},
+	}
+	data := map[string]interface{}{"C": contacts}
+	encoded, _ := msgpack.Marshal(data)
+	bytesVal := append([]byte{msgpackMagic0, msgpackMagic1}, encoded...)
+	tr := newTreasureWithBytes(bytesVal)
+	path := "C[*].Email"
+	f := &hydrapb.TreasureFilter{
+		Operator:       hydrapb.Relational_IS_NOT_EMPTY,
+		BytesFieldPath: &path,
+		CompareValue:   &hydrapb.TreasureFilter_StringVal{StringVal: ""},
+	}
+	for b.Loop() {
+		evaluateNativeBytesFieldFilter(tr, f)
+	}
+}
