@@ -50,7 +50,8 @@ const (
 	tagCreatedBy = "createdBy"
 	tagUpdatedAt = "updatedAt"
 	tagUpdatedBy = "updatedBy"
-	tagExpireAt  = "expireAt"
+	tagExpireAt   = "expireAt"
+	tagSearchMeta = "searchMeta"
 )
 
 type Hydraidego interface {
@@ -355,6 +356,14 @@ type Filter struct {
 	timeVal        *time.Time
 	timeField      *TimeField
 	treasureKey    *string // Profile mode: which Treasure key this filter targets
+	label          *string // Optional label for match tracking in SearchResultMeta
+}
+
+// WithLabel sets a label for match tracking. When this filter matches,
+// the label appears in SearchResultMeta.MatchedLabels.
+func (f *Filter) WithLabel(label string) *Filter {
+	f.label = &label
+	return f
 }
 
 // ForKey sets the TreasureKey for profile-mode filtering.
@@ -556,6 +565,15 @@ func FilterBytesFieldNestedSliceAnyBool(slicePath string, fieldName string, op R
 	return &Filter{operator: op, bytesFieldPath: &anyPath, boolVal: &value}
 }
 
+// SearchMeta contains metadata about how a Treasure matched the search criteria.
+// Populated during filter evaluation when labeled filters or VectorFilters are used.
+type SearchMeta struct {
+	// VectorScores contains cosine similarity scores (one per VectorFilter, in order).
+	VectorScores []float32
+	// MatchedLabels contains labels of filters that evaluated to true.
+	MatchedLabels []string
+}
+
 // FilterLogic defines how conditions within a FilterGroup are combined.
 type FilterLogic int
 
@@ -619,6 +637,13 @@ type PhraseFilter struct {
 	words          []string
 	negate         bool
 	treasureKey    *string // Profile mode: which Treasure key this filter targets
+	label          *string // Optional label for match tracking in SearchResultMeta
+}
+
+// WithLabel sets a label for match tracking on this PhraseFilter.
+func (pf *PhraseFilter) WithLabel(label string) *PhraseFilter {
+	pf.label = &label
+	return pf
 }
 
 // ForKey sets the TreasureKey for profile-mode phrase filtering.
@@ -666,6 +691,13 @@ type VectorFilter struct {
 	queryVector    []float32
 	minSimilarity  float32
 	treasureKey    *string // Profile mode: which Treasure key this filter targets
+	label          *string // Optional label for match tracking in SearchResultMeta
+}
+
+// WithLabel sets a label for match tracking on this VectorFilter.
+func (vf *VectorFilter) WithLabel(label string) *VectorFilter {
+	vf.label = &label
+	return vf
 }
 
 // isFilterItem marks VectorFilter as a valid FilterItem.
@@ -725,6 +757,13 @@ type GeoDistanceFilter struct {
 	radiusKm     float64
 	mode         GeoMode
 	treasureKey  *string
+	label        *string // Optional label for match tracking in SearchResultMeta
+}
+
+// WithLabel sets a label for match tracking on this GeoDistanceFilter.
+func (gf *GeoDistanceFilter) WithLabel(label string) *GeoDistanceFilter {
+	gf.label = &label
+	return gf
 }
 
 // isFilterItem marks GeoDistanceFilter as a valid FilterItem.
@@ -4198,6 +4237,9 @@ func convertFilterToProto(f *Filter) *hydraidepbgo.TreasureFilter {
 	if f.treasureKey != nil {
 		pf.TreasureKey = f.treasureKey
 	}
+	if f.label != nil {
+		pf.Label = f.label
+	}
 
 	return pf
 }
@@ -4239,6 +4281,9 @@ func convertFilterGroupToProto(group *FilterGroup) *hydraidepbgo.FilterGroup {
 			if pf.treasureKey != nil {
 				protoPF.TreasureKey = pf.treasureKey
 			}
+			if pf.label != nil {
+				protoPF.Label = pf.label
+			}
 			pg.PhraseFilters = append(pg.PhraseFilters, protoPF)
 		}
 	}
@@ -4252,6 +4297,9 @@ func convertFilterGroupToProto(group *FilterGroup) *hydraidepbgo.FilterGroup {
 			}
 			if vf.treasureKey != nil {
 				protoVF.TreasureKey = vf.treasureKey
+			}
+			if vf.label != nil {
+				protoVF.Label = vf.label
 			}
 			pg.VectorFilters = append(pg.VectorFilters, protoVF)
 		}
@@ -4271,6 +4319,9 @@ func convertFilterGroupToProto(group *FilterGroup) *hydraidepbgo.FilterGroup {
 			}
 			if gf.treasureKey != nil {
 				protoGF.TreasureKey = gf.treasureKey
+			}
+			if gf.label != nil {
+				protoGF.Label = gf.label
 			}
 			pg.GeoDistanceFilters = append(pg.GeoDistanceFilters, protoGF)
 		}
@@ -4337,6 +4388,8 @@ func (h *hydraidego) CatalogReadManyStream(ctx context.Context, swampName name.N
 		if convErr := convertProtoTreasureToCatalogModel(treasure, modelValue); convErr != nil {
 			return NewError(ErrCodeInvalidModel, convErr.Error())
 		}
+
+		setSearchMetaOnModel(modelValue, response.GetMeta())
 
 		if iterErr := iterator(modelValue); iterErr != nil {
 			return iterErr
@@ -4429,6 +4482,8 @@ func (h *hydraidego) CatalogReadManyFromMany(ctx context.Context, request []*Cat
 			if convErr := convertProtoTreasureToCatalogModel(treasure, modelValue); convErr != nil {
 				return NewError(ErrCodeInvalidModel, convErr.Error())
 			}
+
+			setSearchMetaOnModel(modelValue, response.GetMeta())
 
 			if iterErr := iterator(swampName, modelValue); iterErr != nil {
 				return iterErr
@@ -7005,6 +7060,38 @@ func convertProtoTreasureToCatalogModel(treasure *hydraidepbgo.Treasure, model a
 
 	return nil
 
+}
+
+// setSearchMetaOnModel populates the model's searchMeta-tagged field from a proto SearchResultMeta.
+// This field is read-only: it is only populated during search/read responses and is never
+// processed during write operations (Set, Create, Update).
+func setSearchMetaOnModel(model any, protoMeta *hydraidepbgo.SearchResultMeta) {
+	if protoMeta == nil {
+		return
+	}
+	if len(protoMeta.VectorScores) == 0 && len(protoMeta.MatchedLabels) == 0 {
+		return
+	}
+
+	v := reflect.ValueOf(model)
+	if v.Kind() != reflect.Ptr || v.Elem().Kind() != reflect.Struct {
+		return
+	}
+
+	t := v.Elem().Type()
+	for i := 0; i < t.NumField(); i++ {
+		if tag, ok := t.Field(i).Tag.Lookup(tagHydrAIDE); ok && tag == tagSearchMeta {
+			field := v.Elem().Field(i)
+			if field.Type() == reflect.TypeOf((*SearchMeta)(nil)) {
+				meta := &SearchMeta{
+					VectorScores:  protoMeta.VectorScores,
+					MatchedLabels: protoMeta.MatchedLabels,
+				}
+				field.Set(reflect.ValueOf(meta))
+			}
+			return
+		}
+	}
 }
 
 func setProtoTreasureToModel(treasure *hydraidepbgo.Treasure, field reflect.Value) error {

@@ -320,6 +320,87 @@ h.CatalogReadBatch(ctx, swamp, matchedKeys[:10], Model{}, func(model any) error 
 
 ---
 
+## SearchResultMeta — Scores and Match Labels
+
+When filters have labels or VectorFilters are used, each streaming result includes
+a `SearchMeta` with vector similarity scores and matched filter labels.
+
+This works in all modes including KeysOnly — you get metadata without content overhead.
+
+### Adding labels to filters
+
+```go
+hydraidego.FilterBytesFieldSliceContainsInt8("LLMSiteFunctions", int8(7)).WithLabel("booking")
+hydraidego.FilterBytesFieldSliceContainsInt8("LLMIndustrySectors", int8(6)).WithLabel("health")
+hydraidego.FilterVector("Embedding", queryVec, 0.5).WithLabel("semantic")
+hydraidego.GeoDistance("Lat", "Lng", 47.497, 19.040, 50.0, hydraidego.GeoInside).WithLabel("location")
+hydraidego.FilterPhrase("WordIndex", "hello", "world").WithLabel("phrase")
+```
+
+Unlabeled filters work normally but don't appear in `MatchedLabels`.
+VectorFilter scores are always captured regardless of labels.
+
+### Reading metadata via searchMeta tag
+
+Add a `*hydraidego.SearchMeta` field with the `hydraide:"searchMeta"` tag to your model.
+It is automatically populated during search/read responses. This field is **read-only**:
+it is never processed during write operations (Set, Create, Update).
+
+```go
+type MyModel struct {
+    Domain  string                  `hydraide:"key"`
+    Payload []byte                  `hydraide:"value"`
+    Meta    *hydraidego.SearchMeta  `hydraide:"searchMeta"` // auto-populated on read
+}
+
+h.CatalogReadManyStream(ctx, swamp, index, filters, MyModel{},
+    func(model any) error {
+        m := model.(*MyModel)
+        fmt.Printf("Key: %s\n", m.Domain)
+        if m.Meta != nil {
+            if len(m.Meta.VectorScores) > 0 {
+                fmt.Printf("  Relevance: %.2f\n", m.Meta.VectorScores[0])
+            }
+            fmt.Printf("  Matched: %v\n", m.Meta.MatchedLabels)
+        }
+        return nil
+    })
+```
+
+### KeysOnly with metadata
+
+SearchMeta is populated even in KeysOnly mode — scores and labels without content:
+```go
+index := &hydraidego.Index{
+    MaxResults: 100,
+    KeysOnly:   true,
+}
+// model.Meta.VectorScores and model.Meta.MatchedLabels are still populated
+```
+
+### OR groups with labels
+
+In OR groups, all matching branches are reported (not just the first):
+
+```go
+filters := hydraidego.FilterOR(
+    hydraidego.FilterBytesFieldSliceContainsInt8("LLMIndustrySectors", int8(1)).WithLabel("hospitality"),
+    hydraidego.FilterBytesFieldSliceContainsInt8("LLMIndustrySectors", int8(6)).WithLabel("health"),
+)
+// If a domain has both sectors 1 and 6:
+// meta.MatchedLabels = ["hospitality", "health"]
+// If it only has sector 6:
+// meta.MatchedLabels = ["health"]
+```
+
+### Performance
+
+- **Without labels/vectors (fast path):** zero overhead, same as before
+- **With meta:** ~35% overhead for score capture + label tracking (~1.8us vs ~1.3us)
+- **Fast-path detection:** automatic via `hasAnyLabels` — no opt-in needed
+
+---
+
 ## Complete Example
 
 ```go

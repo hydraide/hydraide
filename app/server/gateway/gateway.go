@@ -642,6 +642,7 @@ func (g Gateway) GetByIndexStream(in *hydrapb.GetByIndexStreamRequest, stream hy
 	filters := in.GetFilters()
 	maxResults := in.GetMaxResults()
 	excludeMap := buildExcludeMap(in.ExcludeKeys)
+	needsMeta := hasAnyLabels(filters)
 	var matchCount int32
 
 	for _, treasureInterface := range treasures {
@@ -657,24 +658,38 @@ func (g Gateway) GetByIndexStream(in *hydrapb.GetByIndexStreamRequest, stream hy
 			}
 		}
 
-		if !evaluateNativeFilterGroup(treasureInterface, filters) {
+		var matched bool
+		var meta *filterMatchMeta
+
+		if needsMeta {
+			matched, meta = evaluateNativeFilterGroupWithMeta(treasureInterface, filters)
+		} else {
+			matched = evaluateNativeFilterGroup(treasureInterface, filters)
+		}
+
+		if !matched {
 			continue
 		}
 
+		resp := &hydrapb.GetByIndexStreamResponse{}
+
 		if in.KeysOnly {
-			if err := stream.Send(&hydrapb.GetByIndexStreamResponse{
-				Treasure: &hydrapb.Treasure{Key: treasureInterface.GetKey(), IsExist: true},
-			}); err != nil {
-				return err
-			}
+			resp.Treasure = &hydrapb.Treasure{Key: treasureInterface.GetKey(), IsExist: true}
 		} else {
 			t := &hydrapb.Treasure{}
 			treasureToKeyValuePair(treasureInterface, t)
-			if err := stream.Send(&hydrapb.GetByIndexStreamResponse{
-				Treasure: t,
-			}); err != nil {
-				return err
+			resp.Treasure = t
+		}
+
+		if meta != nil && (len(meta.vectorScores) > 0 || len(meta.matchedLabels) > 0) {
+			resp.Meta = &hydrapb.SearchResultMeta{
+				VectorScores:  meta.vectorScores,
+				MatchedLabels: meta.matchedLabels,
 			}
+		}
+
+		if err := stream.Send(resp); err != nil {
+			return err
 		}
 
 		matchCount++
@@ -730,6 +745,7 @@ func (g Gateway) GetByIndexStreamFromMany(in *hydrapb.GetByIndexStreamFromManyRe
 		filters := query.GetFilters()
 		queryMax := query.GetMaxResults()
 		excludeMap := buildExcludeMap(query.ExcludeKeys)
+		needsMeta := hasAnyLabels(filters)
 		var queryCount int32
 
 		for _, treasureInterface := range treasures {
@@ -745,28 +761,39 @@ func (g Gateway) GetByIndexStreamFromMany(in *hydrapb.GetByIndexStreamFromManyRe
 				}
 			}
 
-			if !evaluateNativeFilterGroup(treasureInterface, filters) {
+			var matched bool
+			var meta *filterMatchMeta
+
+			if needsMeta {
+				matched, meta = evaluateNativeFilterGroupWithMeta(treasureInterface, filters)
+			} else {
+				matched = evaluateNativeFilterGroup(treasureInterface, filters)
+			}
+
+			if !matched {
 				continue
 			}
 
+			resp := &hydrapb.GetByIndexStreamFromManyResponse{SwampName: query.SwampName}
+
 			if query.KeysOnly {
-				if err := stream.Send(&hydrapb.GetByIndexStreamFromManyResponse{
-					SwampName: query.SwampName,
-					Treasure:  &hydrapb.Treasure{Key: treasureInterface.GetKey(), IsExist: true},
-				}); err != nil {
-					swampInterface.CeaseVigil()
-					return err
-				}
+				resp.Treasure = &hydrapb.Treasure{Key: treasureInterface.GetKey(), IsExist: true}
 			} else {
 				t := &hydrapb.Treasure{}
 				treasureToKeyValuePair(treasureInterface, t)
-				if err := stream.Send(&hydrapb.GetByIndexStreamFromManyResponse{
-					SwampName: query.SwampName,
-					Treasure:  t,
-				}); err != nil {
-					swampInterface.CeaseVigil()
-					return err
+				resp.Treasure = t
+			}
+
+			if meta != nil && (len(meta.vectorScores) > 0 || len(meta.matchedLabels) > 0) {
+				resp.Meta = &hydrapb.SearchResultMeta{
+					VectorScores:  meta.vectorScores,
+					MatchedLabels: meta.matchedLabels,
 				}
+			}
+
+			if err := stream.Send(resp); err != nil {
+				swampInterface.CeaseVigil()
+				return err
 			}
 
 			queryCount++

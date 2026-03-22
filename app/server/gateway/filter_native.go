@@ -20,6 +20,54 @@ func evaluateNativeFilterGroup(t treasure.Treasure, group *hydrapb.FilterGroup) 
 	)
 }
 
+// evaluateNativeFilterGroupWithMeta evaluates a FilterGroup and collects metadata
+// about which labeled filters matched and what vector scores were computed.
+func evaluateNativeFilterGroupWithMeta(t treasure.Treasure, group *hydrapb.FilterGroup) (bool, *filterMatchMeta) {
+	meta := &filterMatchMeta{}
+	result := evaluateFilterGroupWithMeta(group,
+		func(f *hydrapb.TreasureFilter) bool {
+			matched := evaluateNativeSingleFilter(t, f)
+			if matched && f.Label != nil && *f.Label != "" {
+				meta.matchedLabels = append(meta.matchedLabels, *f.Label)
+			}
+			return matched
+		},
+		func(sg *hydrapb.FilterGroup) bool {
+			matched, subMeta := evaluateNativeFilterGroupWithMeta(t, sg)
+			if matched && subMeta != nil {
+				meta.vectorScores = append(meta.vectorScores, subMeta.vectorScores...)
+				meta.matchedLabels = append(meta.matchedLabels, subMeta.matchedLabels...)
+			}
+			return matched
+		},
+		func(pf *hydrapb.PhraseFilter) bool {
+			matched := evaluateNativePhraseFilter(t, pf)
+			if matched && pf.Label != nil && *pf.Label != "" {
+				meta.matchedLabels = append(meta.matchedLabels, *pf.Label)
+			}
+			return matched
+		},
+		func(vf *hydrapb.VectorFilter) bool {
+			matched, score := evaluateNativeVectorFilterWithScore(t, vf)
+			if matched {
+				meta.vectorScores = append(meta.vectorScores, score)
+				if vf.Label != nil && *vf.Label != "" {
+					meta.matchedLabels = append(meta.matchedLabels, *vf.Label)
+				}
+			}
+			return matched
+		},
+		func(gf *hydrapb.GeoDistanceFilter) bool {
+			matched := evaluateNativeGeoDistanceFilter(t, gf)
+			if matched && gf.Label != nil && *gf.Label != "" {
+				meta.matchedLabels = append(meta.matchedLabels, *gf.Label)
+			}
+			return matched
+		},
+	)
+	return result, meta
+}
+
 // evaluateNativeSingleFilter evaluates one TreasureFilter against a treasure.Treasure interface.
 func evaluateNativeSingleFilter(t treasure.Treasure, filter *hydrapb.TreasureFilter) bool {
 	op := filter.GetOperator()
@@ -394,6 +442,37 @@ func evaluateNativePhraseFilter(t treasure.Treasure, pf *hydrapb.PhraseFilter) b
 		return !found
 	}
 	return found
+}
+
+// evaluateNativeVectorFilterWithScore is like evaluateNativeVectorFilter but also
+// returns the computed cosine similarity score.
+func evaluateNativeVectorFilterWithScore(t treasure.Treasure, vf *hydrapb.VectorFilter) (bool, float32) {
+	if vf == nil || len(vf.QueryVector) == 0 {
+		return true, 0
+	}
+
+	if t.GetContentType() != treasure.ContentTypeByteArray {
+		return false, 0
+	}
+
+	bytesVal, err := t.GetContentByteArray()
+	if err != nil || bytesVal == nil || !isMsgpackEncoded(bytesVal) {
+		return false, 0
+	}
+
+	decoded, err := decodeMsgpackToMap(unwrapMsgpack(bytesVal))
+	if err != nil {
+		return false, 0
+	}
+
+	fieldVal := extractFieldByPath(decoded, vf.BytesFieldPath)
+	storedVector := toFloat32Slice(fieldVal)
+	if len(storedVector) == 0 || len(storedVector) != len(vf.QueryVector) {
+		return false, 0
+	}
+
+	similarity := dotProduct(storedVector, vf.QueryVector)
+	return similarity >= vf.MinSimilarity, similarity
 }
 
 // evaluateNativeVectorFilter computes vector similarity against the treasure's byte array content.

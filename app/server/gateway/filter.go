@@ -75,6 +75,129 @@ type anyMatchSlice struct {
 	values []interface{}
 }
 
+// filterMatchMeta accumulates search result metadata during filter evaluation.
+// Passed via closure to filter callbacks.
+type filterMatchMeta struct {
+	vectorScores  []float32
+	matchedLabels []string
+}
+
+// hasAnyLabels checks if any filter in the group has a label or if VectorFilters
+// are present (which always produce scores). Used to decide fast vs meta path.
+func hasAnyLabels(group *hydrapb.FilterGroup) bool {
+	if group == nil {
+		return false
+	}
+	if len(group.VectorFilters) > 0 {
+		return true
+	}
+	for _, f := range group.Filters {
+		if f.Label != nil && *f.Label != "" {
+			return true
+		}
+	}
+	for _, pf := range group.PhraseFilters {
+		if pf.Label != nil && *pf.Label != "" {
+			return true
+		}
+	}
+	for _, gf := range group.GeoDistanceFilters {
+		if gf.Label != nil && *gf.Label != "" {
+			return true
+		}
+	}
+	for _, sg := range group.SubGroups {
+		if hasAnyLabels(sg) {
+			return true
+		}
+	}
+	return false
+}
+
+// evaluateFilterGroupWithMeta is like evaluateFilterGroupWith but for OR groups
+// it evaluates ALL branches (no short-circuit) to collect all matching labels.
+func evaluateFilterGroupWithMeta(
+	group *hydrapb.FilterGroup,
+	evalFilter func(*hydrapb.TreasureFilter) bool,
+	evalSubGroup func(*hydrapb.FilterGroup) bool,
+	evalPhrase func(*hydrapb.PhraseFilter) bool,
+	evalVector func(*hydrapb.VectorFilter) bool,
+	evalGeoDistance func(*hydrapb.GeoDistanceFilter) bool,
+) bool {
+	if group == nil {
+		return true
+	}
+
+	hasFilters := len(group.Filters) > 0
+	hasSubGroups := len(group.SubGroups) > 0
+	hasPhraseFilters := len(group.PhraseFilters) > 0
+	hasVectorFilters := len(group.VectorFilters) > 0
+	hasGeoDistanceFilters := len(group.GeoDistanceFilters) > 0
+
+	if !hasFilters && !hasSubGroups && !hasPhraseFilters && !hasVectorFilters && !hasGeoDistanceFilters {
+		return true
+	}
+
+	if group.Logic == hydrapb.FilterLogic_OR {
+		// Evaluate ALL branches to collect all matching labels (no short-circuit)
+		anyMatched := false
+		for _, f := range group.Filters {
+			if evalFilter(f) {
+				anyMatched = true
+			}
+		}
+		for _, sg := range group.SubGroups {
+			if evalSubGroup(sg) {
+				anyMatched = true
+			}
+		}
+		for _, pf := range group.PhraseFilters {
+			if evalPhrase(pf) {
+				anyMatched = true
+			}
+		}
+		for _, vf := range group.VectorFilters {
+			if evalVector(vf) {
+				anyMatched = true
+			}
+		}
+		for _, gf := range group.GeoDistanceFilters {
+			if evalGeoDistance(gf) {
+				anyMatched = true
+			}
+		}
+		return anyMatched
+	}
+
+	// AND (default) — short-circuit on first failure
+	for _, f := range group.Filters {
+		if !evalFilter(f) {
+			return false
+		}
+	}
+	for _, sg := range group.SubGroups {
+		if !evalSubGroup(sg) {
+			return false
+		}
+	}
+	for _, pf := range group.PhraseFilters {
+		if !evalPhrase(pf) {
+			return false
+		}
+	}
+	for _, vf := range group.VectorFilters {
+		if !evalVector(vf) {
+			return false
+		}
+	}
+	for _, gf := range group.GeoDistanceFilters {
+		if !evalGeoDistance(gf) {
+			return false
+		}
+	}
+	return true
+}
+
 // evaluateFilterGroupWith is the generic AND/OR evaluator for filter groups.
 // The four callbacks determine how individual filters, sub-groups, phrase filters,
 // and vector filters are evaluated.
