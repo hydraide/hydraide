@@ -256,6 +256,70 @@ hydraidego.FilterPhrase("WordIndex", "hello", "world").ForKey("WordIndex")
 
 ---
 
+## ExcludeKeys — Server-Side Key Exclusion
+
+Prevents specified keys from appearing in search results. Runs **before** filter
+evaluation for maximum performance (O(1) map lookup per treasure, ~10ns).
+
+Use cases:
+- **Pagination without offset:** exclude already-seen keys on subsequent pages
+- **Deduplication:** exclude keys already shown from other sources
+- **"Show more" patterns:** fetch next batch excluding previous results
+
+```go
+// First page: no exclusions
+index := &hydraidego.Index{
+    IndexType:  hydraidego.IndexCreationTime,
+    IndexOrder: hydraidego.IndexOrderDesc,
+    MaxResults: 10,
+}
+
+// Second page: exclude first page results
+index := &hydraidego.Index{
+    IndexType:   hydraidego.IndexCreationTime,
+    IndexOrder:  hydraidego.IndexOrderDesc,
+    MaxResults:  10,
+    ExcludeKeys: []string{"domain1.com", "domain2.com", "domain3.com"},
+}
+```
+
+Works with `CatalogReadManyStream`, `CatalogReadManyFromMany`, and `CatalogReadMany`.
+Can be combined with filters, MaxResults, and all other parameters.
+
+---
+
+## KeysOnly — Lightweight Key-Only Results
+
+Returns only treasure keys (Key + IsExist) in the response, skipping all content
+serialization. Reduces gRPC payload size dramatically (~16x faster than full conversion).
+
+Use cases:
+- **Large result sets:** discover 1000+ matching keys without content overhead
+- **Two-phase search:** KeysOnly for discovery, then CatalogReadBatch for selected keys
+- **Counting with key tracking:** know which keys matched, not just how many
+
+```go
+// Phase 1: discover matching keys (lightweight, ~17ns per treasure)
+index := &hydraidego.Index{
+    IndexType:  hydraidego.IndexCreationTime,
+    IndexOrder: hydraidego.IndexOrderDesc,
+    MaxResults: 1000,
+    KeysOnly:   true,
+}
+
+var matchedKeys []string
+h.CatalogReadManyStream(ctx, swamp, index, filters, Model{}, func(model any) error {
+    m := model.(*Model)
+    matchedKeys = append(matchedKeys, m.Key)
+    return nil
+})
+
+// Phase 2: fetch full content for top 10 results
+h.CatalogReadBatch(ctx, swamp, matchedKeys[:10], Model{}, func(model any) error { ... })
+```
+
+---
+
 ## Complete Example
 
 ```go

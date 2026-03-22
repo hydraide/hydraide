@@ -1103,6 +1103,14 @@ message GetByIndexRequest {
   optional google.protobuf.Timestamp FromTime = 7;
   optional google.protobuf.Timestamp ToTime = 8;
 
+  // ExcludeKeys is an optional list of Treasure keys to skip in the results.
+  // Excluded keys are rejected before any filter evaluation (cheapest possible rejection).
+  repeated string ExcludeKeys = 9;
+
+  // KeysOnly when true returns only Key + IsExist for each Treasure (no content or metadata).
+  // Saves bandwidth when the client only needs to know which keys matched.
+  bool KeysOnly = 10;
+
 }
 
 message IndexType {
@@ -1160,6 +1168,12 @@ message GetByKeysRequest {
   // IslandID is the deterministic storage zone (or "island") where this Swamp lives.
   // Optional island identifier for routing.
   uint64 IslandID = 3;
+
+  // ExcludeKeys is an optional list of Treasure keys to skip in the results.
+  repeated string ExcludeKeys = 4;
+
+  // KeysOnly when true returns only Key + IsExist for each Treasure (no content or metadata).
+  bool KeysOnly = 5;
 }
 
 // GetByKeysResponse contains all the treasures found for the requested keys.
@@ -2419,6 +2433,12 @@ message GetByIndexStreamRequest {
   // This is a post-filter limit: the server still evaluates all candidates
   // but stops streaming after MaxResults matches have been sent.
   int32 MaxResults = 10;
+
+  // ExcludeKeys is an optional list of Treasure keys to skip before filter evaluation.
+  repeated string ExcludeKeys = 11;
+
+  // KeysOnly when true returns only Key + IsExist for each Treasure (no content or metadata).
+  bool KeysOnly = 12;
 }
 
 // GetByIndexStreamResponse contains a single matching Treasure.
@@ -2442,6 +2462,12 @@ message SwampQuery {
 
   // MaxResults limits per-swamp matching results. 0 = unlimited.
   int32 MaxResults = 10;
+
+  // ExcludeKeys is an optional list of Treasure keys to skip before filter evaluation.
+  repeated string ExcludeKeys = 11;
+
+  // KeysOnly when true returns only Key + IsExist for each Treasure (no content or metadata).
+  bool KeysOnly = 12;
 }
 
 // GetByIndexStreamFromManyRequest allows reading from multiple swamps in a single streaming operation.

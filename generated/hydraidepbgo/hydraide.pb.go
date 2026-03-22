@@ -3082,8 +3082,14 @@ type GetByIndexRequest struct {
 	// Use these to return only results between the specified start (FromTime) and end (ToTime) timestamps.
 	// Each field can be set independently; neither is required.
 	// This enables the engine to filter results server-side, avoiding full client-side iteration over all treasures.
-	FromTime      *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=FromTime,proto3,oneof" json:"FromTime,omitempty"`
-	ToTime        *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=ToTime,proto3,oneof" json:"ToTime,omitempty"`
+	FromTime *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=FromTime,proto3,oneof" json:"FromTime,omitempty"`
+	ToTime   *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=ToTime,proto3,oneof" json:"ToTime,omitempty"`
+	// ExcludeKeys is an optional list of Treasure keys to skip in the results.
+	// Excluded keys are rejected before any filter evaluation (cheapest possible rejection).
+	ExcludeKeys []string `protobuf:"bytes,9,rep,name=ExcludeKeys,proto3" json:"ExcludeKeys,omitempty"`
+	// KeysOnly when true returns only Key + IsExist for each Treasure (no content or metadata).
+	// Saves bandwidth when the client only needs to know which keys matched.
+	KeysOnly      bool `protobuf:"varint,10,opt,name=KeysOnly,proto3" json:"KeysOnly,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3172,6 +3178,20 @@ func (x *GetByIndexRequest) GetToTime() *timestamppb.Timestamp {
 		return x.ToTime
 	}
 	return nil
+}
+
+func (x *GetByIndexRequest) GetExcludeKeys() []string {
+	if x != nil {
+		return x.ExcludeKeys
+	}
+	return nil
+}
+
+func (x *GetByIndexRequest) GetKeysOnly() bool {
+	if x != nil {
+		return x.KeysOnly
+	}
+	return false
 }
 
 type IndexType struct {
@@ -3305,7 +3325,11 @@ type GetByKeysRequest struct {
 	Keys []string `protobuf:"bytes,2,rep,name=Keys,proto3" json:"Keys,omitempty"`
 	// IslandID is the deterministic storage zone (or "island") where this Swamp lives.
 	// Optional island identifier for routing.
-	IslandID      uint64 `protobuf:"varint,3,opt,name=IslandID,proto3" json:"IslandID,omitempty"`
+	IslandID uint64 `protobuf:"varint,3,opt,name=IslandID,proto3" json:"IslandID,omitempty"`
+	// ExcludeKeys is an optional list of Treasure keys to skip in the results.
+	ExcludeKeys []string `protobuf:"bytes,4,rep,name=ExcludeKeys,proto3" json:"ExcludeKeys,omitempty"`
+	// KeysOnly when true returns only Key + IsExist for each Treasure (no content or metadata).
+	KeysOnly      bool `protobuf:"varint,5,opt,name=KeysOnly,proto3" json:"KeysOnly,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3359,6 +3383,20 @@ func (x *GetByKeysRequest) GetIslandID() uint64 {
 		return x.IslandID
 	}
 	return 0
+}
+
+func (x *GetByKeysRequest) GetExcludeKeys() []string {
+	if x != nil {
+		return x.ExcludeKeys
+	}
+	return nil
+}
+
+func (x *GetByKeysRequest) GetKeysOnly() bool {
+	if x != nil {
+		return x.KeysOnly
+	}
+	return false
 }
 
 // GetByKeysResponse contains all the treasures found for the requested keys.
@@ -8600,7 +8638,11 @@ type GetByIndexStreamRequest struct {
 	// 0 = unlimited (stream all matches). >0 = stop after N matches.
 	// This is a post-filter limit: the server still evaluates all candidates
 	// but stops streaming after MaxResults matches have been sent.
-	MaxResults    int32 `protobuf:"varint,10,opt,name=MaxResults,proto3" json:"MaxResults,omitempty"`
+	MaxResults int32 `protobuf:"varint,10,opt,name=MaxResults,proto3" json:"MaxResults,omitempty"`
+	// ExcludeKeys is an optional list of Treasure keys to skip before filter evaluation.
+	ExcludeKeys []string `protobuf:"bytes,11,rep,name=ExcludeKeys,proto3" json:"ExcludeKeys,omitempty"`
+	// KeysOnly when true returns only Key + IsExist for each Treasure (no content or metadata).
+	KeysOnly      bool `protobuf:"varint,12,opt,name=KeysOnly,proto3" json:"KeysOnly,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -8705,6 +8747,20 @@ func (x *GetByIndexStreamRequest) GetMaxResults() int32 {
 	return 0
 }
 
+func (x *GetByIndexStreamRequest) GetExcludeKeys() []string {
+	if x != nil {
+		return x.ExcludeKeys
+	}
+	return nil
+}
+
+func (x *GetByIndexStreamRequest) GetKeysOnly() bool {
+	if x != nil {
+		return x.KeysOnly
+	}
+	return false
+}
+
 // GetByIndexStreamResponse contains a single matching Treasure.
 // The server sends one of these per matching result via the stream.
 type GetByIndexStreamResponse struct {
@@ -8765,7 +8821,11 @@ type SwampQuery struct {
 	ToTime    *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=ToTime,proto3,oneof" json:"ToTime,omitempty"`
 	Filters   *FilterGroup           `protobuf:"bytes,9,opt,name=Filters,proto3,oneof" json:"Filters,omitempty"`
 	// MaxResults limits per-swamp matching results. 0 = unlimited.
-	MaxResults    int32 `protobuf:"varint,10,opt,name=MaxResults,proto3" json:"MaxResults,omitempty"`
+	MaxResults int32 `protobuf:"varint,10,opt,name=MaxResults,proto3" json:"MaxResults,omitempty"`
+	// ExcludeKeys is an optional list of Treasure keys to skip before filter evaluation.
+	ExcludeKeys []string `protobuf:"bytes,11,rep,name=ExcludeKeys,proto3" json:"ExcludeKeys,omitempty"`
+	// KeysOnly when true returns only Key + IsExist for each Treasure (no content or metadata).
+	KeysOnly      bool `protobuf:"varint,12,opt,name=KeysOnly,proto3" json:"KeysOnly,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -8868,6 +8928,20 @@ func (x *SwampQuery) GetMaxResults() int32 {
 		return x.MaxResults
 	}
 	return 0
+}
+
+func (x *SwampQuery) GetExcludeKeys() []string {
+	if x != nil {
+		return x.ExcludeKeys
+	}
+	return nil
+}
+
+func (x *SwampQuery) GetKeysOnly() bool {
+	if x != nil {
+		return x.KeysOnly
+	}
+	return false
 }
 
 // GetByIndexStreamFromManyRequest allows reading from multiple swamps in a single streaming operation.
@@ -9707,7 +9781,7 @@ const file_hydraide_proto_rawDesc = "" +
 	"\aBoolean\"\x1b\n" +
 	"\x04Type\x12\b\n" +
 	"\x04TRUE\x10\x00\x12\t\n" +
-	"\x05FALSE\x10\x01\"\xfd\x02\n" +
+	"\x05FALSE\x10\x01\"\xbb\x03\n" +
 	"\x11GetByIndexRequest\x12\x1a\n" +
 	"\bIslandID\x18\x01 \x01(\x04R\bIslandID\x12\x1c\n" +
 	"\tSwampName\x18\x02 \x01(\tR\tSwampName\x12:\n" +
@@ -9716,7 +9790,10 @@ const file_hydraide_proto_rawDesc = "" +
 	"\x04From\x18\x05 \x01(\x05R\x04From\x12\x14\n" +
 	"\x05Limit\x18\x06 \x01(\x05R\x05Limit\x12;\n" +
 	"\bFromTime\x18\a \x01(\v2\x1a.google.protobuf.TimestampH\x00R\bFromTime\x88\x01\x01\x127\n" +
-	"\x06ToTime\x18\b \x01(\v2\x1a.google.protobuf.TimestampH\x01R\x06ToTime\x88\x01\x01B\v\n" +
+	"\x06ToTime\x18\b \x01(\v2\x1a.google.protobuf.TimestampH\x01R\x06ToTime\x88\x01\x01\x12 \n" +
+	"\vExcludeKeys\x18\t \x03(\tR\vExcludeKeys\x12\x1a\n" +
+	"\bKeysOnly\x18\n" +
+	" \x01(\bR\bKeysOnlyB\v\n" +
 	"\t_FromTimeB\t\n" +
 	"\a_ToTime\"\x98\x02\n" +
 	"\tIndexType\"\x8a\x02\n" +
@@ -9743,11 +9820,13 @@ const file_hydraide_proto_rawDesc = "" +
 	"\x03ASC\x10\x00\x12\b\n" +
 	"\x04DESC\x10\x01\"J\n" +
 	"\x12GetByIndexResponse\x124\n" +
-	"\tTreasures\x18\x01 \x03(\v2\x16.hydraidepbgo.TreasureR\tTreasures\"`\n" +
+	"\tTreasures\x18\x01 \x03(\v2\x16.hydraidepbgo.TreasureR\tTreasures\"\x9e\x01\n" +
 	"\x10GetByKeysRequest\x12\x1c\n" +
 	"\tSwampName\x18\x01 \x01(\tR\tSwampName\x12\x12\n" +
 	"\x04Keys\x18\x02 \x03(\tR\x04Keys\x12\x1a\n" +
-	"\bIslandID\x18\x03 \x01(\x04R\bIslandID\"I\n" +
+	"\bIslandID\x18\x03 \x01(\x04R\bIslandID\x12 \n" +
+	"\vExcludeKeys\x18\x04 \x03(\tR\vExcludeKeys\x12\x1a\n" +
+	"\bKeysOnly\x18\x05 \x01(\bR\bKeysOnly\"I\n" +
 	"\x11GetByKeysResponse\x124\n" +
 	"\tTreasures\x18\x01 \x03(\v2\x16.hydraidepbgo.TreasureR\tTreasures\"b\n" +
 	"\x12ShiftByKeysRequest\x12\x1c\n" +
@@ -10211,7 +10290,7 @@ const file_hydraide_proto_rawDesc = "" +
 	"\bRadiusKm\x18\x05 \x01(\x01R\bRadiusKm\x126\n" +
 	"\x04Mode\x18\x06 \x01(\x0e2\".hydraidepbgo.GeoDistanceMode.TypeR\x04Mode\x12%\n" +
 	"\vTreasureKey\x18\a \x01(\tH\x00R\vTreasureKey\x88\x01\x01B\x0e\n" +
-	"\f_TreasureKey\"\xe9\x03\n" +
+	"\f_TreasureKey\"\xa7\x04\n" +
 	"\x17GetByIndexStreamRequest\x12\x1a\n" +
 	"\bIslandID\x18\x01 \x01(\x04R\bIslandID\x12\x1c\n" +
 	"\tSwampName\x18\x02 \x01(\tR\tSwampName\x12:\n" +
@@ -10225,13 +10304,15 @@ const file_hydraide_proto_rawDesc = "" +
 	"\n" +
 	"MaxResults\x18\n" +
 	" \x01(\x05R\n" +
-	"MaxResultsB\v\n" +
+	"MaxResults\x12 \n" +
+	"\vExcludeKeys\x18\v \x03(\tR\vExcludeKeys\x12\x1a\n" +
+	"\bKeysOnly\x18\f \x01(\bR\bKeysOnlyB\v\n" +
 	"\t_FromTimeB\t\n" +
 	"\a_ToTimeB\n" +
 	"\n" +
 	"\b_Filters\"N\n" +
 	"\x18GetByIndexStreamResponse\x122\n" +
-	"\bTreasure\x18\x01 \x01(\v2\x16.hydraidepbgo.TreasureR\bTreasure\"\xdc\x03\n" +
+	"\bTreasure\x18\x01 \x01(\v2\x16.hydraidepbgo.TreasureR\bTreasure\"\x9a\x04\n" +
 	"\n" +
 	"SwampQuery\x12\x1a\n" +
 	"\bIslandID\x18\x01 \x01(\x04R\bIslandID\x12\x1c\n" +
@@ -10246,7 +10327,9 @@ const file_hydraide_proto_rawDesc = "" +
 	"\n" +
 	"MaxResults\x18\n" +
 	" \x01(\x05R\n" +
-	"MaxResultsB\v\n" +
+	"MaxResults\x12 \n" +
+	"\vExcludeKeys\x18\v \x03(\tR\vExcludeKeys\x12\x1a\n" +
+	"\bKeysOnly\x18\f \x01(\bR\bKeysOnlyB\v\n" +
 	"\t_FromTimeB\t\n" +
 	"\a_ToTimeB\n" +
 	"\n" +

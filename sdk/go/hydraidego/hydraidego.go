@@ -143,13 +143,15 @@ type Hydraidego interface {
 //	    ToTime:     time.Date(2024, 6, 30, 23, 59, 59, 0, time.UTC),
 //	}
 type Index struct {
-	IndexType              // What field to use for sorting/filtering
-	IndexOrder             // Ascending or Descending order
-	From       int32       // Offset: how many records to skip (0 = start from first)
-	Limit      int32       // Max results to return (0 = return all) — pre-filter engine limit
-	FromTime   *time.Time  // Inclusive lower bound for time-based filtering - optional. It can be nil
-	ToTime     *time.Time  // Exclusive upper bound for time-based filtering - optional. It can be nil
-	MaxResults int32       // Post-filter limit: stop streaming after N matches (0 = unlimited)
+	IndexType               // What field to use for sorting/filtering
+	IndexOrder              // Ascending or Descending order
+	From        int32       // Offset: how many records to skip (0 = start from first)
+	Limit       int32       // Max results to return (0 = return all) — pre-filter engine limit
+	FromTime    *time.Time  // Inclusive lower bound for time-based filtering - optional. It can be nil
+	ToTime      *time.Time  // Exclusive upper bound for time-based filtering - optional. It can be nil
+	MaxResults  int32       // Post-filter limit: stop streaming after N matches (0 = unlimited)
+	ExcludeKeys []string    // Keys to skip server-side before filter evaluation (nil = no exclusion)
+	KeysOnly    bool        // If true, response contains only Key + IsExist (no content or metadata)
 }
 
 // IndexType specifies which field to use as the index during a read.
@@ -1965,12 +1967,14 @@ func (h *hydraidego) CatalogReadMany(ctx context.Context, swampName name.Name, i
 	orderTypeProtoFormat := convertOrderTypeToProtoOrderType(index.IndexOrder)
 
 	indexRequest := &hydraidepbgo.GetByIndexRequest{
-		IslandID:  swampName.GetIslandID(h.client.GetAllIslands()),
-		SwampName: swampName.Get(),
-		IndexType: indexTypeProtoFormat,
-		OrderType: orderTypeProtoFormat,
-		From:      index.From,
-		Limit:     index.Limit,
+		IslandID:    swampName.GetIslandID(h.client.GetAllIslands()),
+		SwampName:   swampName.Get(),
+		IndexType:   indexTypeProtoFormat,
+		OrderType:   orderTypeProtoFormat,
+		From:        index.From,
+		Limit:       index.Limit,
+		ExcludeKeys: index.ExcludeKeys,
+		KeysOnly:    index.KeysOnly,
 	}
 
 	indexRequest.FromTime = toOptionalTimestamppb(index.FromTime)
@@ -4295,14 +4299,16 @@ func (h *hydraidego) CatalogReadManyStream(ctx context.Context, swampName name.N
 	}
 
 	request := &hydraidepbgo.GetByIndexStreamRequest{
-		IslandID:   swampName.GetIslandID(h.client.GetAllIslands()),
-		SwampName:  swampName.Get(),
-		IndexType:  convertIndexTypeToProtoIndexType(index.IndexType),
-		OrderType:  convertOrderTypeToProtoOrderType(index.IndexOrder),
-		From:       index.From,
-		Limit:      index.Limit,
-		Filters:    convertFilterGroupToProto(filters),
-		MaxResults: index.MaxResults,
+		IslandID:    swampName.GetIslandID(h.client.GetAllIslands()),
+		SwampName:   swampName.Get(),
+		IndexType:   convertIndexTypeToProtoIndexType(index.IndexType),
+		OrderType:   convertOrderTypeToProtoOrderType(index.IndexOrder),
+		From:        index.From,
+		Limit:       index.Limit,
+		Filters:     convertFilterGroupToProto(filters),
+		MaxResults:  index.MaxResults,
+		ExcludeKeys: index.ExcludeKeys,
+		KeysOnly:    index.KeysOnly,
 	}
 
 	request.FromTime = toOptionalTimestamppb(index.FromTime)
@@ -4375,14 +4381,16 @@ func (h *hydraidego) CatalogReadManyFromMany(ctx context.Context, request []*Cat
 		}
 
 		query := &hydraidepbgo.SwampQuery{
-			IslandID:   req.SwampName.GetIslandID(h.client.GetAllIslands()),
-			SwampName:  req.SwampName.Get(),
-			IndexType:  convertIndexTypeToProtoIndexType(req.Index.IndexType),
-			OrderType:  convertOrderTypeToProtoOrderType(req.Index.IndexOrder),
-			From:       req.Index.From,
-			Limit:      req.Index.Limit,
-			Filters:    convertFilterGroupToProto(req.Filters),
-			MaxResults: req.Index.MaxResults,
+			IslandID:    req.SwampName.GetIslandID(h.client.GetAllIslands()),
+			SwampName:   req.SwampName.Get(),
+			IndexType:   convertIndexTypeToProtoIndexType(req.Index.IndexType),
+			OrderType:   convertOrderTypeToProtoOrderType(req.Index.IndexOrder),
+			From:        req.Index.From,
+			Limit:       req.Index.Limit,
+			Filters:     convertFilterGroupToProto(req.Filters),
+			MaxResults:  req.Index.MaxResults,
+			ExcludeKeys: req.Index.ExcludeKeys,
+			KeysOnly:    req.Index.KeysOnly,
 		}
 
 		query.FromTime = toOptionalTimestamppb(req.Index.FromTime)

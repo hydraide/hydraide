@@ -38,6 +38,19 @@ type Gateway struct {
 	TelemetryCollector    telemetry.Collector
 }
 
+// buildExcludeMap creates a set from a list of keys for O(1) exclusion lookup.
+// Returns nil if the input is empty, so callers can skip the check entirely.
+func buildExcludeMap(keys []string) map[string]struct{} {
+	if len(keys) == 0 {
+		return nil
+	}
+	m := make(map[string]struct{}, len(keys))
+	for _, k := range keys {
+		m[k] = struct{}{}
+	}
+	return m
+}
+
 func (g Gateway) Heartbeat(_ context.Context, in *hydrapb.HeartbeatRequest) (*hydrapb.HeartbeatResponse, error) {
 	return &hydrapb.HeartbeatResponse{
 		Pong: in.Ping,
@@ -497,12 +510,21 @@ func (g Gateway) GetByIndex(ctx context.Context, in *hydrapb.GetByIndexRequest) 
 	}
 
 	// convert all treasures to the protobuf format
+	excludeMap := buildExcludeMap(in.ExcludeKeys)
 	var response []*hydrapb.Treasure
 	for _, treasureInterface := range treasures {
-		// convert the treasure to the protobuf format
-		t := &hydrapb.Treasure{}
-		treasureToKeyValuePair(treasureInterface, t)
-		response = append(response, t)
+		if excludeMap != nil {
+			if _, excluded := excludeMap[treasureInterface.GetKey()]; excluded {
+				continue
+			}
+		}
+		if in.KeysOnly {
+			response = append(response, &hydrapb.Treasure{Key: treasureInterface.GetKey(), IsExist: true})
+		} else {
+			t := &hydrapb.Treasure{}
+			treasureToKeyValuePair(treasureInterface, t)
+			response = append(response, t)
+		}
 	}
 
 	// get the treasures by the index
@@ -559,12 +581,21 @@ func (g Gateway) GetByKeys(ctx context.Context, in *hydrapb.GetByKeysRequest) (*
 	treasures := swampInterface.GetTreasuresByKeys(in.GetKeys())
 
 	// Convert all treasures to the protobuf format
+	excludeMap := buildExcludeMap(in.ExcludeKeys)
 	var response []*hydrapb.Treasure
 	for _, treasureInterface := range treasures {
-		// Convert the treasure to the protobuf format
-		t := &hydrapb.Treasure{}
-		treasureToKeyValuePair(treasureInterface, t)
-		response = append(response, t)
+		if excludeMap != nil {
+			if _, excluded := excludeMap[treasureInterface.GetKey()]; excluded {
+				continue
+			}
+		}
+		if in.KeysOnly {
+			response = append(response, &hydrapb.Treasure{Key: treasureInterface.GetKey(), IsExist: true})
+		} else {
+			t := &hydrapb.Treasure{}
+			treasureToKeyValuePair(treasureInterface, t)
+			response = append(response, t)
+		}
 	}
 
 	// Return the treasures
@@ -610,6 +641,7 @@ func (g Gateway) GetByIndexStream(in *hydrapb.GetByIndexStreamRequest, stream hy
 
 	filters := in.GetFilters()
 	maxResults := in.GetMaxResults()
+	excludeMap := buildExcludeMap(in.ExcludeKeys)
 	var matchCount int32
 
 	for _, treasureInterface := range treasures {
@@ -618,17 +650,31 @@ func (g Gateway) GetByIndexStream(in *hydrapb.GetByIndexStreamRequest, stream hy
 			return stream.Context().Err()
 		}
 
+		// ExcludeKeys: skip before filter eval (cheapest rejection)
+		if excludeMap != nil {
+			if _, excluded := excludeMap[treasureInterface.GetKey()]; excluded {
+				continue
+			}
+		}
+
 		if !evaluateNativeFilterGroup(treasureInterface, filters) {
 			continue
 		}
 
-		t := &hydrapb.Treasure{}
-		treasureToKeyValuePair(treasureInterface, t)
-
-		if err := stream.Send(&hydrapb.GetByIndexStreamResponse{
-			Treasure: t,
-		}); err != nil {
-			return err
+		if in.KeysOnly {
+			if err := stream.Send(&hydrapb.GetByIndexStreamResponse{
+				Treasure: &hydrapb.Treasure{Key: treasureInterface.GetKey(), IsExist: true},
+			}); err != nil {
+				return err
+			}
+		} else {
+			t := &hydrapb.Treasure{}
+			treasureToKeyValuePair(treasureInterface, t)
+			if err := stream.Send(&hydrapb.GetByIndexStreamResponse{
+				Treasure: t,
+			}); err != nil {
+				return err
+			}
 		}
 
 		matchCount++
@@ -683,6 +729,7 @@ func (g Gateway) GetByIndexStreamFromMany(in *hydrapb.GetByIndexStreamFromManyRe
 
 		filters := query.GetFilters()
 		queryMax := query.GetMaxResults()
+		excludeMap := buildExcludeMap(query.ExcludeKeys)
 		var queryCount int32
 
 		for _, treasureInterface := range treasures {
@@ -691,19 +738,35 @@ func (g Gateway) GetByIndexStreamFromMany(in *hydrapb.GetByIndexStreamFromManyRe
 				return stream.Context().Err()
 			}
 
+			// ExcludeKeys: skip before filter eval (cheapest rejection)
+			if excludeMap != nil {
+				if _, excluded := excludeMap[treasureInterface.GetKey()]; excluded {
+					continue
+				}
+			}
+
 			if !evaluateNativeFilterGroup(treasureInterface, filters) {
 				continue
 			}
 
-			t := &hydrapb.Treasure{}
-			treasureToKeyValuePair(treasureInterface, t)
-
-			if err := stream.Send(&hydrapb.GetByIndexStreamFromManyResponse{
-				SwampName: query.SwampName,
-				Treasure:  t,
-			}); err != nil {
-				swampInterface.CeaseVigil()
-				return err
+			if query.KeysOnly {
+				if err := stream.Send(&hydrapb.GetByIndexStreamFromManyResponse{
+					SwampName: query.SwampName,
+					Treasure:  &hydrapb.Treasure{Key: treasureInterface.GetKey(), IsExist: true},
+				}); err != nil {
+					swampInterface.CeaseVigil()
+					return err
+				}
+			} else {
+				t := &hydrapb.Treasure{}
+				treasureToKeyValuePair(treasureInterface, t)
+				if err := stream.Send(&hydrapb.GetByIndexStreamFromManyResponse{
+					SwampName: query.SwampName,
+					Treasure:  t,
+				}); err != nil {
+					swampInterface.CeaseVigil()
+					return err
+				}
 			}
 
 			queryCount++
