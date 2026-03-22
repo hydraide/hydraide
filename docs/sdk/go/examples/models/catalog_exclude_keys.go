@@ -144,3 +144,68 @@ func (d *DizzletPayload) IncrementalSearch(r repo.Repo, rounds int) ([]string, e
 
 	return allKeys, nil
 }
+
+// --- IncludedKeys Examples ---
+
+// SearchWithinSubset searches only within a pre-computed candidate list.
+// Only domains in candidateKeys are evaluated against the filters.
+func (d *DizzletPayload) SearchWithinSubset(r repo.Repo, candidateKeys []string) ([]*DizzletPayload, error) {
+	ctx, cancel := hydraidehelper.CreateHydraContext()
+	defer cancel()
+
+	h := r.GetHydraidego()
+	swamp := name.New().Sanctuary("catalog").Realm("dizzlets").Swamp("com")
+
+	index := &hydraidego.Index{
+		IndexType:    hydraidego.IndexCreationTime,
+		IndexOrder:   hydraidego.IndexOrderDesc,
+		IncludedKeys: candidateKeys, // only search within these keys
+	}
+
+	filters := hydraidego.FilterAND(
+		hydraidego.FilterBytesFieldSliceContainsInt8("LLMSiteFunctions", int8(7)),
+		hydraidego.FilterBytesFieldSliceLen(hydraidego.GreaterThan, "LLMContacts", 0),
+	)
+
+	var results []*DizzletPayload
+	err := h.CatalogReadManyStream(ctx, swamp, index, filters, DizzletPayload{}, func(model any) error {
+		results = append(results, model.(*DizzletPayload))
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return results, nil
+}
+
+// SearchSubsetExcludingSeen combines IncludedKeys with ExcludeKeys.
+// Searches within candidates but excludes already-seen results.
+func (d *DizzletPayload) SearchSubsetExcludingSeen(r repo.Repo, candidateKeys []string, seenKeys []string) ([]*DizzletPayload, error) {
+	ctx, cancel := hydraidehelper.CreateHydraContext()
+	defer cancel()
+
+	h := r.GetHydraidego()
+	swamp := name.New().Sanctuary("catalog").Realm("dizzlets").Swamp("com")
+
+	index := &hydraidego.Index{
+		IndexType:    hydraidego.IndexCreationTime,
+		IndexOrder:   hydraidego.IndexOrderDesc,
+		IncludedKeys: candidateKeys,
+		ExcludeKeys:  seenKeys,
+		MaxResults:   10,
+	}
+
+	filters := hydraidego.FilterAND(
+		hydraidego.FilterBytesFieldSliceContainsInt8("LLMSiteFunctions", int8(7)),
+	)
+
+	var results []*DizzletPayload
+	err := h.CatalogReadManyStream(ctx, swamp, index, filters, DizzletPayload{}, func(model any) error {
+		results = append(results, model.(*DizzletPayload))
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return results, nil
+}

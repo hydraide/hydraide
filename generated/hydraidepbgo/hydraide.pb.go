@@ -3089,7 +3089,11 @@ type GetByIndexRequest struct {
 	ExcludeKeys []string `protobuf:"bytes,9,rep,name=ExcludeKeys,proto3" json:"ExcludeKeys,omitempty"`
 	// KeysOnly when true returns only Key + IsExist for each Treasure (no content or metadata).
 	// Saves bandwidth when the client only needs to know which keys matched.
-	KeysOnly      bool `protobuf:"varint,10,opt,name=KeysOnly,proto3" json:"KeysOnly,omitempty"`
+	KeysOnly bool `protobuf:"varint,10,opt,name=KeysOnly,proto3" json:"KeysOnly,omitempty"`
+	// IncludedKeys is an optional whitelist of Treasure keys.
+	// When set, only keys present in this list can appear in results.
+	// Applied before ExcludeKeys and filter evaluation.
+	IncludedKeys  []string `protobuf:"bytes,11,rep,name=IncludedKeys,proto3" json:"IncludedKeys,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3192,6 +3196,13 @@ func (x *GetByIndexRequest) GetKeysOnly() bool {
 		return x.KeysOnly
 	}
 	return false
+}
+
+func (x *GetByIndexRequest) GetIncludedKeys() []string {
+	if x != nil {
+		return x.IncludedKeys
+	}
+	return nil
 }
 
 type IndexType struct {
@@ -3329,7 +3340,10 @@ type GetByKeysRequest struct {
 	// ExcludeKeys is an optional list of Treasure keys to skip in the results.
 	ExcludeKeys []string `protobuf:"bytes,4,rep,name=ExcludeKeys,proto3" json:"ExcludeKeys,omitempty"`
 	// KeysOnly when true returns only Key + IsExist for each Treasure (no content or metadata).
-	KeysOnly      bool `protobuf:"varint,5,opt,name=KeysOnly,proto3" json:"KeysOnly,omitempty"`
+	KeysOnly bool `protobuf:"varint,5,opt,name=KeysOnly,proto3" json:"KeysOnly,omitempty"`
+	// IncludedKeys is an optional whitelist of Treasure keys.
+	// When set, only keys present in this list can appear in results.
+	IncludedKeys  []string `protobuf:"bytes,6,rep,name=IncludedKeys,proto3" json:"IncludedKeys,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3397,6 +3411,13 @@ func (x *GetByKeysRequest) GetKeysOnly() bool {
 		return x.KeysOnly
 	}
 	return false
+}
+
+func (x *GetByKeysRequest) GetIncludedKeys() []string {
+	if x != nil {
+		return x.IncludedKeys
+	}
+	return nil
 }
 
 // GetByKeysResponse contains all the treasures found for the requested keys.
@@ -8738,7 +8759,11 @@ type GetByIndexStreamRequest struct {
 	// ExcludeKeys is an optional list of Treasure keys to skip before filter evaluation.
 	ExcludeKeys []string `protobuf:"bytes,11,rep,name=ExcludeKeys,proto3" json:"ExcludeKeys,omitempty"`
 	// KeysOnly when true returns only Key + IsExist for each Treasure (no content or metadata).
-	KeysOnly      bool `protobuf:"varint,12,opt,name=KeysOnly,proto3" json:"KeysOnly,omitempty"`
+	KeysOnly bool `protobuf:"varint,12,opt,name=KeysOnly,proto3" json:"KeysOnly,omitempty"`
+	// IncludedKeys is an optional whitelist of Treasure keys.
+	// When set, only keys present in this list can appear in results.
+	// Applied before ExcludeKeys and filter evaluation.
+	IncludedKeys  []string `protobuf:"bytes,13,rep,name=IncludedKeys,proto3" json:"IncludedKeys,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -8857,6 +8882,13 @@ func (x *GetByIndexStreamRequest) GetKeysOnly() bool {
 	return false
 }
 
+func (x *GetByIndexStreamRequest) GetIncludedKeys() []string {
+	if x != nil {
+		return x.IncludedKeys
+	}
+	return nil
+}
+
 // GetByIndexStreamResponse contains a single matching Treasure.
 // The server sends one of these per matching result via the stream.
 type GetByIndexStreamResponse struct {
@@ -8931,7 +8963,10 @@ type SwampQuery struct {
 	// ExcludeKeys is an optional list of Treasure keys to skip before filter evaluation.
 	ExcludeKeys []string `protobuf:"bytes,11,rep,name=ExcludeKeys,proto3" json:"ExcludeKeys,omitempty"`
 	// KeysOnly when true returns only Key + IsExist for each Treasure (no content or metadata).
-	KeysOnly      bool `protobuf:"varint,12,opt,name=KeysOnly,proto3" json:"KeysOnly,omitempty"`
+	KeysOnly bool `protobuf:"varint,12,opt,name=KeysOnly,proto3" json:"KeysOnly,omitempty"`
+	// IncludedKeys is an optional whitelist of Treasure keys.
+	// When set, only keys present in this list can appear in results.
+	IncludedKeys  []string `protobuf:"bytes,13,rep,name=IncludedKeys,proto3" json:"IncludedKeys,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -9048,6 +9083,13 @@ func (x *SwampQuery) GetKeysOnly() bool {
 		return x.KeysOnly
 	}
 	return false
+}
+
+func (x *SwampQuery) GetIncludedKeys() []string {
+	if x != nil {
+		return x.IncludedKeys
+	}
+	return nil
 }
 
 // GetByIndexStreamFromManyRequest allows reading from multiple swamps in a single streaming operation.
@@ -9896,7 +9938,7 @@ const file_hydraide_proto_rawDesc = "" +
 	"\aBoolean\"\x1b\n" +
 	"\x04Type\x12\b\n" +
 	"\x04TRUE\x10\x00\x12\t\n" +
-	"\x05FALSE\x10\x01\"\xbb\x03\n" +
+	"\x05FALSE\x10\x01\"\xdf\x03\n" +
 	"\x11GetByIndexRequest\x12\x1a\n" +
 	"\bIslandID\x18\x01 \x01(\x04R\bIslandID\x12\x1c\n" +
 	"\tSwampName\x18\x02 \x01(\tR\tSwampName\x12:\n" +
@@ -9908,7 +9950,8 @@ const file_hydraide_proto_rawDesc = "" +
 	"\x06ToTime\x18\b \x01(\v2\x1a.google.protobuf.TimestampH\x01R\x06ToTime\x88\x01\x01\x12 \n" +
 	"\vExcludeKeys\x18\t \x03(\tR\vExcludeKeys\x12\x1a\n" +
 	"\bKeysOnly\x18\n" +
-	" \x01(\bR\bKeysOnlyB\v\n" +
+	" \x01(\bR\bKeysOnly\x12\"\n" +
+	"\fIncludedKeys\x18\v \x03(\tR\fIncludedKeysB\v\n" +
 	"\t_FromTimeB\t\n" +
 	"\a_ToTime\"\x98\x02\n" +
 	"\tIndexType\"\x8a\x02\n" +
@@ -9935,13 +9978,14 @@ const file_hydraide_proto_rawDesc = "" +
 	"\x03ASC\x10\x00\x12\b\n" +
 	"\x04DESC\x10\x01\"J\n" +
 	"\x12GetByIndexResponse\x124\n" +
-	"\tTreasures\x18\x01 \x03(\v2\x16.hydraidepbgo.TreasureR\tTreasures\"\x9e\x01\n" +
+	"\tTreasures\x18\x01 \x03(\v2\x16.hydraidepbgo.TreasureR\tTreasures\"\xc2\x01\n" +
 	"\x10GetByKeysRequest\x12\x1c\n" +
 	"\tSwampName\x18\x01 \x01(\tR\tSwampName\x12\x12\n" +
 	"\x04Keys\x18\x02 \x03(\tR\x04Keys\x12\x1a\n" +
 	"\bIslandID\x18\x03 \x01(\x04R\bIslandID\x12 \n" +
 	"\vExcludeKeys\x18\x04 \x03(\tR\vExcludeKeys\x12\x1a\n" +
-	"\bKeysOnly\x18\x05 \x01(\bR\bKeysOnly\"I\n" +
+	"\bKeysOnly\x18\x05 \x01(\bR\bKeysOnly\x12\"\n" +
+	"\fIncludedKeys\x18\x06 \x03(\tR\fIncludedKeys\"I\n" +
 	"\x11GetByKeysResponse\x124\n" +
 	"\tTreasures\x18\x01 \x03(\v2\x16.hydraidepbgo.TreasureR\tTreasures\"b\n" +
 	"\x12ShiftByKeysRequest\x12\x1c\n" +
@@ -10416,7 +10460,7 @@ const file_hydraide_proto_rawDesc = "" +
 	"\x06_Label\"\\\n" +
 	"\x10SearchResultMeta\x12\"\n" +
 	"\fVectorScores\x18\x01 \x03(\x02R\fVectorScores\x12$\n" +
-	"\rMatchedLabels\x18\x02 \x03(\tR\rMatchedLabels\"\xa7\x04\n" +
+	"\rMatchedLabels\x18\x02 \x03(\tR\rMatchedLabels\"\xcb\x04\n" +
 	"\x17GetByIndexStreamRequest\x12\x1a\n" +
 	"\bIslandID\x18\x01 \x01(\x04R\bIslandID\x12\x1c\n" +
 	"\tSwampName\x18\x02 \x01(\tR\tSwampName\x12:\n" +
@@ -10432,7 +10476,8 @@ const file_hydraide_proto_rawDesc = "" +
 	" \x01(\x05R\n" +
 	"MaxResults\x12 \n" +
 	"\vExcludeKeys\x18\v \x03(\tR\vExcludeKeys\x12\x1a\n" +
-	"\bKeysOnly\x18\f \x01(\bR\bKeysOnlyB\v\n" +
+	"\bKeysOnly\x18\f \x01(\bR\bKeysOnly\x12\"\n" +
+	"\fIncludedKeys\x18\r \x03(\tR\fIncludedKeysB\v\n" +
 	"\t_FromTimeB\t\n" +
 	"\a_ToTimeB\n" +
 	"\n" +
@@ -10440,7 +10485,7 @@ const file_hydraide_proto_rawDesc = "" +
 	"\x18GetByIndexStreamResponse\x122\n" +
 	"\bTreasure\x18\x01 \x01(\v2\x16.hydraidepbgo.TreasureR\bTreasure\x127\n" +
 	"\x04Meta\x18\x02 \x01(\v2\x1e.hydraidepbgo.SearchResultMetaH\x00R\x04Meta\x88\x01\x01B\a\n" +
-	"\x05_Meta\"\x9a\x04\n" +
+	"\x05_Meta\"\xbe\x04\n" +
 	"\n" +
 	"SwampQuery\x12\x1a\n" +
 	"\bIslandID\x18\x01 \x01(\x04R\bIslandID\x12\x1c\n" +
@@ -10457,7 +10502,8 @@ const file_hydraide_proto_rawDesc = "" +
 	" \x01(\x05R\n" +
 	"MaxResults\x12 \n" +
 	"\vExcludeKeys\x18\v \x03(\tR\vExcludeKeys\x12\x1a\n" +
-	"\bKeysOnly\x18\f \x01(\bR\bKeysOnlyB\v\n" +
+	"\bKeysOnly\x18\f \x01(\bR\bKeysOnly\x12\"\n" +
+	"\fIncludedKeys\x18\r \x03(\tR\fIncludedKeysB\v\n" +
 	"\t_FromTimeB\t\n" +
 	"\a_ToTimeB\n" +
 	"\n" +

@@ -284,7 +284,40 @@ index := &hydraidego.Index{
 ```
 
 Works with `CatalogReadManyStream`, `CatalogReadManyFromMany`, and `CatalogReadMany`.
-Can be combined with filters, MaxResults, and all other parameters.
+Can be combined with IncludedKeys, filters, MaxResults, and all other parameters.
+
+---
+
+## IncludedKeys — Server-Side Key Whitelist
+
+Restricts search results to only the specified keys. When set, a treasure must
+have its key in the IncludedKeys list to be eligible for filter evaluation.
+Runs before ExcludeKeys and filters (O(1) map lookup per treasure).
+
+Execution order: **IncludedKeys -> ExcludeKeys -> Filters -> Response**
+
+Use cases:
+- **Subset search:** filter within a pre-computed candidate list
+- **Re-validation:** re-check a known set of keys against updated filters
+- **User selections:** search only within user-selected domains
+
+```go
+// Search only within these candidate domains
+index := &hydraidego.Index{
+    IndexType:    hydraidego.IndexCreationTime,
+    IndexOrder:   hydraidego.IndexOrderDesc,
+    IncludedKeys: []string{"domain1.com", "domain2.com", "domain3.com"},
+}
+
+// Combined: search within candidates, excluding already-seen
+index := &hydraidego.Index{
+    IndexType:    hydraidego.IndexCreationTime,
+    IndexOrder:   hydraidego.IndexOrderDesc,
+    IncludedKeys: candidateKeys,
+    ExcludeKeys:  alreadySeenKeys,
+    MaxResults:   10,
+}
+```
 
 ---
 

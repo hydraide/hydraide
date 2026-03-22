@@ -38,9 +38,9 @@ type Gateway struct {
 	TelemetryCollector    telemetry.Collector
 }
 
-// buildExcludeMap creates a set from a list of keys for O(1) exclusion lookup.
+// buildKeySet creates a set from a list of keys for O(1) inclusion/exclusion lookup.
 // Returns nil if the input is empty, so callers can skip the check entirely.
-func buildExcludeMap(keys []string) map[string]struct{} {
+func buildKeySet(keys []string) map[string]struct{} {
 	if len(keys) == 0 {
 		return nil
 	}
@@ -510,11 +510,18 @@ func (g Gateway) GetByIndex(ctx context.Context, in *hydrapb.GetByIndexRequest) 
 	}
 
 	// convert all treasures to the protobuf format
-	excludeMap := buildExcludeMap(in.ExcludeKeys)
+	includeMap := buildKeySet(in.IncludedKeys)
+	excludeMap := buildKeySet(in.ExcludeKeys)
 	var response []*hydrapb.Treasure
 	for _, treasureInterface := range treasures {
+		key := treasureInterface.GetKey()
+		if includeMap != nil {
+			if _, included := includeMap[key]; !included {
+				continue
+			}
+		}
 		if excludeMap != nil {
-			if _, excluded := excludeMap[treasureInterface.GetKey()]; excluded {
+			if _, excluded := excludeMap[key]; excluded {
 				continue
 			}
 		}
@@ -581,16 +588,23 @@ func (g Gateway) GetByKeys(ctx context.Context, in *hydrapb.GetByKeysRequest) (*
 	treasures := swampInterface.GetTreasuresByKeys(in.GetKeys())
 
 	// Convert all treasures to the protobuf format
-	excludeMap := buildExcludeMap(in.ExcludeKeys)
+	includeMap := buildKeySet(in.IncludedKeys)
+	excludeMap := buildKeySet(in.ExcludeKeys)
 	var response []*hydrapb.Treasure
 	for _, treasureInterface := range treasures {
+		key := treasureInterface.GetKey()
+		if includeMap != nil {
+			if _, included := includeMap[key]; !included {
+				continue
+			}
+		}
 		if excludeMap != nil {
-			if _, excluded := excludeMap[treasureInterface.GetKey()]; excluded {
+			if _, excluded := excludeMap[key]; excluded {
 				continue
 			}
 		}
 		if in.KeysOnly {
-			response = append(response, &hydrapb.Treasure{Key: treasureInterface.GetKey(), IsExist: true})
+			response = append(response, &hydrapb.Treasure{Key: key, IsExist: true})
 		} else {
 			t := &hydrapb.Treasure{}
 			treasureToKeyValuePair(treasureInterface, t)
@@ -641,7 +655,8 @@ func (g Gateway) GetByIndexStream(in *hydrapb.GetByIndexStreamRequest, stream hy
 
 	filters := in.GetFilters()
 	maxResults := in.GetMaxResults()
-	excludeMap := buildExcludeMap(in.ExcludeKeys)
+	includeMap := buildKeySet(in.IncludedKeys)
+	excludeMap := buildKeySet(in.ExcludeKeys)
 	needsMeta := hasAnyLabels(filters)
 	var matchCount int32
 
@@ -651,9 +666,18 @@ func (g Gateway) GetByIndexStream(in *hydrapb.GetByIndexStreamRequest, stream hy
 			return stream.Context().Err()
 		}
 
+		key := treasureInterface.GetKey()
+
+		// IncludedKeys: if set, key must be in the whitelist
+		if includeMap != nil {
+			if _, included := includeMap[key]; !included {
+				continue
+			}
+		}
+
 		// ExcludeKeys: skip before filter eval (cheapest rejection)
 		if excludeMap != nil {
-			if _, excluded := excludeMap[treasureInterface.GetKey()]; excluded {
+			if _, excluded := excludeMap[key]; excluded {
 				continue
 			}
 		}
@@ -744,7 +768,8 @@ func (g Gateway) GetByIndexStreamFromMany(in *hydrapb.GetByIndexStreamFromManyRe
 
 		filters := query.GetFilters()
 		queryMax := query.GetMaxResults()
-		excludeMap := buildExcludeMap(query.ExcludeKeys)
+		includeMap := buildKeySet(query.IncludedKeys)
+		excludeMap := buildKeySet(query.ExcludeKeys)
 		needsMeta := hasAnyLabels(filters)
 		var queryCount int32
 
@@ -754,9 +779,18 @@ func (g Gateway) GetByIndexStreamFromMany(in *hydrapb.GetByIndexStreamFromManyRe
 				return stream.Context().Err()
 			}
 
+			key := treasureInterface.GetKey()
+
+			// IncludedKeys: if set, key must be in the whitelist
+			if includeMap != nil {
+				if _, included := includeMap[key]; !included {
+					continue
+				}
+			}
+
 			// ExcludeKeys: skip before filter eval (cheapest rejection)
 			if excludeMap != nil {
-				if _, excluded := excludeMap[treasureInterface.GetKey()]; excluded {
+				if _, excluded := excludeMap[key]; excluded {
 					continue
 				}
 			}

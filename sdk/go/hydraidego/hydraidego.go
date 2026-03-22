@@ -151,8 +151,9 @@ type Index struct {
 	FromTime    *time.Time  // Inclusive lower bound for time-based filtering - optional. It can be nil
 	ToTime      *time.Time  // Exclusive upper bound for time-based filtering - optional. It can be nil
 	MaxResults  int32       // Post-filter limit: stop streaming after N matches (0 = unlimited)
-	ExcludeKeys []string    // Keys to skip server-side before filter evaluation (nil = no exclusion)
-	KeysOnly    bool        // If true, response contains only Key + IsExist (no content or metadata)
+	ExcludeKeys  []string   // Keys to skip server-side before filter evaluation (nil = no exclusion)
+	IncludedKeys []string   // Whitelist: only these keys can appear in results (nil = no restriction)
+	KeysOnly     bool       // If true, response contains only Key + IsExist (no content or metadata)
 }
 
 // IndexType specifies which field to use as the index during a read.
@@ -2012,8 +2013,9 @@ func (h *hydraidego) CatalogReadMany(ctx context.Context, swampName name.Name, i
 		OrderType:   orderTypeProtoFormat,
 		From:        index.From,
 		Limit:       index.Limit,
-		ExcludeKeys: index.ExcludeKeys,
-		KeysOnly:    index.KeysOnly,
+		ExcludeKeys:  index.ExcludeKeys,
+		IncludedKeys: index.IncludedKeys,
+		KeysOnly:     index.KeysOnly,
 	}
 
 	indexRequest.FromTime = toOptionalTimestamppb(index.FromTime)
@@ -4358,8 +4360,9 @@ func (h *hydraidego) CatalogReadManyStream(ctx context.Context, swampName name.N
 		Limit:       index.Limit,
 		Filters:     convertFilterGroupToProto(filters),
 		MaxResults:  index.MaxResults,
-		ExcludeKeys: index.ExcludeKeys,
-		KeysOnly:    index.KeysOnly,
+		ExcludeKeys:  index.ExcludeKeys,
+		IncludedKeys: index.IncludedKeys,
+		KeysOnly:     index.KeysOnly,
 	}
 
 	request.FromTime = toOptionalTimestamppb(index.FromTime)
@@ -4442,8 +4445,9 @@ func (h *hydraidego) CatalogReadManyFromMany(ctx context.Context, request []*Cat
 			Limit:       req.Index.Limit,
 			Filters:     convertFilterGroupToProto(req.Filters),
 			MaxResults:  req.Index.MaxResults,
-			ExcludeKeys: req.Index.ExcludeKeys,
-			KeysOnly:    req.Index.KeysOnly,
+			ExcludeKeys:  req.Index.ExcludeKeys,
+			IncludedKeys: req.Index.IncludedKeys,
+			KeysOnly:     req.Index.KeysOnly,
 		}
 
 		query.FromTime = toOptionalTimestamppb(req.Index.FromTime)

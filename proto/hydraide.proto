@@ -1111,6 +1111,11 @@ message GetByIndexRequest {
   // Saves bandwidth when the client only needs to know which keys matched.
   bool KeysOnly = 10;
 
+  // IncludedKeys is an optional whitelist of Treasure keys.
+  // When set, only keys present in this list can appear in results.
+  // Applied before ExcludeKeys and filter evaluation.
+  repeated string IncludedKeys = 11;
+
 }
 
 message IndexType {
@@ -1174,6 +1179,10 @@ message GetByKeysRequest {
 
   // KeysOnly when true returns only Key + IsExist for each Treasure (no content or metadata).
   bool KeysOnly = 5;
+
+  // IncludedKeys is an optional whitelist of Treasure keys.
+  // When set, only keys present in this list can appear in results.
+  repeated string IncludedKeys = 6;
 }
 
 // GetByKeysResponse contains all the treasures found for the requested keys.
@@ -2465,6 +2474,11 @@ message GetByIndexStreamRequest {
 
   // KeysOnly when true returns only Key + IsExist for each Treasure (no content or metadata).
   bool KeysOnly = 12;
+
+  // IncludedKeys is an optional whitelist of Treasure keys.
+  // When set, only keys present in this list can appear in results.
+  // Applied before ExcludeKeys and filter evaluation.
+  repeated string IncludedKeys = 13;
 }
 
 // GetByIndexStreamResponse contains a single matching Treasure.
@@ -2498,6 +2512,10 @@ message SwampQuery {
 
   // KeysOnly when true returns only Key + IsExist for each Treasure (no content or metadata).
   bool KeysOnly = 12;
+
+  // IncludedKeys is an optional whitelist of Treasure keys.
+  // When set, only keys present in this list can appear in results.
+  repeated string IncludedKeys = 13;
 }
 
 // GetByIndexStreamFromManyRequest allows reading from multiple swamps in a single streaming operation.
