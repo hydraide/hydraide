@@ -73,6 +73,9 @@ type BinaryDownloader interface {
 	// SetCacheDir sets the cache directory
 	SetCacheDir(dir string)
 
+	// ClearCache removes all cached download files, forcing a fresh download on next call
+	ClearCache()
+
 	// SetProgressCallback sets a callback function for download progress
 	SetProgressCallback(callback ProgressCallback)
 }
@@ -194,6 +197,13 @@ func New() BinaryDownloader {
 //     across runs or can be shared between processes.
 func (d *DefaultDownloader) SetCacheDir(dir string) {
 	d.cacheDir = dir
+}
+
+// ClearCache removes all cached download files so the next download is forced from the network.
+func (d *DefaultDownloader) ClearCache() {
+	if d.cacheDir != "" {
+		_ = os.RemoveAll(d.cacheDir)
+	}
 }
 
 // SetProgressCallback attaches a callback function to report

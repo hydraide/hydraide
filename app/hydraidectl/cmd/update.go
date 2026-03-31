@@ -21,6 +21,7 @@ import (
 var (
 	updateInstance string
 	updateNoStart  bool
+	updateForce    bool
 )
 
 // upgradeCmd defines the "upgrade" subcommand for the CLI.
@@ -73,9 +74,14 @@ for example before running a migration.`,
 			fmt.Println("Unable to determine the latest version of HydrAIDE. Please try again later.")
 			os.Exit(1)
 		}
-		if latestVersion == instanceMeta.Version {
+		if latestVersion == instanceMeta.Version && !updateForce {
 			fmt.Printf("The instance %q is already up to date (version %s).\n", updateInstance, latestVersion)
+			fmt.Println("Use --force to re-download and reinstall the current version.")
 			os.Exit(0)
+		}
+		if updateForce {
+			fmt.Printf("Force upgrade requested for instance %q (current: %s, latest: %s).\n", updateInstance, instanceMeta.Version, latestVersion)
+			downloaderInterface.ClearCache()
 		}
 
 		// Prepare detectors/controllers
@@ -187,4 +193,5 @@ func init() {
 	rootCmd.AddCommand(upgradeCmd)
 	upgradeCmd.Flags().StringVarP(&updateInstance, "instance", "i", "", "Name of the service instance")
 	upgradeCmd.Flags().BoolVar(&updateNoStart, "no-start", false, "Upgrade without starting the instance (useful before migration)")
+	upgradeCmd.Flags().BoolVar(&updateForce, "force", false, "Force re-download and reinstall even if already on the latest version")
 }
