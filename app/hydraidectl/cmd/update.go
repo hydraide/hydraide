@@ -91,7 +91,7 @@ for example before running a migration.`,
 
 		serviceHelperInterface := servicehelper.New()
 		instanceController := instancerunner.NewInstanceController(
-			instancerunner.WithTimeout(20*time.Second),
+			instancerunner.WithTimeout(90*time.Second),
 			instancerunner.WithGracefulStartStopTimeout(600*time.Second),
 		)
 

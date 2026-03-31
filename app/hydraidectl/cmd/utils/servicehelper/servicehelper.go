@@ -1,6 +1,7 @@
 package servicehelper
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
@@ -8,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/locker"
 )
@@ -787,17 +789,32 @@ func (s *serviceManagerImpl) RemoveService(instanceName string) error {
 	switch runtime.GOOS {
 	case LINUX_OS:
 		serviceFilePath := filepath.Join(s.d.paths.SystemdDir, serviceName+".service")
-		_, _ = s.d.runner.Run("systemctl", "stop", serviceName+".service")
+
+		// Best-effort stop with timeout — the caller (upgrade) usually already stopped the service,
+		// but we try again in case it was called standalone.
+		stopCtx, stopCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer stopCancel()
+		stopCmd := exec.CommandContext(stopCtx, "systemctl", "stop", serviceName+".service")
+		_ = stopCmd.Run()
 
 		if err := locker.DeleteLockFile(instanceName); err != nil {
 			slog.Error("Failed to delete lock file for instance", "instanceName", instanceName)
 		}
 
-		_, _ = s.d.runner.Run("systemctl", "disable", serviceName+".service")
+		disableCtx, disableCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer disableCancel()
+		disableCmd := exec.CommandContext(disableCtx, "systemctl", "disable", serviceName+".service")
+		_ = disableCmd.Run()
+
 		if err := os.Remove(serviceFilePath); err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("failed to remove service file: %v", err)
 		}
-		_, _ = s.d.runner.Run("systemctl", "daemon-reload")
+
+		reloadCtx, reloadCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer reloadCancel()
+		reloadCmd := exec.CommandContext(reloadCtx, "systemctl", "daemon-reload")
+		_ = reloadCmd.Run()
+
 		return nil
 
 	case MAC_OS:
