@@ -808,6 +808,7 @@ If an update is available, the command performs the entire flow end‑to‑end:
 5. **Wait** until the instance reports **`healthy`** (if started)
 
 If the instance is **already on the latest version**, this command is a **no‑op** (it **does not stop** the server).
+Use `--force` to bypass the version check and force a full re‑download and reinstall.
 
 ### Prerequisites
 
@@ -817,13 +818,14 @@ If the instance is **already on the latest version**, this command is a **no‑o
 ### Synopsis
 
 ```bash
-hydraidectl upgrade --instance <name> [--no-start]
+hydraidectl upgrade --instance <name> [--no-start] [--force]
 ```
 
 ### Flags
 
 * `--instance` / `-i` **(required)** — the target instance name.
 * `--no-start` — update the binary without starting the server (useful before migration).
+* `--force` — force re‑download and reinstall even if the instance is already on the latest version. Clears the download cache to ensure a fresh binary.
 
 ### Behavior & Timeouts
 
@@ -835,8 +837,9 @@ hydraidectl upgrade --instance <name> [--no-start]
 * Health wait: polls the instance until it becomes **`healthy`** (if started).
 
     * Overall operation context timeout: **600s**
-    * Controller command timeout: **20s**
+    * Controller command timeout: **90s** (enough time for graceful data flush on stop)
     * Graceful start/stop timeout: **600s**
+    * Service removal timeouts: **30s** per systemctl operation (stop, disable, daemon‑reload)
 
 ### Examples
 
@@ -846,6 +849,9 @@ hydraidectl upgrade --instance prod
 
 # Update without starting (for migration scenarios)
 sudo hydraidectl upgrade --instance prod --no-start
+
+# Force reinstall even if already on the latest version
+sudo hydraidectl upgrade --instance prod --force
 ```
 
 **Typical outputs**
@@ -854,6 +860,15 @@ sudo hydraidectl upgrade --instance prod --no-start
 
   ```
   The instance "prod" is already up to date (version X.Y.Z).
+  Use --force to re-download and reinstall the current version.
+  ```
+* Force upgrade (same version):
+
+  ```
+  Force upgrade requested for instance "prod" (current: X.Y.Z, latest: X.Y.Z).
+  Instance "prod" stopped gracefully.
+  Downloading  45.2 MB / 45.2 MB
+  Instance "prod" has been successfully updated to version X.Y.Z and started.
   ```
 * Successful update + start:
 
