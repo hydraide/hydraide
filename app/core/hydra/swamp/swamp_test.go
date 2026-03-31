@@ -11,8 +11,10 @@ import (
 	"time"
 
 	"github.com/hydraide/hydraide/app/core/filesystem"
+	"github.com/hydraide/hydraide/app/core/hydra/swamp/beacon"
 	"github.com/hydraide/hydraide/app/core/hydra/swamp/chronicler"
 	"github.com/hydraide/hydraide/app/core/hydra/swamp/metadata"
+	"github.com/hydraide/hydraide/app/core/hydra/swamp/treasure/guard"
 	"github.com/hydraide/hydraide/app/core/settings"
 	"github.com/hydraide/hydraide/app/name"
 	"github.com/stretchr/testify/assert"
@@ -3373,6 +3375,11 @@ func TestSwamp_GetAllTreasures(t *testing.T) {
 		swampName := name.New().Sanctuary(sanctuaryForQuickTest).Realm("should-get").Swamp("all-treasures")
 
 		hashPath := swampName.GetFullHashPath(settingsInterface.GetHydraAbsDataFolderPath(), testAllServers, testMaxDepth, testMaxFolderPerLevel)
+
+		// Clean up any leftover data from previous test runs
+		chroniclerCleanup := chronicler.New(hashPath, maxFileSize, testMaxDepth, fsInterface, metadata.New(hashPath))
+		chroniclerCleanup.Destroy()
+
 		chroniclerInterface := chronicler.New(hashPath, maxFileSize, testMaxDepth, fsInterface, metadata.New(hashPath))
 		chroniclerInterface.CreateDirectoryIfNotExists()
 
@@ -3528,6 +3535,11 @@ func newSwampForTest(t *testing.T, realmName, swampName string) Swamp {
 	swampNameObj := name.New().Sanctuary(sanctuaryForQuickTest).Realm(realmName).Swamp(swampName)
 
 	hashPath := swampNameObj.GetFullHashPath(settingsInterface.GetHydraAbsDataFolderPath(), testAllServers, testMaxDepth, testMaxFolderPerLevel)
+
+	// Clean up any leftover data from previous test runs to ensure test isolation
+	chroniclerCleanup := chronicler.New(hashPath, maxFileSize, testMaxDepth, fsInterface, metadata.New(hashPath))
+	chroniclerCleanup.Destroy()
+
 	chroniclerInterface := chronicler.New(hashPath, maxFileSize, testMaxDepth, fsInterface, metadata.New(hashPath))
 	chroniclerInterface.CreateDirectoryIfNotExists()
 
@@ -3543,7 +3555,15 @@ func newSwampForTest(t *testing.T, realmName, swampName string) Swamp {
 	}
 
 	metadataInterface := metadata.New(hashPath)
-	return New(swampNameObj, closeAfterIdle, fssSwamp, swampEventCallbackFunc, swampInfoCallbackFunc, closeCallbackFunc, metadataInterface)
+	sw := New(swampNameObj, closeAfterIdle, fssSwamp, swampEventCallbackFunc, swampInfoCallbackFunc, closeCallbackFunc, metadataInterface)
+
+	t.Cleanup(func() {
+		sw.CeaseVigil()
+		sw.Close()
+		chroniclerInterface.Destroy()
+	})
+
+	return sw
 
 }
 
@@ -4288,5 +4308,256 @@ func TestSwamp_AutoDestroy_CloneAndDeleteTreasuresByKeys(t *testing.T) {
 
 		swampInterface.CeaseVigil()
 		swampInterface.Destroy()
+	})
+}
+
+// TestShiftExpiredThenSaveSameKey_Persistence verifies that when a key is removed via
+// CloneAndDeleteExpiredTreasures and then re-saved with the same key, the data persists
+// after swamp close and reload from disk.
+//
+// Bug reproduction: the delete-marked treasure was left in treasuresWaitingForWriter,
+// and beacon.Add() silently dropped the new treasure (same key already existed),
+// so only OpDelete was flushed — causing data loss on reopen.
+func TestShiftExpiredThenSaveSameKey_Persistence(t *testing.T) {
+
+	settingsInterface := settings.New(testMaxDepth, testMaxFolderPerLevel)
+	settingsInterface.RegisterPattern(name.New().Sanctuary(sanctuaryForQuickTest).Realm("*").Swamp("*"), false, 1, &settings.FileSystemSettings{
+		WriteIntervalSec: 0,
+		MaxFileSizeByte:  8192,
+	})
+	closeAfterIdle := 30 * time.Second
+
+	t.Run("should persist re-saved key after ShiftExpired removes it", func(t *testing.T) {
+
+		swampName := name.New().Sanctuary(sanctuaryForQuickTest).Realm("shift-resave").Swamp("same-key")
+		hashPath := swampName.GetFullHashPath(settingsInterface.GetHydraAbsDataFolderPath(), testAllServers, testMaxDepth, testMaxFolderPerLevel)
+
+		chron := chronicler.NewV2(hashPath, testMaxDepth)
+		chron.CreateDirectoryIfNotExists()
+
+		sw := New(swampName, closeAfterIdle, &FilesystemSettings{ChroniclerInterface: chron, WriteInterval: 0},
+			func(e *Event) {}, func(i *Info) {}, func(n name.Name) {}, metadata.New(hashPath))
+		sw.BeginVigil()
+
+		// Keep-alive treasure so the swamp doesn't auto-destroy after shift
+		ka := sw.CreateTreasure("keepalive")
+		gka := ka.StartTreasureGuard(true)
+		ka.SetContentString(gka, "alive")
+		ka.SetExpirationTime(gka, time.Now().Add(24*time.Hour))
+		_ = ka.Save(gka)
+		ka.ReleaseTreasureGuard(gka)
+
+		// Step 1: Save a treasure with an EXPIRED expiration time
+		tr := sw.CreateTreasure("test-domain.hu")
+		g := tr.StartTreasureGuard(true)
+		tr.SetContentString(g, "template-001")
+		tr.SetExpirationTime(g, time.Now().Add(-1*time.Minute))
+		_ = tr.Save(g)
+		tr.ReleaseTreasureGuard(g)
+
+		// Step 2: ShiftExpired — removes the key from the swamp
+		shifted, err := sw.CloneAndDeleteExpiredTreasures(10)
+		assert.NoError(t, err)
+		assert.Equal(t, 1, len(shifted))
+		assert.Equal(t, "test-domain.hu", shifted[0].GetKey())
+
+		// Step 3: Re-save the SAME key with a FUTURE expiration
+		tr2 := sw.CreateTreasure("test-domain.hu")
+		g2 := tr2.StartTreasureGuard(true)
+		tr2.SetContentString(g2, "template-002-updated")
+		tr2.SetExpirationTime(g2, time.Now().Add(24*time.Hour))
+		_ = tr2.Save(g2)
+		tr2.ReleaseTreasureGuard(g2)
+
+		// Step 4: Verify in-memory read works
+		readTr, err := sw.GetTreasure("test-domain.hu")
+		assert.NoError(t, err)
+		assert.NotNil(t, readTr, "immediate read should find the key")
+		g3 := readTr.StartTreasureGuard(true)
+		content := readTr.CloneContent(g3)
+		readTr.ReleaseTreasureGuard(g3)
+		assert.NotNil(t, content.String)
+		assert.Equal(t, "template-002-updated", *content.String)
+
+		// Step 5: Close the swamp — triggers final flush + chronicler close
+		sw.CeaseVigil()
+		sw.Close()
+
+		// --- Phase 2: Reload from disk and verify data survived ---
+		chron2 := chronicler.NewV2(hashPath, testMaxDepth)
+		loadBeacon := beacon.New()
+		chron2.Load(loadBeacon)
+
+		assert.Equal(t, 2, loadBeacon.Count(), "after close+reopen keepalive + test-domain.hu should exist on disk")
+		assert.True(t, loadBeacon.IsExists("test-domain.hu"), "test-domain.hu should exist after reload")
+
+		if reloaded := loadBeacon.Get("test-domain.hu"); reloaded != nil {
+			g4 := reloaded.StartTreasureGuard(true, guard.BodyAuthID)
+			c := reloaded.CloneContent(g4)
+			reloaded.ReleaseTreasureGuard(g4)
+			assert.NotNil(t, c.String)
+			assert.Equal(t, "template-002-updated", *c.String, "reloaded content should match")
+		}
+
+		chron2.Destroy()
+	})
+
+	t.Run("should persist re-saved key with WriteInterval", func(t *testing.T) {
+
+		swampName := name.New().Sanctuary(sanctuaryForQuickTest).Realm("shift-resave").Swamp("write-interval")
+		hashPath := swampName.GetFullHashPath(settingsInterface.GetHydraAbsDataFolderPath(), testAllServers, testMaxDepth, testMaxFolderPerLevel)
+
+		chron := chronicler.NewV2(hashPath, testMaxDepth)
+		chron.CreateDirectoryIfNotExists()
+
+		sw := New(swampName, closeAfterIdle, &FilesystemSettings{ChroniclerInterface: chron, WriteInterval: 1 * time.Second},
+			func(e *Event) {}, func(i *Info) {}, func(n name.Name) {}, metadata.New(hashPath))
+		sw.BeginVigil()
+
+		// Keep-alive treasure so the swamp doesn't auto-destroy after shift
+		ka := sw.CreateTreasure("keepalive")
+		gka := ka.StartTreasureGuard(true)
+		ka.SetContentString(gka, "alive")
+		ka.SetExpirationTime(gka, time.Now().Add(24*time.Hour))
+		_ = ka.Save(gka)
+		ka.ReleaseTreasureGuard(gka)
+
+		tr := sw.CreateTreasure("hunyadirt.hu")
+		g := tr.StartTreasureGuard(true)
+		tr.SetContentString(g, "c286cd3e")
+		tr.SetExpirationTime(g, time.Now().Add(-1*time.Minute))
+		_ = tr.Save(g)
+		tr.ReleaseTreasureGuard(g)
+
+		// Wait for the WriteInterval to flush to disk
+		time.Sleep(2 * time.Second)
+
+		shifted, err := sw.CloneAndDeleteExpiredTreasures(10)
+		assert.NoError(t, err)
+		assert.Equal(t, 1, len(shifted))
+
+		tr2 := sw.CreateTreasure("hunyadirt.hu")
+		g2 := tr2.StartTreasureGuard(true)
+		tr2.SetContentString(g2, "c286cd3e")
+		tr2.SetExpirationTime(g2, time.Now().Add(7*24*time.Hour))
+		_ = tr2.Save(g2)
+		tr2.ReleaseTreasureGuard(g2)
+
+		sw.CeaseVigil()
+		sw.Close()
+
+		chron2 := chronicler.NewV2(hashPath, testMaxDepth)
+		loadBeacon := beacon.New()
+		chron2.Load(loadBeacon)
+
+		assert.Equal(t, 2, loadBeacon.Count(), "key should survive close+reopen with WriteInterval")
+		assert.True(t, loadBeacon.IsExists("hunyadirt.hu"))
+
+		chron2.Destroy()
+	})
+
+	t.Run("should handle multiple shift-and-resave cycles", func(t *testing.T) {
+
+		swampName := name.New().Sanctuary(sanctuaryForQuickTest).Realm("shift-resave").Swamp("multi-cycle")
+		hashPath := swampName.GetFullHashPath(settingsInterface.GetHydraAbsDataFolderPath(), testAllServers, testMaxDepth, testMaxFolderPerLevel)
+
+		chron := chronicler.NewV2(hashPath, testMaxDepth)
+		chron.CreateDirectoryIfNotExists()
+
+		sw := New(swampName, closeAfterIdle, &FilesystemSettings{ChroniclerInterface: chron, WriteInterval: 0},
+			func(e *Event) {}, func(i *Info) {}, func(n name.Name) {}, metadata.New(hashPath))
+		sw.BeginVigil()
+
+		// Keep-alive treasure so the swamp doesn't auto-destroy after shift
+		ka := sw.CreateTreasure("keepalive")
+		gka := ka.StartTreasureGuard(true)
+		ka.SetContentString(gka, "alive")
+		ka.SetExpirationTime(gka, time.Now().Add(24*time.Hour))
+		_ = ka.Save(gka)
+		ka.ReleaseTreasureGuard(gka)
+
+		for cycle := 0; cycle < 3; cycle++ {
+			tr := sw.CreateTreasure("recurring-key")
+			g := tr.StartTreasureGuard(true)
+			tr.SetContentString(g, fmt.Sprintf("value-cycle-%d-expired", cycle))
+			tr.SetExpirationTime(g, time.Now().Add(-1*time.Minute))
+			_ = tr.Save(g)
+			tr.ReleaseTreasureGuard(g)
+
+			shifted, err := sw.CloneAndDeleteExpiredTreasures(10)
+			assert.NoError(t, err)
+			assert.Equal(t, 1, len(shifted), "cycle %d: should shift 1 treasure", cycle)
+
+			tr2 := sw.CreateTreasure("recurring-key")
+			g2 := tr2.StartTreasureGuard(true)
+			tr2.SetContentString(g2, fmt.Sprintf("value-cycle-%d-fresh", cycle))
+			tr2.SetExpirationTime(g2, time.Now().Add(24*time.Hour))
+			_ = tr2.Save(g2)
+			tr2.ReleaseTreasureGuard(g2)
+
+			if cycle < 2 {
+				sw.CloneAndDeleteTreasuresByKeys([]string{"recurring-key"})
+			}
+		}
+
+		readTr, err := sw.GetTreasure("recurring-key")
+		assert.NoError(t, err)
+		assert.NotNil(t, readTr)
+
+		sw.CeaseVigil()
+		sw.Close()
+
+		chron2 := chronicler.NewV2(hashPath, testMaxDepth)
+		loadBeacon := beacon.New()
+		chron2.Load(loadBeacon)
+
+		assert.Equal(t, 2, loadBeacon.Count(), "after 3 cycles, keepalive + recurring-key should survive")
+		assert.True(t, loadBeacon.IsExists("recurring-key"))
+
+		if reloaded := loadBeacon.Get("recurring-key"); reloaded != nil {
+			g := reloaded.StartTreasureGuard(true, guard.BodyAuthID)
+			c := reloaded.CloneContent(g)
+			reloaded.ReleaseTreasureGuard(g)
+			assert.NotNil(t, c.String)
+			assert.Equal(t, "value-cycle-2-fresh", *c.String)
+		}
+
+		chron2.Destroy()
+	})
+
+	t.Run("normal saves unaffected by fix", func(t *testing.T) {
+
+		swampName := name.New().Sanctuary(sanctuaryForQuickTest).Realm("shift-resave").Swamp("no-conflict")
+		hashPath := swampName.GetFullHashPath(settingsInterface.GetHydraAbsDataFolderPath(), testAllServers, testMaxDepth, testMaxFolderPerLevel)
+
+		chron := chronicler.NewV2(hashPath, testMaxDepth)
+		chron.CreateDirectoryIfNotExists()
+
+		sw := New(swampName, closeAfterIdle, &FilesystemSettings{ChroniclerInterface: chron, WriteInterval: 0},
+			func(e *Event) {}, func(i *Info) {}, func(n name.Name) {}, metadata.New(hashPath))
+		sw.BeginVigil()
+
+		for i := 0; i < 5; i++ {
+			tr := sw.CreateTreasure(fmt.Sprintf("normal-key-%d", i))
+			g := tr.StartTreasureGuard(true)
+			tr.SetContentString(g, fmt.Sprintf("normal-value-%d", i))
+			tr.SetExpirationTime(g, time.Now().Add(1*time.Hour))
+			_ = tr.Save(g)
+			tr.ReleaseTreasureGuard(g)
+		}
+
+		sw.CeaseVigil()
+		sw.Close()
+
+		chron2 := chronicler.NewV2(hashPath, testMaxDepth)
+		loadBeacon := beacon.New()
+		chron2.Load(loadBeacon)
+
+		assert.Equal(t, 5, loadBeacon.Count(), "all 5 normal keys should persist")
+		for i := 0; i < 5; i++ {
+			assert.True(t, loadBeacon.IsExists(fmt.Sprintf("normal-key-%d", i)))
+		}
+
+		chron2.Destroy()
 	})
 }

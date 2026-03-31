@@ -194,7 +194,6 @@ func New() BinaryDownloader {
 //     across runs or can be shared between processes.
 func (d *DefaultDownloader) SetCacheDir(dir string) {
 	d.cacheDir = dir
-	fmt.Println("SetCacheDir executed")
 }
 
 // SetProgressCallback attaches a callback function to report

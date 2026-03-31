@@ -152,6 +152,9 @@ func (v *validatorImpl) ParseMessageSize(ctx context.Context, input string) (int
 	// Parse size with unit (case-insensitive)
 	input = strings.ToUpper(input)
 
+	// Remove all internal spaces (e.g., "100 MB" → "100MB")
+	input = strings.ReplaceAll(input, " ", "")
+
 	// Check for multiple decimal points
 	if strings.Count(input, ".") > 1 {
 		return 0, fmt.Errorf("invalid format: multiple decimal points not allowed")
@@ -162,7 +165,7 @@ func (v *validatorImpl) ParseMessageSize(ctx context.Context, input string) (int
 	var unit string
 
 	for i, r := range input {
-		if (r >= '0' && r <= '9') || r == '.' {
+		if (r >= '0' && r <= '9') || r == '.' || r == '-' {
 			numStr.WriteRune(r)
 		} else {
 			unit = input[i:]
@@ -172,13 +175,26 @@ func (v *validatorImpl) ParseMessageSize(ctx context.Context, input string) (int
 
 	numStrFinal := numStr.String()
 	if numStrFinal == "" {
+		// If the entire input is just a known unit (e.g., "MB"), report invalid format
+		knownUnits := map[string]bool{"B": true, "KB": true, "MB": true, "GB": true}
+		if knownUnits[input] {
+			return 0, fmt.Errorf("invalid format: use raw bytes (e.g., 10485760) or size with unit (e.g., 100MB, 1GB)")
+		}
+		// No digits found at the start. Try to detect a known unit suffix at the end
+		// e.g., "abcMB" → "abc" is the invalid number part, "MB" is the unit
+		for _, suffix := range []string{"GB", "MB", "KB", "B"} {
+			if strings.HasSuffix(input, suffix) && len(input) > len(suffix) {
+				invalidPart := input[:len(input)-len(suffix)]
+				return 0, fmt.Errorf("invalid number: %s", strings.ToLower(invalidPart))
+			}
+		}
 		return 0, fmt.Errorf("invalid format: use raw bytes (e.g., 10485760) or size with unit (e.g., 100MB, 1GB)")
 	}
 
 	// Parse the numeric part
 	num, err := strconv.ParseFloat(numStrFinal, 64)
 	if err != nil {
-		return 0, fmt.Errorf("invalid number: %s", numStrFinal)
+		return 0, fmt.Errorf("invalid number: %s", strings.ToLower(numStrFinal))
 	}
 
 	if num < 0 {

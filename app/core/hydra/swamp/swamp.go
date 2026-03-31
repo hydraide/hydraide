@@ -2036,6 +2036,12 @@ func (s *swamp) SaveFunction(t treasure.Treasure, guardID guard.ID) treasure.Tre
 	// and the treasure is totally new
 	if existedTreasureObj == nil {
 
+		// If this key was recently deleted (e.g. via ShiftExpired), the old delete-marked
+		// treasure may still be sitting in the write buffer. We must remove it first,
+		// otherwise beacon.Add silently drops the new treasure (key already exists)
+		// and only the OpDelete gets flushed — causing data loss after swamp reopen.
+		s.treasuresWaitingForWriter.Delete(t.GetKey())
+
 		// add the treasure to the treasuresWaitingForWriter index
 		s.treasuresWaitingForWriter.Add(t)
 

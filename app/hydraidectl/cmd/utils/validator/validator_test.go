@@ -220,8 +220,8 @@ func TestParseMessageSize(t *testing.T) {
 		},
 		{
 			name:    "valid size with KB unit",
-			input:   "1024KB",
-			want:    1024 * KB,
+			input:   "10240KB",
+			want:    10240 * KB,
 			wantErr: false,
 		},
 		{

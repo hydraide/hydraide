@@ -40,6 +40,9 @@ func TestDownloadHydraServerLatest(t *testing.T) {
 	assert.NoError(t, os.MkdirAll(basePath, 0o755))
 	t.Cleanup(func() { _ = os.RemoveAll(basePath) })
 
+	// Clear the download cache so the file is always re-downloaded and the progress callback fires
+	_ = os.RemoveAll(filepath.Join(os.TempDir(), TEMP_FILENAME))
+
 	d := New()
 	// Optional: show progress into a buffer to ensure callback is wired.
 	var progCalled bool

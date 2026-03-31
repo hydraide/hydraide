@@ -80,6 +80,9 @@ func TestNoOpHandlerInterface(t *testing.T) {
 
 // TestStartInstance verifies that the StartInstance function correctly starts a service.
 func TestStartInstance(t *testing.T) {
+	if os.Getuid() != 0 {
+		t.Skip("skipping: requires root privileges for systemd service management")
+	}
 	// Setup service dynamically based on the OS.
 	serviceName, err := createTestServiceFile()
 	if err != nil {
@@ -128,6 +131,9 @@ func TestStartInstance(t *testing.T) {
 
 // TestStopInstance verifies that the StopInstance function correctly stops a running service.
 func TestStopInstance(t *testing.T) {
+	if os.Getuid() != 0 {
+		t.Skip("skipping: requires root privileges for systemd service management")
+	}
 	// Setup service dynamically based on the OS.
 	serviceName, err := createTestServiceFile()
 	if err != nil {
@@ -171,6 +177,9 @@ func TestStopInstance(t *testing.T) {
 
 // TestRestartInstance verifies that RestartInstance correctly stops and starts a service.
 func TestRestartInstance(t *testing.T) {
+	if os.Getuid() != 0 {
+		t.Skip("skipping: requires root privileges for systemd service management")
+	}
 	// Setup service dynamically based on the OS.
 	serviceName, err := createTestServiceFile()
 	if err != nil {
