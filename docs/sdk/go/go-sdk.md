@@ -208,6 +208,7 @@ including registration, validation, destruction, and real-time subscriptions.
 | DeRegisterSwamp | ✅ Ready | [basics_deregister_swamp.go](examples/models/basics_deregister_swamp.go) |
 | IsSwampExist    | ✅ Ready | [basics_is_swamp_exist.go](examples/models/basics_is_swamp_exist.go)     |
 | IsKeyExists     | ✅ Ready | [basics_is_key_exist.go](examples/models/basics_is_key_exist.go)         |
+| AreKeysExist    | ✅ Ready | [basics_are_keys_exist.go](examples/models/basics_are_keys_exist.go)     |
 | Count           | ✅ Ready | [basics_count.go](examples/models/basics_count.go)                       |
 | Destroy         | ✅ Ready | [basics_destroy.go](examples/models/basics_destroy.go)                   |
 | DestroyBulk     | ✅ Ready | Bulk destroy multiple swamps via bidirectional streaming                  |
