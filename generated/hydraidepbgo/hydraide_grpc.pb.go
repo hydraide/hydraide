@@ -37,6 +37,7 @@ const (
 	HydraideService_Count_FullMethodName                    = "/hydraidepbgo.HydraideService/Count"
 	HydraideService_IsSwampExist_FullMethodName             = "/hydraidepbgo.HydraideService/IsSwampExist"
 	HydraideService_IsKeyExist_FullMethodName               = "/hydraidepbgo.HydraideService/IsKeyExist"
+	HydraideService_AreKeysExist_FullMethodName             = "/hydraidepbgo.HydraideService/AreKeysExist"
 	HydraideService_SubscribeToEvents_FullMethodName        = "/hydraidepbgo.HydraideService/SubscribeToEvents"
 	HydraideService_SubscribeToInfo_FullMethodName          = "/hydraidepbgo.HydraideService/SubscribeToInfo"
 	HydraideService_Uint32SlicePush_FullMethodName          = "/hydraidepbgo.HydraideService/Uint32SlicePush"
@@ -314,6 +315,23 @@ type HydraideServiceClient interface {
 	//
 	// 💡 Note: The value is not returned – only a boolean indicator of existence.
 	IsKeyExist(ctx context.Context, in *IsKeyExistRequest, opts ...grpc.CallOption) (*IsKeyExistResponse, error)
+	// AreKeysExist checks whether multiple keys exist in a given swamp in a single request.
+	//
+	// This is the batch version of IsKeyExist. Instead of making N separate calls,
+	// you can check all keys at once, reducing roundtrip latency.
+	//
+	// Behavioral notes:
+	// - The response contains a map from each requested key to its existence status (true/false).
+	// - All requested keys appear in the response — unlike GetByKeys, missing keys are NOT omitted.
+	// - If the swamp does not exist, all keys will return false.
+	//
+	// Use cases:
+	// - Bulk pre-validation before batch inserts
+	// - Filtering a list of candidate keys to determine which already exist
+	// - Efficient deduplication checks
+	//
+	// 💡 Note: No treasure content is returned – only boolean existence flags per key.
+	AreKeysExist(ctx context.Context, in *AreKeysExistRequest, opts ...grpc.CallOption) (*AreKeysExistResponse, error)
 	// SubscribeToEvents allows clients to subscribe to **all data changes** within a given swamp.
 	//
 	// When any treasure in the swamp is created, updated, or deleted,
@@ -694,6 +712,16 @@ func (c *hydraideServiceClient) IsKeyExist(ctx context.Context, in *IsKeyExistRe
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(IsKeyExistResponse)
 	err := c.cc.Invoke(ctx, HydraideService_IsKeyExist_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *hydraideServiceClient) AreKeysExist(ctx context.Context, in *AreKeysExistRequest, opts ...grpc.CallOption) (*AreKeysExistResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AreKeysExistResponse)
+	err := c.cc.Invoke(ctx, HydraideService_AreKeysExist_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1245,6 +1273,23 @@ type HydraideServiceServer interface {
 	//
 	// 💡 Note: The value is not returned – only a boolean indicator of existence.
 	IsKeyExist(context.Context, *IsKeyExistRequest) (*IsKeyExistResponse, error)
+	// AreKeysExist checks whether multiple keys exist in a given swamp in a single request.
+	//
+	// This is the batch version of IsKeyExist. Instead of making N separate calls,
+	// you can check all keys at once, reducing roundtrip latency.
+	//
+	// Behavioral notes:
+	// - The response contains a map from each requested key to its existence status (true/false).
+	// - All requested keys appear in the response — unlike GetByKeys, missing keys are NOT omitted.
+	// - If the swamp does not exist, all keys will return false.
+	//
+	// Use cases:
+	// - Bulk pre-validation before batch inserts
+	// - Filtering a list of candidate keys to determine which already exist
+	// - Efficient deduplication checks
+	//
+	// 💡 Note: No treasure content is returned – only boolean existence flags per key.
+	AreKeysExist(context.Context, *AreKeysExistRequest) (*AreKeysExistResponse, error)
 	// SubscribeToEvents allows clients to subscribe to **all data changes** within a given swamp.
 	//
 	// When any treasure in the swamp is created, updated, or deleted,
@@ -1501,6 +1546,9 @@ func (UnimplementedHydraideServiceServer) IsSwampExist(context.Context, *IsSwamp
 }
 func (UnimplementedHydraideServiceServer) IsKeyExist(context.Context, *IsKeyExistRequest) (*IsKeyExistResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method IsKeyExist not implemented")
+}
+func (UnimplementedHydraideServiceServer) AreKeysExist(context.Context, *AreKeysExistRequest) (*AreKeysExistResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AreKeysExist not implemented")
 }
 func (UnimplementedHydraideServiceServer) SubscribeToEvents(*SubscribeToEventsRequest, grpc.ServerStreamingServer[SubscribeToEventsResponse]) error {
 	return status.Errorf(codes.Unimplemented, "method SubscribeToEvents not implemented")
@@ -1904,6 +1952,24 @@ func _HydraideService_IsKeyExist_Handler(srv interface{}, ctx context.Context, d
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(HydraideServiceServer).IsKeyExist(ctx, req.(*IsKeyExistRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _HydraideService_AreKeysExist_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AreKeysExistRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HydraideServiceServer).AreKeysExist(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HydraideService_AreKeysExist_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HydraideServiceServer).AreKeysExist(ctx, req.(*AreKeysExistRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -2372,6 +2438,10 @@ var HydraideService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "IsKeyExist",
 			Handler:    _HydraideService_IsKeyExist_Handler,
+		},
+		{
+			MethodName: "AreKeysExist",
+			Handler:    _HydraideService_AreKeysExist_Handler,
 		},
 		{
 			MethodName: "Uint32SlicePush",

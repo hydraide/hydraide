@@ -272,6 +272,24 @@ service HydraideService {
   // 💡 Note: The value is not returned – only a boolean indicator of existence.
   rpc IsKeyExist(IsKeyExistRequest) returns (IsKeyExistResponse) {}
 
+  // AreKeysExist checks whether multiple keys exist in a given swamp in a single request.
+  //
+  // This is the batch version of IsKeyExist. Instead of making N separate calls,
+  // you can check all keys at once, reducing roundtrip latency.
+  //
+  // Behavioral notes:
+  // - The response contains a map from each requested key to its existence status (true/false).
+  // - All requested keys appear in the response — unlike GetByKeys, missing keys are NOT omitted.
+  // - If the swamp does not exist, all keys will return false.
+  //
+  // Use cases:
+  // - Bulk pre-validation before batch inserts
+  // - Filtering a list of candidate keys to determine which already exist
+  // - Efficient deduplication checks
+  //
+  // 💡 Note: No treasure content is returned – only boolean existence flags per key.
+  rpc AreKeysExist(AreKeysExistRequest) returns (AreKeysExistResponse) {}
+
   // SubscribeToEvents allows clients to subscribe to **all data changes** within a given swamp.
   //
   // When any treasure in the swamp is created, updated, or deleted,
@@ -1970,6 +1988,23 @@ message IsKeyExistRequest {
 message IsKeyExistResponse {
   // IsExist will be true if the key is present in the swamp, false otherwise.
   bool IsExist = 1;
+}
+
+// AreKeysExistRequest checks whether multiple keys exist within a given swamp.
+// This is the batch version of IsKeyExistRequest.
+message AreKeysExistRequest {
+  // IslandID is the deterministic storage zone (or "island") where this Swamp lives.
+  uint64 IslandID = 1;
+  // SwampName is the name of the swamp where the keys are expected.
+  string SwampName = 2;
+  // Keys is the list of keys to check for existence.
+  repeated string Keys = 3;
+}
+
+// AreKeysExistResponse returns the existence status of each requested key.
+message AreKeysExistResponse {
+  // Results maps each requested key to its existence status (true = exists, false = not found).
+  map<string, bool> Results = 1;
 }
 
 // ============ TELEMETRY MESSAGES ============

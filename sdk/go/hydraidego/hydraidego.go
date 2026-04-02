@@ -62,6 +62,7 @@ type Hydraidego interface {
 	Unlock(ctx context.Context, key string, lockID string) error
 	IsSwampExist(ctx context.Context, swampName name.Name) (bool, error)
 	IsKeyExists(ctx context.Context, swampName name.Name, key string) (bool, error)
+	AreKeysExist(ctx context.Context, swampName name.Name, keys []string) (map[string]bool, error)
 	CatalogCreate(ctx context.Context, swampName name.Name, model any) error
 	CatalogCreateMany(ctx context.Context, swampName name.Name, models []any, iterator CreateManyIteratorFunc) error
 	CatalogCreateManyToMany(ctx context.Context, request []*CatalogManyToManyRequest, iterator CatalogCreateManyToManyIteratorFunc) error
@@ -1469,6 +1470,39 @@ func (h *hydraidego) IsKeyExists(ctx context.Context, swampName name.Name, key s
 	}
 
 	return true, nil
+
+}
+
+// AreKeysExist checks whether multiple keys exist inside a given Swamp in a single request.
+//
+// This is the batch version of IsKeyExists. Instead of making N separate round-trips,
+// all keys are checked in one gRPC call.
+//
+// Parameters:
+//   - ctx: Context for cancellation and deadlines.
+//   - swampName: The target swamp's fully qualified name.
+//   - keys: The list of keys to check for existence.
+//
+// Returns:
+//   - map[string]bool: A map from each requested key to true (exists) or false (not found).
+//   - error: An error if the gRPC call fails.
+func (h *hydraidego) AreKeysExist(ctx context.Context, swampName name.Name, keys []string) (map[string]bool, error) {
+
+	if len(keys) == 0 {
+		return map[string]bool{}, nil
+	}
+
+	response, err := h.client.GetServiceClient(swampName).AreKeysExist(ctx, &hydraidepbgo.AreKeysExistRequest{
+		IslandID:  swampName.GetIslandID(h.client.GetAllIslands()),
+		SwampName: swampName.Get(),
+		Keys:      keys,
+	})
+
+	if err != nil {
+		return nil, errorHandler(err)
+	}
+
+	return response.GetResults(), nil
 
 }
 

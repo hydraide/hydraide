@@ -454,6 +454,11 @@ type Swamp interface {
 	// (bool): True if the key exists in the swamp, false otherwise.
 	TreasureExists(key string) bool
 
+	// TreasuresExistByKeys checks multiple keys for existence in a single operation.
+	// Returns a map from each key to its existence status (true/false).
+	// This is the batch equivalent of TreasureExists.
+	TreasuresExistByKeys(keys []string) map[string]bool
+
 	// CountTreasures returns the number of treasures in the swamp.
 	//
 	// Real-world use-case:
@@ -2501,6 +2506,19 @@ func (s *swamp) TreasureExists(key string) bool {
 	// set the last interaction time to the current time
 	atomic.StoreInt64(&s.lastInteractionTime, time.Now().UnixNano())
 	return s.beaconKey.IsExists(key)
+}
+
+// TreasuresExistByKeys checks if multiple keys exist in the swamp.
+// This is the batch equivalent of TreasureExists, using a single read-lock for all lookups.
+func (s *swamp) TreasuresExistByKeys(keys []string) map[string]bool {
+	// set the last interaction time to the current time
+	atomic.StoreInt64(&s.lastInteractionTime, time.Now().UnixNano())
+
+	if len(keys) == 0 {
+		return map[string]bool{}
+	}
+
+	return s.beaconKey.AreExists(keys)
 }
 
 // WriteTreasuresToFilesystem writes all new, modified or deleted treasures to the filesystem by the chroniclerInterface

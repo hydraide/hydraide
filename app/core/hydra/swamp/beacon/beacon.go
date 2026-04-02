@@ -476,6 +476,12 @@ type Beacon interface {
 	// The function uses read-transaction (RLock) to ensure multiple read operations can occur simultaneously without blocking each other while preserving data integrity.
 	IsExists(key string) bool
 
+	// AreExists checks if multiple keys exist in the beacon using a single read-lock.
+	// Returns a map from each requested key to its existence status (true/false).
+	// This is more efficient than calling IsExists in a loop because it acquires
+	// a single RLock for all key lookups instead of one per key.
+	AreExists(keys []string) map[string]bool
+
 	// SortBy... Common Functionality:
 	// 1. Each sorting function first locks the beacon instance using the internal mutex `mu` to ensure thread safety during the sorting operation.
 	// 2. It then checks if the beacon is ordered (`isOrdered`). If it's not ordered, an error will be returned.
@@ -774,6 +780,25 @@ func (b *beacon) IsExists(key string) bool {
 	}
 
 	return false
+
+}
+
+// AreExists checks if multiple keys exist in the beacon using a single RLock.
+func (b *beacon) AreExists(keys []string) map[string]bool {
+
+	atomic.StoreInt32(&b.initialized, 1)
+
+	result := make(map[string]bool, len(keys))
+
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	for _, key := range keys {
+		_, ok := b.treasuresByKeys[key]
+		result[key] = ok
+	}
+
+	return result
 
 }
 

@@ -3280,6 +3280,65 @@ func TestSwamp_GetTreasuresByBeaconWithVariousMethod(t *testing.T) {
 
 	})
 
+	t.Run("should TreasuresExistByKeys return correct existence map", func(t *testing.T) {
+
+		allTests := 10
+
+		swampName := name.New().Sanctuary(sanctuaryForQuickTest).Realm("treasures-exist-by-keys").Swamp("batch-check")
+
+		hashPath := swampName.GetFullHashPath(settingsInterface.GetHydraAbsDataFolderPath(), testAllServers, testMaxDepth, testMaxFolderPerLevel)
+		chroniclerInterface := chronicler.New(hashPath, maxFileSize, testMaxDepth, fsInterface, metadata.New(hashPath))
+		chroniclerInterface.CreateDirectoryIfNotExists()
+
+		swampEventCallbackFunc := func(e *Event) {}
+		closeCallbackFunc := func(n name.Name) {}
+		swampInfoCallbackFunc := func(i *Info) {}
+
+		fssSwamp := &FilesystemSettings{
+			ChroniclerInterface: chroniclerInterface,
+			WriteInterval:       writeInterval,
+		}
+
+		metadataInterface := metadata.New(hashPath)
+		swampInterface := New(swampName, closeAfterIdle, fssSwamp, swampEventCallbackFunc, swampInfoCallbackFunc, closeCallbackFunc, metadataInterface)
+		swampInterface.BeginVigil()
+
+		// create treasures with keys "0" through "9"
+		for i := 0; i < allTests; i++ {
+			treasureInterface := swampInterface.CreateTreasure(fmt.Sprintf("%d", i))
+			assert.NotNil(t, treasureInterface, "treasureInterface should not be nil")
+			guardID := treasureInterface.StartTreasureGuard(true)
+			treasureInterface.SetContentFloat64(guardID, float64(i))
+			treasureInterface.ReleaseTreasureGuard(guardID)
+			guardID = treasureInterface.StartTreasureGuard(true)
+			_ = treasureInterface.Save(guardID)
+			treasureInterface.ReleaseTreasureGuard(guardID)
+		}
+
+		// mixed existing and non-existing keys
+		results := swampInterface.TreasuresExistByKeys([]string{"0", "5", "999", "9", "nonexistent"})
+		assert.Equal(t, 5, len(results), "results should have 5 entries")
+		assert.True(t, results["0"], "key 0 should exist")
+		assert.True(t, results["5"], "key 5 should exist")
+		assert.True(t, results["9"], "key 9 should exist")
+		assert.False(t, results["999"], "key 999 should not exist")
+		assert.False(t, results["nonexistent"], "nonexistent should not exist")
+
+		// empty keys
+		emptyResults := swampInterface.TreasuresExistByKeys([]string{})
+		assert.Equal(t, 0, len(emptyResults), "empty keys should return empty map")
+
+		// after deleting a key, it should return false
+		_ = swampInterface.DeleteTreasure("5", false)
+		afterDelete := swampInterface.TreasuresExistByKeys([]string{"5", "0"})
+		assert.False(t, afterDelete["5"], "key 5 should not exist after deletion")
+		assert.True(t, afterDelete["0"], "key 0 should still exist")
+
+		swampInterface.CeaseVigil()
+		swampInterface.Destroy()
+
+	})
+
 }
 
 // Test for GetAndDeleteRandomTreasures

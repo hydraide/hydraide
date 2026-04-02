@@ -1445,6 +1445,58 @@ func (g Gateway) IsKeyExist(_ context.Context, in *hydrapb.IsKeyExistRequest) (*
 
 }
 
+func (g Gateway) AreKeysExist(_ context.Context, in *hydrapb.AreKeysExistRequest) (*hydrapb.AreKeysExistResponse, error) {
+
+	g.ZeusInterface.GetSafeops().LockSystem()
+	defer g.ZeusInterface.GetSafeops().UnlockSystem()
+
+	defer handlePanic()
+
+	// validate the swamp name
+	swampName, err := checkSwampName(g.ZeusInterface, in.GetIslandID(), in.SwampName, true)
+	if err != nil {
+		return nil, err
+	}
+
+	// validate that we have at least one key
+	if len(in.GetKeys()) == 0 {
+		return &hydrapb.AreKeysExistResponse{
+			Results: map[string]bool{},
+		}, nil
+	}
+
+	// check if the swamp exists before summoning
+	hydraInterface := g.ZeusInterface.GetHydra()
+	isExist, err := hydraInterface.IsExistSwamp(in.GetIslandID(), swampName)
+	if err != nil || !isExist {
+		// swamp doesn't exist — all keys are non-existent
+		results := make(map[string]bool, len(in.GetKeys()))
+		for _, key := range in.GetKeys() {
+			results[key] = false
+		}
+		return &hydrapb.AreKeysExistResponse{
+			Results: results,
+		}, nil
+	}
+
+	// summon the swamp
+	swampInterface, err := hydraInterface.SummonSwamp(context.Background(), in.GetIslandID(), swampName)
+	if err != nil {
+		return nil, status.Error(codes.Internal, fmt.Sprintf("internal server error in hydra: %s", err.Error()))
+	}
+
+	// begin the vigil, to prevent closing of the swamp
+	swampInterface.BeginVigil()
+	defer swampInterface.CeaseVigil()
+
+	results := swampInterface.TreasuresExistByKeys(in.GetKeys())
+
+	return &hydrapb.AreKeysExistResponse{
+		Results: results,
+	}, nil
+
+}
+
 func (g Gateway) SubscribeToEvents(in *hydrapb.SubscribeToEventsRequest, eventServer hydrapb.HydraideService_SubscribeToEventsServer) error {
 
 	// do not use the g.ZeusInterface.GetSafeops().LockSystem() because if we use it, we can never stop the server because of the active subscribers

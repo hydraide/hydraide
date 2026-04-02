@@ -1004,6 +1004,56 @@ func TestBeacon(t *testing.T) {
 
 	})
 
+	t.Run("should AreExists return correct existence map for batch keys", func(t *testing.T) {
+
+		b := New()
+		b.SetInitialized(true)
+
+		// add 10 treasures with keys "key-0" through "key-9"
+		for i := 0; i < 10; i++ {
+			treasureInterface := treasure.New(MySaveFunction)
+			guardID := treasureInterface.StartTreasureGuard(true, guard.BodyAuthID)
+			treasureInterface.BodySetKey(guardID, fmt.Sprintf("key-%d", i))
+			treasureInterface.SetContentString(guardID, fmt.Sprintf("content-%d", i))
+			b.Add(treasureInterface)
+			treasureInterface.ReleaseTreasureGuard(guardID)
+		}
+
+		// check mixed existing and non-existing keys
+		results := b.AreExists([]string{"key-0", "key-5", "key-999", "key-9", "nonexistent"})
+		assert.Equal(t, 5, len(results), "results map should have 5 entries")
+		assert.True(t, results["key-0"], "key-0 should exist")
+		assert.True(t, results["key-5"], "key-5 should exist")
+		assert.True(t, results["key-9"], "key-9 should exist")
+		assert.False(t, results["key-999"], "key-999 should not exist")
+		assert.False(t, results["nonexistent"], "nonexistent should not exist")
+
+		// empty keys should return empty map
+		emptyResults := b.AreExists([]string{})
+		assert.Equal(t, 0, len(emptyResults), "empty keys should return empty map")
+
+		// all keys exist
+		allExist := b.AreExists([]string{"key-0", "key-1", "key-2"})
+		assert.Equal(t, 3, len(allExist), "results should have 3 entries")
+		for _, exists := range allExist {
+			assert.True(t, exists, "all keys should exist")
+		}
+
+		// no keys exist
+		noneExist := b.AreExists([]string{"missing-1", "missing-2", "missing-3"})
+		assert.Equal(t, 3, len(noneExist), "results should have 3 entries")
+		for _, exists := range noneExist {
+			assert.False(t, exists, "no keys should exist")
+		}
+
+		// after deleting a key, it should return false
+		b.Delete("key-5")
+		afterDelete := b.AreExists([]string{"key-5", "key-0"})
+		assert.False(t, afterDelete["key-5"], "key-5 should not exist after deletion")
+		assert.True(t, afterDelete["key-0"], "key-0 should still exist")
+
+	})
+
 }
 
 func TestBeacon_GetManyFromOrderPosition_TimeFiltering(t *testing.T) {
