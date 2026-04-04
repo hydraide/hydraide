@@ -630,7 +630,7 @@ func (g Gateway) GetByIndexStream(in *hydrapb.GetByIndexStreamRequest, stream hy
 
 	swampName, err := checkSwampName(g.ZeusInterface, in.GetIslandID(), in.SwampName, true)
 	if err != nil {
-		return status.Error(codes.InvalidArgument, err.Error())
+		return err
 	}
 
 	hydraInterface := g.ZeusInterface.GetHydra()
@@ -744,7 +744,7 @@ func (g Gateway) GetByIndexStreamFromMany(in *hydrapb.GetByIndexStreamFromManyRe
 
 		swampName, err := checkSwampName(g.ZeusInterface, query.GetIslandID(), query.SwampName, true)
 		if err != nil {
-			return status.Error(codes.InvalidArgument, err.Error())
+			return err
 		}
 
 		swampInterface, err := hydraInterface.SummonSwamp(stream.Context(), query.GetIslandID(), swampName)
@@ -904,7 +904,7 @@ func (g Gateway) GetStream(in *hydrapb.GetStreamRequest, stream hydrapb.Hydraide
 
 		swampName, err := checkSwampName(g.ZeusInterface, query.GetIslandID(), query.SwampName, true)
 		if err != nil {
-			return status.Error(codes.InvalidArgument, err.Error())
+			return err
 		}
 
 		swampInterface, err := hydraInterface.SummonSwamp(stream.Context(), query.GetIslandID(), swampName)
