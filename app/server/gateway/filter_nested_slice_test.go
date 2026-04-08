@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"testing"
+	"time"
 
 	"github.com/hydraide/hydraide/app/core/hydra/swamp/treasure"
 	hydrapb "github.com/hydraide/hydraide/generated/hydraidepbgo"
@@ -1664,4 +1665,155 @@ func convertNestedSliceWhereToProto(nf *NestedSliceWhereFilterSDK) *hydrapb.Nest
 		result.CountValue = *nf.countValue
 	}
 	return result
+}
+
+// =============================================================================
+// time.Time in msgpack — regression tests for FilterBytesFieldTime
+// =============================================================================
+
+// TestNestedSliceWhere_TimeField_MsgpackExtension reproduces the bug where
+// FilterBytesFieldTime produces an Int64Val comparison, but msgpack stores
+// time.Time as ext type -1 (timestamp extension), not as int64.
+// The server must convert time.Time → Unix seconds before comparing.
+func TestNestedSliceWhere_TimeField_MsgpackExtension(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+	fiveMinAgo := now.Add(-5 * time.Minute)
+
+	// time.Time fields in msgpack are stored as timestamp extension, not int64
+	tr := makeSliceTreasure(t, map[string]interface{}{
+		"CampaignEntries": []interface{}{
+			map[string]interface{}{
+				"Status":     int8(1),
+				"CampaignID": "camp-active",
+				"NextSendAt": fiveMinAgo, // time.Time — msgpack ext type -1
+			},
+		},
+	})
+
+	campaignPath := "CampaignID"
+	nf := makeNestedSliceWhereFilter(hydrapb.NestedSliceWhereFilter_ANY, "CampaignEntries",
+		&hydrapb.FilterGroup{
+			Logic: hydrapb.FilterLogic_AND,
+			Filters: []*hydrapb.TreasureFilter{
+				bytesFieldFilter("Status", hydrapb.Relational_EQUAL, int8(1)),
+				{
+					Operator:       hydrapb.Relational_STRING_IN,
+					BytesFieldPath: &campaignPath,
+					StringInVals:   []string{"camp-active"},
+				},
+				// FilterBytesFieldTime(LTE, "NextSendAt", now) → Int64Val = now.Unix()
+				bytesFieldFilter("NextSendAt", hydrapb.Relational_LESS_THAN_OR_EQUAL, now.Unix()),
+				// FilterBytesFieldTime(GT, "NextSendAt", time.Time{}) → Int64Val = 0
+				bytesFieldFilter("NextSendAt", hydrapb.Relational_GREATER_THAN, int64(0)),
+			},
+		},
+	)
+	fg := &hydrapb.FilterGroup{
+		Logic:                    hydrapb.FilterLogic_AND,
+		NestedSliceWhereFilters: []*hydrapb.NestedSliceWhereFilter{nf},
+	}
+	if !evaluateNativeFilterGroup(tr, fg) {
+		t.Error("expected NestedSliceWhere with time.Time field (msgpack ext) to match when NextSendAt is 5min ago")
+	}
+}
+
+func TestNestedSliceWhere_TimeField_ZeroTime(t *testing.T) {
+	// Zero time.Time should be > 0 Unix seconds check should fail
+	tr := makeSliceTreasure(t, map[string]interface{}{
+		"CampaignEntries": []interface{}{
+			map[string]interface{}{
+				"Status":     int8(1),
+				"CampaignID": "camp-active",
+				"NextSendAt": time.Time{}, // zero time
+			},
+		},
+	})
+
+	nf := makeNestedSliceWhereFilter(hydrapb.NestedSliceWhereFilter_ANY, "CampaignEntries",
+		andConditions(
+			bytesFieldFilter("Status", hydrapb.Relational_EQUAL, int8(1)),
+			bytesFieldFilter("NextSendAt", hydrapb.Relational_GREATER_THAN, int64(0)),
+		),
+	)
+	fg := &hydrapb.FilterGroup{
+		Logic:                    hydrapb.FilterLogic_AND,
+		NestedSliceWhereFilters: []*hydrapb.NestedSliceWhereFilter{nf},
+	}
+	if evaluateNativeFilterGroup(tr, fg) {
+		t.Error("expected zero time.Time to fail GT 0 check")
+	}
+}
+
+func TestNestedSliceWhere_TimeField_FutureTime(t *testing.T) {
+	// NextSendAt is in the future — LTE now should fail
+	now := time.Now().UTC().Truncate(time.Second)
+	futureTime := now.Add(1 * time.Hour)
+
+	tr := makeSliceTreasure(t, map[string]interface{}{
+		"CampaignEntries": []interface{}{
+			map[string]interface{}{
+				"Status":     int8(1),
+				"NextSendAt": futureTime,
+			},
+		},
+	})
+
+	nf := makeNestedSliceWhereFilter(hydrapb.NestedSliceWhereFilter_ANY, "CampaignEntries",
+		andConditions(
+			bytesFieldFilter("Status", hydrapb.Relational_EQUAL, int8(1)),
+			bytesFieldFilter("NextSendAt", hydrapb.Relational_LESS_THAN_OR_EQUAL, now.Unix()),
+		),
+	)
+	fg := &hydrapb.FilterGroup{
+		Logic:                    hydrapb.FilterLogic_AND,
+		NestedSliceWhereFilters: []*hydrapb.NestedSliceWhereFilter{nf},
+	}
+	if evaluateNativeFilterGroup(tr, fg) {
+		t.Error("expected future NextSendAt to fail LTE now check")
+	}
+}
+
+func TestTopLevel_TimeField_MsgpackExtension(t *testing.T) {
+	// Same bug at top-level (not nested) — time.Time in BytesVal
+	now := time.Now().UTC().Truncate(time.Second)
+	fiveMinAgo := now.Add(-5 * time.Minute)
+
+	tr := makeSliceTreasure(t, map[string]interface{}{
+		"NextSendAt": fiveMinAgo,
+	})
+
+	fg := &hydrapb.FilterGroup{
+		Logic: hydrapb.FilterLogic_AND,
+		Filters: []*hydrapb.TreasureFilter{
+			bytesFieldFilter("NextSendAt", hydrapb.Relational_LESS_THAN_OR_EQUAL, now.Unix()),
+		},
+	}
+	if !evaluateNativeFilterGroup(tr, fg) {
+		t.Error("expected top-level time.Time field (msgpack ext) to match LTE now")
+	}
+}
+
+func TestAnyMatch_TimeField_Wildcard(t *testing.T) {
+	// time.Time with [*] wildcard path (evaluateAnyMatch path)
+	now := time.Now().UTC().Truncate(time.Second)
+	fiveMinAgo := now.Add(-5 * time.Minute)
+
+	tr := makeSliceTreasure(t, map[string]interface{}{
+		"Events": []interface{}{
+			map[string]interface{}{"At": now.Add(1 * time.Hour)},  // future
+			map[string]interface{}{"At": fiveMinAgo},               // past
+		},
+	})
+
+	path := "Events[*].At"
+	fg := &hydrapb.FilterGroup{
+		Logic: hydrapb.FilterLogic_AND,
+		Filters: []*hydrapb.TreasureFilter{
+			bytesFieldFilter("Events[*].At", hydrapb.Relational_LESS_THAN_OR_EQUAL, now.Unix()),
+		},
+	}
+	_ = path
+	if !evaluateNativeFilterGroup(tr, fg) {
+		t.Error("expected [*] wildcard time.Time to match when at least one is <= now")
+	}
 }

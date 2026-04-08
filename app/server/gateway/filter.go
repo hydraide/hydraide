@@ -5,6 +5,7 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"time"
 
 	hydrapb "github.com/hydraide/hydraide/generated/hydraidepbgo"
 	"github.com/vmihailenco/msgpack/v5"
@@ -416,6 +417,8 @@ func toInt64(v interface{}) (int64, bool) {
 		return int64(n), true
 	case float64:
 		return int64(n), true
+	case time.Time:
+		return n.UTC().Unix(), true
 	default:
 		return 0, false
 	}
