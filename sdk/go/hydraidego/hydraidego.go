@@ -357,8 +357,11 @@ type Filter struct {
 	bytesFieldPath *string
 	timeVal        *time.Time
 	timeField      *TimeField
-	treasureKey    *string // Profile mode: which Treasure key this filter targets
-	label          *string // Optional label for match tracking in SearchResultMeta
+	treasureKey    *string   // Profile mode: which Treasure key this filter targets
+	label          *string   // Optional label for match tracking in SearchResultMeta
+	stringInVals   []string  // STRING_IN values
+	int32InVals    []int32   // INT32_IN values
+	int64InVals    []int64   // INT64_IN values
 }
 
 // WithLabel sets a label for match tracking. When this filter matches,
@@ -567,6 +570,124 @@ func FilterBytesFieldNestedSliceAnyBool(slicePath string, fieldName string, op R
 	return &Filter{operator: op, bytesFieldPath: &anyPath, boolVal: &value}
 }
 
+// --- IN filters ---
+
+// FilterBytesFieldStringIn checks if the string field at fieldPath equals any of the given values.
+func FilterBytesFieldStringIn(fieldPath string, values ...string) *Filter {
+	return &Filter{operator: StringIn, bytesFieldPath: &fieldPath, stringInVals: values}
+}
+
+// FilterBytesFieldInt32In checks if the int32 field at fieldPath equals any of the given values.
+func FilterBytesFieldInt32In(fieldPath string, values ...int32) *Filter {
+	return &Filter{operator: Int32In, bytesFieldPath: &fieldPath, int32InVals: values}
+}
+
+// FilterBytesFieldInt64In checks if the int64 field at fieldPath equals any of the given values.
+func FilterBytesFieldInt64In(fieldPath string, values ...int64) *Filter {
+	return &Filter{operator: Int64In, bytesFieldPath: &fieldPath, int64InVals: values}
+}
+
+// --- Time convenience filter ---
+
+// FilterBytesFieldTime is a convenience wrapper for filtering time.Time fields
+// stored as int64 Unix seconds in MessagePack.
+// Internally converts to FilterBytesFieldInt64 with value.UTC().Unix().
+func FilterBytesFieldTime(op RelationalOperator, fieldPath string, value time.Time) *Filter {
+	unixSec := value.UTC().Unix()
+	return FilterBytesFieldInt64(op, fieldPath, unixSec)
+}
+
+// --- Nested Slice Where/All/None/Count filters ---
+
+// NestedSliceWhereMode determines the quantifier logic for NestedSliceWhereFilter.
+type NestedSliceWhereMode int
+
+const (
+	// NestedSliceWhereAny requires at least ONE element to satisfy all conditions (WHERE semantics).
+	NestedSliceWhereAny NestedSliceWhereMode = iota
+	// NestedSliceWhereAll requires EVERY element to satisfy all conditions.
+	NestedSliceWhereAll
+	// NestedSliceWhereNone requires NO element to satisfy all conditions.
+	NestedSliceWhereNone
+)
+
+// NestedSliceWhereFilter evaluates conditions against elements of a nested slice.
+type NestedSliceWhereFilter struct {
+	mode          NestedSliceWhereMode
+	slicePath     string
+	conditions    *FilterGroup
+	treasureKey   *string
+	label         *string
+	countOperator *RelationalOperator // COUNT mode only
+	countValue    *int32              // COUNT mode only
+}
+
+// isFilterItem marks NestedSliceWhereFilter as a valid FilterItem.
+func (f *NestedSliceWhereFilter) isFilterItem() {}
+
+// WithLabel sets a label for match tracking.
+func (f *NestedSliceWhereFilter) WithLabel(label string) *NestedSliceWhereFilter {
+	f.label = &label
+	return f
+}
+
+// ForKey sets the TreasureKey for profile-mode filtering.
+func (f *NestedSliceWhereFilter) ForKey(key string) *NestedSliceWhereFilter {
+	f.treasureKey = &key
+	return f
+}
+
+// FilterNestedSliceWhere creates a filter that checks whether at least ONE element
+// in the slice at slicePath satisfies ALL conditions simultaneously.
+//
+// Each condition's field path is relative to the slice element, not the root struct.
+//
+// Example:
+//
+//	filter := hydraidego.FilterNestedSliceWhere("CampaignEntries",
+//	    hydraidego.FilterBytesFieldInt8(hydraidego.Equal, "Status", 1),
+//	    hydraidego.FilterBytesFieldString(hydraidego.Equal, "CampaignID", "camp-123"),
+//	)
+func FilterNestedSliceWhere(slicePath string, conditions ...FilterItem) *NestedSliceWhereFilter {
+	g := FilterAND(conditions...)
+	return &NestedSliceWhereFilter{mode: NestedSliceWhereAny, slicePath: slicePath, conditions: g}
+}
+
+// FilterNestedSliceAll creates a filter that checks whether EVERY element
+// in the slice at slicePath satisfies ALL conditions simultaneously.
+// An empty slice evaluates to true (vacuous truth).
+func FilterNestedSliceAll(slicePath string, conditions ...FilterItem) *NestedSliceWhereFilter {
+	g := FilterAND(conditions...)
+	return &NestedSliceWhereFilter{mode: NestedSliceWhereAll, slicePath: slicePath, conditions: g}
+}
+
+// FilterNestedSliceNone creates a filter that checks whether NO element
+// in the slice at slicePath satisfies ALL conditions simultaneously.
+// An empty slice evaluates to true.
+func FilterNestedSliceNone(slicePath string, conditions ...FilterItem) *NestedSliceWhereFilter {
+	g := FilterAND(conditions...)
+	return &NestedSliceWhereFilter{mode: NestedSliceWhereNone, slicePath: slicePath, conditions: g}
+}
+
+// FilterNestedSliceCount creates a filter that counts how many elements in the slice
+// at slicePath satisfy ALL conditions, then compares the count using the given operator.
+//
+// Example: "at least 3 active campaign entries"
+//
+//	hydraidego.FilterNestedSliceCount("CampaignEntries", hydraidego.GreaterThanOrEqual, 3,
+//	    hydraidego.FilterBytesFieldInt8(hydraidego.Equal, "Status", 1),
+//	)
+func FilterNestedSliceCount(slicePath string, op RelationalOperator, count int32, conditions ...FilterItem) *NestedSliceWhereFilter {
+	g := FilterAND(conditions...)
+	return &NestedSliceWhereFilter{
+		mode:          NestedSliceWhereAny, // mode is overridden to COUNT in proto conversion
+		slicePath:     slicePath,
+		conditions:    g,
+		countOperator: &op,
+		countValue:    &count,
+	}
+}
+
 // SearchMeta contains metadata about how a Treasure matched the search criteria.
 // Populated during filter evaluation when labeled filters or VectorFilters are used.
 type SearchMeta struct {
@@ -614,12 +735,13 @@ func (f *Filter) isFilterItem() {}
 //	    ),
 //	)
 type FilterGroup struct {
-	logic              FilterLogic
-	filters            []*Filter
-	subGroups          []*FilterGroup
-	phraseFilters      []*PhraseFilter
-	vectorFilters      []*VectorFilter
-	geoDistanceFilters []*GeoDistanceFilter
+	logic                    FilterLogic
+	filters                  []*Filter
+	subGroups                []*FilterGroup
+	phraseFilters            []*PhraseFilter
+	vectorFilters            []*VectorFilter
+	geoDistanceFilters       []*GeoDistanceFilter
+	nestedSliceWhereFilters  []*NestedSliceWhereFilter
 }
 
 // isFilterItem marks FilterGroup as a valid FilterItem.
@@ -875,6 +997,8 @@ func FilterAND(items ...FilterItem) *FilterGroup {
 			g.vectorFilters = append(g.vectorFilters, v)
 		case *GeoDistanceFilter:
 			g.geoDistanceFilters = append(g.geoDistanceFilters, v)
+		case *NestedSliceWhereFilter:
+			g.nestedSliceWhereFilters = append(g.nestedSliceWhereFilters, v)
 		}
 	}
 	return g
@@ -896,6 +1020,8 @@ func FilterOR(items ...FilterItem) *FilterGroup {
 			g.vectorFilters = append(g.vectorFilters, v)
 		case *GeoDistanceFilter:
 			g.geoDistanceFilters = append(g.geoDistanceFilters, v)
+		case *NestedSliceWhereFilter:
+			g.nestedSliceWhereFilters = append(g.nestedSliceWhereFilters, v)
 		}
 	}
 	return g
@@ -4270,6 +4396,16 @@ func convertFilterToProto(f *Filter) *hydraidepbgo.TreasureFilter {
 		}
 	}
 
+	if len(f.stringInVals) > 0 {
+		pf.StringInVals = f.stringInVals
+	}
+	if len(f.int32InVals) > 0 {
+		pf.Int32InVals = f.int32InVals
+	}
+	if len(f.int64InVals) > 0 {
+		pf.Int64InVals = f.int64InVals
+	}
+
 	if f.treasureKey != nil {
 		pf.TreasureKey = f.treasureKey
 	}
@@ -4360,6 +4496,41 @@ func convertFilterGroupToProto(group *FilterGroup) *hydraidepbgo.FilterGroup {
 				protoGF.Label = gf.label
 			}
 			pg.GeoDistanceFilters = append(pg.GeoDistanceFilters, protoGF)
+		}
+	}
+
+	for _, nf := range group.nestedSliceWhereFilters {
+		if nf != nil {
+			protoNF := &hydraidepbgo.NestedSliceWhereFilter{
+				SlicePath: nf.slicePath,
+			}
+
+			// Determine mode
+			if nf.countOperator != nil && nf.countValue != nil {
+				protoNF.EvalMode = hydraidepbgo.NestedSliceWhereFilter_COUNT
+				protoNF.CountOperator = convertRelationalOperatorToProtoOperator(*nf.countOperator)
+				protoNF.CountValue = *nf.countValue
+			} else {
+				switch nf.mode {
+				case NestedSliceWhereAll:
+					protoNF.EvalMode = hydraidepbgo.NestedSliceWhereFilter_ALL
+				case NestedSliceWhereNone:
+					protoNF.EvalMode = hydraidepbgo.NestedSliceWhereFilter_NONE
+				default:
+					protoNF.EvalMode = hydraidepbgo.NestedSliceWhereFilter_ANY
+				}
+			}
+
+			if nf.conditions != nil {
+				protoNF.Conditions = convertFilterGroupToProto(nf.conditions)
+			}
+			if nf.treasureKey != nil {
+				protoNF.TreasureKey = nf.treasureKey
+			}
+			if nf.label != nil {
+				protoNF.Label = nf.label
+			}
+			pg.NestedSliceWhereFilters = append(pg.NestedSliceWhereFilters, protoNF)
 		}
 	}
 
@@ -4838,6 +5009,15 @@ const (
 
 	// SliceNotContainsSubstring means "no string element in BytesVal slice contains substring" (case-insensitive, requires BytesFieldPath)
 	SliceNotContainsSubstring
+
+	// StringIn means "field value equals any of the given string values" (requires BytesFieldPath)
+	StringIn
+
+	// Int32In means "field value equals any of the given int32 values" (requires BytesFieldPath)
+	Int32In
+
+	// Int64In means "field value equals any of the given int64 values" (requires BytesFieldPath)
+	Int64In
 )
 
 // IncrementMetaRequest defines optional metadata to be set when performing
@@ -7733,6 +7913,12 @@ func convertRelationalOperatorToProtoOperator(operator RelationalOperator) hydra
 		return hydraidepbgo.Relational_SLICE_CONTAINS_SUBSTRING
 	case SliceNotContainsSubstring:
 		return hydraidepbgo.Relational_SLICE_NOT_CONTAINS_SUBSTRING
+	case StringIn:
+		return hydraidepbgo.Relational_STRING_IN
+	case Int32In:
+		return hydraidepbgo.Relational_INT32_IN
+	case Int64In:
+		return hydraidepbgo.Relational_INT64_IN
 	case Equal:
 		fallthrough
 	default:

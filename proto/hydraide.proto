@@ -1775,6 +1775,9 @@ message Relational {
     SLICE_NOT_CONTAINS = 15;            // BytesVal slice does NOT contain the exact value
     SLICE_CONTAINS_SUBSTRING = 16;      // any string element in BytesVal slice contains substring (case-insensitive)
     SLICE_NOT_CONTAINS_SUBSTRING = 17;  // no string element in BytesVal slice contains substring (case-insensitive)
+    STRING_IN = 18;                     // field value equals any of the strings in TreasureFilter.StringInVals
+    INT32_IN = 19;                      // field value equals any of the int32s in TreasureFilter.Int32InVals
+    INT64_IN = 20;                      // field value equals any of the int64s in TreasureFilter.Int64InVals
   }
 }
 
@@ -2269,6 +2272,16 @@ message TreasureFilter {
   // Label is an optional identifier for match tracking in SearchResultMeta.
   // When set, this label appears in MatchedLabels if the filter evaluates to true.
   optional string Label = 20;
+
+  // StringInVals holds the set of allowed string values when Operator is STRING_IN.
+  // The filter matches if the field value equals ANY of these strings.
+  repeated string StringInVals = 21;
+
+  // Int32InVals holds the set of allowed int32 values when Operator is INT32_IN.
+  repeated int32 Int32InVals = 22;
+
+  // Int64InVals holds the set of allowed int64 values when Operator is INT64_IN.
+  repeated int64 Int64InVals = 23;
 }
 
 // FilterLogic defines how filters within a FilterGroup are combined.
@@ -2303,6 +2316,52 @@ message FilterGroup {
   repeated PhraseFilter PhraseFilters = 4;
   repeated VectorFilter VectorFilters = 5;
   repeated GeoDistanceFilter GeoDistanceFilters = 6;
+  repeated NestedSliceWhereFilter NestedSliceWhereFilters = 7;
+}
+
+// NestedSliceWhereFilter evaluates conditions against elements of a nested slice
+// within a MessagePack-encoded BytesVal struct.
+//
+// SlicePath is a dot-separated path to the slice field (e.g., "CampaignEntries"
+// or "Outer.Inner.Items"). Each element in the slice must be a struct (map).
+//
+// Conditions is a FilterGroup evaluated against each slice element individually.
+// The BytesFieldPath in each leaf TreasureFilter is relative to the slice element,
+// not the root struct.
+//
+// EvalMode determines the quantifier logic:
+//   - ANY (default): at least ONE element satisfies all conditions
+//   - ALL: EVERY element satisfies all conditions (empty slice → true)
+//   - NONE: NO element satisfies all conditions (empty slice → true)
+//   - COUNT: count matching elements, then compare using CountOperator/CountValue
+message NestedSliceWhereFilter {
+
+  enum Mode {
+    ANY = 0;   // at least ONE element satisfies all conditions (WHERE semantics)
+    ALL = 1;   // EVERY element satisfies all conditions
+    NONE = 2;  // NO element satisfies all conditions
+    COUNT = 3; // count matching elements, compare with CountOperator/CountValue
+  }
+
+  Mode EvalMode = 1;
+
+  // Dot-separated path to the slice field in BytesVal.
+  string SlicePath = 2;
+
+  // Conditions evaluated per element. Supports AND/OR/nested logic.
+  FilterGroup Conditions = 3;
+
+  // TreasureKey for profile-mode filtering (same semantics as TreasureFilter.TreasureKey).
+  optional string TreasureKey = 4;
+
+  // Optional label for match tracking in SearchResultMeta.
+  optional string Label = 5;
+
+  // COUNT mode only: operator for comparing the count of matching elements.
+  Relational.Operator CountOperator = 6;
+
+  // COUNT mode only: reference value to compare the count against.
+  int32 CountValue = 7;
 }
 
 // PhraseFilter checks if specified words appear at consecutive positions

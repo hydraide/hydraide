@@ -738,6 +738,10 @@ The `Details` struct (including the nested `Address`) is serialized into the Tre
 | `FilterBytesFieldFloat64(op, path, value)` | float64 field at path |
 | `FilterBytesFieldString(op, path, value)` | string field at path |
 | `FilterBytesFieldBool(op, path, value)` | bool field at path |
+| `FilterBytesFieldTime(op, path, time.Time)` | time.Time field (stored as int64 Unix seconds) |
+| `FilterBytesFieldStringIn(path, values...)` | string field ∈ set of values |
+| `FilterBytesFieldInt32In(path, values...)` | int32 field ∈ set of values |
+| `FilterBytesFieldInt64In(path, values...)` | int64 field ∈ set of values |
 
 All relational operators (`Equal`, `NotEqual`, `GreaterThan`, etc.) and string operators (`Contains`, `StartsWith`, etc.) work with BytesField filters.
 
@@ -813,6 +817,49 @@ err := h.CatalogReadManyStream(ctx, swamp, index, filters, Product{}, func(model
 ```
 
 > Full example: [catalog_read_many_stream_bytes_field.go](examples/models/catalog_read_many_stream_bytes_field.go)
+
+##### IN Filters — Set Membership
+
+Check if a field value belongs to a set of allowed values:
+
+```go
+// String IN: match any of the active campaigns
+hydraidego.FilterBytesFieldStringIn("CampaignID", "camp-1", "camp-2", "camp-3")
+
+// Int32 IN: Status is Active(1) or Finished(3)
+hydraidego.FilterBytesFieldInt32In("Status", 1, 3)
+
+// Int64 IN: match specific timestamps
+hydraidego.FilterBytesFieldInt64In("ScheduledAt", 1712534400, 1712620800)
+```
+
+##### Time Convenience Filter
+
+`time.Time` fields stored as int64 Unix seconds can be filtered with `FilterBytesFieldTime`:
+
+```go
+hydraidego.FilterBytesFieldTime(hydraidego.LessThanOrEqual, "NextSendAt", time.Now())
+hydraidego.FilterBytesFieldTime(hydraidego.GreaterThan, "NextSendAt", time.Time{}) // exclude zero
+```
+
+##### Nested Slice Where — Multi-Condition Element Matching
+
+Unlike `NestedSliceAny` (one condition per filter), `FilterNestedSliceWhere` guarantees that the **same element** satisfies ALL conditions:
+
+```go
+// Find domains with at least ONE CampaignEntry that is Active AND in our campaigns AND ready
+filters := hydraidego.FilterAND(
+    hydraidego.FilterNestedSliceWhere("CampaignEntries",
+        hydraidego.FilterBytesFieldInt8(hydraidego.Equal, "Status", 1),
+        hydraidego.FilterBytesFieldStringIn("CampaignID", activeCampaignIDs...),
+        hydraidego.FilterBytesFieldTime(hydraidego.LessThanOrEqual, "NextSendAt", time.Now()),
+    ),
+)
+```
+
+Four modes: `FilterNestedSliceWhere` (any element), `FilterNestedSliceAll` (every element), `FilterNestedSliceNone` (no element), `FilterNestedSliceCount` (count + compare).
+
+> Full reference: [filtering.md](filtering.md)
 
 **Important:** BytesField filtering requires **MessagePack encoding**. If the Treasure's `BytesVal` uses GOB encoding (the default), the server cannot inspect its contents and the filter returns `false` (no match). See below for how to enable MessagePack.
 
