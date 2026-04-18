@@ -461,6 +461,10 @@ If values are provided, HydrAIDE attaches them as **binary segments** to the Tre
    - Filter by time (e.g., records updated in the last 24h)
    - Fetch expired entries (`ExpireAt < now`)
    - Sort (e.g., `UpdatedAt DESC`, `CreatedAt ASC`)
+   - Filter on nested struct fields via MessagePack (dot-separated paths)
+   - Filter with IN operators for set membership (`StringIn`, `Int32In`, `Int64In`)
+   - Filter nested struct slices with multi-condition matching (`FilterNestedSliceWhere/All/None/Count`)
+   - Combine with phrase search, vector similarity, and geographic distance filters
 
 3. **`ExpireAt` as Time-Driven Logic**  
    The `expireAt` field introduces a time-based behavior layer:

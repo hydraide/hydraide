@@ -49,6 +49,9 @@ filters := hydraidego.FilterAND(
 | `SliceNotContains` | BytesVal slice does NOT contain value |
 | `SliceContainsSubstring` | any string element contains substring (case-insensitive) |
 | `SliceNotContainsSubstring` | no string element contains substring |
+| `StringIn` | field value equals any of the given string values |
+| `Int32In` | field value equals any of the given int32 values |
+| `Int64In` | field value equals any of the given int64 values |
 
 ---
 
@@ -201,6 +204,201 @@ The server iterates over each element in the slice and returns true if ANY eleme
 field matches the operator.
 
 Available types: `FilterBytesFieldNestedSliceAnyString`, `NestedSliceAnyInt8`, `NestedSliceAnyBool`.
+
+> **Limitation:** `NestedSliceAny` checks ONE condition per filter. When multiple `NestedSliceAny`
+> filters are AND-ed, each may match a DIFFERENT element. To require that the SAME element
+> satisfies ALL conditions, use `FilterNestedSliceWhere` (see below).
+
+---
+
+## IN Filters — Set Membership
+
+Check if a field value is a member of a set of allowed values. More efficient and
+readable than chaining multiple `Equal` conditions with `FilterOR`.
+
+```go
+// String IN: CampaignID is one of the active campaigns
+hydraidego.FilterBytesFieldStringIn("CampaignID", "camp-abc", "camp-def", "camp-ghi")
+
+// Int32 IN: Status is Active(1) or Finished(3)
+hydraidego.FilterBytesFieldInt32In("Status", 1, 3)
+
+// Int64 IN: Timestamp matches one of the scheduled times
+hydraidego.FilterBytesFieldInt64In("ScheduledAt", 1712534400, 1712620800, 1712707200)
+```
+
+IN filters work with `[*]` wildcard paths (any element match) and inside
+`FilterNestedSliceWhere` conditions.
+
+```go
+// Combined: find domains where ANY contact has Role in {"CEO", "CTO", "CFO"}
+hydraidego.FilterAND(
+    hydraidego.FilterBytesFieldSliceLen(hydraidego.GreaterThan, "LLMContacts", 0),
+    hydraidego.FilterBytesFieldStringIn("LLMContacts[*].Role", "CEO", "CTO", "CFO"),
+)
+```
+
+---
+
+## Time Convenience Filter
+
+`time.Time` fields are stored as `int64` Unix seconds in MessagePack. The `FilterBytesFieldTime`
+wrapper handles the conversion automatically:
+
+```go
+// NextSendAt <= now (ready to send)
+hydraidego.FilterBytesFieldTime(hydraidego.LessThanOrEqual, "NextSendAt", time.Now())
+
+// CreatedAt > 24 hours ago
+hydraidego.FilterBytesFieldTime(hydraidego.GreaterThan, "CreatedAt", time.Now().Add(-24*time.Hour))
+
+// Exclude zero-time entries (NextSendAt is set)
+hydraidego.FilterBytesFieldTime(hydraidego.GreaterThan, "NextSendAt", time.Time{})
+```
+
+Internally this is equivalent to `FilterBytesFieldInt64(op, path, value.UTC().Unix())`.
+
+---
+
+## Nested Slice Where — Multi-Condition Element Matching
+
+Check conditions against EACH element in a struct slice individually. Unlike `NestedSliceAny`
+(which tests ONE condition per filter), these filters guarantee that the SAME element
+satisfies ALL conditions simultaneously.
+
+Four modes are available:
+
+| Constructor | Semantics |
+|-------------|-----------|
+| `FilterNestedSliceWhere(path, conditions...)` | At least ONE element satisfies ALL conditions |
+| `FilterNestedSliceAll(path, conditions...)` | EVERY element satisfies ALL conditions |
+| `FilterNestedSliceNone(path, conditions...)` | NO element satisfies ALL conditions |
+| `FilterNestedSliceCount(path, op, count, conditions...)` | Count matching elements, compare with operator |
+
+### FilterNestedSliceWhere (ANY / WHERE)
+
+"Is there at least ONE element where ALL conditions are true simultaneously?"
+
+```go
+// Find domains where at least one CampaignEntry is:
+//   Active (Status=1) AND in one of our campaigns AND ready to send
+filters := hydraidego.FilterAND(
+    hydraidego.FilterNestedSliceWhere("CampaignEntries",
+        hydraidego.FilterBytesFieldInt8(hydraidego.Equal, "Status", 1),
+        hydraidego.FilterBytesFieldStringIn("CampaignID", activeCampaignIDs...),
+        hydraidego.FilterBytesFieldTime(hydraidego.LessThanOrEqual, "NextSendAt", time.Now()),
+        hydraidego.FilterBytesFieldTime(hydraidego.GreaterThan, "NextSendAt", time.Time{}),
+    ),
+)
+```
+
+**Why this matters:** Without `FilterNestedSliceWhere`, AND-ing three separate
+`NestedSliceAny` filters would match even if Status=1 is on element[0],
+CampaignID matches on element[1], and NextSendAt on element[2].
+`FilterNestedSliceWhere` guarantees all conditions match on the SAME element.
+
+### FilterNestedSliceAll
+
+"Does EVERY element satisfy ALL conditions?"
+
+```go
+// All campaign entries are finished
+filters := hydraidego.FilterAND(
+    hydraidego.FilterNestedSliceAll("CampaignEntries",
+        hydraidego.FilterBytesFieldInt8(hydraidego.Equal, "Status", 3), // Finished
+    ),
+)
+```
+
+Empty slice → `true` (vacuous truth: "every element satisfies" when there are no elements).
+
+### FilterNestedSliceNone
+
+"Does NO element satisfy ALL conditions?"
+
+```go
+// No campaign entry is active
+filters := hydraidego.FilterAND(
+    hydraidego.FilterNestedSliceNone("CampaignEntries",
+        hydraidego.FilterBytesFieldInt8(hydraidego.Equal, "Status", 1), // Active
+    ),
+)
+```
+
+Empty slice → `true` (no elements can satisfy anything).
+
+### FilterNestedSliceCount
+
+"How many elements satisfy ALL conditions? Compare against a threshold."
+
+```go
+// At least 3 active campaign entries
+filters := hydraidego.FilterAND(
+    hydraidego.FilterNestedSliceCount("CampaignEntries",
+        hydraidego.GreaterThanOrEqual, 3,
+        hydraidego.FilterBytesFieldInt8(hydraidego.Equal, "Status", 1),
+    ),
+)
+
+// Exactly 0 excluded entries (no exclusions)
+filters := hydraidego.FilterAND(
+    hydraidego.FilterNestedSliceCount("CampaignEntries",
+        hydraidego.Equal, 0,
+        hydraidego.FilterBytesFieldInt8(hydraidego.Equal, "Status", 2), // Excluded
+    ),
+)
+```
+
+### Complex conditions with OR logic
+
+Conditions accept any `FilterItem` — including `FilterOR` for per-element OR logic:
+
+```go
+// Find where at least one entry is Active AND in campaign-1 OR campaign-2
+filters := hydraidego.FilterAND(
+    hydraidego.FilterNestedSliceWhere("CampaignEntries",
+        hydraidego.FilterBytesFieldInt8(hydraidego.Equal, "Status", 1),
+        hydraidego.FilterOR(
+            hydraidego.FilterBytesFieldString(hydraidego.Equal, "CampaignID", "camp-1"),
+            hydraidego.FilterBytesFieldString(hydraidego.Equal, "CampaignID", "camp-2"),
+        ),
+    ),
+)
+```
+
+### Nested path (dot-separated)
+
+SlicePath supports dot-separated navigation for deeply nested slices:
+
+```go
+// Slice at Outer.Inner.Items
+hydraidego.FilterNestedSliceWhere("Outer.Inner.Items",
+    hydraidego.FilterBytesFieldString(hydraidego.Equal, "Name", "target"),
+)
+```
+
+### Labels and profile mode
+
+```go
+// With label tracking
+hydraidego.FilterNestedSliceWhere("CampaignEntries",
+    hydraidego.FilterBytesFieldInt8(hydraidego.Equal, "Status", 1),
+).WithLabel("has-active-campaign")
+
+// Profile mode
+hydraidego.FilterNestedSliceWhere("CampaignEntries",
+    hydraidego.FilterBytesFieldInt8(hydraidego.Equal, "Status", 1),
+).ForKey("CampaignData")
+```
+
+### Edge cases
+
+| Scenario | WHERE (ANY) | ALL | NONE | COUNT |
+|----------|:-----------:|:---:|:----:|:-----:|
+| Empty slice | `false` | `true` | `true` | compare 0 |
+| Missing field | `false` | `true` | `true` | compare 0 |
+| Nil elements in slice | skipped | fail | skipped | not counted |
+| No conditions | `true` | `true` | `false` | compare len(slice) |
 
 ---
 
@@ -434,7 +632,7 @@ filters := hydraidego.FilterOR(
 
 ---
 
-## Complete Example
+## Complete Examples
 
 ```go
 // Complex search: Booking sites in Budapest area with Barion, contacts, no permanent makeup
@@ -445,5 +643,32 @@ filters := hydraidego.FilterAND(
     hydraidego.FilterBytesFieldSliceLen(hydraidego.GreaterThan, "LLMContacts", 0),
     hydraidego.FilterBytesFieldNestedSliceAnyString("LLMContacts", "Email", hydraidego.IsNotEmpty, ""),
     hydraidego.GeoDistance("Lat", "Lng", 47.497, 19.040, 50.0, hydraidego.GeoInside),
+)
+
+// Worker query: domains ready to send in active campaigns
+activeCampaignIDs := []string{"camp-1", "camp-2", "camp-3"}
+filters = hydraidego.FilterAND(
+    hydraidego.FilterNestedSliceWhere("CampaignEntries",
+        hydraidego.FilterBytesFieldInt8(hydraidego.Equal, "Status", 1),
+        hydraidego.FilterBytesFieldStringIn("CampaignID", activeCampaignIDs...),
+        hydraidego.FilterBytesFieldTime(hydraidego.LessThanOrEqual, "NextSendAt", time.Now()),
+        hydraidego.FilterBytesFieldTime(hydraidego.GreaterThan, "NextSendAt", time.Time{}),
+    ),
+)
+
+// Dashboard: count active domains per campaign (KeysOnly for performance)
+filters = hydraidego.FilterAND(
+    hydraidego.FilterNestedSliceWhere("CampaignEntries",
+        hydraidego.FilterBytesFieldInt8(hydraidego.Equal, "Status", 1),
+        hydraidego.FilterBytesFieldString(hydraidego.Equal, "CampaignID", campaignID),
+    ),
+)
+
+// Campaign deletion: find domains to update
+filters = hydraidego.FilterAND(
+    hydraidego.FilterNestedSliceWhere("CampaignEntries",
+        hydraidego.FilterBytesFieldInt8(hydraidego.Equal, "Status", 1),
+        hydraidego.FilterBytesFieldString(hydraidego.Equal, "CampaignID", deletedCampaignID),
+    ),
 )
 ```

@@ -5,6 +5,7 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"time"
 
 	hydrapb "github.com/hydraide/hydraide/generated/hydraidepbgo"
 	"github.com/vmihailenco/msgpack/v5"
@@ -106,6 +107,11 @@ func hasAnyLabels(group *hydrapb.FilterGroup) bool {
 			return true
 		}
 	}
+	for _, nf := range group.NestedSliceWhereFilters {
+		if nf.Label != nil && *nf.Label != "" {
+			return true
+		}
+	}
 	for _, sg := range group.SubGroups {
 		if hasAnyLabels(sg) {
 			return true
@@ -123,6 +129,7 @@ func evaluateFilterGroupWithMeta(
 	evalPhrase func(*hydrapb.PhraseFilter) bool,
 	evalVector func(*hydrapb.VectorFilter) bool,
 	evalGeoDistance func(*hydrapb.GeoDistanceFilter) bool,
+	evalNestedSliceWhere func(*hydrapb.NestedSliceWhereFilter) bool,
 ) bool {
 	if group == nil {
 		return true
@@ -133,8 +140,9 @@ func evaluateFilterGroupWithMeta(
 	hasPhraseFilters := len(group.PhraseFilters) > 0
 	hasVectorFilters := len(group.VectorFilters) > 0
 	hasGeoDistanceFilters := len(group.GeoDistanceFilters) > 0
+	hasNestedSliceWhereFilters := len(group.NestedSliceWhereFilters) > 0
 
-	if !hasFilters && !hasSubGroups && !hasPhraseFilters && !hasVectorFilters && !hasGeoDistanceFilters {
+	if !hasFilters && !hasSubGroups && !hasPhraseFilters && !hasVectorFilters && !hasGeoDistanceFilters && !hasNestedSliceWhereFilters {
 		return true
 	}
 
@@ -163,6 +171,11 @@ func evaluateFilterGroupWithMeta(
 		}
 		for _, gf := range group.GeoDistanceFilters {
 			if evalGeoDistance(gf) {
+				anyMatched = true
+			}
+		}
+		for _, nf := range group.NestedSliceWhereFilters {
+			if evalNestedSliceWhere(nf) {
 				anyMatched = true
 			}
 		}
@@ -195,12 +208,16 @@ func evaluateFilterGroupWithMeta(
 			return false
 		}
 	}
+	for _, nf := range group.NestedSliceWhereFilters {
+		if !evalNestedSliceWhere(nf) {
+			return false
+		}
+	}
 	return true
 }
 
 // evaluateFilterGroupWith is the generic AND/OR evaluator for filter groups.
-// The four callbacks determine how individual filters, sub-groups, phrase filters,
-// and vector filters are evaluated.
+// The callbacks determine how individual filter types are evaluated.
 func evaluateFilterGroupWith(
 	group *hydrapb.FilterGroup,
 	evalFilter func(*hydrapb.TreasureFilter) bool,
@@ -208,6 +225,7 @@ func evaluateFilterGroupWith(
 	evalPhrase func(*hydrapb.PhraseFilter) bool,
 	evalVector func(*hydrapb.VectorFilter) bool,
 	evalGeoDistance func(*hydrapb.GeoDistanceFilter) bool,
+	evalNestedSliceWhere func(*hydrapb.NestedSliceWhereFilter) bool,
 ) bool {
 	if group == nil {
 		return true
@@ -218,9 +236,10 @@ func evaluateFilterGroupWith(
 	hasPhraseFilters := len(group.PhraseFilters) > 0
 	hasVectorFilters := len(group.VectorFilters) > 0
 	hasGeoDistanceFilters := len(group.GeoDistanceFilters) > 0
+	hasNestedSliceWhereFilters := len(group.NestedSliceWhereFilters) > 0
 
 	// Empty group = no filtering = pass
-	if !hasFilters && !hasSubGroups && !hasPhraseFilters && !hasVectorFilters && !hasGeoDistanceFilters {
+	if !hasFilters && !hasSubGroups && !hasPhraseFilters && !hasVectorFilters && !hasGeoDistanceFilters && !hasNestedSliceWhereFilters {
 		return true
 	}
 
@@ -250,6 +269,11 @@ func evaluateFilterGroupWith(
 				return true
 			}
 		}
+		for _, nf := range group.NestedSliceWhereFilters {
+			if evalNestedSliceWhere(nf) {
+				return true
+			}
+		}
 		return false
 	}
 
@@ -276,6 +300,11 @@ func evaluateFilterGroupWith(
 	}
 	for _, gf := range group.GeoDistanceFilters {
 		if !evalGeoDistance(gf) {
+			return false
+		}
+	}
+	for _, nf := range group.NestedSliceWhereFilters {
+		if !evalNestedSliceWhere(nf) {
 			return false
 		}
 	}
@@ -388,6 +417,8 @@ func toInt64(v interface{}) (int64, bool) {
 		return int64(n), true
 	case float64:
 		return int64(n), true
+	case time.Time:
+		return n.UTC().Unix(), true
 	default:
 		return 0, false
 	}
@@ -711,6 +742,32 @@ func evaluateAnyMatch(ams anyMatchSlice, op hydrapb.Relational_Operator, filter 
 			}
 		}
 		return true
+	}
+
+	// STRING_IN / INT32_IN / INT64_IN: check if any value in the slice matches the IN set
+	if op == hydrapb.Relational_STRING_IN {
+		for _, v := range ams.values {
+			if evaluateStringIn(v, filter.StringInVals) {
+				return true
+			}
+		}
+		return false
+	}
+	if op == hydrapb.Relational_INT32_IN {
+		for _, v := range ams.values {
+			if evaluateInt32In(v, filter.Int32InVals) {
+				return true
+			}
+		}
+		return false
+	}
+	if op == hydrapb.Relational_INT64_IN {
+		for _, v := range ams.values {
+			if evaluateInt64In(v, filter.Int64InVals) {
+				return true
+			}
+		}
+		return false
 	}
 
 	for _, v := range ams.values {

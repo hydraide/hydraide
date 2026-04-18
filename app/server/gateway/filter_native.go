@@ -17,6 +17,7 @@ func evaluateNativeFilterGroup(t treasure.Treasure, group *hydrapb.FilterGroup) 
 		func(pf *hydrapb.PhraseFilter) bool { return evaluateNativePhraseFilter(t, pf) },
 		func(vf *hydrapb.VectorFilter) bool { return evaluateNativeVectorFilter(t, vf) },
 		func(gf *hydrapb.GeoDistanceFilter) bool { return evaluateNativeGeoDistanceFilter(t, gf) },
+		func(nf *hydrapb.NestedSliceWhereFilter) bool { return evaluateNativeNestedSliceWhereFilter(t, nf) },
 	)
 }
 
@@ -61,6 +62,13 @@ func evaluateNativeFilterGroupWithMeta(t treasure.Treasure, group *hydrapb.Filte
 			matched := evaluateNativeGeoDistanceFilter(t, gf)
 			if matched && gf.Label != nil && *gf.Label != "" {
 				meta.matchedLabels = append(meta.matchedLabels, *gf.Label)
+			}
+			return matched
+		},
+		func(nf *hydrapb.NestedSliceWhereFilter) bool {
+			matched := evaluateNativeNestedSliceWhereFilter(t, nf)
+			if matched && nf.Label != nil && *nf.Label != "" {
+				meta.matchedLabels = append(meta.matchedLabels, *nf.Label)
 			}
 			return matched
 		},
@@ -294,11 +302,31 @@ func evaluateNativeBytesFieldFilter(t treasure.Treasure, filter *hydrapb.Treasur
 		return op == hydrapb.Relational_IS_EMPTY
 	}
 
+	return evaluateBytesFieldFilterAgainstMap(decoded, filter)
+}
+
+// evaluateBytesFieldFilterAgainstMap evaluates a single TreasureFilter against
+// a pre-decoded msgpack map. This allows reuse for both top-level evaluation
+// and per-element evaluation in NestedSliceWhereFilter.
+func evaluateBytesFieldFilterAgainstMap(decoded map[string]interface{}, filter *hydrapb.TreasureFilter) bool {
+	op := filter.GetOperator()
+
 	fieldVal := extractFieldByPath(decoded, *filter.BytesFieldPath)
 
 	// [*] wildcard: any-match iteration over nested slice elements
 	if ams, ok := fieldVal.(anyMatchSlice); ok {
 		return evaluateAnyMatch(ams, op, filter)
+	}
+
+	// STRING_IN / INT32_IN / INT64_IN
+	if op == hydrapb.Relational_STRING_IN {
+		return evaluateStringIn(fieldVal, filter.StringInVals)
+	}
+	if op == hydrapb.Relational_INT32_IN {
+		return evaluateInt32In(fieldVal, filter.Int32InVals)
+	}
+	if op == hydrapb.Relational_INT64_IN {
+		return evaluateInt64In(fieldVal, filter.Int64InVals)
 	}
 
 	// IS_EMPTY / IS_NOT_EMPTY
@@ -394,6 +422,57 @@ func evaluateNativeBytesFieldFilter(t treasure.Treasure, filter *hydrapb.Treasur
 		}
 	}
 
+	return false
+}
+
+// evaluateStringIn checks if the field value equals any of the given string values.
+func evaluateStringIn(fieldVal interface{}, vals []string) bool {
+	if fieldVal == nil || len(vals) == 0 {
+		return false
+	}
+	s, ok := fieldVal.(string)
+	if !ok {
+		return false
+	}
+	for _, allowed := range vals {
+		if s == allowed {
+			return true
+		}
+	}
+	return false
+}
+
+// evaluateInt32In checks if the field value equals any of the given int32 values.
+func evaluateInt32In(fieldVal interface{}, vals []int32) bool {
+	if fieldVal == nil || len(vals) == 0 {
+		return false
+	}
+	v, ok := toInt64(fieldVal)
+	if !ok {
+		return false
+	}
+	for _, allowed := range vals {
+		if v == int64(allowed) {
+			return true
+		}
+	}
+	return false
+}
+
+// evaluateInt64In checks if the field value equals any of the given int64 values.
+func evaluateInt64In(fieldVal interface{}, vals []int64) bool {
+	if fieldVal == nil || len(vals) == 0 {
+		return false
+	}
+	v, ok := toInt64(fieldVal)
+	if !ok {
+		return false
+	}
+	for _, allowed := range vals {
+		if v == allowed {
+			return true
+		}
+	}
 	return false
 }
 
@@ -516,6 +595,9 @@ func evaluateNativeProfileFilterGroup(treasures map[string]treasure.Treasure, gr
 		func(gf *hydrapb.GeoDistanceFilter) bool {
 			return evaluateNativeProfileGeoDistanceFilter(treasures, gf)
 		},
+		func(nf *hydrapb.NestedSliceWhereFilter) bool {
+			return evaluateNativeProfileNestedSliceWhereFilter(treasures, nf)
+		},
 	)
 }
 
@@ -619,4 +701,195 @@ func evaluateNativeProfileGeoDistanceFilter(treasures map[string]treasure.Treasu
 		return false
 	}
 	return evaluateNativeGeoDistanceFilter(t, gf)
+}
+
+// evaluateNativeNestedSliceWhereFilter evaluates a NestedSliceWhereFilter against
+// a treasure. It decodes the treasure's BytesVal, extracts the slice at SlicePath,
+// and evaluates conditions per element according to the mode (ANY/ALL/NONE/COUNT).
+func evaluateNativeNestedSliceWhereFilter(t treasure.Treasure, nf *hydrapb.NestedSliceWhereFilter) bool {
+	if nf == nil {
+		return true
+	}
+
+	if t.GetContentType() != treasure.ContentTypeByteArray {
+		return nf.EvalMode == hydrapb.NestedSliceWhereFilter_ALL ||
+			nf.EvalMode == hydrapb.NestedSliceWhereFilter_NONE ||
+			(nf.EvalMode == hydrapb.NestedSliceWhereFilter_COUNT && evaluateCountResult(0, nf))
+	}
+
+	bytesVal, err := t.GetContentByteArray()
+	if err != nil || bytesVal == nil || !isMsgpackEncoded(bytesVal) {
+		return nf.EvalMode == hydrapb.NestedSliceWhereFilter_ALL ||
+			nf.EvalMode == hydrapb.NestedSliceWhereFilter_NONE ||
+			(nf.EvalMode == hydrapb.NestedSliceWhereFilter_COUNT && evaluateCountResult(0, nf))
+	}
+
+	decoded, err := decodeMsgpackToMap(unwrapMsgpack(bytesVal))
+	if err != nil {
+		return nf.EvalMode == hydrapb.NestedSliceWhereFilter_ALL ||
+			nf.EvalMode == hydrapb.NestedSliceWhereFilter_NONE ||
+			(nf.EvalMode == hydrapb.NestedSliceWhereFilter_COUNT && evaluateCountResult(0, nf))
+	}
+
+	return evaluateNestedSliceWhereAgainstMap(decoded, nf)
+}
+
+// evaluateNestedSliceWhereAgainstMap evaluates a NestedSliceWhereFilter against
+// a pre-decoded msgpack map. Extracted for reuse in profile mode and nested evaluation.
+func evaluateNestedSliceWhereAgainstMap(decoded map[string]interface{}, nf *hydrapb.NestedSliceWhereFilter) bool {
+	sliceVal := extractFieldByPath(decoded, nf.SlicePath)
+	arr, ok := sliceVal.([]interface{})
+	if !ok || len(arr) == 0 {
+		// No elements: ANY→false, ALL→true, NONE→true, COUNT→compare 0
+		switch nf.EvalMode {
+		case hydrapb.NestedSliceWhereFilter_ANY:
+			return false
+		case hydrapb.NestedSliceWhereFilter_ALL, hydrapb.NestedSliceWhereFilter_NONE:
+			return true
+		case hydrapb.NestedSliceWhereFilter_COUNT:
+			return evaluateCountResult(0, nf)
+		}
+		return false
+	}
+
+	conditions := nf.Conditions
+	if conditions == nil || (len(conditions.Filters) == 0 && len(conditions.SubGroups) == 0 &&
+		len(conditions.NestedSliceWhereFilters) == 0) {
+		// No conditions: all elements match
+		switch nf.EvalMode {
+		case hydrapb.NestedSliceWhereFilter_ANY:
+			return true
+		case hydrapb.NestedSliceWhereFilter_ALL:
+			return true
+		case hydrapb.NestedSliceWhereFilter_NONE:
+			return false
+		case hydrapb.NestedSliceWhereFilter_COUNT:
+			return evaluateCountResult(int32(len(arr)), nf)
+		}
+		return true
+	}
+
+	var matchCount int32
+	for _, elem := range arr {
+		elemMap, ok := elem.(map[string]interface{})
+		if !ok {
+			// Non-map element: treated as not matching
+			switch nf.EvalMode {
+			case hydrapb.NestedSliceWhereFilter_ALL:
+				return false
+			}
+			continue
+		}
+
+		matched := evaluateFilterGroupAgainstMap(elemMap, conditions)
+
+		switch nf.EvalMode {
+		case hydrapb.NestedSliceWhereFilter_ANY:
+			if matched {
+				return true
+			}
+		case hydrapb.NestedSliceWhereFilter_ALL:
+			if !matched {
+				return false
+			}
+		case hydrapb.NestedSliceWhereFilter_NONE:
+			if matched {
+				return false
+			}
+		case hydrapb.NestedSliceWhereFilter_COUNT:
+			if matched {
+				matchCount++
+			}
+		}
+	}
+
+	switch nf.EvalMode {
+	case hydrapb.NestedSliceWhereFilter_ANY:
+		return false
+	case hydrapb.NestedSliceWhereFilter_ALL:
+		return true
+	case hydrapb.NestedSliceWhereFilter_NONE:
+		return true
+	case hydrapb.NestedSliceWhereFilter_COUNT:
+		return evaluateCountResult(matchCount, nf)
+	}
+	return false
+}
+
+// evaluateCountResult compares a count of matching elements against the
+// NestedSliceWhereFilter's CountOperator and CountValue.
+func evaluateCountResult(count int32, nf *hydrapb.NestedSliceWhereFilter) bool {
+	return compareOrdered(int64(count), nf.CountOperator, int64(nf.CountValue))
+}
+
+// evaluateFilterGroupAgainstMap evaluates a FilterGroup against a pre-decoded
+// msgpack map. Used for per-element evaluation in NestedSliceWhereFilter.
+// Only supports BytesField filters and nested NestedSliceWhereFilters within conditions.
+func evaluateFilterGroupAgainstMap(decoded map[string]interface{}, group *hydrapb.FilterGroup) bool {
+	if group == nil {
+		return true
+	}
+
+	hasFilters := len(group.Filters) > 0
+	hasSubGroups := len(group.SubGroups) > 0
+	hasNestedSliceWhereFilters := len(group.NestedSliceWhereFilters) > 0
+
+	if !hasFilters && !hasSubGroups && !hasNestedSliceWhereFilters {
+		return true
+	}
+
+	if group.Logic == hydrapb.FilterLogic_OR {
+		for _, f := range group.Filters {
+			if f.BytesFieldPath != nil && evaluateBytesFieldFilterAgainstMap(decoded, f) {
+				return true
+			}
+		}
+		for _, sg := range group.SubGroups {
+			if evaluateFilterGroupAgainstMap(decoded, sg) {
+				return true
+			}
+		}
+		for _, nf := range group.NestedSliceWhereFilters {
+			if evaluateNestedSliceWhereAgainstMap(decoded, nf) {
+				return true
+			}
+		}
+		return false
+	}
+
+	// AND (default)
+	for _, f := range group.Filters {
+		if f.BytesFieldPath != nil && !evaluateBytesFieldFilterAgainstMap(decoded, f) {
+			return false
+		}
+	}
+	for _, sg := range group.SubGroups {
+		if !evaluateFilterGroupAgainstMap(decoded, sg) {
+			return false
+		}
+	}
+	for _, nf := range group.NestedSliceWhereFilters {
+		if !evaluateNestedSliceWhereAgainstMap(decoded, nf) {
+			return false
+		}
+	}
+	return true
+}
+
+// evaluateNativeProfileNestedSliceWhereFilter evaluates a NestedSliceWhereFilter
+// against a map of native treasures in profile mode.
+func evaluateNativeProfileNestedSliceWhereFilter(treasures map[string]treasure.Treasure, nf *hydrapb.NestedSliceWhereFilter) bool {
+	if nf == nil {
+		return true
+	}
+	if nf.TreasureKey == nil || *nf.TreasureKey == "" {
+		return false
+	}
+	t, exists := treasures[*nf.TreasureKey]
+	if !exists {
+		return nf.EvalMode == hydrapb.NestedSliceWhereFilter_ALL ||
+			nf.EvalMode == hydrapb.NestedSliceWhereFilter_NONE ||
+			(nf.EvalMode == hydrapb.NestedSliceWhereFilter_COUNT && evaluateCountResult(0, nf))
+	}
+	return evaluateNativeNestedSliceWhereFilter(t, nf)
 }
