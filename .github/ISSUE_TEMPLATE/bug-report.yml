@@ -16,7 +16,6 @@ body:
         - core
         - hydraidectl
         - go-sdk
-        - python-sdk
         - other
     validations:
       required: true

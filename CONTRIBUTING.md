@@ -85,7 +85,7 @@ clear, parseable, and contain example code.
 Use [Conventional Commits](https://www.conventionalcommits.org/) when possible:
 
 - `fix: handle empty Swamp hydration`
-- `feat: add TTL support to Python SDK`
+- `feat: add TTL support to Go SDK`
 - `docs: clarify Catalog usage`
 
 ---
@@ -100,7 +100,7 @@ This helps us **automatically assign labels**, generate changelogs, and maintain
 | Prefix      | Purpose                                  | Example                                   |
 | ----------- | ---------------------------------------- | ----------------------------------------- |
 | `fix:`      | Bugfix, unexpected behavior              | `fix: handle empty Swamp hydration`       |
-| `feat:`     | New feature or capability                | `feat: add TTL support to Python SDK`     |
+| `feat:`     | New feature or capability                | `feat: add TTL support to Go SDK`     |
 | `docs:`     | Documentation-only change                | `docs: clarify Catalog usage`             |
 | `refactor:` | Internal code change, no behavior change | `refactor: simplify hydration handler`    |
 | `chore:`    | Build system, tooling, or meta change    | `chore: update GitHub Actions matrix`     |
@@ -191,7 +191,6 @@ permissions to understand or act based on them, just use them to stay aligned wi
 | Label              | Meaning                              |
 | ------------------ | ------------------------------------ |
 | `area:sdk-go`      | This task relates to the Go SDK.     |
-| `area:sdk-python`  | This task relates to the Python SDK. |
 | `area:hydraidectl` | CLI logic and tooling.               |
 
 ### 📌 Contribution Meta

@@ -9,11 +9,9 @@ repos:
     hooks:
       - id: check-added-large-files
       - id: check-json
-      - id: check-ast
       - id: check-merge-conflict
       - id: check-yaml
         args: [--unsafe]
-      - id: debug-statements
       - id: detect-private-key
       - id: end-of-file-fixer
   - repo: https://github.com/compilerla/conventional-pre-commit
@@ -22,22 +20,3 @@ repos:
       - id: conventional-pre-commit
         stages: [ commit-msg ]
         args: [--strict]
-
-
-  # pre-commit hooks for the Python SDK
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.13
-    hooks:
-      - id: ruff-check
-        files: ^sdk/python/hydraidepy
-        args: [--config, sdk/python/hydraidepy/pyproject.toml, --extend-select, I, --fix]
-      - id: ruff-format
-        files: ^sdk/python/hydraidepy
-        args: [--config, sdk/python/hydraidepy/pyproject.toml]
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.19.1
-    hooks:
-      - id: mypy
-        pass_filenames: false
-        args: [sdk/python/hydraidepy/., --strict, --ignore-missing-imports, --config-file, sdk/python/hydraidepy/pyproject.toml]
-        files: ^sdk/python/hydraidepy

@@ -32,10 +32,6 @@ area:sdk-go:
   - 'sdk/go/**'
   - 'docs/sdk/go/**'
 
-area:sdk-python:
-  - 'sdk/python/**'
-  - 'docs/sdk/python/**'
-
 area:docs:
   - 'docs/**'
   - '**/*.md'

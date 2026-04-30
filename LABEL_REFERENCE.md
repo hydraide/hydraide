@@ -43,7 +43,6 @@
 | `area:server`      | HydrAIDE Server internals (`app/hydraideserver/`). | ✅ **Maintainers** set manually, or auto-applied if paths under `app/hydraideserver/` are touched.     | `#5319e7` |
 | `area:hydraidectl` | HydrAIDE CLI implementation specifically.        | ✅ Manually set by maintainers. Can also be inferred from PRs affecting `cmd/hydraidectl/` or CLI docs. | `#008672` |
 | `area:sdk-go`      | Go SDK and related logic.                        | ✅ Auto-assigned if files under `sdk/go/` or `docs/sdk/go/` are modified.                              | `#3572A5` |
-| `area:sdk-python`  | Python SDK and tooling.                          | ✅ Maintainers set manually or via path-based CI rule (e.g. `sdk/python/**`).                          | `#3572A5` |
 | `area:docs`        | Documentation or markdown-based assets.          | 🔁 **Auto-applied** if PR includes `.md`, `.rst`, or lives under `docs/`, `README.md`, etc.            | `#006b75` |
 
 ## 🏷 Priority Labels

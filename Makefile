@@ -3,19 +3,13 @@
 # =============================================================================
 #
 # This Makefile provides useful targets for generating gRPC client code from
-# .proto definitions. It supports Go out-of-the-box and allows optional
-# generation for Python, Node.js, Rust, Java, and C# if tools are installed.
-#
-# Note:
-# - Go SDK is pre-generated under ./generated/go
-# - All other languages must be generated manually
-#
-# Safe to run in CI/CD – missing tools will not break execution
+# .proto definitions. The Go SDK is generated under ./generated/hydraidepbgo
+# via the proto-go target.
 #
 # Need help? → https://grpc.io/docs/
 #
 # =============================================================================
-.PHONY: build push build-push clean build-binary build-hydraidectl test proto-go proto-python proto-node proto-rust proto-java proto-csharp help
+.PHONY: build push build-push clean build-binary build-hydraidectl test proto-go help
 
 # Default target - show help
 .DEFAULT_GOAL := help
@@ -36,11 +30,6 @@ help:
 	@echo ""
 	@echo "  🛠️  PROTO GENERATION:"
 	@echo "    make proto-go        - Generate Go proto files"
-	@echo "    make proto-python    - Generate Python proto files"
-	@echo "    make proto-node      - Generate Node.js proto files"
-	@echo "    make proto-rust      - Generate Rust proto files"
-	@echo "    make proto-java      - Generate Java proto files"
-	@echo "    make proto-csharp    - Generate C# proto files"
 	@echo ""
 	@echo "  🧹 CLEANUP:"
 	@echo "    make clean           - Remove generated files and binaries"
@@ -147,65 +136,6 @@ proto-go:
 # - Deletes all contents in the ./generated folders
 clean:
 	@echo "🧹 Cleaning generated files..."
-	rm -rf generated/hydraidepbgo* generated/hydraidepbpy/* generated/hydraidepbjs/* generated/hydraidepbrs/* generated/hydraidepbjv/* generated/hydraidepbcs/*
+	rm -rf generated/hydraidepbgo*
 	@echo "🧹 Cleaning built binaries..."
 	rm -f hydraide-amd64 hydraide-arm64 hydraidectl
-
-# -----------------------------------------------------------------------------
-# 🔹 proto-python – Generate Python client bindings (if grpc_tools available)
-# -----------------------------------------------------------------------------
-# Output: ./generated/python
-proto-python:
-	@echo "🐍 Syncing python dependencies via uv...\n"
-	cd sdk/python/hydraidepy && \
-	    uv sync
-	@echo "🐍 Generating Python gRPC files...\n"
-		sdk/python/hydraidepy/.venv/bin/python -m grpc_tools.protoc -I proto \
-		--python_out=sdk/python/hydraidepy/src/hydraidepy/generated \
-		--grpc_python_out=sdk/python/hydraidepy/src/hydraidepy/generated \
-		proto/hydraide.proto
-
-# -----------------------------------------------------------------------------
-# 🔹 proto-node – Generate Node.js client bindings (requires grpc_tools_node_protoc_plugin)
-# -----------------------------------------------------------------------------
-# Output: ./generated/node
-proto-node:
-	@echo "🟨 Generating Node.js gRPC files..."
-	@command -v protoc-gen-grpc >/dev/null 2>&1 || { echo "⚠️  Node.js gRPC plugin not found – skipping"; exit 0; }
-	@protoc --proto_path=proto \
-		--js_out=import_style=commonjs,binary:generated/hydraidepbjs \
-		--grpc_out=generated/hydraidepbjs \
-		proto/hydraide.proto
-
-# -----------------------------------------------------------------------------
-# 🔹 proto-rust – Generate Rust proto files (requires protoc-gen-prost)
-# -----------------------------------------------------------------------------
-# Output: ./generated/rust
-proto-rust:
-	@echo "🦀 Generating Rust proto files..."
-	@command -v protoc-gen-prost >/dev/null 2>&1 || { echo "⚠️  protoc-gen-prost not installed – skipping"; exit 0; }
-	@protoc --proto_path=proto \
-		--prost_out=./generated/hydraidepbrs \
-		proto/hydraide.proto
-
-# -----------------------------------------------------------------------------
-# 🔹 proto-java – Generate Java proto files
-# -----------------------------------------------------------------------------
-# Output: ./generated/java
-proto-java:
-	@echo "☕ Generating Java proto files..."
-	@protoc --proto_path=proto \
-		--java_out=./generated/hydraidepbjv \
-		--grpc-java_out=./generated/hydraidepbjv \
-		proto/hydraide.proto
-
-# -----------------------------------------------------------------------------
-# 🔹 proto-csharp – Generate C# (.NET) proto files
-# -----------------------------------------------------------------------------
-# Output: ./generated/csharp
-proto-csharp:
-	@echo "🎯 Generating C# proto files..."
-	@protoc --proto_path=proto \
-		--csharp_out=./generated/hydraidepbcs \
-		--grpc_out=./generated/hydraidepbcs \
-		proto/hydraide.proto

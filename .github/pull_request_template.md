@@ -28,7 +28,6 @@ Closes #
 - [ ] core
 - [ ] hydraidectl
 - [ ] sdk/go
-- [ ] sdk/python
 - [ ] docs
 - [ ] ci/build
 
