@@ -954,6 +954,11 @@ func New(name name.Name, closeAfterIdle time.Duration, filesystemSettings *Files
 		s.chroniclerInterface.RegisterFilePointerFunction(s.FilePointerCallbackFunction)
 		// load the swamp from the chroniclerInterface while the swamp is created
 		s.chroniclerInterface.RegisterSaveFunction(s.SaveFunction)
+		// Wire the live-count callback so the V2 chronicler can do O(1)
+		// fragmentation checks during Write()/Close() and trigger inline
+		// compaction without re-scanning the file. Must be wired before
+		// any Write() — Load() does not need it (it uses its own loaded index).
+		s.chroniclerInterface.RegisterLiveCountFunction(s.beaconKey.Count)
 		// The swamp is Permanent-Type so we need to load the data from the filesystem
 		s.chroniclerInterface.Load(s.beaconKey)
 	}

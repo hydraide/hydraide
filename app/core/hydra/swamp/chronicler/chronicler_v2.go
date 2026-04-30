@@ -19,6 +19,20 @@ import (
 	"github.com/hydraide/hydraide/app/core/hydra/swamp/treasure/guard"
 )
 
+const (
+	// defaultMinEntriesForCompact is the smallest total-entry count for which
+	// inline compaction is worth running. Below this, the wasted-bytes savings
+	// are negligible and not worth the rewrite cost.
+	defaultMinEntriesForCompact = 100
+
+	// defaultMaxFileSizeForLoadCompact caps the file size eligible for inline
+	// self-heal during Load(). Anything above this is left to Write() / Close()
+	// triggers (or a manual sweep) so summon latency stays bounded.
+	// 256 MiB is large enough to cover almost all real swamps while still
+	// finishing in well under a second on commodity disks.
+	defaultMaxFileSizeForLoadCompact = int64(256 * 1024 * 1024)
+)
+
 // chroniclerV2 implements the Chronicler interface using the V2 append-only format.
 // It stores all data in a single .hyd file instead of multiple chunk files.
 //
@@ -42,6 +56,17 @@ type chroniclerV2 struct {
 	dontSendFilePointer bool
 	compactionOnSave    bool // Whether to check and run compaction on save
 
+	// minEntriesForCompact is the minimum total entry count below which inline
+	// compaction is skipped. Avoids needless rewrites of tiny files even if
+	// their fragmentation ratio is technically above the threshold.
+	minEntriesForCompact int
+
+	// maxFileSizeForLoadCompact caps the file size eligible for inline
+	// self-heal during Load(). Larger files are left to the Write()/Close()
+	// triggers (or a manual sweep) to avoid producing latency spikes on
+	// summon. 0 = no cap.
+	maxFileSizeForLoadCompact int64
+
 	// Swamp metadata (stored in .hyd file, replaces separate meta file)
 	swampName string // Full swamp name for reverse lookup
 
@@ -51,6 +76,21 @@ type chroniclerV2 struct {
 
 	// Runtime state
 	lastFragmentation float64 // Last calculated fragmentation ratio
+
+	// totalEntriesInFile tracks the total number of entries currently
+	// persisted in the .hyd file (live + dead, every INSERT/UPDATE/DELETE
+	// ever written and not yet compacted away). Initialized from the file
+	// header on Load(), incremented on each successful Write(), and reset
+	// to the live-count after a successful compaction.
+	// Always accessed under c.mu.
+	totalEntriesInFile int64
+
+	// liveCountFunc returns the current number of live keys in the swamp.
+	// Wired by the swamp via RegisterLiveCountFunction (typically backed by
+	// beacon.Count). Used for O(1) fragmentation estimation during Write()
+	// to decide whether inline compaction should run.
+	// Always accessed under c.mu.
+	liveCountFunc func() int
 
 	// Persistent writer - stays open while swamp is active
 	// This avoids repeated file open/close for each Write() call
@@ -76,12 +116,14 @@ func NewV2(swampDataFolderPath string, maxDepth int) Chronicler {
 	hydFilePath := swampDataFolderPath + ".hyd"
 
 	return &chroniclerV2{
-		swampDataFolderPath: swampDataFolderPath,
-		hydFilePath:         hydFilePath,
-		maxBlockSize:        v2.DefaultMaxBlockSize,
-		compactionThreshold: 0.3,
-		maxDepth:            maxDepth,
-		compactionOnSave:    true,
+		swampDataFolderPath:       swampDataFolderPath,
+		hydFilePath:               hydFilePath,
+		maxBlockSize:              v2.DefaultMaxBlockSize,
+		compactionThreshold:       0.3,
+		maxDepth:                  maxDepth,
+		compactionOnSave:          true,
+		minEntriesForCompact:      defaultMinEntriesForCompact,
+		maxFileSizeForLoadCompact: defaultMaxFileSizeForLoadCompact,
 	}
 }
 
@@ -92,13 +134,15 @@ func NewV2WithName(swampDataFolderPath string, maxDepth int, swampName string) C
 	hydFilePath := swampDataFolderPath + ".hyd"
 
 	return &chroniclerV2{
-		swampDataFolderPath: swampDataFolderPath,
-		hydFilePath:         hydFilePath,
-		maxBlockSize:        v2.DefaultMaxBlockSize,
-		compactionThreshold: 0.3,
-		maxDepth:            maxDepth,
-		compactionOnSave:    true,
-		swampName:           swampName,
+		swampDataFolderPath:       swampDataFolderPath,
+		hydFilePath:               hydFilePath,
+		maxBlockSize:              v2.DefaultMaxBlockSize,
+		compactionThreshold:       0.3,
+		maxDepth:                  maxDepth,
+		compactionOnSave:          true,
+		swampName:                 swampName,
+		minEntriesForCompact:      defaultMinEntriesForCompact,
+		maxFileSizeForLoadCompact: defaultMaxFileSizeForLoadCompact,
 	}
 }
 
@@ -107,12 +151,14 @@ func NewV2WithConfig(swampDataFolderPath string, maxDepth int, maxBlockSize int,
 	hydFilePath := swampDataFolderPath + ".hyd"
 
 	return &chroniclerV2{
-		swampDataFolderPath: swampDataFolderPath,
-		hydFilePath:         hydFilePath,
-		maxBlockSize:        maxBlockSize,
-		compactionThreshold: compactionThreshold,
-		maxDepth:            maxDepth,
-		compactionOnSave:    true,
+		swampDataFolderPath:       swampDataFolderPath,
+		hydFilePath:               hydFilePath,
+		maxBlockSize:              maxBlockSize,
+		compactionThreshold:       compactionThreshold,
+		maxDepth:                  maxDepth,
+		compactionOnSave:          true,
+		minEntriesForCompact:      defaultMinEntriesForCompact,
+		maxFileSizeForLoadCompact: defaultMaxFileSizeForLoadCompact,
 	}
 }
 
@@ -132,6 +178,15 @@ func (c *chroniclerV2) RegisterSaveFunction(swampSaveFunction func(t treasure.Tr
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.swampSaveFunction = swampSaveFunction
+}
+
+// RegisterLiveCountFunction wires a callback (typically beacon.Count) used by
+// the Write()/Close()/Load() paths to estimate fragmentation in O(1) and
+// decide whether inline compaction should run.
+func (c *chroniclerV2) RegisterLiveCountFunction(liveCountFunction func() int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.liveCountFunc = liveCountFunction
 }
 
 func (c *chroniclerV2) GetSwampAbsPath() string {
@@ -187,9 +242,29 @@ func (c *chroniclerV2) Destroy() {
 // Load reads all treasures from the .hyd file and populates the beacon index.
 // It automatically handles the replay of INSERT/UPDATE/DELETE entries to
 // build the final state with only live entries.
+//
+// Crash recovery: any leftover ".hyd.compact" temp file from a previous
+// interrupted compaction is removed before reading. The atomic-rename
+// guarantee in Compactor.Compact ensures the .hyd file is always either
+// the full pre- or full post-compaction state, never mid-flight.
+//
+// Self-heal: after a successful index load, if the file is large enough,
+// fragmented above the threshold, and not larger than maxFileSizeForLoadCompact,
+// an inline compaction runs immediately so the swamp starts its session
+// with a clean file. The lock is held the entire time, so this can never
+// race with concurrent Write()/Close() on the same chronicler.
 func (c *chroniclerV2) Load(indexObj beacon.Beacon) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	// Crash recovery — drop any leftover temp from a previously crashed
+	// compaction. The .hyd file itself is always intact thanks to atomic
+	// rename, but the temp file would otherwise sit around forever.
+	if err := v2.CleanupCompactionTemp(c.hydFilePath); err != nil {
+		slog.Warn("could not remove leftover compaction temp",
+			"path", c.hydFilePath,
+			"error", err)
+	}
 
 	// Check if file exists
 	if _, err := os.Stat(c.hydFilePath); os.IsNotExist(err) {
@@ -205,16 +280,27 @@ func (c *chroniclerV2) Load(indexObj beacon.Beacon) {
 			"error", err)
 		return
 	}
-	defer reader.Close()
 
 	// Load index and get swamp metadata
 	index, swampNameFromFile, err := reader.LoadIndex()
 	if err != nil {
+		reader.Close()
 		slog.Error("cannot load index from swamp file",
 			"path", c.hydFilePath,
 			"error", err)
 		return
 	}
+
+	// Capture header stats while the reader is still open. The header's
+	// EntryCount reflects the total entries persisted across all writes
+	// (live + dead) — exactly the value we need for inline-compaction
+	// fragmentation estimates.
+	header := reader.GetHeader()
+	totalFromHeader := int64(0)
+	if header != nil {
+		totalFromHeader = int64(header.EntryCount)
+	}
+	reader.Close()
 
 	// Update swamp name from file if not set
 	if swampNameFromFile != "" && c.swampName == "" {
@@ -223,6 +309,58 @@ func (c *chroniclerV2) Load(indexObj beacon.Beacon) {
 
 	// Calculate fragmentation for later compaction decision
 	liveEntries := len(index)
+
+	// Initialize the persistent total-entries counter from the header.
+	// If the header is stale (e.g., crash before final close updated it),
+	// fall back to live count — Write() will append from there.
+	c.totalEntriesInFile = totalFromHeader
+	if c.totalEntriesInFile < int64(liveEntries) {
+		c.totalEntriesInFile = int64(liveEntries)
+	}
+
+	// Self-heal: rewrite the file in place if it is heavily fragmented and
+	// small enough that the rewrite cost is bounded. Skipping the size check
+	// for very large files keeps summon latency predictable; those will be
+	// compacted incrementally by the Write() trigger or a manual sweep.
+	if c.compactionOnSave && totalFromHeader >= int64(c.minEntriesForCompact) && liveEntries < int(totalFromHeader) {
+		dead := totalFromHeader - int64(liveEntries)
+		frag := float64(dead) / float64(totalFromHeader)
+		c.lastFragmentation = frag
+		if frag > c.compactionThreshold {
+			fileSize := int64(0)
+			if fi, err := os.Stat(c.hydFilePath); err == nil {
+				fileSize = fi.Size()
+			}
+			if c.maxFileSizeForLoadCompact <= 0 || fileSize <= c.maxFileSizeForLoadCompact {
+				slog.Info("load self-heal compaction triggered",
+					"path", c.hydFilePath,
+					"fragmentation", frag,
+					"live_entries", liveEntries,
+					"total_entries", totalFromHeader,
+					"file_size", fileSize)
+				result, cerr := v2.CompactFromIndex(c.hydFilePath, c.maxBlockSize, c.swampName, index, int(totalFromHeader))
+				if cerr != nil {
+					slog.Error("load self-heal compaction failed",
+						"path", c.hydFilePath,
+						"error", cerr)
+					// Original file is intact; counters keep header-derived value.
+				} else if result != nil && result.Compacted {
+					c.totalEntriesInFile = int64(result.LiveEntries)
+					c.lastFragmentation = 0
+					slog.Info("load self-heal compaction completed",
+						"path", c.hydFilePath,
+						"old_size", result.OldFileSize,
+						"new_size", result.NewFileSize,
+						"saved_bytes", result.OldFileSize-result.NewFileSize)
+				}
+			} else {
+				slog.Debug("load self-heal skipped due to file size cap",
+					"path", c.hydFilePath,
+					"file_size", fileSize,
+					"cap", c.maxFileSizeForLoadCompact)
+			}
+		}
+	}
 
 	// Convert entries to treasures
 	treasures := make(map[string]treasure.Treasure)
@@ -277,6 +415,9 @@ func (c *chroniclerV2) Write(treasures []treasure.Treasure) {
 
 	// Track file pointer events for callback
 	var filePointerEvents []*FileNameEvent
+	// Count successfully written entries so the in-memory total counter stays
+	// in lockstep with what is actually persisted to the .hyd file.
+	writtenCount := 0
 
 	// Write each treasure as an entry
 	for _, t := range treasures {
@@ -328,6 +469,7 @@ func (c *chroniclerV2) Write(treasures []treasure.Treasure) {
 			t.ReleaseTreasureGuard(guardID)
 			continue
 		}
+		writtenCount++
 
 		// Track for file pointer callback
 		if !c.dontSendFilePointer {
@@ -348,9 +490,19 @@ func (c *chroniclerV2) Write(treasures []treasure.Treasure) {
 		}
 	}
 
-	// Note: We don't close the writer here anymore!
-	// The writer stays open and will be closed when Close() is called.
-	// Compaction is checked during Close() instead of every write.
+	// Update the persistent total-entries counter with however many entries
+	// actually made it into the writer's buffer (errored entries are skipped
+	// above with `continue`).
+	c.totalEntriesInFile += int64(writtenCount)
+
+	// Note: We don't close the writer here.
+	// The writer stays open and is closed when Close() is called.
+	//
+	// Inline compaction trigger: now that the counters are up to date, do an
+	// O(1) fragmentation check against the live-count callback. If the file
+	// is heavily fragmented we run compaction synchronously, still under
+	// c.mu.Lock(), so no concurrent Write() can race us.
+	c.maybeCompactInline()
 }
 
 // ensureWriter creates the persistent writer if it doesn't exist.
@@ -388,50 +540,116 @@ func (c *chroniclerV2) ensureWriter() error {
 	return nil
 }
 
-// maybeCompact checks fragmentation and runs compaction if threshold exceeded.
-func (c *chroniclerV2) maybeCompact() {
-	// Only compact if we have a file
-	if _, err := os.Stat(c.hydFilePath); os.IsNotExist(err) {
+// maybeCompactInline checks the in-memory counters and triggers an inline
+// compaction if fragmentation exceeds the threshold.
+//
+// Must be called with c.mu held. The compaction itself runs synchronously
+// under the same lock — this is what guarantees no concurrent Write() can
+// race with the temp-file build and atomic rename.
+//
+// Hysteresis: compaction is only considered when total >= 2 × live. This
+// prevents an oscillating workload (rewrite the same N keys repeatedly)
+// from compacting on every batch — it amortizes the rewrite cost so that
+// each compaction does at least live× useful work, bounding the total
+// rewrite cost to O(N log N) for N writes.
+func (c *chroniclerV2) maybeCompactInline() {
+	if !c.compactionOnSave {
+		return
+	}
+	if c.liveCountFunc == nil {
+		return
+	}
+	total := c.totalEntriesInFile
+	if total < int64(c.minEntriesForCompact) {
 		return
 	}
 
-	// Read current fragmentation
-	reader, err := v2.NewFileReader(c.hydFilePath)
-	if err != nil {
+	live := int64(c.liveCountFunc())
+	if live < 0 {
+		live = 0
+	}
+	if live > total {
+		// Should not happen, but guard against counter drift.
 		return
 	}
-
-	fragmentation, _, _, err := reader.CalculateFragmentation()
-	reader.Close()
-
-	if err != nil {
-		return
-	}
-
-	c.lastFragmentation = fragmentation
-
-	// Compact if threshold exceeded
-	if fragmentation > c.compactionThreshold {
-		slog.Info("compaction triggered",
-			"path", c.hydFilePath,
-			"fragmentation", fragmentation,
-			"threshold", c.compactionThreshold)
-
-		compactor := v2.NewCompactor(c.hydFilePath, c.maxBlockSize, c.compactionThreshold)
-		result, err := compactor.Compact()
-		if err != nil {
-			slog.Error("compaction failed",
-				"path", c.hydFilePath,
-				"error", err)
-			return
+	// Hysteresis guard — refuse to compact unless the file has roughly
+	// doubled in size since the last compaction (or initial load).
+	if total < 2*live {
+		dead := total - live
+		if dead <= 0 {
+			c.lastFragmentation = 0
+		} else {
+			c.lastFragmentation = float64(dead) / float64(total)
 		}
-
-		slog.Info("compaction completed",
-			"path", c.hydFilePath,
-			"old_size", result.OldFileSize,
-			"new_size", result.NewFileSize,
-			"saved_bytes", result.OldFileSize-result.NewFileSize)
+		return
 	}
+	dead := total - live
+	if dead <= 0 {
+		c.lastFragmentation = 0
+		return
+	}
+
+	frag := float64(dead) / float64(total)
+	c.lastFragmentation = frag
+	if frag <= c.compactionThreshold {
+		return
+	}
+
+	if err := c.runCompactionLocked(); err != nil {
+		slog.Error("inline compaction failed",
+			"path", c.hydFilePath,
+			"error", err)
+		// Counters left as-is — next trigger will retry.
+	}
+}
+
+// runCompactionLocked closes the open writer, runs a full file compaction,
+// and updates counters. Must be called with c.mu held.
+//
+// Safety invariants:
+//   - All writes go through c.mu, so no concurrent appender can race the
+//     compaction's read/temp-write/rename sequence.
+//   - The Compactor uses atomic os.Rename, so the .hyd file is always either
+//     the full pre-compaction or the full post-compaction state — never mid.
+//   - On any error path inside Compactor.Compact, the original file is left
+//     intact and the temp file is removed.
+func (c *chroniclerV2) runCompactionLocked() error {
+	// Close the writer so its file handle is released and all buffered data
+	// is flushed before the compactor reads the file.
+	if c.writer != nil && !c.writerClosed {
+		if err := c.writer.Close(); err != nil {
+			return err
+		}
+		c.writerClosed = true
+		c.writer = nil
+	}
+
+	// Defensively wipe any leftover temp from a previously crashed run before
+	// the compactor creates a fresh one (it would also overwrite, but explicit
+	// cleanup keeps logs honest).
+	_ = v2.CleanupCompactionTemp(c.hydFilePath)
+
+	compactor := v2.NewCompactor(c.hydFilePath, c.maxBlockSize, 0)
+	result, err := compactor.Compact()
+	if err != nil {
+		return err
+	}
+	if result == nil || !result.Compacted {
+		return nil
+	}
+
+	// After compaction the file contains exactly the live entries.
+	c.totalEntriesInFile = int64(result.LiveEntries)
+	c.lastFragmentation = 0
+
+	slog.Info("compaction completed",
+		"path", c.hydFilePath,
+		"old_size", result.OldFileSize,
+		"new_size", result.NewFileSize,
+		"live_entries", result.LiveEntries,
+		"removed_entries", result.RemovedEntries,
+		"saved_bytes", result.OldFileSize-result.NewFileSize)
+	return nil
 }
 
 // encodeTreasure serializes a treasure to bytes using GOB encoding.
@@ -485,25 +703,12 @@ func (c *chroniclerV2) GetFragmentation() float64 {
 }
 
 // ForceCompaction runs compaction regardless of fragmentation threshold.
+// Shares the locked critical-section pattern with the inline trigger so it
+// is safe to call concurrently with normal swamp activity.
 func (c *chroniclerV2) ForceCompaction() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-
-	// Close writer first if open (to release file handle)
-	if c.writer != nil && !c.writerClosed {
-		if err := c.writer.Close(); err != nil {
-			return err
-		}
-		c.writerClosed = true
-	}
-
-	compactor := v2.NewCompactor(c.hydFilePath, c.maxBlockSize, 0)
-	_, err := compactor.Compact()
-
-	// Reset writer so next write will create a new one
-	c.writer = nil
-
-	return err
+	return c.runCompactionLocked()
 }
 
 // Close flushes all pending writes and closes the file handle.
@@ -512,83 +717,33 @@ func (c *chroniclerV2) ForceCompaction() error {
 // can be reopened by calling Write() again (lazy reinitialization).
 //
 // The Close() method also checks if compaction is needed and runs it
-// if the fragmentation threshold is exceeded.
+// if the fragmentation threshold is exceeded — this runs even when no
+// writer was opened in this session, so a swamp that was only loaded
+// (read-only) can still self-heal a previously-fragmented file.
 func (c *chroniclerV2) Close() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// If writer is not open, nothing to do
-	if c.writer == nil || c.writerClosed {
-		return nil
-	}
-
-	// Close the writer - this flushes all pending data
-	if err := c.writer.Close(); err != nil {
-		slog.Error("failed to close V2 chronicler writer",
-			"path", c.hydFilePath,
-			"error", err)
-		return err
-	}
-
-	c.writerClosed = true
-	c.writer = nil
-
-	slog.Debug("V2 chronicler closed",
-		"path", c.hydFilePath)
-
-	// Check if compaction is needed (now that writer is closed)
-	if c.compactionOnSave {
-		c.maybeCompactUnlocked()
-	}
-
-	return nil
-}
-
-// maybeCompactUnlocked checks and runs compaction without acquiring lock.
-// Must be called with lock already held.
-func (c *chroniclerV2) maybeCompactUnlocked() {
-	// Only compact if we have a file
-	if _, err := os.Stat(c.hydFilePath); os.IsNotExist(err) {
-		return
-	}
-
-	// Read current fragmentation
-	reader, err := v2.NewFileReader(c.hydFilePath)
-	if err != nil {
-		return
-	}
-
-	fragmentation, _, _, err := reader.CalculateFragmentation()
-	reader.Close()
-
-	if err != nil {
-		return
-	}
-
-	c.lastFragmentation = fragmentation
-
-	// Compact if threshold exceeded
-	if fragmentation > c.compactionThreshold {
-		slog.Info("compaction triggered on close",
-			"path", c.hydFilePath,
-			"fragmentation", fragmentation,
-			"threshold", c.compactionThreshold)
-
-		compactor := v2.NewCompactor(c.hydFilePath, c.maxBlockSize, c.compactionThreshold)
-		result, err := compactor.Compact()
-		if err != nil {
-			slog.Error("compaction failed",
+	// Close the writer if currently open. Skip cleanly if already closed
+	// or never opened — we still want the compaction check below to run.
+	if c.writer != nil && !c.writerClosed {
+		if err := c.writer.Close(); err != nil {
+			slog.Error("failed to close V2 chronicler writer",
 				"path", c.hydFilePath,
 				"error", err)
-			return
+			return err
 		}
-
-		slog.Info("compaction completed",
-			"path", c.hydFilePath,
-			"old_size", result.OldFileSize,
-			"new_size", result.NewFileSize,
-			"saved_bytes", result.OldFileSize-result.NewFileSize)
+		c.writerClosed = true
+		c.writer = nil
+		slog.Debug("V2 chronicler closed",
+			"path", c.hydFilePath)
 	}
+
+	// Compaction check runs unconditionally on Close — this is the safety net
+	// for swamps that idle out without enough writes to hit the inline trigger,
+	// or that were only ever loaded in this session.
+	c.maybeCompactInline()
+	return nil
 }
 
 // Sync forces a sync of pending data to disk without closing the writer.

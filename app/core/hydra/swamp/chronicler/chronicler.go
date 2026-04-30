@@ -43,6 +43,12 @@ type Chronicler interface {
 	// For V1: no-op (V1 doesn't use append-only format)
 	// For V2: rewrites the .hyd file, removing all dead entries
 	ForceCompaction() error
+	// RegisterLiveCountFunction registers a callback that returns the current
+	// number of live keys in the swamp (typically backed by the beacon Count()).
+	// V2 uses this for O(1) fragmentation checks during Write() to trigger
+	// inline compaction without re-scanning the file.
+	// For V1: no-op.
+	RegisterLiveCountFunction(liveCountFunction func() int)
 }
 
 type FileNameEvent struct {
@@ -112,6 +118,10 @@ func (c *chronicler) RegisterSaveFunction(swampSaveFunction func(t treasure.Trea
 	defer c.mu.Unlock()
 	c.swampSaveFunction = swampSaveFunction
 }
+
+// RegisterLiveCountFunction is a no-op for V1; V1 does not use fragmentation-based
+// compaction (it uses chunked .actual files instead of an append-only log).
+func (c *chronicler) RegisterLiveCountFunction(_ func() int) {}
 
 // GetSwampAbsPath returns the absolute path of the swamp's directory
 func (c *chronicler) GetSwampAbsPath() string {

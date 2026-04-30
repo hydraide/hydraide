@@ -206,6 +206,85 @@ func (c *Compactor) ForceCompact() (*CompactionResult, error) {
 	return c.Compact()
 }
 
+// CompactFromIndex performs compaction using a pre-loaded live entry index.
+// This is an optimization for the Load() self-heal path: the caller already
+// read the file and built the live index, so we skip the second file scan
+// and write only the live entries directly to a new .hyd file, then atomically
+// rename it over the old file.
+//
+// Caller must ensure no concurrent writers are touching filePath while this runs.
+// On any error, the original filePath is left intact (atomic rename only happens on success).
+//
+// totalEntries is the total number of entries in the source file (live + dead),
+// used solely to populate the result statistics.
+func CompactFromIndex(filePath string, maxBlockSize int, swampName string, index map[string][]byte, totalEntries int) (*CompactionResult, error) {
+	if filePath == "" {
+		return nil, fmt.Errorf("file path cannot be empty")
+	}
+	if maxBlockSize <= 0 {
+		maxBlockSize = DefaultMaxBlockSize
+	}
+
+	result := &CompactionResult{
+		LiveEntries:    len(index),
+		TotalEntries:   totalEntries,
+		RemovedEntries: totalEntries - len(index),
+	}
+
+	// Source file size for stats (and existence check)
+	if oldInfo, err := os.Stat(filePath); err == nil {
+		result.OldFileSize = oldInfo.Size()
+	} else if os.IsNotExist(err) {
+		result.Compacted = false
+		return result, nil
+	} else {
+		result.Error = err
+		return result, err
+	}
+
+	if totalEntries > 0 {
+		result.Fragmentation = float64(result.RemovedEntries) / float64(totalEntries)
+	}
+
+	// Always remove any leftover temp from a previous crashed compaction
+	tempPath := filePath + ".compact"
+	_ = os.Remove(tempPath)
+
+	writer, err := NewFileWriterWithName(tempPath, maxBlockSize, swampName)
+	if err != nil {
+		result.Error = err
+		return result, err
+	}
+
+	for key, data := range index {
+		entry := Entry{Operation: OpInsert, Key: key, Data: data}
+		if err := writer.WriteEntry(entry); err != nil {
+			writer.Close()
+			os.Remove(tempPath)
+			result.Error = err
+			return result, err
+		}
+	}
+
+	if err := writer.Close(); err != nil {
+		os.Remove(tempPath)
+		result.Error = err
+		return result, err
+	}
+
+	if err := os.Rename(tempPath, filePath); err != nil {
+		os.Remove(tempPath)
+		result.Error = err
+		return result, err
+	}
+
+	if newInfo, err := os.Stat(filePath); err == nil {
+		result.NewFileSize = newInfo.Size()
+	}
+	result.Compacted = true
+	return result, nil
+}
+
 // String returns a human-readable summary of the compaction result
 func (r *CompactionResult) String() string {
 	if !r.Compacted {
