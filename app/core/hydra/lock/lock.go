@@ -36,141 +36,142 @@ type Lock interface {
 }
 
 type lock struct {
-	// This map stores the waiting goroutines for each key.
-	// Each entry holds a queue struct that contains the waiting goroutines.
-	queues sync.Map
+	// queues stores per-key FIFO queues of waiting callers.
+	queues sync.Map // map[string]*queue
 }
 
 func New() Lock {
 	return &lock{}
 }
 
-func newQueue() *queue {
-	q := &queue{}
-	return q
+// caller represents a single waiter in the queue.
+//
+// ready is closed by Unlock (or auto-TTL) of the previous caller when this
+// caller becomes the head of the queue. The waiting goroutine selects on
+// this channel and the caller's context — no busy-wait, no CPU spin.
+//
+// done is closed by remove() once the caller leaves the queue (whether via
+// Unlock, TTL expiration, or context cancellation). The auto-unlock watchdog
+// selects on done so it can terminate immediately on Unlock instead of
+// living for the full TTL.
+type caller struct {
+	id    string
+	ready chan struct{}
+	done  chan struct{}
 }
 
 type queue struct {
-	mu      sync.RWMutex
-	callers []string
+	mu      sync.Mutex
+	callers []*caller
 }
 
-func (q *queue) AddCaller(caller string) {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	q.callers = append(q.callers, caller)
+func newQueue() *queue {
+	return &queue{}
 }
 
-func (q *queue) DeleteCaller(callerID string) error {
-
+// enqueue appends a new caller. If it lands at the head (queue was empty),
+// its ready channel is pre-closed so it can proceed immediately.
+func (q *queue) enqueue(c *caller) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-
-	for i, caller := range q.callers {
-
-		if caller == callerID {
-
-			// If there are more waiting goroutines, remove the first one from the queue.
-			// If the queue is empty, delete the entry entirely.
-			if len(q.callers) > 1 {
-				q.callers = append(q.callers[:i], q.callers[i+1:]...)
-			} else {
-				q.callers = []string{}
-			}
-			return nil
-
-		}
+	wasEmpty := len(q.callers) == 0
+	q.callers = append(q.callers, c)
+	if wasEmpty {
+		close(c.ready)
 	}
-
-	return errors.New("caller not found")
-
 }
 
-func (q *queue) CanExecute(callerID string) bool {
-
-	q.mu.RLock()
-	defer q.mu.RUnlock()
-
-	if len(q.callers) == 0 {
+// remove deletes the caller with the given id from the queue. If the removed
+// caller was at the head, the next caller's ready channel is closed so it can
+// proceed. Returns true if the caller was found.
+func (q *queue) remove(id string) bool {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	for i, c := range q.callers {
+		if c.id != id {
+			continue
+		}
+		wasHead := i == 0
+		q.callers = append(q.callers[:i], q.callers[i+1:]...)
+		// Signal the leaving caller's watchdog so it can terminate.
+		// Each caller has a fresh done channel and remove() only matches
+		// once per id, so this close is safe.
+		close(c.done)
+		if wasHead && len(q.callers) > 0 {
+			// Wake the next waiter.
+			close(q.callers[0].ready)
+		}
 		return true
 	}
-
-	return q.callers[0] == callerID
-
-}
-
-// StartAutoUnlock ensures that the lock is forcefully released when the TTL expires.
-func (q *queue) StartAutoUnlock(ctx context.Context, callerID string, ttl time.Duration) {
-
-	// handling the panic because this function called by a goroutine
-	defer panichandler.PanicHandler()
-
-	// Remove the caller after the TTL expires. Whichever timeout comes first will be used.
-	// Exit the goroutine immediately afterward.
-	t := time.NewTicker(ttl)
-	defer t.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			// If the callerID is found in the waiting queue, remove it.
-			_ = q.DeleteCaller(callerID)
-			return
-		case <-t.C:
-			_ = q.DeleteCaller(callerID)
-			return
-		}
-	}
-
-}
-
-func (l *lock) Lock(ctx context.Context, key string, ttl time.Duration) (lockID string, err error) {
-
-	// generate lockID
-	lockID = uuid.NewString()
-	// Retrieve the queue associated with the key, or create it if it doesn't exist.
-	q := l.getQueue(key)
-	// Add the caller as a waiting entry in the queue.
-	q.AddCaller(lockID)
-
-	for {
-		select {
-		case <-ctx.Done():
-
-			// On timeout, remove the caller from the queue since it can no longer wait.
-			_ = q.DeleteCaller(lockID)
-			return "", errors.New("lock timeout")
-
-		default:
-
-			// Check if the caller is at the front of the queue.
-			if q.CanExecute(lockID) {
-				// When granting the lock to the caller, start a goroutine
-				// that will automatically release the lock after the TTL expires.
-				// This prevents deadlocks in the database that could block other callers.
-				// If the lock is released this way, Unlock will return an error
-				// indicating that a timeout occurred.
-				panichandler.SafeGo("auto-unlock", func() {
-					q.StartAutoUnlock(ctx, lockID, ttl)
-				})
-				return lockID, nil
-			}
-
-			continue
-
-		}
-	}
-
-}
-
-func (l *lock) Unlock(key string, lockID string) error {
-	// Retrieve the queue associated with the given key.
-	q := l.getQueue(key)
-	// Remove the caller from the queue.
-	return q.DeleteCaller(lockID)
+	return false
 }
 
 func (l *lock) getQueue(key string) *queue {
+	if v, ok := l.queues.Load(key); ok {
+		return v.(*queue)
+	}
 	actual, _ := l.queues.LoadOrStore(key, newQueue())
 	return actual.(*queue)
+}
+
+func (l *lock) Lock(ctx context.Context, key string, ttl time.Duration) (lockID string, err error) {
+	lockID = uuid.NewString()
+
+	c := &caller{
+		id:    lockID,
+		ready: make(chan struct{}),
+		done:  make(chan struct{}),
+	}
+
+	q := l.getQueue(key)
+	q.enqueue(c)
+
+	// Wait until either we become the head of the queue (ready closed),
+	// or the caller's context is done.
+	select {
+	case <-c.ready:
+		// We hold the lock now. Start the auto-release watchdog: if the caller
+		// forgets to Unlock or crashes, the TTL will release the lock and
+		// wake the next waiter. The watchdog uses a fresh background context
+		// so the caller's ctx-cancellation does not prematurely release a
+		// successfully-acquired lock.
+		panichandler.SafeGo("auto-unlock", func() {
+			t := time.NewTimer(ttl)
+			defer t.Stop()
+			select {
+			case <-t.C:
+				q.remove(lockID)
+			case <-c.done:
+				// Unlock (or another remove) already took us out;
+				// no work for the watchdog.
+			}
+		})
+		return lockID, nil
+
+	case <-ctx.Done():
+		// We never acquired the lock. Remove ourselves from the queue.
+		// If we happened to land at the head between enqueue and select
+		// (race window: enqueue closed our ready right after we entered
+		// select), remove() still does the right thing — it wakes the
+		// next waiter when removing the head.
+		q.remove(lockID)
+		return "", errors.New("lock timeout")
+	}
+}
+
+// Unlock releases the lock. It removes the caller from the queue and (if it
+// was the head) wakes the next waiter via the queue's remove() logic.
+//
+// Returning an error when the lockID is not found preserves the original
+// contract — typically this means the TTL already expired.
+func (l *lock) Unlock(key string, lockID string) error {
+	v, ok := l.queues.Load(key)
+	if !ok {
+		return errors.New("caller not found")
+	}
+	q := v.(*queue)
+	if !q.remove(lockID) {
+		return errors.New("caller not found")
+	}
+	return nil
 }
