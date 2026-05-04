@@ -1571,3 +1571,13 @@ Download them — and you can start using them right away!
 - **HydrAIDE** is ideal for up to ~500K vectors with strong pre-filtering (e.g. category + language reduces 500K to 50-100K)
 - For 10M+ vectors without pre-filtering, a dedicated ANN index (HNSW, IVF) would be faster
 - HydrAIDE's advantage: **single system** for metadata filtering + vector search + phrase search, no orchestration needed
+
+## Q: My `CatalogShiftExpired` test is flaky — entries don't get returned even though I set `ExpireAt = time.Now().Add(-1 * time.Second)`
+
+This is **almost always client/server clock skew**, not a HydrAIDE bug.
+
+The expiration check runs on the server against the *server's* `time.Now()`. If the client clock is ahead of the server by Δ, then `client_now - 1s` may still be in the server's future when Δ > 1s, so the entry isn't shifted.
+
+**Fix:** use a margin much larger than realistic NTP skew, e.g. `ExpireAt = time.Now().Add(-30 * time.Second)`. This is the recommended pattern for "treat as expired right now" semantics. Also keep NTP/chrony running on every HydrAIDE host.
+
+Full debugging walkthrough: [`docs/troubleshooting/clock-skew-and-shift-expired.md`](troubleshooting/clock-skew-and-shift-expired.md).

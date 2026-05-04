@@ -38,6 +38,35 @@ import (
 //     If the field is not set, or it's in the future, `LoadExpired()` will not return it.
 //   - Example: `ExpireAt: time.Now().Add(30 * time.Second).UTC()`
 //
+// ⏱️ Clock skew gotcha (read this if your tests are flaky):
+//
+//   The expiration decision is made by the **server** against its own
+//   `time.Now()`. If the client and server clocks are out of sync (NTP drift,
+//   container clock skew, virtualized hosts), a value like
+//   `time.Now().Add(-1 * time.Second)` set on the client may still be in the
+//   FUTURE from the server's perspective.
+//
+//   Symptom: `CatalogShiftExpired` intermittently returns 0 entries, even though
+//   a `Save` with a "past" `ExpireAt` was made microseconds before. The entry IS
+//   in the swamp (you can `CatalogRead` it back), but the server considers it
+//   not-yet-expired because its `time.Now()` is behind the client's.
+//
+//   This is NOT a HydrAIDE bug — `expT < server_now` is the correct
+//   distributed-systems check (the server is authoritative for "expired").
+//
+//   Mitigation:
+//     - When you want "expired right now" semantics, use a margin much larger
+//       than realistic clock skew, e.g. `ExpireAt: time.Now().Add(-30 * time.Second)`
+//       (or `-1 * time.Minute`). NTP drift is typically <100ms but can spike to
+//       multiple seconds; 30s comfortably absorbs it.
+//     - Run NTP / chrony on every HydrAIDE host so skew stays under tens of ms.
+//     - For "always immediately expired" queue semantics, a small ExpireAt is
+//       still better than zero — zero may be filtered by `omitempty` on the
+//       client SDK. Use a clearly-past margin instead.
+//
+//   See `docs/troubleshooting/clock-skew-and-shift-expired.md` for a full
+//   debugging walkthrough of how to tell clock-skew apart from real bugs.
+//
 // 🧪 Example usage:
 //
 //	// Insert a task (not shown here — you can use CatalogSave or SaveMany)
