@@ -8,6 +8,7 @@ on:
       - 'sdk/go/**'
       - 'proto/**'
       - 'generated/**'
+      - 'scripts/gen-dev-certs.sh'
       - '.github/workflows/examples-test.yml'
   pull_request:
     paths:
@@ -15,6 +16,7 @@ on:
       - 'sdk/go/**'
       - 'proto/**'
       - 'generated/**'
+      - 'scripts/gen-dev-certs.sh'
       - '.github/workflows/examples-test.yml'
   workflow_dispatch:
 
