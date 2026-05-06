@@ -16,11 +16,11 @@ A structure-first data engine for workloads that scale by namespace. One Swamp p
 
 ## What HydrAIDE is
 
-HydrAIDE organises data into **Swamps** — independent namespaces that live in their own files on disk and load into memory only when accessed. You give every natural unit of your domain its own Swamp: per tenant, per user, per device, per agent, per crawled domain. There is no shared global table. There is no central coordinator. Each Swamp is reached in O(1) by deterministic hashing — the client computes where the data lives without consulting metadata.
+HydrAIDE organises data into **Swamps** — independent namespaces (think "shard with its own file, lifecycle and lock domain") that live in their own files on disk and load into memory only when accessed. You give every natural unit of your domain its own Swamp: per tenant, per user, per device, per agent, per crawled domain. There is no shared global table. There is no central coordinator. Each Swamp is reached in O(1) by deterministic hashing — the client computes where the data lives without consulting metadata.
 
 Inside a Swamp, data is stored as typed key/value **Treasures**. The Go SDK lets you save and load native structs directly; the wire protocol is gRPC, so any language with a protoc-generated client can use HydrAIDE without an SDK. Every write emits a real-time event over a Subscribe stream — there is no separate pub/sub layer to operate.
 
-HydrAIDE has powered [Trendizz.com](https://trendizz.com) since 2024 — indexing millions of European websites and serving keyword search from a single server.
+HydrAIDE has powered [Trendizz.com](https://trendizz.com) since 2024 — indexing millions of European websites and serving keyword search from a single server. Concrete numbers: 100K inserts in ~46 ms, 10K updates in ~3.75 ms, ~15.4 bytes per entry on disk on a Threadripper + NVMe. See [benchmarks](docs/benchmarks/V2_RESULTS_SUMMARY.md).
 
 ---
 
@@ -85,6 +85,20 @@ sudo hydraidectl init -i <your-instance-name>
 - **Append-only single-file storage** — one `.hyd` file per Swamp with automatic compaction. On a Threadripper 2950X + Samsung 990 PRO: 100K inserts in ~46 ms, 10K updates in ~3.75 ms, 10K deletes in ~1.66 ms, ~15.4 bytes per entry on disk. See [benchmark results](docs/benchmarks/V2_RESULTS_SUMMARY.md) and [run instructions](docs/benchmarks/CHRONICLER_BENCHMARKS.md).
 - **Per-key FIFO locking** — concurrent writes on different keys run in parallel; same-key writes are queued. Deadlocks are not possible by construction.
 - **gRPC-native, SDK-optional** — the [proto file](proto/hydraide.proto) is the source of truth. The Go SDK is a convenience layer; any language with protoc support can talk to a HydrAIDE server directly.
+
+---
+
+## Good fit for
+
+The features list above is what HydrAIDE *does*. Here's what to *build* with it:
+
+| You're building | Why HydrAIDE fits |
+|---|---|
+| **Multi-tenant SaaS** | One Swamp per tenant. Isolation, GDPR delete, eviction — by construction, no row-level security to write or audit. See the [`multi-tenant-saas` reference app](docs/sdk/go/examples/03-reference-apps/multi-tenant-saas/). |
+| **IoT / device fleet state** | A device's data only lives in RAM while it's talking. Idle = zero CPU, zero memory. Scales to millions of devices on one server. |
+| **Per-agent / per-user AI state** | Native subscriptions on every write feed agent loops without Kafka. One Swamp per agent gives independent lifecycle and lock domain. |
+| **Real-time collaborative apps** | The gRPC subscribe stream replaces a separate event bus. One binary, one wire protocol. See [`live-subscribe`](docs/sdk/go/examples/02-recipes/live-subscribe/). |
+| **Search and keyword indexes** | What HydrAIDE was originally built for. Powers Trendizz across millions of European websites today. |
 
 ---
 
