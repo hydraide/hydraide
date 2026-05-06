@@ -7366,7 +7366,7 @@ func setProtoTreasureToModel(treasure *hydraidepbgo.Treasure, field reflect.Valu
 
 	if treasure.Uint64Val != nil {
 		switch field.Kind() {
-		case reflect.Uint64:
+		case reflect.Uint64, reflect.Uint:
 			field.SetUint(treasure.GetUint64Val())
 			return nil
 		default:
@@ -7410,7 +7410,7 @@ func setProtoTreasureToModel(treasure *hydraidepbgo.Treasure, field reflect.Valu
 
 	if treasure.Int64Val != nil {
 		switch field.Kind() {
-		case reflect.Int64:
+		case reflect.Int64, reflect.Int:
 			field.SetInt(treasure.GetInt64Val())
 			return nil
 
@@ -7689,6 +7689,10 @@ func convertFieldToKvPair(value reflect.Value, kvPair *hydraidepbgo.KeyValuePair
 	case reflect.Uint64:
 		intVal := value.Uint()
 		kvPair.Uint64Val = &intVal
+	case reflect.Uint:
+		// Platform-dependent uint is stored as uint64.
+		intVal := value.Uint()
+		kvPair.Uint64Val = &intVal
 	// 🔢 Signed integers
 	case reflect.Int8:
 		val := int32(value.Int())
@@ -7700,6 +7704,10 @@ func convertFieldToKvPair(value reflect.Value, kvPair *hydraidepbgo.KeyValuePair
 		val := int32(value.Int())
 		kvPair.Int32Val = &val
 	case reflect.Int64:
+		intVal := value.Int()
+		kvPair.Int64Val = &intVal
+	case reflect.Int:
+		// Platform-dependent int is stored as int64.
 		intVal := value.Int()
 		kvPair.Int64Val = &intVal
 	// 🔬 Floating point numbers
