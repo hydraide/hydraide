@@ -12,7 +12,7 @@ Every database you adopt comes with its own dialect to learn before anyone on th
 
 Storing data as native structs collapses that gap. Code review stays in one language. The shape you read in the code is the shape on the wire and the shape on disk. New contributors are productive on the first day, because there is no second language between them and the data.
 
-📚 **Full runnable examples:** [models examples](../sdk/go/examples/models)
+📚 **Full runnable examples:** [Go examples](../sdk/go/examples/)
 
 ---
 
@@ -30,8 +30,8 @@ import (
     "time"
 
     // Helper packages from the example repo (create context, access SDK, build names)
-    "github.com/hydraide/hydraide/docs/sdk/go/examples/models/utils/hydraidehelper"
-    "github.com/hydraide/hydraide/docs/sdk/go/examples/models/utils/repo"
+    "github.com/hydraide/hydraide/sdk/go/hydraidego/utils/hydraidehelper"
+    "github.com/hydraide/hydraide/sdk/go/hydraidego/utils/repo"
     "github.com/hydraide/hydraide/sdk/go/hydraidego/name"
 )
 

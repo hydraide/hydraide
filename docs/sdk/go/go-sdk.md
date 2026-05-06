@@ -42,7 +42,7 @@ You can find the repo implementation and usage examples here:
 
 For a complete working example of how to initialize and run your service using the `repo` package, take a look at the demo application:
 
-▶️ [`main.go` in app-queue](examples/applications/app-queue/main.go) — a minimal end-to-end example of SDK setup and Swamp registration with a queue service
+▶️ [`01-quickstart`](examples/01-quickstart/) — a minimal end-to-end example of SDK setup and Swamp registration with a queue service
 
 ---
 
@@ -151,12 +151,12 @@ The Go SDK offers a simple yet powerful way to manage data through two fundament
 Each user has their own dedicated Profile Swamp, which can store all of their relevant information such as name, avatar, registration date, last login time, and more.
 A profile can hold any amount of data — but always belongs to exactly one entity (like one user).
 
-📄 [`model_profile_example.go`](examples/models/model_profile_example.go)
+📄 [example](examples/)
 
 **Catalogs**, on the other hand, are key–value Swamps where you can store many unique keys — each mapped to its own custom value.
 This is ideal for scenarios like tracking all registered user IDs, counting how many users exist in total, or displaying a list of users in an admin dashboard.
 
-📄 [`model_catalog_example.go`](examples/models/model_catalog_example.go)
+📄 [example](examples/)
 
 In both cases, data is defined using regular Go `struct`s decorated with HydrAIDE field tags.
 You work with the data through model-bound methods that make saving, querying, or subscribing extremely simple and intuitive.
@@ -170,7 +170,7 @@ Throughout this SDK documentation (except for the Heartbeat example), all model 
 
 | Function  | SDK Status | Example Go Models and Docs                                  |
 | --------- | ------- |-------------------------------------------------------------|
-| Heartbeat | ✅ Ready | [basics_heartbeat.go](examples/models/basics_heartbeat.go)  |
+| Heartbeat | ✅ Ready | [example](examples/)  |
 
 ---
 
@@ -193,8 +193,8 @@ Ideal for:
 
 | Function | SDK Status | Example Go Models and Docs                                     |
 | -------- | ------- |----------------------------------------------------------------|
-| Lock     | ✅ Ready | [basics_lock_unlock.go](examples/models/basics_lock_unlock.go) |
-| Unlock   | ✅ Ready | [basics_lock_unlock.go](examples/models/basics_lock_unlock.go) |
+| Lock     | ✅ Ready | [example](examples/) |
+| Unlock   | ✅ Ready | [example](examples/) |
 
 ---
 
@@ -205,15 +205,15 @@ including registration, validation, destruction, and real-time subscriptions.
 
 | Function        | SDK Status | Example Go Models and Docs                                               |
 | --------------- | ---------- |--------------------------------------------------------------------------|
-| RegisterSwamp   | ✅ Ready | [basics_register_swamp.go](examples/models/basics_register_swamp.go)     |
-| DeRegisterSwamp | ✅ Ready | [basics_deregister_swamp.go](examples/models/basics_deregister_swamp.go) |
-| IsSwampExist    | ✅ Ready | [basics_is_swamp_exist.go](examples/models/basics_is_swamp_exist.go)     |
-| IsKeyExists     | ✅ Ready | [basics_is_key_exist.go](examples/models/basics_is_key_exist.go)         |
-| AreKeysExist    | ✅ Ready | [basics_are_keys_exist.go](examples/models/basics_are_keys_exist.go)     |
-| Count           | ✅ Ready | [basics_count.go](examples/models/basics_count.go)                       |
-| Destroy         | ✅ Ready | [basics_destroy.go](examples/models/basics_destroy.go)                   |
+| RegisterSwamp   | ✅ Ready | [example](examples/)     |
+| DeRegisterSwamp | ✅ Ready | [example](examples/) |
+| IsSwampExist    | ✅ Ready | [example](examples/)     |
+| IsKeyExists     | ✅ Ready | [example](examples/)         |
+| AreKeysExist    | ✅ Ready | [example](examples/)     |
+| Count           | ✅ Ready | [example](examples/)                       |
+| Destroy         | ✅ Ready | [example](examples/)                   |
 | DestroyBulk     | ✅ Ready | Bulk destroy multiple swamps via bidirectional streaming                  |
-| Subscribe       | ✅ Ready | [basics_subscribe.go](examples/models/basics_subscribe.go)               |
+| Subscribe       | ✅ Ready | [example](examples/)               |
 
 ---
 
@@ -263,12 +263,12 @@ Each field is stored in binary chunks — only if the value is present (thanks t
 
 | Function                       | SDK Status | Go Example                                                       |
 |--------------------------------| ---------- | ---------------------------------------------------------------- |
-| `Profile Save, Read, Destroy` | ✅ Ready    | [profile_save_read_destroy.go](examples/models/profile_save_read_destroy.go)   |
-| `Profile Read Batch` | ✅ Ready    | [profile_read_batch.go](examples/models/profile_read_batch.go)   |
-| `Profile Save Batch` | ✅ Ready    | [profile_save_batch.go](examples/models/profile_save_batch.go)   |
+| `Profile Save, Read, Destroy` | ✅ Ready    | [example](examples/)   |
+| `Profile Read Batch` | ✅ Ready    | [example](examples/)   |
+| `Profile Save Batch` | ✅ Ready    | [example](examples/)   |
 
 🧪 **Looking for a complete production-ready model?**
-Check out [profile_save_read_destroy.go](examples/models/profile_save_read_destroy.go) — a real-world example with nested structs, 
+Check out [example](examples/) — a real-world example with nested structs, 
 timestamps, and struct pointers for user avatars, preferences, and security.
 
 #### 🚀 Bulk Profile Operations with Batch Functions
@@ -305,7 +305,7 @@ client.ProfileReadBatch(ctx, swampNames, &UserProfile{}, func(swampName name.Nam
 })
 ```
 
-📖 **Full examples and best practices:** [profile_read_batch.go](examples/models/profile_read_batch.go)
+📖 **Full examples and best practices:** [example](examples/)
 
 ##### 💾 ProfileSaveBatch - Bulk Saving
 
@@ -334,7 +334,7 @@ client.ProfileSaveBatch(ctx, swampNames, models, func(swampName name.Name, err e
 })
 ```
 
-📖 **Full examples and best practices:** [profile_save_batch.go](examples/models/profile_save_batch.go)
+📖 **Full examples and best practices:** [example](examples/)
 
 **Performance improvement: 20-100x faster** for bulk operations! 🚀
 
@@ -495,7 +495,7 @@ Great for:
 - Bulk validation/verification
 - Reading configuration entries by a list of keys
 
-> Full example: [catalog_read_batch.go](examples/models/catalog_read_batch.go)
+> Full example: [example](examples/)
 
 ---
 
@@ -656,7 +656,7 @@ err := h.CatalogReadManyStream(ctx, swamp, index, filters, ProductModel{}, func(
 
 When `filters` is `nil`, all Treasures matching the Index criteria are streamed (equivalent to `CatalogReadMany` but with streaming delivery).
 
-> Full example: [catalog_read_many_stream.go](examples/models/catalog_read_many_stream.go)
+> Full example: [example](examples/)
 
 ##### CatalogReadManyFromMany — Multi-Swamp Streaming Read
 
@@ -687,7 +687,7 @@ err := h.CatalogReadManyFromMany(ctx, requests, OrderModel{}, func(swampName nam
 })
 ```
 
-> Full example: [catalog_read_many_from_many.go](examples/models/catalog_read_many_from_many.go)
+> Full example: [example](examples/)
 
 ##### Filtering Inside Complex Types (BytesField Filters)
 
@@ -817,7 +817,7 @@ err := h.CatalogReadManyStream(ctx, swamp, index, filters, Product{}, func(model
 })
 ```
 
-> Full example: [catalog_read_many_stream_bytes_field.go](examples/models/catalog_read_many_stream_bytes_field.go)
+> Full example: [example](examples/)
 
 ##### IN Filters — Set Membership
 
@@ -859,8 +859,6 @@ filters := hydraidego.FilterAND(
 ```
 
 Four modes: `FilterNestedSliceWhere` (any element), `FilterNestedSliceAll` (every element), `FilterNestedSliceNone` (no element), `FilterNestedSliceCount` (count + compare).
-
-> Full reference: [filtering.md](filtering.md)
 
 **Important:** BytesField filtering requires **MessagePack encoding**. If the Treasure's `BytesVal` uses GOB encoding (the default), the server cannot inspect its contents and the filter returns `false` (no match). See below for how to enable MessagePack.
 
@@ -1021,7 +1019,7 @@ filters := hydraidego.FilterOR(
 4. Starting from each position of the first word, it checks if subsequent words appear at positions `pos+1`, `pos+2`, etc. using binary search
 5. `FilterPhrase` matches when consecutive positions are found; `FilterNotPhrase` matches when they are NOT found
 
-> Full example: [catalog_advanced_filters.go](examples/models/catalog_advanced_filters.go)
+> Full example: [example](examples/)
 
 ---
 
@@ -1276,7 +1274,235 @@ For `CatalogReadManyFromMany`, `MaxResults` works per-swamp (each swamp's query 
 
 For `ProfileReadBatchWithFilter`, `maxResults` is a global limit across all profiles.
 
-> Full example: [profile_advanced_filters.go](examples/models/profile_advanced_filters.go)
+> Runnable example: [`02-recipes/advanced-filters`](examples/02-recipes/advanced-filters/) — AND/OR + IN-style filtering against a small product catalog.
+
+---
+
+##### 🧮 Operators
+
+Every relational operator works against typed values; string operators target string fields; existence operators ignore the comparison value.
+
+| Operator | Description |
+|----------|-------------|
+| `Equal` | value == reference |
+| `NotEqual` | value != reference |
+| `GreaterThan` | value > reference |
+| `GreaterThanOrEqual` | value >= reference |
+| `LessThan` | value < reference |
+| `LessThanOrEqual` | value <= reference |
+| `Contains` | string contains substring (case-sensitive) |
+| `NotContains` | string does NOT contain substring |
+| `StartsWith` | string starts with prefix |
+| `EndsWith` | string ends with suffix |
+| `IsEmpty` | field is nil/unset or empty string |
+| `IsNotEmpty` | field exists and is non-empty |
+| `HasKey` | BytesVal map contains the specified key |
+| `HasNotKey` | BytesVal map does NOT contain the key |
+| `SliceContains` | BytesVal slice contains exact value |
+| `SliceNotContains` | BytesVal slice does NOT contain value |
+| `SliceContainsSubstring` | any string element contains substring (case-insensitive) |
+| `SliceNotContainsSubstring` | no string element contains substring |
+| `StringIn` | field value equals any of the given string values |
+| `Int32In` | field value equals any of the given int32 values |
+| `Int64In` | field value equals any of the given int64 values |
+
+---
+
+##### 📦 Slice Filters
+
+Three flavours of slice membership testing on msgpack slice fields.
+
+**SliceContains — exact match in a slice:**
+
+```go
+// Does LLMSiteFunctions contain 7 (Booking)?
+hydraidego.FilterBytesFieldSliceContainsInt8("LLMSiteFunctions", int8(7))
+
+// Does PaymentProviders contain "Barion"? (case-sensitive)
+hydraidego.FilterBytesFieldSliceContainsString("PaymentProviders", "Barion")
+
+// Also: SliceContainsInt32, SliceContainsInt64
+```
+
+**SliceNotContains — negated exact match:**
+
+```go
+// Exclude e-commerce sites
+hydraidego.FilterBytesFieldSliceNotContainsInt8("LLMSiteFunctions", int8(1))
+
+// Does NOT accept Stripe
+hydraidego.FilterBytesFieldSliceNotContainsString("PaymentProviders", "Stripe")
+```
+
+**SliceContainsSubstring — case-insensitive substring in string slices:**
+
+```go
+// Any activity contains "tattoo" (matches "custom tattoo design", "Tattoo Art", …)
+hydraidego.FilterBytesFieldSliceContainsSubstring("LLMDetailedActivities", "tattoo")
+
+// No activity contains "permanent makeup"
+hydraidego.FilterBytesFieldSliceNotContainsSubstring("LLMDetailedActivities", "permanent makeup")
+```
+
+These compose with `FilterAND` / `FilterOR` like any other filter.
+
+---
+
+##### 📏 Slice Length (`#len`)
+
+Check the length of a slice or map via the `#len` pseudo-field. Internally this appends `.#len` to the field path and exposes the length as an int comparable with any standard operator.
+
+```go
+// At least 1 contact
+hydraidego.FilterBytesFieldSliceLen(hydraidego.GreaterThan, "LLMContacts", 0)
+
+// Exactly 3 industry sectors
+hydraidego.FilterBytesFieldSliceLen(hydraidego.Equal, "LLMIndustrySectors", 3)
+
+// Empty slice (no product categories)
+hydraidego.FilterBytesFieldSliceLen(hydraidego.Equal, "LLMProductCategories", 0)
+
+// Maps work too: metadata has fewer than 5 keys
+hydraidego.FilterBytesFieldSliceLen(hydraidego.LessThan, "Metadata", 5)
+```
+
+---
+
+##### 🪞 Nested Slice Any (`[*]` wildcard)
+
+Match if **any** element in a struct slice has a field satisfying a condition. Internally builds a path like `"LLMContacts[*].Email"`.
+
+```go
+// At least 1 contact has a non-empty email
+hydraidego.FilterBytesFieldNestedSliceAnyString("LLMContacts", "Email", hydraidego.IsNotEmpty, "")
+
+// At least 1 contact is a CEO
+hydraidego.FilterBytesFieldNestedSliceAnyString("LLMContacts", "Role", hydraidego.Equal, "CEO")
+
+// At least 1 contact has a domain-matching email
+hydraidego.FilterBytesFieldNestedSliceAnyBool("LLMContacts", "IsDomainMatch", hydraidego.Equal, true)
+```
+
+Available types: `NestedSliceAnyString`, `NestedSliceAnyInt8`, `NestedSliceAnyBool`.
+
+> **Limitation:** each filter checks one condition. AND-ing two `NestedSliceAny` filters may match different elements. To require the **same** element to satisfy all conditions, use `FilterNestedSliceWhere` (see above).
+
+---
+
+##### 🚫 ExcludeKeys — server-side key exclusion
+
+Skip specified keys before filter evaluation. O(1) lookup per treasure (~10ns).
+
+Use cases: pagination without offset, deduplication, "show more" patterns.
+
+```go
+// Second page: exclude first page results
+index := &hydraidego.Index{
+    IndexType:   hydraidego.IndexCreationTime,
+    IndexOrder:  hydraidego.IndexOrderDesc,
+    MaxResults:  10,
+    ExcludeKeys: []string{"domain1.com", "domain2.com", "domain3.com"},
+}
+```
+
+Works with `CatalogReadManyStream`, `CatalogReadManyFromMany`, and `CatalogReadMany`.
+
+---
+
+##### ✅ IncludedKeys — server-side key whitelist
+
+Restrict the result set to a specific list of keys. Runs **before** ExcludeKeys and filters.
+
+Execution order: **IncludedKeys → ExcludeKeys → Filters → Response**.
+
+Use cases: subset search within a precomputed candidate list, re-validation, user selections.
+
+```go
+index := &hydraidego.Index{
+    IndexType:    hydraidego.IndexCreationTime,
+    IndexOrder:   hydraidego.IndexOrderDesc,
+    IncludedKeys: candidateKeys,
+    ExcludeKeys:  alreadySeenKeys,
+    MaxResults:   10,
+}
+```
+
+---
+
+##### 🪶 KeysOnly — lightweight key-only results
+
+Return only Treasure keys (Key + IsExist), skipping content serialization. Reduces gRPC payload dramatically (~16× faster than full conversion, ~17ns per treasure).
+
+Use cases: large result discovery, two-phase search (KeysOnly to find, `CatalogReadBatch` for the chosen ones).
+
+```go
+// Phase 1: discover matching keys
+index := &hydraidego.Index{
+    IndexType:  hydraidego.IndexCreationTime,
+    IndexOrder: hydraidego.IndexOrderDesc,
+    MaxResults: 1000,
+    KeysOnly:   true,
+}
+
+var matchedKeys []string
+h.CatalogReadManyStream(ctx, swamp, index, filters, Model{}, func(model any) error {
+    matchedKeys = append(matchedKeys, model.(*Model).Key)
+    return nil
+})
+
+// Phase 2: hydrate the chosen subset
+h.CatalogReadBatch(ctx, swamp, matchedKeys[:10], Model{}, func(model any) error { ... })
+```
+
+---
+
+##### 🏷️ SearchResultMeta — scores and matched labels
+
+When filters carry labels or VectorFilters are used, each streaming result includes a `SearchMeta` with similarity scores and the matched filter labels. Works in all modes — including `KeysOnly`.
+
+**Adding labels:**
+
+```go
+hydraidego.FilterBytesFieldSliceContainsInt8("LLMSiteFunctions", int8(7)).WithLabel("booking")
+hydraidego.FilterVector("Embedding", queryVec, 0.5).WithLabel("semantic")
+hydraidego.GeoDistance("Lat", "Lng", 47.497, 19.040, 50.0, hydraidego.GeoInside).WithLabel("location")
+hydraidego.FilterPhrase("WordIndex", "hello", "world").WithLabel("phrase")
+```
+
+Unlabeled filters work normally but do not appear in `MatchedLabels`. VectorFilter scores are captured regardless of labels.
+
+**Reading the metadata** via the `hydraide:"searchMeta"` tag — auto-populated on read, never written:
+
+```go
+type MyModel struct {
+    Domain string                 `hydraide:"key"`
+    Body   *Body                  `hydraide:"value"`
+    Meta   *hydraidego.SearchMeta `hydraide:"searchMeta"`
+}
+
+h.CatalogReadManyStream(ctx, swamp, index, filters, MyModel{}, func(model any) error {
+    m := model.(*MyModel)
+    if m.Meta != nil {
+        if len(m.Meta.VectorScores) > 0 {
+            fmt.Printf("  relevance: %.2f\n", m.Meta.VectorScores[0])
+        }
+        fmt.Printf("  matched: %v\n", m.Meta.MatchedLabels)
+    }
+    return nil
+})
+```
+
+In OR groups every matching branch is reported (not just the first):
+
+```go
+filters := hydraidego.FilterOR(
+    hydraidego.FilterBytesFieldSliceContainsInt8("LLMIndustrySectors", int8(1)).WithLabel("hospitality"),
+    hydraidego.FilterBytesFieldSliceContainsInt8("LLMIndustrySectors", int8(6)).WithLabel("health"),
+)
+// A domain in both sectors → MatchedLabels = ["hospitality", "health"]
+```
+
+**Performance:** zero overhead on the fast path (no labels, no vectors). With labels/vectors, ~35% overhead (~1.8µs vs ~1.3µs).
 
 ---
 
@@ -1374,7 +1600,7 @@ func ProcessJobBatch(r repo.Repo, jobIDs []string) error {
 - 📢 **Event stream**: Subscribers will be notified of deletions
 - 🎯 **Order not guaranteed**: Results may come back in any order
 
-> Full example with edge cases and best practices: [catalog_shift_batch.go](examples/models/catalog_shift_batch.go)
+> Full example with edge cases and best practices: [example](examples/)
 
 ---
 
@@ -1494,25 +1720,25 @@ Catalogs are not suitable when:
 
 | Function                  | SDK Status | Example Go Models and Docs |
 |---------------------------| ------- |----------------------------|
-| CatalogCreate             | ✅ Ready | [catalog_create.go](examples/models/catalog_create.go)             |
-| CatalogCreateMany         | ✅ Ready | [catalog_create_many.go](examples/models/catalog_create_many.go)             |
-| CatalogCreateManyToMany   | ✅ Ready | [catalog_create_many_to_many.go](examples/models/catalog_create_many_to_many.go)             |
-| CatalogRead               | ✅ Ready | [catalog_read.go](examples/models/catalog_read.go)              |
-| CatalogReadMany           | ✅ Ready | [catalog_read_many.go](examples/models/catalog_read_many.go)            |
-| CatalogReadBatch          | ✅ Ready | [catalog_read_batch.go](examples/models/catalog_read_batch.go)            |
-| CatalogUpdate             | ✅ Ready | [catalog_update.go](examples/models/catalog_update.go)              |
-| CatalogUpdateMany         | ✅ Ready | [catalog_update_many.go](examples/models/catalog_update_many.go)              |
-| CatalogDelete             | ✅ Ready | [catalog_delete.go](examples/models/catalog_delete.go)              |
-| CatalogDeleteMany         | ✅ Ready | [catalog_delete.go](examples/models/catalog_delete.go)              |
-| CatalogDeleteManyFromMany | ✅ Ready | [catalog_delete_many_from_many.go](examples/models/catalog_delete_many_from_many.go)            |
-| CatalogSave               | ✅ Ready | [catalog_save.go](examples/models/catalog_save.go)             |
-| CatalogSaveMany           | ✅ Ready | [catalog_save_many.go](examples/models/catalog_save_many.go)             |
-| CatalogSaveManyToMany     | ✅ Ready | [catalog_save_many_to_many.go](examples/models/catalog_save_many_to_many.go)             |
-| CatalogReadManyStream     | ✅ Ready | [catalog_read_many_stream.go](examples/models/catalog_read_many_stream.go)            |
-| CatalogReadManyFromMany   | ✅ Ready | [catalog_read_many_from_many.go](examples/models/catalog_read_many_from_many.go)            |
+| CatalogCreate             | ✅ Ready | [example](examples/)             |
+| CatalogCreateMany         | ✅ Ready | [example](examples/)             |
+| CatalogCreateManyToMany   | ✅ Ready | [example](examples/)             |
+| CatalogRead               | ✅ Ready | [example](examples/)              |
+| CatalogReadMany           | ✅ Ready | [example](examples/)            |
+| CatalogReadBatch          | ✅ Ready | [example](examples/)            |
+| CatalogUpdate             | ✅ Ready | [example](examples/)              |
+| CatalogUpdateMany         | ✅ Ready | [example](examples/)              |
+| CatalogDelete             | ✅ Ready | [example](examples/)              |
+| CatalogDeleteMany         | ✅ Ready | [example](examples/)              |
+| CatalogDeleteManyFromMany | ✅ Ready | [example](examples/)            |
+| CatalogSave               | ✅ Ready | [example](examples/)             |
+| CatalogSaveMany           | ✅ Ready | [example](examples/)             |
+| CatalogSaveManyToMany     | ✅ Ready | [example](examples/)             |
+| CatalogReadManyStream     | ✅ Ready | [example](examples/)            |
+| CatalogReadManyFromMany   | ✅ Ready | [example](examples/)            |
 | CompactSwamp              | ✅ Ready | Encoding migration helper — forces .hyd file rewrite              |
-| CatalogShiftExpired       | ✅ Ready | [catalog_shift_expired.go](examples/models/catalog_shift_expired.go)              |
-| CatalogShiftBatch         | ✅ Ready | [catalog_shift_batch.go](examples/models/catalog_shift_batch.go)              |
+| CatalogShiftExpired       | ✅ Ready | [example](examples/)              |
+| CatalogShiftBatch         | ✅ Ready | [example](examples/)              |
 
 ---
 
@@ -1546,7 +1772,7 @@ All `Increment*` functions work the same way — only the type changes.
 
 To see a complete example in action (including conditional logic, metadata usage, and memory-only Swamps), check out:
 
-👉 [Catalog Model Rate Limit Counter](examples/models/increment.go)
+👉 [Atomic counter recipe](examples/02-recipes/atomic-counter/)
 
 This single model demonstrates how to:
 
@@ -1835,7 +2061,7 @@ These are implemented **in a single documented Go model**, not as separate files
 | `Uint32SliceSize`         | Returns the number of elements in the slice (slice length)                |
 | `Uint32SliceIsValueExist` | Checks whether a specific value exists in a slice                         |
 
-All of these are demonstrated in the [ModelTagProductViewers](examples/models/slice_and_reverse_index.go) Go model, which shows how to:
+All of these are demonstrated in the [example](examples/) Go model, which shows how to:
 
 * Index users under tagged products
 * Query reverse relationships
@@ -1966,6 +2192,6 @@ For comprehensive examples including:
 
 See the full guide here:
 
-📖 [Testing with Real Database Connection Guide](examples/models/testing_with_real_database.md)
+📖 [Testing HydrAIDE models against a live instance](testing.md)
 
 This approach eliminates the need for complex mocking while giving you confidence that your code works correctly in production-like conditions.

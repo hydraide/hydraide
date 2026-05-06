@@ -133,6 +133,14 @@ If you write your own HydrAIDE-backed service, mirror this workflow: a
 compose-managed test instance, a build-tagged integration suite, and
 cleanup that destroys whatever the tests created.
 
+## Common gotchas
+
+- **`CatalogShiftExpired` returning 0 entries on a freshly written
+  Treasure with a past `ExpireAt`.** Almost always client/server clock
+  skew, not a HydrAIDE bug — see
+  [Clock skew and `ShiftExpired`](../troubleshooting/clock-skew-and-shift-expired.md)
+  for the full debug recipe.
+
 ## Reference
 
 - Recipe with the canonical setup: [`02-recipes/atomic-patch`](examples/02-recipes/atomic-patch/)

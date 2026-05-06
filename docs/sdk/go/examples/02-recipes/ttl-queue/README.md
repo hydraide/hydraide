@@ -37,3 +37,12 @@ go run .
 ```bash
 make test-examples
 ```
+
+## Gotcha — `ShiftExpired` returns 0 against a remote HydrAIDE
+
+If your test enqueues a task with `ExpireAt` set just barely in the
+past and the immediate `CatalogShiftExpired` call returns no entries —
+locally everything works, but against a deployed instance it flakes —
+the cause is almost always **client/server clock skew**, not a
+HydrAIDE bug. Full debug recipe:
+[Clock skew and `ShiftExpired`](../../../../troubleshooting/clock-skew-and-shift-expired.md).

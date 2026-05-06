@@ -44,8 +44,8 @@ If you're new to HydrAIDE, feel free to:
 
 Explore ready-to-run demo applications built in Go to better understand the HydrAIDE Go SDK and its unique data modeling approach.
 
-- All demo apps are located in the [Example Applications in Go](https://github.com/hydraide/hydraide/tree/main/docs/sdk/go/examples/applications) folder.
-- Model Examples [CRUD operations, subscriptions, etc.](https://github.com/hydraide/hydraide/tree/main/docs/sdk/go/examples/models)
+- All runnable Go examples — quickstart, recipes (TTL queues, atomic patches, subscriptions, business locks, server-side filters, …) and reference HTTP apps — live in the [example tree](docs/sdk/go/examples/).
+- For testing your own HydrAIDE models against a live instance: [Testing guide](docs/sdk/go/testing.md).
 - Full Go SDK Documentation: [Go SDK Documentation](docs/sdk/go/go-sdk.md)
 
 These examples are a great starting point to learn how to:
