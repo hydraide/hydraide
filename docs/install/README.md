@@ -55,44 +55,29 @@ Inside your Ubuntu (WSL2) terminal, run the Linux installer (see above).
 
 ---
 
-### 🚀 Minimal Setup – Start HydrAIDE in 2 Steps
-
-1. **Initialize a new instance**
+### 🚀 Minimal Setup – Start HydrAIDE in one command
 
 ```bash
-hydraidectl init
+sudo hydraidectl init -i <your-instance-name>
 ```
 
-This interactive setup asks for:
+`init` is end-to-end: it asks for the instance name (skipped when `-i` is given) and a base folder, then generates the TLS cert, downloads the binary, registers the systemd unit, starts the service, and waits for it to become healthy.
 
-* The instance name (e.g. `hydraide-prod`, `hydraide-test`)
-* Folder location for certificates, settings, and data
-* Optional port and service tuning
-
-It automatically generates the full folder structure:
+The folder structure created on disk:
 
 ```
-<your-folder>/
-├── certificate/
-├── settings/
-└── data/
-└── logs/
-└── binary
-└── .env
+<base-folder>/<instance-name>/
+├── certificate/         ca.crt, server.crt/key, client.crt/key
+├── settings/            generated server config
+├── data/                .hyd files (Swamp data)
+├── logs/                instance log files
+├── binary               the HydrAIDE server binary
+└── .env                 systemd environment file
 ```
 
-2. **Start as a background service**
+Use the `client.crt`, `client.key` and `ca.crt` from `certificate/` when connecting to this instance from any HydrAIDE SDK.
 
-```bash
-sudo hydraidectl service --instance <your-instance-name>
-```
-
-This installs and starts HydrAIDE as a persistent systemd service.
-
-> During initialization, a `certificate/` folder is created, which includes a `ca.crt` `client.key` `client.crt` files. 
-> These certificates are required when connecting to HydrAIDE from a client SDK.
-
-You're now ready to connect via gRPC — HydrAIDE is live and secure.
+For the full prompt sequence and tunable options, see [`docs/install/quickstart.md`](quickstart.md). Use `sudo hydraidectl init --advanced` to expose every tunable.
 
 ---
 

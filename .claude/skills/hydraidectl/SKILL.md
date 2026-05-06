@@ -270,7 +270,7 @@ sudo hydraidectl destroy -i <instance> --purge
 
 ## 5. Sudo and SSH considerations
 
-Several `hydraidectl` commands manage systemd units (`service`, `start`, `stop`, `restart`, `upgrade`, `backup`, `restore`, `destroy`, `compact`, `migrate`, `cleanup`) and require `sudo`. Some of these prompt for the password interactively.
+Several `hydraidectl` commands manage systemd units (`init`, `edit`, `start`, `stop`, `restart`, `upgrade`, `backup`, `restore`, `destroy`, `compact`, `migrate`, `cleanup`) and require `sudo`. Some of these prompt for the password interactively.
 
 This means **interactive `sudo` does not work over non-interactive SSH**. Two options when operating remotely:
 
