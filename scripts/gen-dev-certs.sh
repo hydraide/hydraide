@@ -80,8 +80,13 @@ openssl x509 -req -in client.csr -CA ca.crt -CAkey ca.key -CAcreateserial \
 
 rm -f server.csr client.csr ca.srl openssl.cnf
 
-chmod 644 ca.crt server.crt client.crt
-chmod 600 ca.key server.key client.key
+# 644 on .key as well: these are local development certs generated into
+# a bind-mounted volume that is consumed by both the container (running
+# as root) and host-side processes (CI runner, current user, …). 600
+# would lock out everyone but the file's owner, which is root under
+# rootful Docker — not what we want for a dev tree. For production
+# certs, generate via your own PKI with stricter permissions.
+chmod 644 ca.crt server.crt client.crt ca.key server.key client.key
 
 echo "done. certificates written to $CERT_DIR:"
 ls -1 "$CERT_DIR"
