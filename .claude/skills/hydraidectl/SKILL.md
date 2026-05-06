@@ -7,7 +7,7 @@ description: Operating HydrAIDE instances with the hydraidectl CLI — install, 
 
 `hydraidectl` is the management CLI for HydrAIDE server instances on a host. This skill is the working reference for operating instances. For data modelling, SDK usage, and writing application code against HydrAIDE, see the sibling [`hydraide` skill](../hydraide/SKILL.md).
 
-The full per-command flag reference is in [`docs/hydraidectl/hydraidectl-user-manual.md`](../../../docs/hydraidectl/hydraidectl-user-manual.md). This skill is a tighter "what to reach for and when" overview.
+The full per-command flag reference is in [`docs/hydraidectl/`](../../../docs/hydraidectl/README.md) — one focused page per category (lifecycle, monitoring, upgrades, data). This skill is a tighter "what to reach for and when" overview.
 
 ---
 
@@ -28,12 +28,12 @@ Full installation guide (including Docker and manual paths): [`docs/hydraidectl/
 
 | Command | Purpose |
 |---|---|
-| `init` | Interactive wizard to create a new instance (paths, ports, certs, config). |
-| `service` | Set up a persistent systemd service for an instance and start it. Requires `sudo`. |
+| `init` | End-to-end install: 2 prompts (instance name + base path), generates TLS cert, downloads binary, registers systemd unit, starts, waits healthy. Requires `sudo`. `--advanced` exposes the full tunable set; `-i <name>` skips the instance-name prompt. |
+| `edit -i <instance>` | Menu-based editor for an existing instance: ports, logging, gRPC, TLS SANs, systemd unit. Saves, restarts, waits healthy. Binary version stays put — use `upgrade` for that. |
 | `start -i <instance>` | Start an instance that is currently stopped. |
 | `stop -i <instance>` | Gracefully stop a running instance. |
 | `restart -i <instance>` | Stop, then start (waits until healthy). |
-| `destroy -i <instance>` | Stop, disable, and remove the instance from the host. With `--with-data`, also deletes the data directory. **Irreversible.** |
+| `destroy -i <instance>` | Stop, disable, and remove the instance from the host. With `--purge`, also deletes the data directory. **Irreversible.** |
 
 ### Inspection and monitoring
 
@@ -82,7 +82,10 @@ See [`docs/hydraidectl/hydraidectl-migration.md`](../../../docs/hydraidectl/hydr
 | Command | Purpose |
 |---|---|
 | `compact -i <instance>` | Force compaction across swamps (or scoped via flags) to reclaim space from dead entries. Compaction also runs automatically on Swamp close above the fragmentation threshold. |
-| `cert` | Generate fresh TLS certificates without modifying any existing instance. Useful for rotating certs that you then plug into an instance config manually. |
+
+> Cert rotation: use `edit -i <instance>` and pick the **TLS SANs** section.
+> Certs are always tied to a live instance now; the standalone `cert` command
+> was removed.
 
 ---
 
@@ -90,9 +93,17 @@ See [`docs/hydraidectl/hydraidectl-migration.md`](../../../docs/hydraidectl/hydr
 
 These are the non-obvious rules that prevent the most common operational mistakes.
 
-### Stop all clients before `upgrade`
+### Stop all clients before any lifecycle command that stops the service
 
-A `hydraidectl upgrade` cannot drain an instance gracefully while a client holds an open TCP connection. **Symptoms when ignored:** the upgrade hangs at "Removing service" indefinitely.
+`stop`, `restart`, `upgrade` and `edit` (save phase) all need to halt the
+running instance to do their job, and HydrAIDE will not shut down gracefully
+while clients still hold open TCP connections — the stop phase hangs. All
+four commands prompt for explicit "have you stopped your clients?"
+confirmation; `stop`, `restart`, and `upgrade` accept a `--yes` / `-y` flag
+to bypass the prompt in scripts.
+
+**Symptoms when ignored:** the operation hangs at "Stopping" or "Removing
+service" indefinitely.
 
 Procedure for any production upgrade:
 
@@ -101,6 +112,11 @@ Procedure for any production upgrade:
 3. Run `hydraidectl upgrade`.
 4. Wait for `hydraidectl health -i <instance>` to return exit code `0`.
 5. Restart clients in reverse dependency order.
+
+When `edit` asks the same confirmation and the user answers `n`, the
+configuration is **still saved** to `.env` / regenerated certs — only the
+restart is skipped. The instance keeps running with the old config until the
+user runs `sudo hydraidectl restart -i <instance>` after quiescing clients.
 
 ### Stop all clients before default-mode `backup`
 
@@ -114,9 +130,9 @@ There is no built-in rollback. Always take a fresh `backup` before upgrading a p
 
 `backup --no-stop` tars the data directory while the instance keeps writing. The archive may capture an inconsistent point-in-time state and may not restore cleanly. Use only when you genuinely cannot afford the brief downtime, and validate the restore in a non-production environment first.
 
-### `destroy --with-data` is irreversible
+### `destroy --purge` is irreversible
 
-`destroy` without `--with-data` removes the systemd service and config but leaves the data directory intact (you can re-attach the data later). With `--with-data`, the data directory is wiped. Always confirm the target instance name before running.
+`destroy` without `--purge` removes the systemd service and config but leaves the data directory intact (you can re-attach the data later). With `--purge`, the data directory is wiped. Always confirm the target instance name before running.
 
 ### Multi-instance orchestration
 
@@ -142,16 +158,22 @@ Use **ext4** on the data volume by default. HydrAIDE buffers writes in memory an
 # 1. Install the CLI
 curl -sSfL https://raw.githubusercontent.com/hydraide/hydraide/main/scripts/install-hydraidectl.sh | bash
 
-# 2. Run the interactive wizard (asks for instance name, ports, paths, certs)
-hydraidectl init
+# 2. Install an instance end-to-end (config + cert + binary + service + start)
+sudo hydraidectl init -i <instance>
 
-# 3. Register as a systemd service and start
-sudo hydraidectl service --instance <instance>
-
-# 4. Verify
+# 3. Verify
 hydraidectl list
 hydraidectl health -i <instance>
 ```
+
+`init` only asks for the instance name (skipped when `-i` is provided) and
+the base path. Everything else is auto-configured: localhost-only TLS, the
+lowest free `4900/4901` pair (auto-bumps by 10 if taken), V2 storage, slog
+at `info`. Pass `--advanced` to expose every tunable. To change settings
+afterwards: `sudo hydraidectl edit -i <instance>`.
+
+The full quickstart (with the SDK snippet for connecting from an app) is in
+[`docs/install/quickstart.md`](../../../docs/install/quickstart.md).
 
 ### B. Production upgrade
 
@@ -241,7 +263,7 @@ sudo hydraidectl compact -i <instance>
 sudo hydraidectl destroy -i <instance>
 
 # Wipe everything
-sudo hydraidectl destroy -i <instance> --with-data
+sudo hydraidectl destroy -i <instance> --purge
 ```
 
 ---
@@ -279,7 +301,7 @@ For deeper diagnostics, the `journalctl` log of the instance unit is the first p
 | What | Where |
 |---|---|
 | CLI source | [`app/hydraidectl/cmd/`](../../../app/hydraidectl/cmd/) |
-| Full per-command flag reference | [`docs/hydraidectl/hydraidectl-user-manual.md`](../../../docs/hydraidectl/hydraidectl-user-manual.md) |
+| Full per-command flag reference | [`docs/hydraidectl/README.md`](../../../docs/hydraidectl/README.md) (index → 4 category pages) |
 | Installation guide | [`docs/hydraidectl/hydraidectl-install.md`](../../../docs/hydraidectl/hydraidectl-install.md) |
 | Migration guide | [`docs/hydraidectl/hydraidectl-migration.md`](../../../docs/hydraidectl/hydraidectl-migration.md) |
 | Filesystem and hardware guidance | [`docs/install/README.md`](../../../docs/install/README.md) |

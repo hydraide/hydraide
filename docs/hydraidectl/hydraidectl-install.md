@@ -3,7 +3,7 @@
 `hydraidectl` is a standalone CLI tool to manage your HydrAIDE server lifecycle.
 The commands below automatically download, install, and make the latest version globally available on your system — with a single line.
 
-To learn about available `hydraidectl` commands and usage examples, refer to the [**Hydraidectl User Manual**](hydraidectl-user-manual.md) document.
+To learn about available `hydraidectl` commands and usage examples, refer to the [**hydraidectl user manual**](README.md).
 
 ---
 
@@ -63,15 +63,18 @@ You can now manage your HydrAIDE instances with `hydraidectl`.
 
 ## Available Commands
 
-* [`init`](hydraidectl-user-manual.md#init--interactive-setup-wizard) – Initialize a new HydrAIDE instance interactively
-* [`service`](hydraidectl-user-manual.md#service--set-up-persistent-system-service) – Create and manage a persistent system service
-* [`start`](hydraidectl-user-manual.md#start--start-an-instance) – Start a specific HydrAIDE instance
-* [`stop`](hydraidectl-user-manual.md#stop--stop-a-running-instance) – Gracefully stop an instance
-* [`restart`](hydraidectl-user-manual.md#restart--restart-instance) – Restart a running or stopped instance
-* [`list`](hydraidectl-user-manual.md#list--show-all-instances) – Show all registered HydrAIDE instances on the host
-* [`health`](hydraidectl-user-manual.md#health--instance-health) – Display health of an instance
-* [`destroy`](hydraidectl-user-manual.md#destroy--remove-instance) – Fully delete an instance, optionally including all its data
+* [`init`](lifecycle.md#init--end-to-end-install) – Install a new instance end-to-end (config + cert + service + start)
+* [`edit`](lifecycle.md#edit--reconfigure-an-instance) – Reconfigure ports, logging, gRPC, TLS SANs or repair the systemd unit
+* [`start`](lifecycle.md#start--start-an-instance) – Start a specific HydrAIDE instance
+* [`stop`](lifecycle.md#stop--stop-a-running-instance) – Gracefully stop an instance
+* [`restart`](lifecycle.md#restart--restart-an-instance) – Restart a running or stopped instance
+* [`list`](monitoring.md#list--show-all-instances) – Show all registered HydrAIDE instances on the host
+* [`health`](monitoring.md#health--instance-health-probe) – Display health of an instance
+* [`destroy`](lifecycle.md#destroy--remove-an-instance) – Fully delete an instance, optionally including all its data
 
-For details, see the [HydrAIDECtl User Manual](hydraidectl-user-manual.md).
+> Looking for the shortest path from "fresh host" to "running instance"?
+> The two-command quickstart lives at [`docs/install/quickstart.md`](../install/quickstart.md).
+
+For details, see the [hydraidectl user manual](README.md).
 
 ---

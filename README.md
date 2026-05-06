@@ -124,10 +124,10 @@ The features below are grouped to follow the order you'd want to read them in: t
 | | Resource | |
 |---|---|---|
 | 📘 | [Go SDK reference](docs/sdk/go/go-sdk.md) | Full API with code samples |
-| 🔧 | [hydraidectl CLI](docs/hydraidectl/hydraidectl-user-manual.md) | Instance management, monitoring, migration |
+| 🔧 | [hydraidectl CLI](docs/hydraidectl/README.md) | Instance management, monitoring, migration |
 | 🔄 | [Migration guide](docs/hydraidectl/hydraidectl-migration.md) | V1→V2 format migration |
-| 🚀 | [Example applications](docs/sdk/go/examples/applications) | Runnable demo apps |
-| 🧩 | [Model examples](docs/sdk/go/examples/models) | CRUD, subscriptions, profiles, catalogs |
+| 🚀 | [Go examples (runnable)](docs/sdk/go/examples) | Quickstart, recipes, and reference apps with integration tests |
+| 🧪 | [Testing HydrAIDE models](docs/sdk/go/testing.md) | How to test against a live instance, not mocks |
 | 🤔 | [Why we built it](docs/why-hydraide.md) | The workload that broke every off-the-shelf database we tried |
 | 📈 | [Benchmarks](docs/benchmarks) | Raw measurements, methodology, run scripts |
 

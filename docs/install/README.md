@@ -96,7 +96,7 @@ You're now ready to connect via gRPC — HydrAIDE is live and secure.
 
 ---
 
-- ➡️ Full CLI documentation with all commands: [hydraidectl user manual](../hydraidectl/hydraidectl-user-manual.md)
+- ➡️ Full CLI documentation with all commands: [hydraidectl user manual](../hydraidectl/README.md)
 
 ---
 
