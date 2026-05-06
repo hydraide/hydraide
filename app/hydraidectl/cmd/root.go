@@ -22,8 +22,8 @@ Welcome to hydraidectl – your tool to install, manage, and operate your HydrAI
 📚 Full documentation: https://github.com/hydraide/hydraide/tree/main/docs/hydraidectl
 
 INSTANCE LIFECYCLE:
-  init        Create and configure a new HydrAIDE instance
-  service     Register as a persistent system service (systemd)
+  init        Install a new HydrAIDE instance end-to-end (config + service + start)
+  edit        Re-run the configuration wizard for an existing instance
   start       Start an instance
   stop        Gracefully stop an instance
   restart     Restart an instance
@@ -52,11 +52,10 @@ DATA MANAGEMENT:
   size        Show instance data storage size
   stats       Show detailed swamp statistics and health report
 
-CERTIFICATES:
-  cert        Generate TLS certificates (standalone)
-
 EXAMPLES:
-  hydraidectl init
+  sudo hydraidectl init
+  sudo hydraidectl init -i prod --advanced
+  sudo hydraidectl edit -i prod
   hydraidectl list
   sudo hydraidectl start --instance prod
   sudo hydraidectl upgrade --instance prod --no-start

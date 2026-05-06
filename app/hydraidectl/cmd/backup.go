@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -57,7 +58,15 @@ func runBackupCmd(cmd *cobra.Command, args []string) {
 		fmt.Printf("Stopping instance...\n")
 		ctx := context.Background()
 		runner := instancerunner.NewInstanceController()
-		_ = runner.StopInstance(ctx, backupInstanceName)
+		if err := runner.StopInstance(ctx, backupInstanceName); err != nil {
+			if errors.Is(err, instancerunner.ErrServiceNotRunning) || errors.Is(err, instancerunner.ErrServiceNotFound) {
+				fmt.Printf("  (instance was not running, proceeding)\n")
+			} else {
+				fmt.Printf("Error: failed to stop instance for a consistent backup: %v\n", err)
+				fmt.Println("  Aborting backup. Stop the instance manually or pass --no-stop if you accept inconsistent snapshots.")
+				os.Exit(1)
+			}
+		}
 	}
 
 	startTime := time.Now()

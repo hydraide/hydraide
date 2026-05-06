@@ -42,7 +42,15 @@ type certificate struct {
 }
 
 // New creates a new Certificate instance with the given name, DNS, and IP SANs.
-// Certificates and keys will be generated under the system's temporary directory.
+// Certificates and keys will be generated under a fresh per-call subdirectory
+// of the system's temporary directory. The unique subdir avoids two failure
+// modes seen with the previous "hardcoded /tmp/<name>.crt" layout:
+//
+//  1. On hosts where `fs.protected_regular` is enabled (default on most
+//     modern kernels), a sticky-bit /tmp prevents even root from overwriting
+//     a regular file owned by a different user. A leftover /tmp/ca.crt from
+//     an earlier non-root invocation would block all subsequent sudo runs.
+//  2. Two parallel callers would race on the shared filenames.
 //
 // Example:
 //
@@ -51,7 +59,13 @@ type certificate struct {
 // This prepares the file paths, but no certificates are generated
 // until Generate() is called.
 func New(name string, dns []string, ip []string) Certificate {
-	td := os.TempDir()
+	td, err := os.MkdirTemp("", "hydraide-cert-")
+	if err != nil {
+		// Fallback to a deterministic but unique directory; Generate() will
+		// surface any further error.
+		td = filepath.Join(os.TempDir(), fmt.Sprintf("hydraide-cert-%d", os.Getpid()))
+		_ = os.MkdirAll(td, 0o700)
+	}
 	return &certificate{
 		name:      name,
 		dns:       dns,

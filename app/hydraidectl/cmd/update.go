@@ -22,6 +22,7 @@ var (
 	updateInstance string
 	updateNoStart  bool
 	updateForce    bool
+	updateYes      bool
 )
 
 // upgradeCmd defines the "upgrade" subcommand for the CLI.
@@ -107,6 +108,10 @@ for example before running a migration.`,
 			fmt.Printf("Warning: failed to get instance status for %q: %v\n", updateInstance, err)
 		}
 		if status != "inactive" && status != "unknown" {
+			if !confirmClientsStopped("upgrade (stop+download+restart)", updateYes) {
+				fmt.Println("🚫 Upgrade cancelled.")
+				return
+			}
 			if err := instanceController.StopInstance(ctx, updateInstance); err != nil {
 				fmt.Printf("Error while stopping the instance %q: %v\n", updateInstance, err)
 				os.Exit(1)
@@ -191,7 +196,9 @@ for example before running a migration.`,
 
 func init() {
 	rootCmd.AddCommand(upgradeCmd)
-	upgradeCmd.Flags().StringVarP(&updateInstance, "instance", "i", "", "Name of the service instance")
+	upgradeCmd.Flags().StringVarP(&updateInstance, "instance", "i", "", "Name of the service instance (required)")
 	upgradeCmd.Flags().BoolVar(&updateNoStart, "no-start", false, "Upgrade without starting the instance (useful before migration)")
 	upgradeCmd.Flags().BoolVar(&updateForce, "force", false, "Force re-download and reinstall even if already on the latest version")
+	upgradeCmd.Flags().BoolVarP(&updateYes, "yes", "y", false, "Skip the clients-stopped confirmation prompt (use in scripts)")
+	_ = upgradeCmd.MarkFlagRequired("instance")
 }

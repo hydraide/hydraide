@@ -38,7 +38,7 @@ If the instance is already running, the command does nothing.`,
 	Run: func(cmd *cobra.Command, args []string) {
 
 		if !elevation.IsElevated() {
-			fmt.Println(elevation.Hint(instanceName))
+			fmt.Println(elevation.Hint(startInstance))
 			os.Exit(3)
 		}
 

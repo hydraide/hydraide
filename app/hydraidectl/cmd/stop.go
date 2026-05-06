@@ -19,6 +19,7 @@ var (
 	stopInstance        string
 	stopCmdTimeout      time.Duration
 	stopGracefulTimeout time.Duration
+	stopYes             bool
 )
 
 var stopCmd = &cobra.Command{
@@ -30,8 +31,13 @@ If the instance is not running, the command does nothing.`,
 	Run: func(cmd *cobra.Command, args []string) {
 
 		if !elevation.IsElevated() {
-			fmt.Println(elevation.Hint(instanceName))
+			fmt.Println(elevation.Hint(stopInstance))
 			os.Exit(3)
+		}
+
+		if !confirmClientsStopped("stop", stopYes) {
+			fmt.Println("🚫 Stop cancelled.")
+			return
 		}
 
 		jsonOutput, _ := cmd.Flags().GetBool("json")
@@ -151,6 +157,7 @@ func init() {
 
 	stopCmd.Flags().BoolP("json", "j", false, "Return structured output in JSON format")
 	stopCmd.Flags().StringP("output", "o", "", "Output format")
+	stopCmd.Flags().BoolVarP(&stopYes, "yes", "y", false, "Skip the clients-stopped confirmation prompt (use in scripts)")
 }
 
 func printJsonStop(err error) {

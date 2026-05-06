@@ -19,10 +19,12 @@ import (
 //  3. Retrieve the collected values via GetCN(), GetIP(), GetDNS()
 type Prompts interface {
 	Start(reader *bufio.Reader)
+	SetDefaults()
+	SetSANs(cn string, dns, ip []string)
 	GetCN() string
 	GetDNS() []string
 	GetIP() []string
-	GenerateCert()
+	GenerateCert() error
 	GetCertificateFiles() []string
 }
 
@@ -117,15 +119,35 @@ func (p *prompts) Start(reader *bufio.Reader) {
 	}
 }
 
+// SetDefaults configures the prompt with localhost-only TLS parameters
+// (CN=hydraide, SAN=localhost + 127.0.0.1) without asking the user. Used by
+// 'hydraidectl init' when running without --advanced.
+func (p *prompts) SetDefaults() {
+	p.CN = "hydraide"
+	p.DNS = []string{"localhost"}
+	p.IP = []string{"127.0.0.1"}
+}
+
+// SetSANs overrides the TLS parameters with the given values without
+// prompting. Used by 'hydraidectl edit' to regenerate a certificate after the
+// user has chosen new SANs through the menu-driven editor.
+func (p *prompts) SetSANs(cn string, dns, ip []string) {
+	p.CN = cn
+	p.DNS = append([]string(nil), dns...)
+	p.IP = append([]string(nil), ip...)
+}
+
 // GenerateCert creates the TLS certificate using the collected parameters.
-func (p *prompts) GenerateCert() {
+// Returns an error if generation fails so the caller can abort instead of
+// silently continuing with an empty certificate set.
+func (p *prompts) GenerateCert() error {
 
 	// Generate the TLS certificate
 	fmt.Println("\n🔒 Generating TLS certificate...")
 	certGen := New(p.CN, p.DNS, p.IP)
 	if err := certGen.Generate(); err != nil {
 		fmt.Println("❌ Error generating TLS certificate:", err)
-		return
+		return err
 	}
 	fmt.Println("✅ TLS certificate generated successfully.")
 
@@ -140,6 +162,7 @@ func (p *prompts) GenerateCert() {
 	fmt.Println("  • Client CRT: ", clientCRT)
 	fmt.Println("  • Client KEY: ", clientKEY)
 
+	return nil
 }
 
 // GetCertificateFiles returns the list of generated certificate files.

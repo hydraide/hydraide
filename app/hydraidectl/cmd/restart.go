@@ -19,6 +19,7 @@ var (
 	restartInstance        string
 	restartCmdTimeout      time.Duration
 	restartGracefulTimeout time.Duration
+	restartYes             bool
 )
 
 var restartCmd = &cobra.Command{
@@ -31,8 +32,13 @@ and then configured as a service with 'service'.`,
 	Run: func(cmd *cobra.Command, args []string) {
 
 		if !elevation.IsElevated() {
-			fmt.Println(elevation.Hint(instanceName))
+			fmt.Println(elevation.Hint(restartInstance))
 			os.Exit(3)
+		}
+
+		if !confirmClientsStopped("restart", restartYes) {
+			fmt.Println("🚫 Restart cancelled.")
+			return
 		}
 
 		jsonOutput, _ := cmd.Flags().GetBool("json")
@@ -175,6 +181,7 @@ func init() {
 	}
 	restartCmd.Flags().BoolP("json", "j", false, "Return structured output in JSON format")
 	restartCmd.Flags().StringP("output", "o", "", "Output format")
+	restartCmd.Flags().BoolVarP(&restartYes, "yes", "y", false, "Skip the clients-stopped confirmation prompt (use in scripts)")
 }
 
 func printJsonRestart(err error) {
