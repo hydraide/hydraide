@@ -1,16 +1,14 @@
-## Database Engine – Philosophy and Operation
+## Database engine — model and operation
 
-The HydrAIDE data management model is fundamentally different from classic database approaches. It uses no schemas, no query language (SELECT, WHERE, etc.), and no central query engine. Instead, the philosophy is:
+HydrAIDE does not use schemas or SQL. The shape of the data lives in the developer's struct definition; the engine stores values in their native binary form. Where richer access is needed, the [query engine](query-engine.md) provides server-side filters, vector and geo predicates, streaming results — without a SQL surface.
 
-**"The structure lives in the developer’s intent and type definition, not in configuration files."**
+The reference SDK is in Go: any struct you define is stored binary, type-preserving, and loaded back as the same struct. The wire protocol is gRPC, so any language with protoc support can talk to the server directly without an SDK. See [pure gRPC control](pure-grpc-control.md).
 
-The primary reference SDK for HydrAIDE currently builds on Go’s strongly typed models: whatever the developer defines as a struct is stored by the system in binary form, with machine precision. This removes the migration burden of schema changes and makes the developer’s code itself the “query.” Alongside the Go SDK, a Python version is on the way, with official SDKs for other languages coming soon.
+### Why it was designed this way
 
-### Why was it designed this way?
+HydrAIDE was built for [Trendizz.com](https://trendizz.com) — a B2B search system that needed to store crawl data from millions of websites and make it available in real time, on a single server, without a separate cache or pub/sub layer. The existing options (SQL, NoSQL, Redis, Kafka) did not combine the speed, real-time reactivity, and memory efficiency required. The result was the **Swamp** — a physical and logical unit that owns the location, behaviour, and lifecycle of a slice of the data.
 
-HydrAIDE was originally created for a B2B search system that needed to store data from millions of websites and make it available in real time, without separate cache or pub/sub systems. Existing database technologies (SQL, NoSQL, Redis, Kafka) could not meet the combined requirements of speed, real-time reactivity, and memory efficiency. This led to a model where the **Swamp** — as both a physical and logical unit — defines the location, behavior, and lifecycle of data.
-
-### How does it work in practice?
+### How it works in practice
 
 To store data, you simply define a Go struct, which itself becomes the Swamp — the storage unit — for example, a user profile:
 
@@ -26,25 +24,25 @@ Then save it in Profile mode:
 
 ```go
 profile := &UserProfile{
-    Name:   "Péter",
+    Name:   "Alice",
     Age:    34,
     Active: true,
 }
 
-h.ProfileSave(ctx, name.New().Sanctuary("users").Realm("profiles").Swamp("peter"), profile)
+h.ProfileSave(ctx, name.New().Sanctuary("users").Realm("profiles").Swamp("alice"), profile)
 ```
 
-No field definitions on the database side, no ALTER TABLE, no JSON conversion. No need to create tables and indexes in the database — everything stays in your code, and you work with your own Go structs. The stored data is saved in binary, type-safe form and loaded back exactly the same way.
+No field definitions on the database side, no `ALTER TABLE`, no JSON conversion. The data is stored in its native binary form and loaded back exactly the same way.
 
-**What happens on save?** HydrAIDE deterministically resolves the Swamp name, calculates the target folder/server, automatically creates the Swamp in microseconds if needed, stores the struct fields as individual binary **Treasures**, sends events to relevant Subscribers, and — if persistence is enabled — flushes the write to SSD in the background. A profile-level write like this is **extremely fast even on a single thread**: real-world measurements show **600–700k operations/sec** on a HydrAIDE server.
+**What happens on save:** HydrAIDE resolves the Swamp name deterministically, computes the target folder/server, creates the Swamp on first access, stores the struct fields as binary **Treasures**, emits events to subscribers, and — if persistence is enabled — flushes the write to disk in the background.
 
-When you save the user, the Swamp is automatically created in microseconds and the data is instantly stored in it. The process is highly optimized: a single HydrAIDE server thread can handle 600–700k such writes per second.
+For storage-engine measurements (insert/update/delete/read latencies and on-disk size), see [V2 benchmark results](../benchmarks/V2_RESULTS_SUMMARY.md).
 
-### Advantages
+### What you get
 
-* **Speed:** O(1) access time, no query parser.
-* **Simplicity:** the code is the query.
-* **Reactivity:** every change generates a real-time event.
-* **Memory efficiency:** Swamps only live in memory when accessed.
+- **O(1) routing.** Swamp name is hashed deterministically to a folder; no central index, no scan.
+- **One language.** The struct is the schema. See [struct-first data model](struct-first-data-model.md).
+- **Reactivity built in.** Every write emits an event over a Subscribe stream. See [reactivity & subscriptions](reactivity-and-subscription-logic.md).
+- **Memory only on access.** Swamps load on first use and evict after a configurable idle window. See [Swamp lifecycle](swamp-lifecycle.md).
 
-This approach not only provides a database but also a **thinking framework** where the developer-defined structure is the actual live data model. To explore more of what HydrAIDE can do, check out the Go SDK documentation — this was only a very simple demonstration; the system offers much more.
+For server-side filtering, vector similarity, and geographic queries on top of this model, see the [query engine](query-engine.md).

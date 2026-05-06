@@ -25,7 +25,7 @@ HydrAIDE is designed to be **extremely lightweight** and **zero-impact** when id
 
 * 🧠 **CPU**: 1-core (x86\_64 or ARM64)
 * 🧮 **RAM**: 15MB free memory (idle)
-* 📀 **Disk**: Any POSIX-compatible filesystem (ZFS recommended for production)
+* 📀 **Disk**: Any POSIX-compatible filesystem. ext4 is the recommended default — HydrAIDE buffers writes in memory and flushes them as compressed append-only blocks, so a copy-on-write filesystem like ZFS adds metadata and write-amplification overhead without measurable benefit.
 
 > ⚠️ HydrAIDE has **no background processes**, **no idle threads**, and **zero CPU usage** when not actively processing Swamps. It is only active on demand.
 
@@ -33,7 +33,7 @@ HydrAIDE is designed to be **extremely lightweight** and **zero-impact** when id
 
 * SSD storage (HydrAIDE works best with fast I/O)
 * Increased file descriptor limits (`ulimit -n 100000`)
-* ZFS with snapshot support for safe backups and rollback
+* ext4 on the data volume (preferred). XFS works as well; ZFS and other COW filesystems work but add unnecessary overhead for append-only block writes — pick a snapshot strategy at the volume or block layer instead.
 
 ---
 

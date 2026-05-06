@@ -1,4 +1,4 @@
-# 🛡️ Business-Level Lock – Philosophy and Operation
+# Business-level locks
 
 ## Philosophy
 
@@ -12,7 +12,7 @@ This lock is completely independent from HydrAIDE’s internal per-Treasure lock
 
 * The first client to call the **Lock()** method with a given key instantly acquires the lock and can execute its task.
 * If a second client tries to lock the same key, the system **blocks the call** until the previous task finishes. Once the first client completes its work, the block on the second client is automatically lifted, and the system immediately hands over the lock — allowing the client’s process to continue without any extra listeners or special code.
-* This mechanism is extremely fast and can handle race conditions even between microservices.
+* The lock works across processes and services that share the same HydrAIDE instance.
 
 ### TTL (Time-To-Live) Protection
 
@@ -26,10 +26,12 @@ If a client crashes or fails to release the lock, the system automatically frees
 * Easy to use with minimal code requirements
 * Can simulate transaction-like flows where multiple operations must run atomically
 
-## Negative Patterns in Other Systems
+## How this differs from other approaches
 
-* **SQL**: Table- or row-level locks — slower and more prone to deadlocks
-* **Redis**: `SETNX`-based locking — requires extra logic for queueing and releasing
-* **Memcached**: No built-in locking — everything must be implemented manually
+If you have used distributed locks before, you have probably reached for one of these patterns:
 
-In contrast, HydrAIDE provides a built-in, distributed, deadlock-free **business-level lock** that follows an intuitive, human-like logic while delivering outstanding technical performance.
+* **Database row locks** (Postgres, MySQL): work well for transactional updates inside one DB connection, but they are tied to the lifetime of a transaction and do not generalise to "lock this business object across N services".
+* **Redis `SETNX`** + token + Lua release: a common application-level lock, but you have to write the queueing and fairness logic yourself.
+* **Memcached**: no built-in locking primitive — everything is on you.
+
+The HydrAIDE business lock fills the same niche as the `SETNX`-pattern, with the queueing, TTL release, and FIFO ordering already implemented. If your application already talks to HydrAIDE, you don't run a separate lock service.

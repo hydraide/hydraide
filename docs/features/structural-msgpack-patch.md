@@ -55,13 +55,17 @@ A `PatchCondition` is evaluated once, before any op runs. If the comparison does
 * **Conditional safety** — optimistic-style pre-checks built into the wire format
 * **Auto-create + metadata in one call** — `CreateIfNotExist` plus `SetCreatedAt`/`SetCreatedBy`/`SetUpdatedAt`/`SetUpdatedBy` removes the ceremony around new-record bootstrapping
 
-## Negative Patterns in Other Systems
+## Comparable primitives elsewhere
 
-* **MongoDB** has `$set` / `$inc` / `$push` operators, but the document is BSON which carries its own type ambiguity (every integer is a `Number` until you reach for special wrappers), and nested updates frequently allocate-and-rewrite the whole document
-* **Redis** has `HINCRBY` and friends, but only at the top of a flat hash — no path syntax, no nested arrays, no type discipline beyond strings
-* **PostgreSQL JSONB** has `jsonb_set` / `||` / `-`, but JSONB is a re-encoded form that loses every numeric type distinction the wire format had — and concurrent updates on the same row need explicit locking
-* **DynamoDB UpdateItem** has typed expressions, but only for top-level attributes; nested mutations require either full rewrite or the (separately rate-limited) document path syntax
-* **Generic SQL with JSON columns** — read row, mutate JSON in app code, write row back. The exact pattern we're escaping from
+If you have used patch-style updates in other systems, this primitive sits in the same family — with type preservation as the differentiator:
+
+* **MongoDB** has `$set` / `$inc` / `$push` over BSON. BSON carries a different type lattice from msgpack and tends to widen integers unless you reach for explicit wrappers.
+* **Redis** has `HINCRBY` and field-level operations on a flat hash. No nested-path syntax, no nested arrays, types are mostly string.
+* **PostgreSQL JSONB** offers `jsonb_set`, concatenation, and removal operators. JSONB normalises numeric types on the way in, so the wire format's distinction between `int8` and `int64` is not preserved.
+* **DynamoDB `UpdateItem`** supports typed expressions on top-level and document-path attributes, with type discipline that is closer to msgpack's, plus separate rate-limit accounting on document-path updates.
+* **Generic SQL with JSON columns**: read row, mutate JSON in application code, write row back — the read-modify-write pattern this primitive is designed to avoid.
+
+These are real and useful in their own engines — the structural patch is what fits naturally inside HydrAIDE because the wire format is already msgpack and the per-key FIFO lock is already running.
 
 ## When to Reach For It
 

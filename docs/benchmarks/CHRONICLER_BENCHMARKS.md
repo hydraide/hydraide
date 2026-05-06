@@ -1,145 +1,87 @@
-# HydrAIDE Chronicler V1 vs V2 Performance Benchmarks
+# HydrAIDE Chronicler V2 Benchmarks
 
-This directory contains comprehensive benchmarks comparing the V1 (filesystem-based, multi-file) and V2 (append-only, single-file) chronicler implementations.
+This directory contains the benchmark suite for the V2 chronicler — the append-only single-file storage engine that backs every Swamp on disk.
 
-## Quick Start
+For measured results on a reference machine, see [V2_RESULTS_SUMMARY.md](V2_RESULTS_SUMMARY.md).
 
-Run all benchmarks and generate a comparison report:
+## Quick start
 
-```bash
-./scripts/benchmark-chronicler.sh
-```
-
-Results will be saved to `benchmark-results-<timestamp>/`
-
-## Individual Benchmarks
-
-### Run V2 Benchmarks Only
+Run the full V2 benchmark set:
 
 ```bash
 go test -bench=BenchmarkV2 -benchmem -benchtime=3x ./app/core/hydra/swamp/chronicler/v2/
 ```
 
-###Run V1 Benchmarks Only
+A wrapper script that captures the output to a timestamped directory:
 
 ```bash
-go test -bench=BenchmarkV1 -benchmem -benchtime=3x ./app/core/hydra/swamp/chronicler/
+./scripts/benchmark-chronicler.sh
 ```
 
-## Benchmark Scenarios
+Results are written to `benchmark-results-<timestamp>/`.
+
+## Benchmark scenarios
 
 | Benchmark | Description |
-|-----------|-------------|
-| **Insert100K** | Insert 100,000 new entries/treasures |
-| **Update10K** | Update 10,000 existing entries (from 100K dataset) |
-| **Delete10K** | Delete 10,000 entries |
-| **Read100K** | Load and index 100,000 entries |
-| **MixedWorkload** | 50% updates, 30% inserts, 20% deletes (10K ops) |
-| **CompactionNeeded** (V2 only) | Test compaction on highly fragmented data |
-| **BlockSizes** (V2 only) | Compare different block sizes (8KB - 128KB) |
+|---|---|
+| `Insert100K` | Insert 100,000 new entries into a fresh Swamp |
+| `Update10K` | Update 10,000 entries inside a 100K-entry Swamp |
+| `Delete10K` | Delete 10,000 entries |
+| `Read100K` | Cold-start hydration: load and index 100,000 entries |
+| `MixedWorkload` | 10K ops — 50% updates, 30% inserts, 20% deletes |
+| `CompactionNeeded` | Compaction of a heavily fragmented Swamp |
+| `BlockSizes` | Sweep across block sizes from 8 KB to 128 KB |
 
-## Expected Results
-
-Based on design analysis:
-
-### Write Performance
-- **V2 Update**: ~250x faster (append vs read-modify-write)
-- **V2 Insert**: Similar or slightly faster
-- **V2 Delete**: Much faster (just append DELETE entry)
-
-### Storage Efficiency  
-- **File Count**: V1: ~400-1000 files, V2: 1 file (400-1000x reduction)
-- **Space Usage**: V2 uses ~30-40% less space (after compaction)
-- **ZFS Metadata**: ~99% reduction
-
-### Memory Usage
-- **V2**: Lower allocation count (fewer file operations)
-- **V2**: More predictable memory patterns
-
-## Understanding the Output
+## Reading the output
 
 ```
-BenchmarkV2_Insert100K-32    1    29861982 ns/op    1538614 bytes    15.39 bytes/entry
+BenchmarkV2_Insert100K-32    1    46422159 ns/op    1538623 bytes    15.39 bytes/entry
 ```
 
-- `29861982 ns/op`: Time to insert 100K entries (≈30ms)
-- `1538614 bytes`: Total file size
-- `15.39 bytes/entry`: Average bytes per entry
+- `46422159 ns/op` — time for the full insert of 100K entries (~46 ms)
+- `1538623 bytes` — final file size (~1.54 MB)
+- `15.39 bytes/entry` — average bytes per entry on disk
 
-## Metrics Reported
+## Metrics reported
 
-- `ns/op`: Nanoseconds per operation
-- `B/op`: Bytes allocated per operation
-- `allocs/op`: Number of allocations per operation
-- `bytes`: Total file/directory size
-- `bytes/entry` or `bytes/treasure`: Size per stored item
-- `bytes_before`: Size before operation
-- `bytes_after`: Size after operation
-- `bytes_growth`: Size increase
-- `files_before`, `files_after`: File count (V1 only)
-- `fragmentation_%`: Percentage of dead entries (V2 compaction)
+- `ns/op` — nanoseconds per operation
+- `B/op` — bytes allocated per operation
+- `allocs/op` — allocation count per operation
+- `bytes` — total file size
+- `bytes/entry` — average size per stored entry
+- `bytes_before`, `bytes_after`, `bytes_growth` — file size around the measured operation
+- `fragmentation_%` — fraction of dead entries (compaction scenario)
 
-## Running Specific Tests
+## Targeted runs
 
 ```bash
-# Test different block sizes
+# Sweep block sizes
 go test -bench=BenchmarkV2_BlockSizes -benchtime=5x ./app/core/hydra/swamp/chronicler/v2/
 
-# Test compaction performance
+# Compaction under fragmentation
 go test -bench=BenchmarkV2_CompactionNeeded -benchtime=1x ./app/core/hydra/swamp/chronicler/v2/
 
-# Profile memory usage
+# Memory profile
 go test -bench=BenchmarkV2_MixedWorkload -benchmem -memprofile=mem.out ./app/core/hydra/swamp/chronicler/v2/
 go tool pprof mem.out
 
-# Profile CPU usage
+# CPU profile
 go test -bench=BenchmarkV2_MixedWorkload -cpuprofile=cpu.out ./app/core/hydra/swamp/chronicler/v2/
 go tool pprof cpu.out
 ```
 
-## Interpreting Results for Migration Decision
+## Hardware notes
 
-### ✅ Proceed with V2 if:
-- Write operations are >10x faster
-- Storage reduction is >50%
-- File count reduced by >100x
-- Memory usage is stable or improved
+Numbers vary with disk and CPU. Recommended for reproducible comparisons:
 
-### ⚠️ Review if:
-- V2 is slower than V1 for writes
-- Storage increase or no significant reduction
-- Memory usage significantly higher
-
-### ❌ Block if:
-- V2 consistently fails tests
-- Data corruption detected
-- Unpredictable performance
-
-## Notes
-
-- Benchmarks use temporary directories (automatically cleaned)
-- V1 benchmarks require the full treasure/beacon infrastructure
-- V2 benchmarks are more isolated and faster to run
-- Times will vary based on hardware (especially SSD speed)
-- Results on Samsung 990 PRO should show V2's best performance
-
-## Hardware Requirements
-
-Recommended for accurate benchmarks:
-- Fast NVMe SSD (e.g., Samsung 990 PRO)
+- Fast NVMe SSD (e.g. Samsung 990 PRO)
 - 16+ GB RAM
-- Linux with ZFS (for V1 production comparison)
+- Linux
 
-## Next Steps
+The reference results in [V2_RESULTS_SUMMARY.md](V2_RESULTS_SUMMARY.md) were produced on a Threadripper 2950X with a Samsung 990 PRO.
 
-After reviewing benchmark results:
-
-1. If results are favorable: Run `hydraidectl migrate --dry-run`
-2. Schedule migration window
-3. Execute full migration
-4. Deploy V2-enabled code
-5. Monitor production metrics
+Benchmarks use temporary directories that are cleaned up automatically.
 
 ---
 
-Last Updated: 2026-01-21
+Last updated: 2026-01-21

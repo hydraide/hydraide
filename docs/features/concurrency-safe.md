@@ -1,12 +1,8 @@
-# 🔒 Concurrency-Safe – Philosophy and Operation
+# Concurrency safety
 
-## Philosophy
+A Swamp can serve many concurrent requests in parallel. Locking is per-key (per Treasure), not per Swamp or per table — so writes on different keys do not contend, and writes on the same key queue in arrival order. Reads do not take a lock at all.
 
-From the very beginning of HydrAIDE's design, a core principle was that a single **Swamp** should be able to handle millions of concurrent requests simultaneously, without blocking each other, while still operating with guaranteed safety.
-
-Other systems (e.g., SQL databases, Redis `SETNX`-based locks) often rely on global or table-level locking, which reduces performance and can create race conditions. HydrAIDE, in contrast, uses per-object (Treasure) level deterministic locking, eliminating the need for external brokers and limiting write operations to the smallest possible unit.
-
-The goal was to ensure that two different processes could never overwrite each other’s data, while reads and writes remain as fast as possible.
+The goal of this design is straightforward: two writers must not silently overwrite each other on the same key, and unrelated writers must not slow each other down.
 
 ## Operation
 
@@ -33,9 +29,9 @@ This queuing offers business logic advantages, for example:
 * Guaranteeing order in financial transactions
 * Consistently updating game states or leaderboards
 
-### 3. Exceptional speed
+### 3. Throughput
 
-Even with write locking, performance is extremely high: on a single CPU core, a single Swamp can handle **600–700 thousand Treasure writes per second**.
+Per-key FIFO locking does not become the bottleneck under typical workloads. For storage-engine measurements (insert/update/delete latencies, throughput per Swamp), see [V2 benchmark results](../benchmarks/V2_RESULTS_SUMMARY.md).
 
 ### 4. Cluster and distributed operation
 
@@ -43,11 +39,8 @@ Based on the hash calculated from the Swamp’s name, the system always routes a
 
 ## Summary
 
-This model enables developers to achieve:
-
-* Maximum parallelism
-* Data integrity even in race conditions
-* **O(1)** access time for every key
-* Simple, safe application logic — without external lock systems or brokers
-
-HydrAIDE’s per-object locking strategy delivers not only technical safety but also business logic benefits.
+* Reads are lock-free.
+* Writes on different keys run in parallel.
+* Writes on the same key are serialised in FIFO order.
+* Locks are released when the client context closes — no orphaned holds.
+* Routing is deterministic across the cluster, so a given key is always handled in the same place.

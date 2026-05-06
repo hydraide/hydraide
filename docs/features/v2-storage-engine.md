@@ -1,20 +1,18 @@
-## V2 Storage Engine – Architecture and Operation
+## Storage engine — architecture and operation
 
-HydrAIDE 3.0 introduces the **V2 Storage Engine**, a completely redesigned append-only storage format that delivers **32-112x faster writes**, **50% smaller storage**, and **95% fewer files** compared to the legacy V1 engine.
+The storage engine is append-only. Each Swamp is one `.hyd` file. Writes are buffered in memory, flushed in compressed blocks, and never modify existing bytes. Compaction runs automatically when fragmentation crosses a threshold.
 
-This document explains how the V2 engine works under the hood, why it's so fast, and how data flows from memory to disk.
+For measured insert/update/delete/read latencies and on-disk sizes on a Threadripper 2950X + Samsung 990 PRO, see [V2 benchmark results](../benchmarks/V2_RESULTS_SUMMARY.md). To reproduce, see [run instructions](../benchmarks/CHRONICLER_BENCHMARKS.md).
 
 ---
 
-### 🎯 Design Goals
+### Design goals
 
-The V2 engine was designed with these priorities:
-
-1. **Minimize file I/O** – Reduce the number of file operations to maximize SSD lifespan
-2. **Optimize for ZFS** – Align block sizes with ZFS record sizes (16KB default)
-3. **Append-only writes** – Never modify existing data, only append new entries
-4. **Single file per Swamp** – Replace hundreds of chunk files with one `.hyd` file
-5. **Lazy persistence** – Buffer writes in memory and flush efficiently
+1. **Minimise file I/O.** Fewer file operations, less SSD wear.
+2. **Block-aligned writes.** Default 16 KB block flush threshold aligns well with common filesystem record sizes.
+3. **Append-only writes.** Existing bytes are never modified; updates and deletes are new entries.
+4. **One file per Swamp.** A single `.hyd` file per Swamp replaces the legacy multi-chunk folder layout.
+5. **Lazy persistence.** Writes accumulate in a buffer and flush as full compressed blocks.
 
 ---
 
@@ -65,7 +63,7 @@ Operation  (1 byte)  – 1=INSERT, 2=UPDATE, 3=DELETE, 4=METADATA
 KeyLen     (2 bytes) – length of the key string
 Key        (N bytes) – the Treasure's unique key (UTF-8 string)
 DataLen    (4 bytes) – length of the data payload
-Data       (M bytes) – GOB-encoded Treasure bytes (empty for DELETE)
+Data       (M bytes) – encoded Treasure bytes (msgpack by default; GOB for legacy data) — empty for DELETE
 ```
 
 Minimum entry size: **7 bytes** (1+2+4 with empty key and empty data — key cannot actually be empty).
@@ -152,8 +150,8 @@ When a client saves a Treasure, here is the exact sequence:
        ▼
 7. For each Treasure in batch:
    ├── Deleted (DeletedAt > 0)?  → Entry{Op: DELETE, Key, Data: nil}
-   ├── Has no FileName yet?      → Entry{Op: INSERT, Key, Data: GOB bytes}
-   └── Has FileName already?     → Entry{Op: UPDATE, Key, Data: GOB bytes}
+   ├── Has no FileName yet?      → Entry{Op: INSERT, Key, Data: encoded bytes (msgpack/GOB)}
+   └── Has FileName already?     → Entry{Op: UPDATE, Key, Data: encoded bytes (msgpack/GOB)}
        │
        ▼
 8. WriteBuffer.Add(entry):
@@ -286,15 +284,18 @@ total=3 entries (2 live + 1 meta), 1 block
 
 ---
 
-### 📊 Performance Characteristics
+### Performance characteristics
 
-| Operation | V1 Engine | V2 Engine | Improvement |
-|-----------|-----------|-----------|-------------|
-| Write 1K treasures | 45ms | 1.4ms | **32x faster** |
-| Write 10K treasures | 450ms | 4ms | **112x faster** |
-| File count (10K treasures) | ~200 files | 1 file | **99.5% fewer** |
-| Storage size | 100% | ~50% | **50% smaller** |
-| SSD write amplification | High | Minimal | **100x less wear** |
+Measured on a Threadripper 2950X + Samsung 990 PRO. See [V2 benchmark results](../benchmarks/V2_RESULTS_SUMMARY.md) for raw output and methodology, and [CHRONICLER_BENCHMARKS](../benchmarks/CHRONICLER_BENCHMARKS.md) for the run scripts.
+
+| Operation | Measurement |
+|---|---|
+| Insert 100,000 entries | ~46 ms (~2.15 M inserts/sec) |
+| Update 10,000 entries (in a 100K Swamp) | ~3.75 ms (~2.67 M updates/sec) |
+| Delete 10,000 entries | ~1.66 ms (~6 M deletes/sec) |
+| Cold read of 100,000 entries (full index rebuild) | ~81 ms |
+| Average bytes per entry on disk | ~15.4 bytes |
+| File count per Swamp | 1 (`<swamp>.hyd`) |
 
 ---
 
@@ -335,7 +336,7 @@ h.RegisterSwamp(ctx, &hydraidego.RegisterSwampRequest{
 ```
 
 **Internal server-side constants** (not configurable per Swamp):
-- `DefaultMaxBlockSize = 16384` – block flush threshold in bytes (16KB uncompressed, ZFS-optimized)
+- `DefaultMaxBlockSize = 16384` – block flush threshold in bytes (16 KB uncompressed)
 - `CompactionThreshold = 0.5` – fragmentation ratio above which compaction runs on Close()
 - Block compression: **Snappy** (always, not configurable)
 - File format version: **3** (magic bytes: `HYDR`, backward-compatible with V2)

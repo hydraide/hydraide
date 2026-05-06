@@ -1,20 +1,24 @@
-## ✍️ No More Queries — No SELECT, no WHERE. **Your struct is the query.**
+## Struct-first data model — your code is the schema
 
-### Philosophy
+### What this means
 
-I’ve always found it painful that every database forces its own query language on developers. Each engine has a different syntax you must learn before you can be productive. The bigger problem is onboarding: even if you hire a great engineer, they still need to learn the database’s query dialect before they can ship safely. Meanwhile, a seemingly harmless query can be inefficient—or outright destabilize the system.
+In HydrAIDE the default way to store and read data is by handing the SDK a native struct. There is no separate schema definition, no migration step, no query string to compose. The struct's field tags tell the engine which field is the key, which is the value, and which fields are optional metadata. The same struct shape is used to read the data back.
 
-HydrAIDE was designed so that any developer who already knows the host language can be productive **on day one**. You never have to “step out” of code into a separate query language, and you can’t run unstable/inefficient queries by accident. Ramp‑up time is minimal, and when you join an existing codebase you immediately understand what each piece of code does—because the code *is* the query.
+When richer access is needed — filtering, vector similarity, geographic distance, field-level inspection — the [query engine](query-engine.md) handles it server-side. The struct stays the source of truth; the query engine is the layer you reach for when you need to look at many records through a lens.
 
-That is why HydrAIDE stores data via native **structs** in Go (and in every native SDK), and exposes simple SDK functions bound to gRPC methods. The goal is a developer‑friendly system you’ll enjoy using from the first minute—without learning a brand‑new language.
+### Why it works this way
 
-📚 **All models types with full, runnable examples:** [models examples](../sdk/go/examples/models)
+Every database you adopt comes with its own dialect to learn before anyone on the team can ship safely. A new hire — or a returning contributor — has to map the language they already know onto the database's surface. That gap is where bugs and accidental load problems live.
+
+Storing data as native structs collapses that gap. Code review stays in one language. The shape you read in the code is the shape on the wire and the shape on disk. New contributors are productive on the first day, because there is no second language between them and the data.
+
+📚 **Full runnable examples:** [models examples](../sdk/go/examples/models)
 
 ---
 
-### Example — Catalog Save Model
+### Example — Catalog save
 
-Below is a minimal example that saves a user record into a **Catalog** Swamp using `CatalogSave()`. If the key exists, it updates; if not, it creates.
+This example saves a user record into a Catalog-type Swamp using `CatalogSave()`. If the key exists, it updates; if not, it creates.
 
 ```go
 // Package name for your example models
@@ -51,14 +55,14 @@ type CatalogModelUserSaveExample struct {
 // Payload holds the business-level content of the user. Extend freely as needed.
 // HydrAIDE stores it in native binary form (no JSON), preserving exact types.
 type Payload struct {
-    LastLogin time.Time // Timestamp of the user’s last login
+    LastLogin time.Time // Timestamp of the user's last login
     IsBanned  bool      // Example business flag
 }
 
 // Save persists the model into a Catalog Swamp.
 // - If the key does not exist → it creates a new Treasure.
 // - If the key exists and content changes → it updates in place.
-// - If nothing changed → it’s a no-op.
+// - If nothing changed → it's a no-op.
 //
 // NOTE:
 // Use CatalogCreate() if you want "insert-only" semantics that error on duplicates.
@@ -95,7 +99,7 @@ func Example_CatalogSave() {
             IsBanned:  false,
         },
         CreatedBy: "admin-service", // Optional metadata
-        CreatedAt: time.Now(),        // Optional metadata
+        CreatedAt: time.Now(),       // Optional metadata
     }
 
     // Save to HydrAIDE (create or update depending on existing state)
@@ -105,11 +109,9 @@ func Example_CatalogSave() {
 }
 ```
 
-**Why this matters**
+### What you get
 
-* No separate query language to learn or maintain
-* Code review stays in one place (the language you already use)
-* Safer by construction: no accidental "bad queries"
-* The code you read is the exact behavior HydrAIDE executes
-
-> With HydrAIDE, you don’t query your data — you **shape** it. Your struct is the query.
+- One language end to end. The struct in your code is the record on disk.
+- No migrations for additive changes. Optional fields stay backwards-compatible because the engine stores values in their native binary form, not JSON.
+- Code review captures both the data shape and the access pattern at the same time.
+- When you need cross-record reads — filters, vector search, geographic queries — reach for the [query engine](query-engine.md) and stream results back over gRPC. The struct stays the schema; the query is the lens.

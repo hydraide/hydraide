@@ -334,6 +334,6 @@ The upgrade is fully backward-compatible — no data is lost and the server read
 
 ## Questions?
 
-- 📚 [HydrAIDE Documentation](../README.md)
+- 📚 [HydrAIDE Documentation](../../README.md)
 - 💬 [Join Discord](https://discord.gg/xE2YSkzFRm)
 - 🐛 [Report Issues](https://github.com/hydraide/hydraide/issues)

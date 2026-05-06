@@ -1,40 +1,45 @@
-# HydrAIDE Chronicler V2 - Benchmark Eredmények Összefoglalója
+# HydrAIDE Chronicler V2 — Benchmark Results
 
-**Dátum:** 2026-01-21  
-**Hardware:** AMD Ryzen Threadripper 2950X (32 thread), Samsung 990 PRO NVMe
+**Date:** 2026-01-21
+**Hardware:** AMD Ryzen Threadripper 2950X (32 threads), Samsung 990 PRO NVMe
 
----
-
-## Gyors Összefoglaló ✅
-
-| Metrika | V2 Eredmény | Értékelés |
-|---------|-------------|-----------|
-| **100K Insert** | ~46ms | ✅ Kiváló |
-| **10K Update** | ~3.8ms | ✅ Nagyon gyors |
-| **10K Delete** | ~1.7ms | ✅ Extrém gyors |
-| **100K Read** | ~81ms | ✅ Elfogadható |
-| **Compaction** | ~1.07s (100K fragmented) | ✅ Hatékony |
-| **Bytes/Entry** | ~15.4 bytes | ✅ Kompakt |
-| **Fájlszám** | **1 fájl** | ✅ 100-1000x csökkenés |
+These are raw measurements taken from the Go benchmark suite under `app/core/hydra/swamp/chronicler/v2/`. To reproduce, see [CHRONICLER_BENCHMARKS.md](CHRONICLER_BENCHMARKS.md).
 
 ---
 
-## Részletes Eredmények
+## Summary
 
-### 1. Insert 100,000 Entry
+| Operation | Time | Throughput |
+|---|---|---|
+| Insert 100,000 entries | ~46 ms | ~2.15 M inserts/sec |
+| Update 10,000 entries (in a 100K Swamp) | ~3.75 ms | ~2.67 M updates/sec |
+| Delete 10,000 entries | ~1.66 ms | ~6 M deletes/sec |
+| Read 100,000 entries (cold start, full index rebuild) | ~81 ms | ~1.23 M entries/sec |
+| Mixed workload, 10K ops (50% update / 30% insert / 20% delete) | ~3.33 ms | — |
+| Compaction of a 90% fragmented 100K Swamp | ~1.07 s | reclaims ~90% of file size |
+
+| Storage metric | Value |
+|---|---|
+| Bytes per entry (average) | ~15.4 bytes |
+| File count per Swamp | 1 (`<swamp>.hyd`) |
+| File size for 100K entries | ~1.54 MB |
+
+---
+
+## Detailed results
+
+### 1. Insert 100,000 entries
 
 ```
 BenchmarkV2_Insert100K-32    1    46422159 ns/op    1538623 bytes    15.39 bytes/entry
 ```
 
-- **Idő**: 46.4ms → **~2.15 millió insert/sec**
-- **Fájlméret**: 1.54 MB (100K entry)
-- **Entry méret**: 15.39 byte/entry (átlag)
-- **Throughput**: ~33 MB/sec írás
+- Time: 46.4 ms → ~2.15 M inserts/sec
+- File size after insert: 1.54 MB
+- Average entry size: 15.39 bytes
+- Write throughput: ~33 MB/sec
 
-**Értékelés**: ✅ Kiváló - lineáris skálázódás, nagy throughput
-
-### 2. Update 10,000 Entry (100K adatból)
+### 2. Update 10,000 entries inside a 100K Swamp
 
 ```
 BenchmarkV2_Update10K-32    1    3752886 ns/op
@@ -43,39 +48,36 @@ BenchmarkV2_Update10K-32    1    3752886 ns/op
    154103 bytes_growth
 ```
 
-- **Idő**: 3.75ms → **~2.67 millió update/sec**
-- **Növekedés**: 154 KB (10K update után)
-- **Append sebesség**: ~41 MB/sec
+- Time: 3.75 ms → ~2.67 M updates/sec
+- File growth from 10K updates: 154 KB
+- Append throughput: ~41 MB/sec
 
-**Értékelés**: ✅ Nagyon gyors - append-only előnye látszik!  
-**V1 vs V2**: Várhatóan ~250x gyorsabb, mert V1-ben read-modify-write kell
+The append-only design means an update is a single new entry written at the tail; the previous version becomes garbage that is reclaimed by compaction.
 
-### 3. Delete 10,000 Entry
+### 3. Delete 10,000 entries
 
 ```
 BenchmarkV2_Delete10K-32    1    1664445 ns/op
 ```
 
-- **Idő**: 1.66ms → **~6 millió delete/sec**
-- **Működés**: Csak DELETE entry append, nincs tényleges törlés
+- Time: 1.66 ms → ~6 M deletes/sec
+- Mechanism: a DELETE entry is appended; the actual data is reclaimed at compaction time.
 
-**Értékelés**: ✅ Extrém gyors - append-only előnye  
-**V1 vs V2**: V2 jelentősen gyorsabb, mert csak append
-
-### 4. Read 100,000 Entry (Index rebuild)
+### 4. Read 100,000 entries (cold start, full index rebuild)
 
 ```
 BenchmarkV2_Read100K-32    1    81390403 ns/op
 ```
 
-- **Idő**: 81.4ms
-- **Throughput**: ~1.23 millió entry/sec olvasás
-- **Fájl méret**: ~1.5 MB → ~18.4 MB/sec olvasás
+- Time: 81.4 ms
+- Throughput: ~1.23 M entries/sec
+- File scanned: ~1.5 MB → ~18.4 MB/sec including decompression and index rebuild
 
-**Értékelés**: ✅ Elfogadható - egyetlen fájl végigolvasása + decompression + index build  
-**Megjegyzés**: Ez csak initialization! Működés közben minden memóriában van.
+This is the cold-start hydration cost. Once the Swamp is loaded, subsequent reads serve from memory.
 
-### 5. Mixed Workload (50% update, 30% insert, 20% delete)
+### 5. Mixed workload (10,000 ops)
+
+50% updates, 30% inserts, 20% deletes.
 
 ```
 BenchmarkV2_MixedWorkload-32    1    3332036 ns/op
@@ -84,112 +86,56 @@ BenchmarkV2_MixedWorkload-32    1    3332036 ns/op
         1 files
 ```
 
-- **Idő**: 3.33ms (10K műveletre)
-- **Növekedés**: 150 KB
-- **Fájl**: Továbbra is 1 fájl!
+- Time: 3.33 ms for 10K mixed operations
+- File growth: 150 KB
+- File count remains 1.
 
-**Értékelés**: ✅ Valós workload szimuláció jól működik
-
-### 6. Compaction (90%+ fragmentation)
+### 6. Compaction of a 90% fragmented Swamp
 
 ```
 BenchmarkV2_CompactionNeeded-32    1    1072090316 ns/op
-  90.91% fragmentation
-  100000 live_entries
-  1100000 total_entries
-  11079440 bytes_before (10.6 MB)
-  1108991 bytes_after (1.08 MB)
-  9970449 bytes_saved (9.5 MB, 90%)
+   90.91% fragmentation
+  100000   live_entries
+ 1100000   total_entries
+ 11079440  bytes_before  (10.6 MB)
+  1108991  bytes_after   (1.08 MB)
+  9970449  bytes_saved   (9.5 MB, 90%)
 ```
 
-- **Idő**: 1.07 sec (100K entry, 90% fragmentation)
-- **Méret csökkenés**: 10.6 MB → 1.08 MB (**90% megtakarítás!**)
-- **Live entries**: 100K / 1.1M total = 9.1% live
+- Time: 1.07 s for 100K live entries inside a heavily fragmented Swamp.
+- Size reduction: 10.6 MB → 1.08 MB (~90% reclaimed).
+- Live entry ratio: 100K live / 1.1M total = 9.1%.
 
-**Értékelés**: ✅ Compaction nagyon hatékony!  
-**Megjegyzés**: Valós helyzetben ritkán lesz ilyen magas a fragmentation
+In practice this level of fragmentation is unusual; compaction is triggered far earlier under the engine's default thresholds.
 
-### 7. Block Size Comparison (10K entry)
+### 7. Block size comparison (10K entries)
 
-| Block Size | Idő | Fájlméret |
-|------------|-----|-----------|
-| 8 KB | 7.7ms | 101 KB |
-| 16 KB | 7.4ms | 100 KB |
-| 32 KB | 7.4ms | 100 KB |
-| **64 KB** | **7.3ms** | **94 KB** ✅ |
-| 128 KB | 7.3ms | 94 KB |
+| Block size | Time | File size |
+|---|---|---|
+| 8 KB  | 7.7 ms | 101 KB |
+| 16 KB | 7.4 ms | 100 KB |
+| 32 KB | 7.4 ms | 100 KB |
+| **64 KB** | **7.3 ms** | **94 KB** |
+| 128 KB | 7.3 ms | 94 KB |
 
-**Optimális**: 64KB block size (default) - jó kompresszió + gyors írás
-
----
-
-## V1 vs V2 Várható Összehasonlítás
-
-### Sebesség (becsült)
-
-| Művelet | V1 (filesystem) | V2 (append-only) | Javulás |
-|---------|-----------------|------------------|---------|
-| **100K Insert** | ~200-300ms | **46ms** | **~5x gyorsabb** |
-| **10K Update** | ~500-1000ms | **3.8ms** | **~200x gyorsabb** ✅ |
-| **10K Delete** | ~100-200ms | **1.7ms** | **~100x gyorsabb** ✅ |
-| **100K Read** | ~60-100ms | **81ms** | Hasonló |
-
-### Tárhely (100K entry)
-
-| Metrika | V1 | V2 | Javulás |
-|---------|----|----|---------|
-| **Fájlok száma** | ~400-1000 | **1** | **400-1000x** ✅ |
-| **Adat méret** | ~2-3 MB | **1.54 MB** | ~40% kisebb |
-| **ZFS metadata** | ~10-20 MB | **~50 KB** | **~99% kevesebb** ✅ |
-| **Bloat (fragmentation)** | Nincs cleanup | Compaction | ✅ |
-
-### Memória
-
-| Metrika | V1 | V2 | Javulás |
-|---------|----|----|---------|
-| **Allocs/op** | Sok (file ops) | Kevesebb (append) | Jobb |
-| **Index build** | Hasonló | Hasonló | - |
+64 KB is the default — a balance between compression ratio and write latency.
 
 ---
 
-## Következtetések
+## Projection for the Trendizz workload
 
-### ✅ **V2 PRODUCTION-READY!**
+Assuming roughly 1,000,000 Swamps with ~100M words indexed and ~10 saves per Swamp per day, the V2 engine produces:
 
-1. **Sebesség**: Update/Delete műveletek **100-200x gyorsabbak**
-2. **Tárhely**: Fájlszám **400-1000x csökkentés**, ZFS metadata 99% megtakarítás
-3. **SSD élettartam**: Write amplification drasztikus csökkenése
-4. **Compaction**: Automatikus helyfelszabadítás, 90% méret visszanyerés
-5. **Stabilitás**: Minden teszt zöld, nincs adatvesztés
+| Metric | V2 value |
+|---|---|
+| File count | ~1 M files (one per Swamp) |
+| Storage footprint | ~300–400 GB |
+| Daily write volume | ~40 GB/day |
 
-### Számok a Trendizz rendszerre (1M swamp, 100M szó)
-
-| Metrika | V1 (jelenlegi) | V2 (új) | Megtakarítás |
-|---------|----------------|---------|--------------|
-| **Fájlok száma** | ~100M fájl | **~1M fájl** | **100x** |
-| **ZFS metadata** | ~200 GB | **~2 GB** | **100x** |
-| **Tárhely** | ~850 GB | **~300-400 GB** | **~60%** |
-| **Napi írás (10 save)** | ~4 TB/nap | **~40 GB/nap** | **100x** |
-| **SSD élettartam** | ~1 év | **~100 év** | **100x** |
+These are projections based on the per-Swamp measurements above, not direct cluster measurements.
 
 ---
 
-## Ajánlás: FOLYTATÁS AZ INTEGRÁCIÓVAL! 🚀
+## Reproducing these numbers
 
-A benchmarkok **minden elvárást túlszárnyaltak**:
-- ✅ Write sebesség: 100-200x javulás update/delete esetén
-- ✅ Tárhely: 100x kevesebb fájl, 60% méret csökkenés
-- ✅ SSD védelem: 100x hosszabb élettartam
-- ✅ Compaction: Hatékony, gyors, automatikus
-
-### Következő lépések:
-
-1. ✅ **Benchmarkok - KÉSZ**
-2. ⏭️ **Fázis 6: Integráció** - Chronicler adapter, Swamp integráció
-3. ⏭️ **Fázis 7: End-to-End tesztek** - V1→V2 migráció tesztelése
-4. ⏭️ **Production migráció** - hydraidectl migrate
-
----
-
-**Készítette:** HydrAIDE Development Team  
-**Jóváhagyásra vár:** Péter
+See [CHRONICLER_BENCHMARKS.md](CHRONICLER_BENCHMARKS.md) for the run scripts and per-scenario commands. Numbers will vary with hardware; the Threadripper 2950X + Samsung 990 PRO results above set the reference baseline.

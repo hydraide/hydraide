@@ -1,17 +1,15 @@
-## 🛰️ Pure gRPC Control — Fully SDK-Optional, Ultra-Fast, Language-Native
+## Pure gRPC control — the protocol is the contract
 
-### Philosophy
+### What this means
 
-From day one, HydrAIDE was built on a simple but non-negotiable principle:
-**access to the engine must be possible from anywhere, in any language, with maximum speed and type safety — without extra layers.**
+The HydrAIDE wire protocol is gRPC, defined by [`proto/hydraide.proto`](../../proto/hydraide.proto). Anything an SDK can do is a method on that proto — there are no SDK-only behaviours hiding behind extra abstractions.
 
-That’s why the foundation of HydrAIDE’s communication is **pure gRPC**, defined by `.proto` files.
-The result is a transport that’s:
+Properties that follow from that:
 
-* **Build-once, run-anywhere** — generate native clients in Go, Python, Node.js, Java, Rust, C#, and more with a single `protoc` command.
-* **Strongly typed end-to-end** — no guessing field names, no brittle JSON parsing, no runtime casting errors.
-* **Ridiculously fast** — binary over HTTP/2 with multiplexed streams, optimized for low-latency edge and IoT scenarios.
-* **Secure by default** — TLS-encrypted, cert-based access baked in.
+* **Generate a client in any language.** A single `protoc` invocation produces a typed client in Go, Python, Node.js, Java, Rust, C#, or any other protoc-supported language.
+* **End-to-end typed.** Field names and types come from the proto; no manual JSON parsing, no runtime casting.
+* **HTTP/2 binary transport.** Multiplexed streams are used directly for the streaming reads (`GetByIndexStream`, `SubscribeToEvents`).
+* **mTLS by default.** Cert-based authentication is part of the connection, not an afterthought.
 
 HydrAIDE’s Go SDK is a **convenience wrapper** over these gRPC calls — adding features like:
 
@@ -23,24 +21,18 @@ But here’s the key: **you never have to use the SDK**.
 If you want to run ultra-lean — for example, on a Raspberry Pi edge node, an embedded controller, or a minimal CLI tool — you can skip the SDK entirely.
 Just use the generated gRPC client for your language and call the service methods directly.
 
-This makes HydrAIDE uniquely flexible:
+In practice this means:
 
-* In **full-stack services**, you might use the SDK for its developer-friendly model handling.
-* In **resource-constrained edge/IoT devices**, you might use raw gRPC for minimal overhead.
-* In **multi-language ecosystems**, teams can connect in whatever language they’re productive in — with no translation layer.
-
----
-
-### Why this matters
-
-* **Zero lock-in** — Any language, any stack, any runtime.
-* **Max performance** — No extra abstractions in the hot path.
-* **Future-proof** — New languages get instant first-class support by regenerating protobuf clients.
-* **Flexible architecture** — Choose between full-feature SDKs or bare-metal gRPC depending on the environment.
-
-> HydrAIDE doesn’t just have an SDK — it *is* the protocol.
-> Everything the SDK can do, you can do directly via gRPC.
+* In a full-stack service, you can use the SDK for its struct/model handling.
+* On a resource-constrained edge or IoT device, you can skip the SDK and call the protoc-generated client directly.
+* In a multi-language stack, each team uses the language they're already productive in — there is no central translation layer to maintain.
 
 ---
 
-📄 **The `.proto` file with full documentation is available here:** [HydrAIDE Protocol Definition](../../proto/hydraide.proto)
+### Why this matters in practice
+
+* **No SDK lock-in.** A team that prefers Rust, Python, or Node can talk to a HydrAIDE server without waiting for a bespoke SDK.
+* **Edge and embedded.** Skip the Go SDK on resource-constrained devices and use the raw protoc-generated client.
+* **One contract for the whole stack.** Code review of new RPCs happens once — in the proto file — and propagates to every language.
+
+📄 The `.proto` file with full documentation: [HydrAIDE protocol definition](../../proto/hydraide.proto)

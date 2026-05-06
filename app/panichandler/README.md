@@ -194,6 +194,4 @@ panichandler.SafeGo("work", doWork)
 
 ## 📖 Detailed Documentation
 
-See the main logging architecture documentation:
-- [Logging Architecture](../../docs/logging-architecture.md)
 - [Panic Logger](../paniclogger/README.md)
