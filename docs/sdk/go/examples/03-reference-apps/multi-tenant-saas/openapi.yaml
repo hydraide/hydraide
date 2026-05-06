@@ -1,0 +1,168 @@
+openapi: 3.0.3
+info:
+  title: HydrAIDE multi-tenant-saas
+  version: 0.1.0
+  description: |
+    Per-tenant user store. Each tenant gets its own Catalog Swamp at
+    apps/multi-tenant-saas/{tenantID}. Tenants are physically isolated
+    on disk, in memory, and at lock granularity.
+servers:
+  - url: http://localhost:8082
+
+paths:
+  /tenants/{tenant}/users:
+    parameters:
+      - in: path
+        name: tenant
+        required: true
+        schema: { type: string }
+    post:
+      summary: Create a user inside the tenant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateUserRequest' }
+            examples:
+              alice: { value: { email: alice@acme.io, name: Alice } }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '400': { $ref: '#/components/responses/Error' }
+    get:
+      summary: List users for the tenant
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/User' }
+
+  /tenants/{tenant}/users/{id}:
+    parameters:
+      - in: path
+        name: tenant
+        required: true
+        schema: { type: string }
+      - in: path
+        name: id
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      summary: Read a user by id
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '404': { $ref: '#/components/responses/Error' }
+    patch:
+      summary: Patch user fields atomically
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PatchUserRequest' }
+            examples:
+              rename:     { value: { name: "Alice Doe" } }
+              deactivate: { value: { isActive: false } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '404': { $ref: '#/components/responses/Error' }
+    delete:
+      summary: Delete a user
+      responses:
+        '204': { description: Deleted }
+
+  /tenants/{tenant}/users/{id}/claim:
+    parameters:
+      - in: path
+        name: tenant
+        required: true
+        schema: { type: string }
+      - in: path
+        name: id
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      summary: Claim the user (TTL-bounded business lock)
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ClaimRequest' }
+            examples:
+              defaultThirty: { value: { holdSeconds: 30 } }
+      responses:
+        '200':
+          description: Acquired
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ClaimResponse' }
+        '409': { $ref: '#/components/responses/Error' }
+
+  /tenants/{tenant}:
+    parameters:
+      - in: path
+        name: tenant
+        required: true
+        schema: { type: string }
+    delete:
+      summary: Destroy the entire tenant Swamp (file removed from disk)
+      responses:
+        '204': { description: Destroyed }
+
+components:
+  schemas:
+    User:
+      type: object
+      required: [id, email, name, isActive, createdAt]
+      properties:
+        id:        { type: string, format: uuid }
+        email:     { type: string, format: email }
+        name:      { type: string }
+        isActive:  { type: boolean }
+        createdAt: { type: string, format: date-time }
+    CreateUserRequest:
+      type: object
+      required: [email]
+      properties:
+        email: { type: string, format: email }
+        name:  { type: string }
+    PatchUserRequest:
+      type: object
+      properties:
+        email:    { type: string, format: email }
+        name:     { type: string }
+        isActive: { type: boolean }
+    ClaimRequest:
+      type: object
+      properties:
+        holdSeconds: { type: integer, minimum: 1, default: 30 }
+    ClaimResponse:
+      type: object
+      required: [acquired]
+      properties:
+        acquired:  { type: boolean }
+        heldUntil: { type: string, format: date-time }
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+  responses:
+    Error:
+      description: Error
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }

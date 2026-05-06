@@ -1,0 +1,127 @@
+{
+  "info": {
+    "name": "HydrAIDE — multi-tenant-saas",
+    "_postman_id": "ee5e9d40-1234-4abc-9def-mtenant000001",
+    "description": "Per-tenant user store with business locks. The {{tenant}} variable controls which Swamp the requests target — run create with tenant=acme, then again with tenant=zenith and notice the lists do not bleed.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8082", "type": "string" },
+    { "key": "tenant",  "value": "acme",                 "type": "string" },
+    { "key": "userId",  "value": "",                     "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Create user",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "var json = pm.response.json();",
+              "if (json && json.id) { pm.collectionVariables.set('userId', json.id); }",
+              "pm.test('status 201', function () { pm.response.to.have.status(201); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "content-type", "value": "application/json" }],
+        "url": {
+          "raw": "{{baseUrl}}/tenants/{{tenant}}/users",
+          "host": ["{{baseUrl}}"],
+          "path": ["tenants", "{{tenant}}", "users"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"alice@acme.io\",\n  \"name\": \"Alice\"\n}"
+        }
+      }
+    },
+    {
+      "name": "List users",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/tenants/{{tenant}}/users",
+          "host": ["{{baseUrl}}"],
+          "path": ["tenants", "{{tenant}}", "users"]
+        }
+      }
+    },
+    {
+      "name": "Read user",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/tenants/{{tenant}}/users/{{userId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["tenants", "{{tenant}}", "users", "{{userId}}"]
+        }
+      }
+    },
+    {
+      "name": "Patch user (rename)",
+      "request": {
+        "method": "PATCH",
+        "header": [{ "key": "content-type", "value": "application/json" }],
+        "url": {
+          "raw": "{{baseUrl}}/tenants/{{tenant}}/users/{{userId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["tenants", "{{tenant}}", "users", "{{userId}}"]
+        },
+        "body": { "mode": "raw", "raw": "{\n  \"name\": \"Alice Doe\"\n}" }
+      }
+    },
+    {
+      "name": "Patch user (deactivate)",
+      "request": {
+        "method": "PATCH",
+        "header": [{ "key": "content-type", "value": "application/json" }],
+        "url": {
+          "raw": "{{baseUrl}}/tenants/{{tenant}}/users/{{userId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["tenants", "{{tenant}}", "users", "{{userId}}"]
+        },
+        "body": { "mode": "raw", "raw": "{\n  \"isActive\": false\n}" }
+      }
+    },
+    {
+      "name": "Claim user (business lock)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "content-type", "value": "application/json" }],
+        "url": {
+          "raw": "{{baseUrl}}/tenants/{{tenant}}/users/{{userId}}/claim",
+          "host": ["{{baseUrl}}"],
+          "path": ["tenants", "{{tenant}}", "users", "{{userId}}", "claim"]
+        },
+        "body": { "mode": "raw", "raw": "{\n  \"holdSeconds\": 30\n}" }
+      }
+    },
+    {
+      "name": "Delete user",
+      "request": {
+        "method": "DELETE",
+        "url": {
+          "raw": "{{baseUrl}}/tenants/{{tenant}}/users/{{userId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["tenants", "{{tenant}}", "users", "{{userId}}"]
+        }
+      }
+    },
+    {
+      "name": "Delete tenant (entire Swamp)",
+      "request": {
+        "method": "DELETE",
+        "url": {
+          "raw": "{{baseUrl}}/tenants/{{tenant}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["tenants", "{{tenant}}"]
+        }
+      }
+    }
+  ]
+}

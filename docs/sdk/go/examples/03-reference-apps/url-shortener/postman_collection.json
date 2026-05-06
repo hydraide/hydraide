@@ -1,0 +1,69 @@
+{
+  "info": {
+    "name": "HydrAIDE — url-shortener",
+    "_postman_id": "ee5e9d40-1234-4abc-9def-urlshort00001",
+    "description": "Short-code → long-URL service backed by HydrAIDE. Create captures the new code into {{code}}; subsequent requests use it.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8081", "type": "string" },
+    { "key": "code", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Create short link",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "var json = pm.response.json();",
+              "if (json && json.code) { pm.collectionVariables.set('code', json.code); }",
+              "pm.test('status 201', function () { pm.response.to.have.status(201); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "content-type", "value": "application/json" }],
+        "url": { "raw": "{{baseUrl}}/links", "host": ["{{baseUrl}}"], "path": ["links"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"url\": \"https://hydraide.io\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Follow short link (redirect)",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{baseUrl}}/{{code}}", "host": ["{{baseUrl}}"], "path": ["{{code}}"] },
+        "description": "Returns 302 to the long URL. Postman follows redirects by default — disable redirects in settings to see the 302 directly."
+      }
+    },
+    {
+      "name": "Stats for code",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/links/{{code}}/stats",
+          "host": ["{{baseUrl}}"],
+          "path": ["links", "{{code}}", "stats"]
+        }
+      }
+    },
+    {
+      "name": "Delete short link",
+      "request": {
+        "method": "DELETE",
+        "url": {
+          "raw": "{{baseUrl}}/links/{{code}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["links", "{{code}}"]
+        }
+      }
+    }
+  ]
+}

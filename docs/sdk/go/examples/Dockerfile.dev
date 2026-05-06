@@ -1,0 +1,32 @@
+# Dockerfile.dev — multi-stage build of the HydrAIDE server straight from
+# the in-repo source tree. Used by the example tree's docker-compose.yml so
+# the compose stack always matches the SDK in this checkout — including
+# very recent changes (e.g. PatchTreasures) that may not yet be in the
+# published `ghcr.io/hydraide/hydraide:latest` image.
+#
+# Build context for this image is the repository root, not the examples
+# directory. See docker-compose.yml for the build.context override.
+
+FROM golang:1.26-alpine AS build
+WORKDIR /src
+
+RUN apk --no-cache add git build-base
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+RUN CGO_ENABLED=0 go build -o /out/hydraide ./app/server
+
+FROM alpine:3.20
+RUN apk --no-cache add ca-certificates curl shadow su-exec
+WORKDIR /hydraide
+COPY --from=build /out/hydraide ./hydraide
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh /hydraide/hydraide
+
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["./hydraide"]
+
+HEALTHCHECK --interval=5s --timeout=3s --start-period=5s --retries=3 \
+    CMD curl --fail http://localhost:4445/health || exit 1

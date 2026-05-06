@@ -1,0 +1,132 @@
+openapi: 3.0.3
+info:
+  title: HydrAIDE todo-api
+  version: 0.1.0
+  description: |
+    Reference CRUD service backed by a single HydrAIDE Catalog Swamp.
+    Demonstrates server-side filtering, atomic field-level patches and
+    per-key FIFO locking.
+servers:
+  - url: http://localhost:8080
+    description: local instance brought up by `make app-todo-api`
+
+paths:
+  /todos:
+    post:
+      summary: Create a todo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateTodoRequest' }
+            examples:
+              basic:
+                value: { title: "buy milk", dueAt: "2026-12-31T17:00:00Z" }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Todo' }
+        '400': { $ref: '#/components/responses/Error' }
+
+    get:
+      summary: List todos (optionally filtered by status)
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [open, done]
+          description: omit for all todos; `open` returns done=false; `done` returns done=true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Todo' }
+
+  /todos/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string, format: uuid }
+
+    get:
+      summary: Read a todo by id
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Todo' }
+        '404': { $ref: '#/components/responses/Error' }
+
+    patch:
+      summary: Patch a todo (atomic field-level mutation)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PatchTodoRequest' }
+            examples:
+              markDone:
+                value: { done: true }
+              renameAndReschedule:
+                value: { title: "buy milk and bread", dueAt: "2026-12-25T12:00:00Z" }
+      responses:
+        '200':
+          description: OK (returns the post-patch todo)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Todo' }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
+    delete:
+      summary: Delete a todo
+      responses:
+        '204': { description: Deleted }
+
+components:
+  schemas:
+    Todo:
+      type: object
+      required: [id, title, done, dueAt, createdAt]
+      properties:
+        id:        { type: string, format: uuid }
+        title:     { type: string }
+        done:      { type: boolean }
+        dueAt:     { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+
+    CreateTodoRequest:
+      type: object
+      required: [title]
+      properties:
+        title: { type: string, minLength: 1 }
+        dueAt: { type: string, format: date-time }
+
+    PatchTodoRequest:
+      type: object
+      description: any combination of fields; at least one is required
+      properties:
+        title: { type: string, minLength: 1 }
+        done:  { type: boolean }
+        dueAt: { type: string, format: date-time }
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+
+  responses:
+    Error:
+      description: Error
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }

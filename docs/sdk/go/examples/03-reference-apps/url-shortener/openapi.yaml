@@ -1,0 +1,106 @@
+openapi: 3.0.3
+info:
+  title: HydrAIDE url-shortener
+  version: 0.1.0
+  description: |
+    Short-code → long-URL service backed by HydrAIDE. The redirect path
+    is read-heavy and uses CatalogRead; the click counter uses
+    IncrementInt64 atomically.
+servers:
+  - url: http://localhost:8081
+    description: local instance brought up by `make app-url-shortener`
+
+paths:
+  /links:
+    post:
+      summary: Create a short link
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateLinkRequest' }
+            examples:
+              basic: { value: { url: "https://hydraide.io" } }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Link' }
+        '400': { $ref: '#/components/responses/Error' }
+
+  /links/{code}/stats:
+    get:
+      summary: Stats for a short code
+      parameters:
+        - in: path
+          name: code
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Stats' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /links/{code}:
+    delete:
+      summary: Delete a short link (and its click counter)
+      parameters:
+        - in: path
+          name: code
+          required: true
+          schema: { type: string }
+      responses:
+        '204': { description: Deleted }
+
+  /{code}:
+    get:
+      summary: Follow a short link (302 redirect to the long URL)
+      parameters:
+        - in: path
+          name: code
+          required: true
+          schema: { type: string }
+      responses:
+        '302':
+          description: Found
+          headers:
+            Location:
+              schema: { type: string, format: uri }
+        '404': { $ref: '#/components/responses/Error' }
+
+components:
+  schemas:
+    Link:
+      type: object
+      required: [code, url, createdAt]
+      properties:
+        code:      { type: string }
+        url:       { type: string, format: uri }
+        createdAt: { type: string, format: date-time }
+    CreateLinkRequest:
+      type: object
+      required: [url]
+      properties:
+        url: { type: string, format: uri }
+    Stats:
+      type: object
+      required: [code, url, clicks]
+      properties:
+        code:   { type: string }
+        url:    { type: string, format: uri }
+        clicks: { type: integer, format: int64 }
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+  responses:
+    Error:
+      description: Error
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }

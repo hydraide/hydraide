@@ -1,0 +1,124 @@
+{
+  "info": {
+    "name": "HydrAIDE — todo-api",
+    "_postman_id": "ee5e9d40-1234-4abc-9def-todoapi000001",
+    "description": "Reference CRUD service backed by HydrAIDE. Import via File → Import. Adjust the baseUrl variable if the server is not on localhost:8080.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080", "type": "string" },
+    { "key": "todoId", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Create todo",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "var json = pm.response.json();",
+              "if (json && json.id) { pm.collectionVariables.set('todoId', json.id); }",
+              "pm.test('status 201', function () { pm.response.to.have.status(201); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "content-type", "value": "application/json" }],
+        "url": { "raw": "{{baseUrl}}/todos", "host": ["{{baseUrl}}"], "path": ["todos"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"buy milk\",\n  \"dueAt\": \"2026-12-31T17:00:00Z\"\n}"
+        }
+      }
+    },
+    {
+      "name": "List todos (all)",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{baseUrl}}/todos", "host": ["{{baseUrl}}"], "path": ["todos"] }
+      }
+    },
+    {
+      "name": "List todos (status=open)",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/todos?status=open",
+          "host": ["{{baseUrl}}"],
+          "path": ["todos"],
+          "query": [{ "key": "status", "value": "open" }]
+        }
+      }
+    },
+    {
+      "name": "List todos (status=done)",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/todos?status=done",
+          "host": ["{{baseUrl}}"],
+          "path": ["todos"],
+          "query": [{ "key": "status", "value": "done" }]
+        }
+      }
+    },
+    {
+      "name": "Read todo by id",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/todos/{{todoId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["todos", "{{todoId}}"]
+        }
+      }
+    },
+    {
+      "name": "Patch todo (mark done)",
+      "request": {
+        "method": "PATCH",
+        "header": [{ "key": "content-type", "value": "application/json" }],
+        "url": {
+          "raw": "{{baseUrl}}/todos/{{todoId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["todos", "{{todoId}}"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"done\": true\n}"
+        }
+      }
+    },
+    {
+      "name": "Patch todo (rename + reschedule)",
+      "request": {
+        "method": "PATCH",
+        "header": [{ "key": "content-type", "value": "application/json" }],
+        "url": {
+          "raw": "{{baseUrl}}/todos/{{todoId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["todos", "{{todoId}}"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"buy milk and bread\",\n  \"dueAt\": \"2026-12-25T12:00:00Z\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Delete todo",
+      "request": {
+        "method": "DELETE",
+        "url": {
+          "raw": "{{baseUrl}}/todos/{{todoId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["todos", "{{todoId}}"]
+        }
+      }
+    }
+  ]
+}

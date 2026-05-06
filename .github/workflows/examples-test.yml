@@ -1,0 +1,61 @@
+name: examples-test
+
+on:
+  push:
+    paths:
+      - 'docs/sdk/go/examples/**'
+      - 'sdk/go/**'
+      - 'proto/**'
+      - 'generated/**'
+      - '.github/workflows/examples-test.yml'
+  pull_request:
+    paths:
+      - 'docs/sdk/go/examples/**'
+      - 'sdk/go/**'
+      - 'proto/**'
+      - 'generated/**'
+      - '.github/workflows/examples-test.yml'
+  workflow_dispatch:
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Bring up local HydrAIDE
+        working-directory: docs/sdk/go/examples
+        run: docker compose up -d
+
+      - name: Wait for HydrAIDE to become healthy
+        working-directory: docs/sdk/go/examples
+        run: |
+          for i in $(seq 1 60); do
+            state=$(docker inspect -f '{{.State.Health.Status}}' hydraide-examples 2>/dev/null || echo starting)
+            if [ "$state" = "healthy" ]; then
+              echo "hydraide is healthy"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "hydraide did not become healthy"
+          docker compose logs
+          exit 1
+
+      - name: Run example integration tests
+        working-directory: docs/sdk/go/examples
+        env:
+          HYDRA_HOST: localhost:5980
+          HYDRA_CERT: ./certificate
+        run: go test -tags=integration -count=1 ./...
+
+      - name: Tear down
+        if: always()
+        working-directory: docs/sdk/go/examples
+        run: docker compose down -v
