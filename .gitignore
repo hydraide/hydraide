@@ -42,6 +42,10 @@ vendor/
 # ---- Environment files ----
 .env
 
+# Locally-generated mTLS certificates for e2e tests
+# (regenerate via scripts/generate-test-certs.sh)
+sdk/go/hydraidego/testdata/certs/
+
 db/
 fallback.log
 .github/copilot-instructions.md

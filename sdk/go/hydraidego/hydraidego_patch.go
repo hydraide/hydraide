@@ -225,8 +225,15 @@ func (h *hydraidego) runPatch(
 	}
 	r := resp.GetResults()[0]
 	st := PatchStatus(r.GetStatus())
-	if r.GetError() != "" && (st != PatchStatusPatched && st != PatchStatusCreated) {
-		return st, NewError(ErrCodeUnknown, fmt.Sprintf("%s: %s", st, r.GetError()))
+	// Per-key statuses are NOT errors — they describe an outcome the caller
+	// is expected to handle (e.g. CONDITION_NOT_MET, KEY_NOT_FOUND, even
+	// TYPE_MISMATCH which often signals a typed client bug). The error
+	// return is reserved for transport-level failures, which are caught
+	// above via translatePatchGRPCError. INTERNAL_ERROR is the only
+	// per-key status that maps back to a non-nil error so callers writing
+	// `if err != nil` still notice unexpected server-side failures.
+	if st == PatchStatusInternalError && r.GetError() != "" {
+		return st, NewError(ErrCodeInternalDatabaseError, r.GetError())
 	}
 	return st, nil
 }
