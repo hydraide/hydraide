@@ -2,6 +2,7 @@ name: examples-test
 
 on:
   push:
+    branches: [main]
     paths:
       - 'docs/sdk/go/examples/**'
       - 'sdk/go/**'
@@ -52,7 +53,6 @@ jobs:
         working-directory: docs/sdk/go/examples
         env:
           HYDRA_HOST: localhost:5980
-          HYDRA_CERT: ./certificate
         run: go test -tags=integration -count=1 ./...
 
       - name: Tear down
