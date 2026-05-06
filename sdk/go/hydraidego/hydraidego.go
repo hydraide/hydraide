@@ -107,6 +107,13 @@ type Hydraidego interface {
 	CatalogReadManyFromMany(ctx context.Context, request []*CatalogReadManyFromManyRequest, model any, iterator CatalogReadManyFromManyIteratorFunc) error
 	ProfileReadWithFilter(ctx context.Context, swampName name.Name, filters *FilterGroup, model any) (bool, error)
 	ProfileReadBatchWithFilter(ctx context.Context, swampNames []name.Name, filters *FilterGroup, model any, maxResults int32, iterator ProfileReadBatchWithFilterIteratorFunc) error
+
+	// Field-level structural patches on msgpack-encoded Catalog treasures.
+	// See hydraidego_patch.go for op semantics. Builder API: CatalogPatch.
+	CatalogPatchField(ctx context.Context, swampName name.Name, key, fieldPath string, value any) (PatchStatus, error)
+	CatalogPatchFields(ctx context.Context, swampName name.Name, key string, fields map[string]any) (PatchStatus, error)
+	CatalogPatchFieldsMany(ctx context.Context, swampName name.Name, requests []*PatchManyRequest, iterator PatchManyIteratorFunc) error
+	CatalogPatch(ctx context.Context, swampName name.Name, key string) *PatchBuilder
 }
 
 // Index defines the configuration for index-based queries in HydrAIDE.
