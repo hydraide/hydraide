@@ -875,6 +875,12 @@ type swamp struct {
 	writerLock      sync.Mutex // mutex for the writer
 	closeWriteMutex sync.Mutex // mutex for the closeWrite function
 	closeMutex      sync.Mutex // mutex for the close function
+	createMu        sync.Mutex // serializes CreateTreasure to prevent dual-creation races
+
+	// creatingTreasures tracks treasures that have been created via CreateTreasure but not yet
+	// persisted (no Save call). Concurrent CreateTreasure calls for the same key must return the
+	// same in-flight treasure object so that subsequent guarded operations serialize correctly.
+	creatingTreasures sync.Map // key string -> treasure.Treasure
 
 	vigil.Vigil
 
@@ -1142,40 +1148,33 @@ func (s *swamp) createMetaForIncrementResponse(treasureObj treasure.Treasure) *I
 
 func (s *swamp) IncrementUint8(key string, i uint8, condition *IncrementUInt8Condition, metadataRequestIfNotExist *IncrementMetadataRequest, metadataRequestIfExist *IncrementMetadataRequest) (newValue uint8, incremented bool, metadataResponse *IncrementMetadataResponse, err error) {
 
-	// get the key treasure by its key
+	// get-or-create the treasure for this key
 	treasureObj := s.beaconKey.Get(key)
-	var guardID guard.ID
-
-	// create the treasure object if it does not exist
 	if treasureObj == nil {
-
 		treasureObj = s.CreateTreasure(key)
-		// create the quard for the treasure object
-		guardID = treasureObj.StartTreasureGuard(true)
-		treasureObj.SetContentUint8(guardID, 0)
+	}
 
+	// acquire the guard before inspecting or mutating the treasure. The existence/type check
+	// must happen inside the guard: there is a TOCTOU window between beaconKey.Get and
+	// CreateTreasure where another goroutine can publish the treasure into the beacon. Without
+	// the in-guard re-check, the "new treasure" branch would call SetContentXxx(0) on a treasure
+	// that already holds a value, silently resetting the counter and corrupting return values.
+	guardID := treasureObj.StartTreasureGuard(true)
+	defer treasureObj.ReleaseTreasureGuard(guardID)
+
+	switch treasureObj.GetContentType() {
+	case treasure.ContentTypeVoid:
+		treasureObj.SetContentUint8(guardID, 0)
 		if metadataRequestIfNotExist != nil {
 			s.setMetaForIncrement(treasureObj, guardID, metadataRequestIfNotExist)
 		}
-
-	} else {
-
-		// ha a treasure létezett, már, akkor ellenőrizzük a tartalom típusát
-		contentType := treasureObj.GetContentType()
-		// ha nem integer volt benne eddig, akkor hibát dobunk
-		if contentType != treasure.ContentTypeUint8 {
-			return 0, false, nil, errors.New(ErrorValueIsNotInt)
-		}
-
-		guardID = treasureObj.StartTreasureGuard(true)
+	case treasure.ContentTypeUint8:
 		if metadataRequestIfExist != nil {
 			s.setMetaForIncrement(treasureObj, guardID, metadataRequestIfExist)
 		}
-
+	default:
+		return 0, false, nil, errors.New(ErrorValueIsNotInt)
 	}
-
-	// release the guard when the function returns
-	defer treasureObj.ReleaseTreasureGuard(guardID)
 
 	// lekérdezzük a jelenlegi integer értékét a treasure-nek
 	contentInt, err := treasureObj.GetContentUint8()
@@ -1227,39 +1226,29 @@ func (s *swamp) IncrementUint8(key string, i uint8, condition *IncrementUInt8Con
 
 func (s *swamp) IncrementUint16(key string, i uint16, condition *IncrementUInt16Condition, metadataRequestIfNotExist *IncrementMetadataRequest, metadataRequestIfExist *IncrementMetadataRequest) (newValue uint16, incremented bool, metadataResponse *IncrementMetadataResponse, err error) {
 
-	// get the key treasure by its key
+	// get-or-create the treasure for this key. See IncrementUint8 for the rationale behind the
+	// in-guard re-check that follows.
 	treasureObj := s.beaconKey.Get(key)
-	var guardID guard.ID
-
-	// ha a treasure nem létezik még, akkor létrehozzuk azt
 	if treasureObj == nil {
-
-		// a treasure még nem létezett, így létrehozzuk azt
 		treasureObj = s.CreateTreasure(key)
-		guardID = treasureObj.StartTreasureGuard(true)
-		treasureObj.SetContentUint16(guardID, 0)
+	}
 
+	guardID := treasureObj.StartTreasureGuard(true)
+	defer treasureObj.ReleaseTreasureGuard(guardID)
+
+	switch treasureObj.GetContentType() {
+	case treasure.ContentTypeVoid:
+		treasureObj.SetContentUint16(guardID, 0)
 		if metadataRequestIfNotExist != nil {
 			s.setMetaForIncrement(treasureObj, guardID, metadataRequestIfNotExist)
 		}
-
-	} else {
-
-		// ha a treasure létezett, már, akkor ellenőrizzük a tartalom típusát
-		contentType := treasureObj.GetContentType()
-		// ha nem integer volt benne eddig, akkor hibát dobunk
-		if contentType != treasure.ContentTypeUint16 {
-			return 0, false, nil, errors.New(ErrorValueIsNotInt)
-		}
-
-		guardID = treasureObj.StartTreasureGuard(true)
+	case treasure.ContentTypeUint16:
 		if metadataRequestIfExist != nil {
 			s.setMetaForIncrement(treasureObj, guardID, metadataRequestIfExist)
 		}
-
+	default:
+		return 0, false, nil, errors.New(ErrorValueIsNotInt)
 	}
-
-	defer treasureObj.ReleaseTreasureGuard(guardID)
 
 	// lekérdezzük a jelenlegi integer értékét a treasure-nek
 	contentInt, err := treasureObj.GetContentUint16()
@@ -1310,37 +1299,29 @@ func (s *swamp) IncrementUint16(key string, i uint16, condition *IncrementUInt16
 }
 func (s *swamp) IncrementUint32(key string, i uint32, condition *IncrementUInt32Condition, metadataRequestIfNotExist *IncrementMetadataRequest, metadataRequestIfExist *IncrementMetadataRequest) (newValue uint32, incremented bool, metadataResponse *IncrementMetadataResponse, err error) {
 
-	// get the key treasure by its key
+	// get-or-create the treasure for this key. See IncrementUint8 for the rationale behind the
+	// in-guard re-check that follows.
 	treasureObj := s.beaconKey.Get(key)
-	var guardID guard.ID
-
-	// ha a treasure nem létezik még, akkor létrehozzuk azt
 	if treasureObj == nil {
-
-		// a treasure még nem létezett, így létrehozzuk azt
 		treasureObj = s.CreateTreasure(key)
-		guardID = treasureObj.StartTreasureGuard(true)
-		treasureObj.SetContentUint32(guardID, 0)
+	}
 
+	guardID := treasureObj.StartTreasureGuard(true)
+	defer treasureObj.ReleaseTreasureGuard(guardID)
+
+	switch treasureObj.GetContentType() {
+	case treasure.ContentTypeVoid:
+		treasureObj.SetContentUint32(guardID, 0)
 		if metadataRequestIfNotExist != nil {
 			s.setMetaForIncrement(treasureObj, guardID, metadataRequestIfNotExist)
 		}
-
-	} else {
-		// ha a treasure létezett, már, akkor ellenőrizzük a tartalom típusát
-		contentType := treasureObj.GetContentType()
-		// ha nem integer volt benne eddig, akkor hibát dobunk
-		if contentType != treasure.ContentTypeUint32 {
-			return 0, false, nil, errors.New(ErrorValueIsNotInt)
-		}
-
-		guardID = treasureObj.StartTreasureGuard(true)
+	case treasure.ContentTypeUint32:
 		if metadataRequestIfExist != nil {
 			s.setMetaForIncrement(treasureObj, guardID, metadataRequestIfExist)
 		}
+	default:
+		return 0, false, nil, errors.New(ErrorValueIsNotInt)
 	}
-
-	defer treasureObj.ReleaseTreasureGuard(guardID)
 
 	// lekérdezzük a jelenlegi integer értékét a treasure-nek
 	contentInt, err := treasureObj.GetContentUint32()
@@ -1390,39 +1371,29 @@ func (s *swamp) IncrementUint32(key string, i uint32, condition *IncrementUInt32
 
 }
 func (s *swamp) IncrementUint64(key string, i uint64, condition *IncrementUInt64Condition, metadataRequestIfNotExist *IncrementMetadataRequest, metadataRequestIfExist *IncrementMetadataRequest) (newValue uint64, incremented bool, metadataResponse *IncrementMetadataResponse, err error) {
-	// get the key treasure by its key
-
+	// get-or-create the treasure for this key. See IncrementUint8 for the rationale behind the
+	// in-guard re-check that follows.
 	treasureObj := s.beaconKey.Get(key)
-	var guardID guard.ID
-
-	// ha a treasure nem létezik még, akkor létrehozzuk azt
 	if treasureObj == nil {
-
 		treasureObj = s.CreateTreasure(key)
-		guardID = treasureObj.StartTreasureGuard(true)
-		treasureObj.SetContentUint64(guardID, 0)
+	}
 
+	guardID := treasureObj.StartTreasureGuard(true)
+	defer treasureObj.ReleaseTreasureGuard(guardID)
+
+	switch treasureObj.GetContentType() {
+	case treasure.ContentTypeVoid:
+		treasureObj.SetContentUint64(guardID, 0)
 		if metadataRequestIfNotExist != nil {
 			s.setMetaForIncrement(treasureObj, guardID, metadataRequestIfNotExist)
 		}
-
-	} else {
-		// ha a treasure létezett, már, akkor ellenőrizzük a tartalom típusát
-		contentType := treasureObj.GetContentType()
-		// ha nem integer volt benne eddig, akkor hibát dobunk
-		if contentType != treasure.ContentTypeUint64 {
-			return 0, false, nil, errors.New(ErrorValueIsNotInt)
-		}
-
-		guardID = treasureObj.StartTreasureGuard(true)
+	case treasure.ContentTypeUint64:
 		if metadataRequestIfExist != nil {
 			s.setMetaForIncrement(treasureObj, guardID, metadataRequestIfExist)
 		}
-
+	default:
+		return 0, false, nil, errors.New(ErrorValueIsNotInt)
 	}
-
-	// biztosítjuk, hogy a treasure-hoz egyszerre csak egy goroutine férjen hozzá
-	defer treasureObj.ReleaseTreasureGuard(guardID)
 
 	// lekérdezzük a jelenlegi integer értékét a treasure-nek
 	contentInt, err := treasureObj.GetContentUint64()
@@ -1472,37 +1443,29 @@ func (s *swamp) IncrementUint64(key string, i uint64, condition *IncrementUInt64
 }
 func (s *swamp) IncrementInt8(key string, i int8, condition *IncrementInt8Condition, metadataRequestIfNotExist *IncrementMetadataRequest, metadataRequestIfExist *IncrementMetadataRequest) (newValue int8, incremented bool, metadataResponse *IncrementMetadataResponse, err error) {
 
-	// get the key treasure by its key
+	// get-or-create the treasure for this key. See IncrementUint8 for the rationale behind the
+	// in-guard re-check that follows.
 	treasureObj := s.beaconKey.Get(key)
-	var guardID guard.ID
-
-	// if thre treasure does not exist yet, we create it
 	if treasureObj == nil {
-
 		treasureObj = s.CreateTreasure(key)
-		guardID = treasureObj.StartTreasureGuard(true)
+	}
+
+	guardID := treasureObj.StartTreasureGuard(true)
+	defer treasureObj.ReleaseTreasureGuard(guardID)
+
+	switch treasureObj.GetContentType() {
+	case treasure.ContentTypeVoid:
 		treasureObj.SetContentInt8(guardID, 0)
 		if metadataRequestIfNotExist != nil {
 			s.setMetaForIncrement(treasureObj, guardID, metadataRequestIfNotExist)
 		}
-
-	} else {
-		// check the type of the treasure content
-		contentType := treasureObj.GetContentType()
-		// return with error if the content type is not int8
-		if contentType != treasure.ContentTypeInt8 {
-			return 0, false, nil, errors.New(ErrorValueIsNotInt)
-		}
-
-		guardID = treasureObj.StartTreasureGuard(true)
+	case treasure.ContentTypeInt8:
 		if metadataRequestIfExist != nil {
 			s.setMetaForIncrement(treasureObj, guardID, metadataRequestIfExist)
 		}
-
+	default:
+		return 0, false, nil, errors.New(ErrorValueIsNotInt)
 	}
-
-	// biztosítjuk, hogy a treasure-hoz egyszerre csak egy goroutine férjen hozzá
-	defer treasureObj.ReleaseTreasureGuard(guardID)
 
 	// lekérdezzük a jelenlegi integer értékét a treasure-nek
 	contentInt, err := treasureObj.GetContentInt8()
@@ -1552,38 +1515,29 @@ func (s *swamp) IncrementInt8(key string, i int8, condition *IncrementInt8Condit
 
 }
 func (s *swamp) IncrementInt16(key string, i int16, condition *IncrementInt16Condition, metadataRequestIfNotExist *IncrementMetadataRequest, metadataRequestIfExist *IncrementMetadataRequest) (newValue int16, incremented bool, metadataResponse *IncrementMetadataResponse, err error) {
-	// get the key treasure by its key
+	// get-or-create the treasure for this key. See IncrementUint8 for the rationale behind the
+	// in-guard re-check that follows.
 	treasureObj := s.beaconKey.Get(key)
-	var guardID guard.ID
-
-	// ha a treasure nem létezik még, akkor létrehozzuk azt
 	if treasureObj == nil {
-
 		treasureObj = s.CreateTreasure(key)
-		guardID = treasureObj.StartTreasureGuard(true)
-		treasureObj.SetContentInt16(guardID, 0)
+	}
 
+	guardID := treasureObj.StartTreasureGuard(true)
+	defer treasureObj.ReleaseTreasureGuard(guardID)
+
+	switch treasureObj.GetContentType() {
+	case treasure.ContentTypeVoid:
+		treasureObj.SetContentInt16(guardID, 0)
 		if metadataRequestIfNotExist != nil {
 			s.setMetaForIncrement(treasureObj, guardID, metadataRequestIfNotExist)
 		}
-
-	} else {
-		// ha a treasure létezett, már, akkor ellenőrizzük a tartalom típusát
-		contentType := treasureObj.GetContentType()
-		// ha nem integer volt benne eddig, akkor hibát dobunk
-		if contentType != treasure.ContentTypeInt16 {
-			return 0, false, nil, errors.New(ErrorValueIsNotInt)
-		}
-
-		guardID = treasureObj.StartTreasureGuard(true)
+	case treasure.ContentTypeInt16:
 		if metadataRequestIfExist != nil {
 			s.setMetaForIncrement(treasureObj, guardID, metadataRequestIfExist)
 		}
-
+	default:
+		return 0, false, nil, errors.New(ErrorValueIsNotInt)
 	}
-
-	// biztosítjuk, hogy a treasure-hoz egyszerre csak egy goroutine férjen hozzá
-	defer treasureObj.ReleaseTreasureGuard(guardID)
 
 	// lekérdezzük a jelenlegi integer értékét a treasure-nek
 	contentInt, err := treasureObj.GetContentInt16()
@@ -1633,36 +1587,29 @@ func (s *swamp) IncrementInt16(key string, i int16, condition *IncrementInt16Con
 }
 func (s *swamp) IncrementInt32(key string, i int32, condition *IncrementInt32Condition, metadataRequestIfNotExist *IncrementMetadataRequest, metadataRequestIfExist *IncrementMetadataRequest) (newValue int32, incremented bool, metadataResponse *IncrementMetadataResponse, err error) {
 
-	// get the key treasure by its key
+	// get-or-create the treasure for this key. See IncrementUint8 for the rationale behind the
+	// in-guard re-check that follows.
 	treasureObj := s.beaconKey.Get(key)
-	var guardID guard.ID
-
-	// ha a treasure nem létezik még, akkor létrehozzuk azt
 	if treasureObj == nil {
-
 		treasureObj = s.CreateTreasure(key)
-		guardID = treasureObj.StartTreasureGuard(true)
+	}
+
+	guardID := treasureObj.StartTreasureGuard(true)
+	defer treasureObj.ReleaseTreasureGuard(guardID)
+
+	switch treasureObj.GetContentType() {
+	case treasure.ContentTypeVoid:
 		treasureObj.SetContentInt32(guardID, 0)
 		if metadataRequestIfNotExist != nil {
 			s.setMetaForIncrement(treasureObj, guardID, metadataRequestIfNotExist)
 		}
-
-	} else {
-		// ha a treasure létezett, már, akkor ellenőrizzük a tartalom típusát
-		contentType := treasureObj.GetContentType()
-		// ha nem integer volt benne eddig, akkor hibát dobunk
-		if contentType != treasure.ContentTypeInt32 {
-			return 0, false, nil, errors.New(ErrorValueIsNotInt)
-		}
-
-		guardID = treasureObj.StartTreasureGuard(true)
+	case treasure.ContentTypeInt32:
 		if metadataRequestIfExist != nil {
 			s.setMetaForIncrement(treasureObj, guardID, metadataRequestIfExist)
 		}
-
+	default:
+		return 0, false, nil, errors.New(ErrorValueIsNotInt)
 	}
-
-	defer treasureObj.ReleaseTreasureGuard(guardID)
 
 	// lekérdezzük a jelenlegi integer értékét a treasure-nek
 	contentInt, err := treasureObj.GetContentInt32()
@@ -1713,35 +1660,29 @@ func (s *swamp) IncrementInt32(key string, i int32, condition *IncrementInt32Con
 
 func (s *swamp) IncrementInt64(key string, i int64, condition *IncrementInt64Condition, metadataRequestIfNotExist *IncrementMetadataRequest, metadataRequestIfExist *IncrementMetadataRequest) (newValue int64, incremented bool, metadataResponse *IncrementMetadataResponse, err error) {
 
-	// get the key treasure by its key
+	// get-or-create the treasure for this key. See IncrementUint8 for the rationale behind the
+	// in-guard re-check that follows.
 	treasureObj := s.beaconKey.Get(key)
-	var guardID guard.ID
-
-	// ha a treasure nem létezik még, akkor létrehozzuk azt
 	if treasureObj == nil {
-		// a treasure még nem létezett, így létrehozzuk azt
 		treasureObj = s.CreateTreasure(key)
-		guardID = treasureObj.StartTreasureGuard(true)
+	}
+
+	guardID := treasureObj.StartTreasureGuard(true)
+	defer treasureObj.ReleaseTreasureGuard(guardID)
+
+	switch treasureObj.GetContentType() {
+	case treasure.ContentTypeVoid:
 		treasureObj.SetContentInt64(guardID, 0)
 		if metadataRequestIfNotExist != nil {
 			s.setMetaForIncrement(treasureObj, guardID, metadataRequestIfNotExist)
 		}
-
-	} else {
-		// ha a treasure létezett, már, akkor ellenőrizzük a tartalom típusát
-		contentType := treasureObj.GetContentType()
-		// ha nem integer volt benne eddig, akkor hibát dobunk
-		if contentType != treasure.ContentTypeInt64 {
-			return 0, false, nil, errors.New(ErrorValueIsNotInt)
-		}
-		guardID = treasureObj.StartTreasureGuard(true)
+	case treasure.ContentTypeInt64:
 		if metadataRequestIfExist != nil {
 			s.setMetaForIncrement(treasureObj, guardID, metadataRequestIfExist)
 		}
-
+	default:
+		return 0, false, nil, errors.New(ErrorValueIsNotInt)
 	}
-
-	defer treasureObj.ReleaseTreasureGuard(guardID)
 
 	// lekérdezzük a jelenlegi integer értékét a treasure-nek
 	contentInt, err := treasureObj.GetContentInt64()
@@ -1803,36 +1744,29 @@ type IncrementFloat64Condition struct {
 
 func (s *swamp) IncrementFloat32(key string, f float32, condition *IncrementFloat32Condition, metadataRequestIfNotExist *IncrementMetadataRequest, metadataRequestIfExist *IncrementMetadataRequest) (newValue float32, incremented bool, metadataResponse *IncrementMetadataResponse, err error) {
 
-	// get the key treasure by its key
+	// get-or-create the treasure for this key. See IncrementUint8 for the rationale behind the
+	// in-guard re-check that follows.
 	treasureObj := s.beaconKey.Get(key)
-	var guardID guard.ID
-
-	// ha a treasure nem létezik még, akkor létrehozzuk azt
 	if treasureObj == nil {
-		// a treasure még nem létezett, így létrehozzuk azt
 		treasureObj = s.CreateTreasure(key)
-		guardID = treasureObj.StartTreasureGuard(true)
+	}
+
+	guardID := treasureObj.StartTreasureGuard(true)
+	defer treasureObj.ReleaseTreasureGuard(guardID)
+
+	switch treasureObj.GetContentType() {
+	case treasure.ContentTypeVoid:
 		treasureObj.SetContentFloat32(guardID, 0)
 		if metadataRequestIfNotExist != nil {
 			s.setMetaForIncrement(treasureObj, guardID, metadataRequestIfNotExist)
 		}
-
-	} else {
-		// ha a treasure létezett, már, akkor ellenőrizzük a tartalom típusát
-		contentType := treasureObj.GetContentType()
-		// ha nem float volt benne eddig, akkor hibát dobunk
-		if contentType != treasure.ContentTypeFloat32 {
-			return 0, false, nil, errors.New(ErrorValueIsNotFloat)
-		}
-
-		guardID = treasureObj.StartTreasureGuard(true)
+	case treasure.ContentTypeFloat32:
 		if metadataRequestIfExist != nil {
 			s.setMetaForIncrement(treasureObj, guardID, metadataRequestIfExist)
 		}
-
+	default:
+		return 0, false, nil, errors.New(ErrorValueIsNotFloat)
 	}
-
-	defer treasureObj.ReleaseTreasureGuard(guardID)
 
 	// get the float value and return an error if it fails
 	contentFloat, err := treasureObj.GetContentFloat32()
@@ -1885,34 +1819,29 @@ func (s *swamp) IncrementFloat32(key string, f float32, condition *IncrementFloa
 
 func (s *swamp) IncrementFloat64(key string, f float64, condition *IncrementFloat64Condition, metadataRequestIfNotExist *IncrementMetadataRequest, metadataRequestIfExist *IncrementMetadataRequest) (newValue float64, incremented bool, metadataResponse *IncrementMetadataResponse, err error) {
 
-	// get the key treasure by its key
+	// get-or-create the treasure for this key. See IncrementUint8 for the rationale behind the
+	// in-guard re-check that follows.
 	treasureObj := s.beaconKey.Get(key)
-	var guardID guard.ID
-
-	// ha a treasure nem létezik még, akkor létrehozzuk azt
 	if treasureObj == nil {
 		treasureObj = s.CreateTreasure(key)
-		guardID = treasureObj.StartTreasureGuard(true)
+	}
+
+	guardID := treasureObj.StartTreasureGuard(true)
+	defer treasureObj.ReleaseTreasureGuard(guardID)
+
+	switch treasureObj.GetContentType() {
+	case treasure.ContentTypeVoid:
 		treasureObj.SetContentFloat64(guardID, 0)
 		if metadataRequestIfNotExist != nil {
 			s.setMetaForIncrement(treasureObj, guardID, metadataRequestIfNotExist)
 		}
-	} else {
-		// ha a treasure létezett, már, akkor ellenőrizzük a tartalom típusát
-		contentType := treasureObj.GetContentType()
-		// ha nem float volt benne eddig, akkor hibát dobunk
-		if contentType != treasure.ContentTypeFloat64 {
-			return 0, false, nil, errors.New(ErrorValueIsNotFloat)
-		}
-
-		guardID = treasureObj.StartTreasureGuard(true)
+	case treasure.ContentTypeFloat64:
 		if metadataRequestIfExist != nil {
 			s.setMetaForIncrement(treasureObj, guardID, metadataRequestIfExist)
 		}
-
+	default:
+		return 0, false, nil, errors.New(ErrorValueIsNotFloat)
 	}
-
-	defer treasureObj.ReleaseTreasureGuard(guardID)
 
 	// get the float value and return an error if it fails
 	contentFloat, err := treasureObj.GetContentFloat64()
@@ -2030,19 +1959,34 @@ func (s *swamp) CountTreasuresWaitingForWriter() int {
 }
 
 // CreateTreasure creates a new Treasure object if it is not existing in the swamp or returns with the existing one.
+//
+// CreateTreasure is safe to call concurrently for the same key: a swamp-level mutex serializes the
+// check-and-create step, and an in-flight tracker (creatingTreasures) ensures that callers racing
+// during the brief window between treasure.New() and the first Save (which adds the treasure to
+// beaconKey) all receive the same treasure object. Without this, concurrent IncrementXxx calls on
+// a fresh key could each see beaconKey.Get == nil, build their own independent treasures, and lose
+// updates when only one of those treasures ends up in the beacon.
 func (s *swamp) CreateTreasure(key string) treasure.Treasure {
 
-	// return with the original treasure if it is existing
-	// this working like the Load function
+	s.createMu.Lock()
+	defer s.createMu.Unlock()
+
+	// return with the original treasure if it is existing in the beacon
 	if treasureObj := s.beaconKey.Get(key); treasureObj != nil {
-		// return with the original treasure
 		return treasureObj
+	}
+
+	// if another goroutine already created an in-flight treasure for this key, reuse it
+	if v, ok := s.creatingTreasures.Load(key); ok {
+		return v.(treasure.Treasure)
 	}
 
 	t := treasure.New(s.SaveFunction)
 	guardID := t.StartTreasureGuard(true, guard.BodyAuthID)
 	t.BodySetKey(guardID, key)
 	t.ReleaseTreasureGuard(guardID)
+
+	s.creatingTreasures.Store(key, t)
 
 	return t
 }
@@ -2069,6 +2013,9 @@ func (s *swamp) SaveFunction(t treasure.Treasure, guardID guard.ID) treasure.Tre
 
 		// add treasure to the beaconKey index
 		s.beaconKey.Add(t)
+
+		// the treasure is now visible via beaconKey, so it no longer needs the in-flight tracker
+		s.creatingTreasures.Delete(t.GetKey())
 
 		// add treasure to all other beacons if needed
 		s.addTreasureToBeacons(t)

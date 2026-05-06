@@ -319,6 +319,70 @@ func TestSwampPatch_PersistsAcrossReload(t *testing.T) {
 	assert.Equal(t, "bob", got["name"])
 }
 
+// ---------- B.13 — concurrent CreateIfNotExist on the same key ----------
+
+// TestSwampPatch_ConcurrentCreateIfNotExist exercises the TOCTOU race between beaconKey.Get and
+// CreateTreasure for PatchFields with CreateIfNotExist=true. Each goroutine increments a counter
+// field and (independently) sets a per-goroutine field. After the run the counter must equal the
+// number of goroutines, and every per-goroutine field must be present in the final map. Without
+// the in-guard re-check, racing CreateIfNotExist callers could overwrite an already-patched body
+// with the seed, losing both counter increments and per-goroutine fields.
+func TestSwampPatch_ConcurrentCreateIfNotExist(t *testing.T) {
+	s := patchTestSwamp(t, "patch", "concurrent-create")
+
+	const workers = 100
+	const key = "shared"
+
+	var wg sync.WaitGroup
+	var creates int32
+	var patched int32
+	wg.Add(workers)
+	for i := 0; i < workers; i++ {
+		go func(idx int) {
+			defer wg.Done()
+			fieldName := fmt.Sprintf("g%d", idx)
+			res, err := s.PatchFields(key,
+				[]msgpackpatch.Op{
+					{Kind: msgpackpatch.OpInc, Path: "counter", Value: encMsgpack(t, int64(1))},
+					{Kind: msgpackpatch.OpSet, Path: fieldName, Value: encMsgpack(t, true)},
+				}, nil,
+				PatchFieldsOptions{CreateIfNotExist: true},
+			)
+			if err != nil {
+				t.Errorf("PatchFields: %v", err)
+				return
+			}
+			switch res.Status {
+			case PatchStatusCreated:
+				atomic.AddInt32(&creates, 1)
+			case PatchStatusPatched:
+				atomic.AddInt32(&patched, 1)
+			default:
+				t.Errorf("unexpected status: %v", res.Status)
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	if creates != 1 {
+		t.Fatalf("expected exactly one PatchStatusCreated, got %d (patched=%d)", creates, patched)
+	}
+	if int(creates+patched) != workers {
+		t.Fatalf("expected created+patched = %d, got %d", workers, creates+patched)
+	}
+
+	got := readPatchedMap(t, s, key)
+	if v, _ := got["counter"].(int64); v != int64(workers) {
+		t.Fatalf("counter: want %d, got %v", workers, got["counter"])
+	}
+	for i := 0; i < workers; i++ {
+		fieldName := fmt.Sprintf("g%d", i)
+		if _, ok := got[fieldName]; !ok {
+			t.Fatalf("missing field %q in patched map (race ate the write)", fieldName)
+		}
+	}
+}
+
 // ---------- B.12 — produces OpUpdate not OpInsert ----------
 
 func TestSwampPatch_ProducesUpdateNotInsert(t *testing.T) {

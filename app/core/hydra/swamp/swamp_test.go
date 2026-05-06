@@ -2734,6 +2734,71 @@ func TestIncrementInt64_OverflowWraps(t *testing.T) {
 		t.Fatalf("expected wrap to %d, got %d", expected, newVal)
 	}
 }
+// TestIncrementInt64_ConcurrentSameKey reproduces the bug described in
+// plan/INCREMENTINT64_RETURN_VALUE_BUG.md: under high concurrency, the engine's stored value used
+// to remain correct, but a subset of IncrementInt64 calls returned a stale value (max returned <
+// number of increments performed). Both the stored value and the maximum returned value must equal
+// the number of increments performed.
+func TestIncrementInt64_ConcurrentSameKey(t *testing.T) {
+	s := newSwampForTest(t, "Int64", "ConcurrentSameKey")
+
+	const workers = 200
+	const key = "i64:concurrent"
+
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var maxV int64
+	seen := make(map[int64]int, workers)
+
+	wg.Add(workers)
+	for i := 0; i < workers; i++ {
+		go func() {
+			defer wg.Done()
+			v, inc, _, err := s.IncrementInt64(key, 1, nil, nil, nil)
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+				return
+			}
+			if !inc {
+				t.Errorf("expected incremented=true")
+				return
+			}
+			mu.Lock()
+			seen[v]++
+			if v > maxV {
+				maxV = v
+			}
+			mu.Unlock()
+		}()
+	}
+	wg.Wait()
+
+	if maxV != int64(workers) {
+		t.Fatalf("max returned value: want %d, got %d", workers, maxV)
+	}
+
+	// Each call must observe a unique post-increment value. Duplicate or missing values indicate
+	// that two concurrent operations raced past each other.
+	for v := int64(1); v <= int64(workers); v++ {
+		if seen[v] != 1 {
+			t.Fatalf("expected exactly one return of value %d, got %d", v, seen[v])
+		}
+	}
+
+	// Stored value must equal the number of increments performed.
+	tr, err := s.GetTreasure(key)
+	if err != nil {
+		t.Fatalf("GetTreasure: %v", err)
+	}
+	stored, err := tr.GetContentInt64()
+	if err != nil {
+		t.Fatalf("GetContentInt64: %v", err)
+	}
+	if stored != int64(workers) {
+		t.Fatalf("stored value: want %d, got %d", workers, stored)
+	}
+}
+
 func TestIncrementFloat32_NewKey_NoMetadata(t *testing.T) {
 	s := newSwampForTest(t, "Float32", "NewKey_NoMetadata")
 

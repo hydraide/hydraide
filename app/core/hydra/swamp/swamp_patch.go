@@ -120,68 +120,95 @@ var emptyMapMsgpack = []byte{0x80}
 // not server errors. The error return is reserved for unexpected internal
 // failures.
 func (s *swamp) PatchFields(key string, ops []msgpackpatch.Op, condition *msgpackpatch.Condition, opts PatchFieldsOptions) (PatchFieldsResult, error) {
-	treasureObj := s.beaconKey.Get(key)
+	// Best-effort early exit: if the treasure does not exist and we are not allowed to create
+	// one, there is no point taking a guard. The in-guard re-check below is the actual
+	// correctness guarantee against the TOCTOU race between beaconKey.Get and CreateTreasure.
+	if !opts.CreateIfNotExist && s.beaconKey.Get(key) == nil {
+		return PatchFieldsResult{Status: PatchStatusKeyNotFound}, nil
+	}
 
-	// Missing-key path.
-	if treasureObj == nil {
-		if !opts.CreateIfNotExist {
-			return PatchFieldsResult{Status: PatchStatusKeyNotFound}, nil
-		}
-		seed := opts.InitialMsgpackOnCreate
-		if len(seed) == 0 {
-			seed = emptyMapMsgpack
-		}
-		// Validate the seed parses as a msgpack value.
+	// If we may create the treasure, validate the seed up front so we never park an unusable
+	// in-flight treasure in creatingTreasures (it would leak there until the swamp closes).
+	seed := opts.InitialMsgpackOnCreate
+	if len(seed) == 0 {
+		seed = emptyMapMsgpack
+	}
+	if opts.CreateIfNotExist {
 		if _, err := msgpackpatch.Parse(seed); err != nil {
 			return PatchFieldsResult{
 				Status: PatchStatusTypeMismatch,
 				Error:  "InitialMsgpackOnCreate: " + err.Error(),
 			}, nil
 		}
-
-		treasureObj = s.CreateTreasure(key)
-		guardID := treasureObj.StartTreasureGuard(true)
-		defer treasureObj.ReleaseTreasureGuard(guardID)
-
-		out, err := msgpackpatch.ApplyWithCondition(seed, ops, condition)
-		if err != nil {
-			return PatchFieldsResult{Status: classifyPatchError(err), Error: err.Error()}, nil
-		}
-		treasureObj.SetContentByteArray(guardID, wrapMsgpackBody(out))
-		applyPatchMeta(treasureObj, guardID, opts.Meta, true)
-		treasureObj.Save(guardID)
-		return PatchFieldsResult{Status: PatchStatusCreated, NewMsgpack: out}, nil
 	}
 
-	// Existing-key path.
-	if treasureObj.GetContentType() != treasure.ContentTypeByteArray {
+	// Get-or-create the treasure outside the guard, then decide new-vs-existing inside the
+	// guard. Without the in-guard re-check, a concurrent goroutine that finishes its create+
+	// patch in the window between the early beaconKey.Get and CreateTreasure would let this
+	// caller silently overwrite the patched body with the seed.
+	treasureObj := s.beaconKey.Get(key)
+	createdNew := false
+	if treasureObj == nil {
+		treasureObj = s.CreateTreasure(key)
+		createdNew = true
+	}
+
+	guardID := treasureObj.StartTreasureGuard(true)
+	defer treasureObj.ReleaseTreasureGuard(guardID)
+
+	saved := false
+	defer func() {
+		// If we obtained a fresh in-flight treasure but never persisted it (condition failed,
+		// patch errored, content type was wrong), drop it from the creatingTreasures tracker
+		// so it does not accumulate. Save() already cleans up on the success path.
+		if createdNew && !saved {
+			s.creatingTreasures.Delete(key)
+		}
+	}()
+
+	var (
+		inputBody []byte
+		isCreate  bool
+	)
+	switch treasureObj.GetContentType() {
+	case treasure.ContentTypeVoid:
+		if !opts.CreateIfNotExist {
+			// The early exit lost a race against a concurrent delete. Report KeyNotFound.
+			return PatchFieldsResult{Status: PatchStatusKeyNotFound}, nil
+		}
+		inputBody = seed
+		isCreate = true
+	case treasure.ContentTypeByteArray:
+		raw, err := treasureObj.GetContentByteArray()
+		if err != nil {
+			return PatchFieldsResult{Status: PatchStatusInternalError, Error: err.Error()}, nil
+		}
+		if len(raw) < 2 || raw[0] != patchMsgpackMagic0 || raw[1] != patchMsgpackMagic1 {
+			return PatchFieldsResult{
+				Status: PatchStatusEncodingNotSupported,
+				Error:  "treasure ByteArray is not msgpack-encoded (missing magic prefix)",
+			}, nil
+		}
+		inputBody = raw[2:]
+	default:
 		return PatchFieldsResult{
 			Status: PatchStatusTypeMismatch,
 			Error:  "treasure is not a ByteArray",
 		}, nil
 	}
 
-	guardID := treasureObj.StartTreasureGuard(true)
-	defer treasureObj.ReleaseTreasureGuard(guardID)
-
-	raw, err := treasureObj.GetContentByteArray()
-	if err != nil {
-		return PatchFieldsResult{Status: PatchStatusInternalError, Error: err.Error()}, nil
-	}
-	if len(raw) < 2 || raw[0] != patchMsgpackMagic0 || raw[1] != patchMsgpackMagic1 {
-		return PatchFieldsResult{
-			Status: PatchStatusEncodingNotSupported,
-			Error:  "treasure ByteArray is not msgpack-encoded (missing magic prefix)",
-		}, nil
-	}
-
-	out, err := msgpackpatch.ApplyWithCondition(raw[2:], ops, condition)
+	out, err := msgpackpatch.ApplyWithCondition(inputBody, ops, condition)
 	if err != nil {
 		return PatchFieldsResult{Status: classifyPatchError(err), Error: err.Error()}, nil
 	}
 	treasureObj.SetContentByteArray(guardID, wrapMsgpackBody(out))
-	applyPatchMeta(treasureObj, guardID, opts.Meta, false)
+	applyPatchMeta(treasureObj, guardID, opts.Meta, isCreate)
 	treasureObj.Save(guardID)
+	saved = true
+
+	if isCreate {
+		return PatchFieldsResult{Status: PatchStatusCreated, NewMsgpack: out}, nil
+	}
 	return PatchFieldsResult{Status: PatchStatusPatched, NewMsgpack: out}, nil
 }
 
