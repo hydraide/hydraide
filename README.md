@@ -38,16 +38,39 @@ The shared mismatch was structural: every engine assumed the data lives in one l
 
 ## Quick Start
 
+Two paths, depending on what you want.
+
+### Try it locally (any platform, 2 minutes)
+
+Best for learning the SDK, prototyping, or kicking the tires before committing to anything. Brings up a local HydrAIDE with auto-generated TLS certs and a working Go example, in two commands.
+
+```bash
+git clone https://github.com/hydraide/hydraide
+cd hydraide/docs/sdk/go/examples
+docker compose up -d
+make quickstart
+```
+
+From here the [example tree](docs/sdk/go/examples/) has 9 focused recipes (TTL queues, atomic patches, subscriptions, distributed locks, server-side filters, …) plus 3 reference HTTP apps (`todo-api`, `url-shortener`, `multi-tenant-saas`) with ready-to-import Postman collections. Pick one, run it, copy from it.
+
+Works on Linux, macOS and Windows. On Windows, run from inside WSL2 with Docker Desktop's WSL2 integration enabled — the `Makefile` and the `docker compose` flow are identical.
+
+→ More: [example tree README](docs/sdk/go/examples/), [testing your own models](docs/sdk/go/testing.md)
+
+### Install for real (Linux service, single binary)
+
+Best for staging, production, or anywhere you want HydrAIDE running as a long-lived service. No config files, no Docker required.
+
 ```bash
 # Install the CLI
 curl -sSfL https://raw.githubusercontent.com/hydraide/hydraide/main/scripts/install-hydraidectl.sh | bash
 
-# Create and start an instance
-hydraidectl init
-sudo hydraidectl service --instance <your-instance-name>
+# End-to-end install: generates TLS cert, downloads the binary, registers
+# the systemd unit, starts the service, and waits until it is healthy.
+sudo hydraidectl init -i <your-instance-name>
 ```
 
-No config files, no Docker required. Docker is also supported — see the [Docker installation guide](docs/install/docker-install.md).
+→ More: [install guide](docs/install/), [install quickstart](docs/install/quickstart.md), [Docker install](docs/install/docker-install.md), [`hydraidectl` user manual](docs/hydraidectl/hydraidectl-user-manual.md)
 
 ---
 
