@@ -21,8 +21,9 @@ lock-free operations, real-time subscriptions, and stateless routing, all tailor
 9. [🧯 When Not to Use Catalogs](#-when-not-to-use-catalogs)
 10. [🔍 Server-Side Filtering & Streaming](#-server-side-filtering--streaming)
 11. [➕ Increment / Decrement – Atomic State Without the Overhead](#-increment--decrement--atomic-state-with-metadata-control)
-12. [📌 Slice & Reverse Indexing in HydrAIDE](#-slice--reverse-indexing-in-hydraide)
-13. [🧪 Testing with Real Database Connection](#-testing-with-real-database-connection)
+12. [🧬 Field-Level Patches – Type-Preserving Structural Mutations](#-field-level-patches--type-preserving-structural-mutations)
+13. [📌 Slice & Reverse Indexing in HydrAIDE](#-slice--reverse-indexing-in-hydraide)
+14. [🧪 Testing with Real Database Connection](#-testing-with-real-database-connection)
 
 ---
 
@@ -1590,6 +1591,192 @@ This lets you control creation/update auditing and TTL in the same atomic call.
 | IncrementFloat64 | ✅ Ready    | ✅ `RateLimitCounter` (shared logic) |
 
 > 💡 Only the numeric type changes — the logic stays the same. The same metadata and condition patterns apply to all variants.
+
+---
+
+### 🧬 Field-Level Patches – Type-Preserving Structural Mutations
+
+HydrAIDE’s `CatalogPatch*` family lets you mutate **individual fields** inside a MessagePack-encoded Catalog Treasure — without ever loading the whole document on the client side.
+
+Whether you want to:
+
+* flip a single boolean flag on a hot key (`IsCrawling`, `IsRejected`, …),
+* atomically increment a nested counter (`Counters.Views`),
+* append an event to a slice (`Events[]`),
+* shallow-merge a partial update map into a nested document,
+
+…you can do it with **one server-side splice**, optionally guarded by a condition, optionally stamping `UpdatedAt`/`UpdatedBy` in the same atomic call.
+
+#### 🧠 Why this is a game-changer
+
+* ⚡ **No more `Lock + Load + Save` loops** — the round-trip pattern that produced `MULTI-HOLD` lock contention on hot keys disappears entirely
+* 🧬 **Wire-level type preservation** — untouched fields stay byte-identical (`int8` stays `int8`, `time.Time` keeps its canonical extension encoding), and mutated fields take on the exact type the client encoded
+* 🔒 **Per-key atomicity** — every op in a patch either commits together or none does, under the same FIFO guard that powers `IncrementInt8`
+* 🚀 **Per-key parallelism** — different keys run fully in parallel; same-key writers queue without blocking the swamp
+* 🎯 **Path expressions** — dotted nested fields and bracketed array indices: `Foo`, `Foo.Bar.Baz`, `Tags[3]`, `Tags[]` (append marker)
+* 🛡️ **Conditional safety** — eight comparators (`EQUAL`, `NOT_EQUAL`, `GT`/`GTE`, `LT`/`LTE`, `EXISTS`, `NOT_EXISTS`) block ops when the pre-condition does not hold
+
+> Read the philosophy and rationale here: [`docs/features/structural-msgpack-patch.md`](../../features/structural-msgpack-patch.md)
+
+#### 🧰 Available Functions
+
+| Function                   | Purpose                                                                  |
+| -------------------------- | ------------------------------------------------------------------------ |
+| `CatalogPatchField`        | One key, one field — the simplest one-liner                              |
+| `CatalogPatchFields`       | One key, multiple fields — atomic under one guard hold                   |
+| `CatalogPatchFieldsMany`   | Multi-key batch with a per-key result iterator                           |
+| `CatalogPatch`             | Fluent **builder** for advanced ops (Inc, Append, Merge, Conditions, Meta) |
+
+> ⚠️ The patch primitive **requires MessagePack-encoded Catalog Treasures**. Register the swamp with `EncodingFormat: EncodingMsgPack`. GOB-encoded values return `ENCODING_NOT_SUPPORTED`. Profile Swamps are not patchable — there each struct field is its own Treasure key, so `ProfileSave` already gives you the same effect.
+
+#### 📌 Quick Examples
+
+##### 1. Single field
+
+```go
+status, err := h.CatalogPatchField(ctx, swampName, "domain1.hu", "IsInQueue", true)
+if err != nil { /* transport error */ }
+switch status {
+case hydraidego.PatchStatusCreated, hydraidego.PatchStatusPatched:
+    // applied
+case hydraidego.PatchStatusEncodingNotSupported:
+    // existing record is not msgpack-encoded
+}
+```
+
+##### 2. Multiple fields in one call
+
+```go
+_, err := h.CatalogPatchFields(ctx, swampName, "domain1.hu", map[string]any{
+    "IsCrawling":     false,
+    "IsRejected":     true,
+    "RejectedReason": int16(7),       // stays int16 on the wire
+    "StatusCounter":  int32(1),       // stays int32 on the wire
+})
+```
+
+##### 3. Multi-key batch with iterator
+
+```go
+err := h.CatalogPatchFieldsMany(ctx, swampName, []*hydraidego.PatchManyRequest{
+    {Key: "d1.hu", Fields: map[string]any{"IsInQueue": true}},
+    {Key: "d2.hu", Fields: map[string]any{"IsCrawling": false}},
+    {Key: "d3.hu", Fields: map[string]any{"IsRejected": true}},
+}, func(key string, status hydraidego.PatchStatus, errMsg string) error {
+    if status != hydraidego.PatchStatusPatched && status != hydraidego.PatchStatusCreated {
+        slog.Warn("patch outcome", "key", key, "status", status, "error", errMsg)
+    }
+    return nil
+})
+```
+
+##### 4. Builder API — conditional, multi-op
+
+```go
+status, err := h.
+    CatalogPatch(ctx, swampName, "domain1.hu").
+    Inc("StatusCounter", int32(1)).            // atomic counter bump (preserves int32)
+    Set("IsInQueue", true).                    // boolean flag
+    Append("Events[]", "boot").                // append to a slice
+    IfFieldEquals("Owner", "alice").           // pre-condition
+    WithUpdatedAt().
+    WithUpdatedBy("worker-7").
+    Exec()
+
+switch status {
+case hydraidego.PatchStatusPatched:
+    // all three ops applied
+case hydraidego.PatchStatusConditionNotMet:
+    // someone else changed Owner — patch was skipped
+case hydraidego.PatchStatusKeyNotFound:
+    // would only happen with .NoCreate(); default is auto-create
+}
+```
+
+##### 5. Optimistic update on a numeric field
+
+```go
+status, err := h.
+    CatalogPatch(ctx, swampName, "domain1.hu").
+    Inc("Counter", int32(1)).
+    IfFieldLessThan("Counter", int32(100)).    // only if still under limit
+    Exec()
+
+if status == hydraidego.PatchStatusConditionNotMet {
+    // limit reached, no increment performed
+}
+```
+
+#### 📚 Op Reference
+
+| Builder Method          | Wire Op       | Notes                                                                                              |
+| ----------------------- | ------------- | -------------------------------------------------------------------------------------------------- |
+| `Set(path, value)`      | `SET`         | Replaces or creates the value at *path*. Auto-creates missing intermediate maps.                   |
+| `Delete(path)`          | `DELETE`      | Removes the field/index. Missing target is a no-op.                                                |
+| `Inc(path, delta)`      | `INC`         | Class-aware increment. Preserves the target's exact numeric msgpack code (`int8` stays `int8`).    |
+| `Append(path, value)`   | `APPEND`      | Path must end in `[]` — `Tags[]`. Auto-creates an empty array on a missing field.                  |
+| `Prepend(path, value)`  | `PREPEND`     | Same path/auto-create rules as `Append`.                                                           |
+| `RemoveAt(path)`        | `REMOVE_AT`   | Path must include an index — `Tags[3]`. Out-of-range yields `PATH_INVALID`.                        |
+| `RemoveVal(path, value)`| `REMOVE_VAL`  | Removes the first array element whose msgpack-encoded bytes equal *value*. Not present is a no-op. |
+| `Merge(path, value)`    | `MERGE`       | Shallow merge of a map into the target map. Conflicting keys overwrite; others are preserved.      |
+
+#### 🛡️ Condition Reference
+
+| Builder Method                            | Wire Op                  |
+| ----------------------------------------- | ------------------------ |
+| `IfFieldEquals(path, value)`              | `EQUAL`                  |
+| `IfFieldNotEquals(path, value)`           | `NOT_EQUAL`              |
+| `IfFieldGreaterThan(path, value)`         | `GREATER_THAN`           |
+| `IfFieldGreaterThanOrEqual(path, value)`  | `GREATER_THAN_OR_EQUAL`  |
+| `IfFieldLessThan(path, value)`            | `LESS_THAN`              |
+| `IfFieldLessThanOrEqual(path, value)`     | `LESS_THAN_OR_EQUAL`     |
+| `IfFieldExists(path)`                     | `EXISTS`                 |
+| `IfFieldNotExists(path)`                  | `NOT_EXISTS`             |
+
+Conditions are evaluated **before any op runs**. If the comparison fails, you get `PatchStatusConditionNotMet` and the blob is left untouched. Only one condition is supported per patch in V1; for compound logic, issue multiple sequential `PatchTreasures` calls (atomicity is then per-call, not across calls).
+
+#### 📊 Status Codes
+
+A patch can return one of nine statuses:
+
+| `PatchStatus`                    | Meaning                                                                       |
+| -------------------------------- | ----------------------------------------------------------------------------- |
+| `PatchStatusPatched`             | Ops were applied to an existing record.                                       |
+| `PatchStatusCreated`             | Record did not exist, was created and patched (`CreateIfNotExist` was true).  |
+| `PatchStatusKeyNotFound`         | Record did not exist and `.NoCreate()` was set on the builder.                |
+| `PatchStatusConditionNotMet`     | Condition evaluated to false — ops were not applied.                          |
+| `PatchStatusFieldNotFound`       | Reserved for ops that strictly require an existing field (currently unused).  |
+| `PatchStatusTypeMismatch`        | Op crossed a type boundary (INC on a string, MERGE on a non-map, etc.).       |
+| `PatchStatusPathInvalid`         | Malformed path or unresolvable index (e.g. out-of-range `Tags[10]`).          |
+| `PatchStatusEncodingNotSupported`| Existing Treasure value is not msgpack-encoded.                               |
+| `PatchStatusInternalError`       | Unexpected server failure. Returns a non-nil Go error in addition.            |
+
+> ⚙️ The Go SDK only returns a non-nil `error` for transport-level failures and `INTERNAL_ERROR`. Every other per-key outcome — including `CONDITION_NOT_MET`, `TYPE_MISMATCH`, `KEY_NOT_FOUND` — surfaces as a status, so `if err != nil` doesn't swallow business logic.
+
+#### 🧱 Auto-Create Behavior
+
+Both the helpers (`CatalogPatchField`, `CatalogPatchFields`, `CatalogPatchFieldsMany`) and the builder default to `CreateIfNotExist = true`. Missing intermediate map levels are auto-created when the final segment is a field name, so
+
+```go
+h.CatalogPatchField(ctx, swampName, "domain1.hu", "stats.crawl.attempts", int32(1))
+```
+
+…will create the empty `stats` map, then the empty `crawl` map, then the `attempts` field, even if none of them existed before. To opt out, use the builder’s `.NoCreate()`:
+
+```go
+status, _ := h.CatalogPatch(ctx, swampName, "missing-key").
+    NoCreate().
+    Set("x", int8(1)).
+    Exec()
+// status == PatchStatusKeyNotFound
+```
+
+#### 🚦 Production Notes
+
+* **Stress run, locally**: 6 workers patching different flag fields across 100 domains for 5 seconds dispatched ~44k patches with zero per-key errors and zero lost updates.
+* **Telemetry**: every `PatchTreasures` call is captured by the same unary interceptor that instruments the rest of the gRPC API, so you can stream patch activity via `SubscribeToTelemetry` without extra wiring.
+* **Compaction**: patches produce normal `OpUpdate` entries on the underlying `.hyd` file; the existing compaction lifecycle applies.
+* **Backward compatibility**: this is purely additive — no existing RPC was changed, every prior client keeps working exactly as before.
 
 ---
 
