@@ -405,6 +405,24 @@ service HydraideService {
   // IncrementFloat64 same logic as IncrementInt8 but for float64 values
   rpc IncrementFloat64(IncrementFloat64Request) returns (IncrementFloat64Response) {}
 
+  // PatchTreasures atomically applies one or more field-level mutations to
+  // MessagePack-encoded Treasures within a single swamp.
+  //
+  // Each TreasurePatch targets a single key and carries a list of typed ops
+  // (SET / DELETE / INC / APPEND / PREPEND / REMOVE_AT / REMOVE_VAL / MERGE)
+  // applied under a per-key guard. Atomicity is per-key: ops within one
+  // patch either all commit or none. Cross-key atomicity is intentionally
+  // not provided.
+  //
+  // The server walks the existing msgpack blob structurally and splices in
+  // pre-encoded values, so untouched fields keep their exact wire encoding
+  // (e.g. int8 stays int8, time.Time stays its canonical extension form).
+  //
+  // Use this to replace client-side Lock + Load + Mutate + Save round-trips
+  // for fine-grained mutations. Per-key Conditions enable optimistic-style
+  // pre-checks; failed checks return CONDITION_NOT_MET without applying ops.
+  rpc PatchTreasures(PatchTreasuresRequest) returns (PatchTreasuresResponse) {}
+
   // ============ TELEMETRY ENDPOINTS ============
   //
   // These endpoints provide real-time observability into the HydrAIDE server.
@@ -2709,4 +2727,215 @@ message CompactSwampRequest {
 // CompactSwampResponse is returned after successful compaction.
 // Success is indicated by the absence of a gRPC error.
 message CompactSwampResponse {
+}
+
+// ============ PATCH TREASURES (msgpack structural mutator) ============
+
+// PatchTreasuresRequest carries a multi-key batch of structural mutations
+// targeting a single swamp.
+//
+// All patches in one request operate on the same SwampName / IslandID. Each
+// patch is applied to its key independently — there is no cross-key
+// atomicity, but ops within a single patch are atomic on that key.
+message PatchTreasuresRequest {
+  // IslandID is the deterministic storage zone where the swamp lives.
+  uint64 IslandID = 1;
+
+  // SwampName addresses the swamp containing the patched treasures.
+  string SwampName = 2;
+
+  // Patches is the per-key batch. Order is preserved in the response.
+  repeated TreasurePatch Patches = 3;
+
+  // CreateIfNotExist controls behavior when a target key is missing. When
+  // false, missing keys yield KEY_NOT_FOUND. When true, an empty msgpack
+  // map (or InitialMsgpackOnCreate, if set) is created and patched.
+  bool CreateIfNotExist = 4;
+
+  // InitialMsgpackOnCreate is an optional seed body for newly-created
+  // treasures. Ignored unless CreateIfNotExist is true. Must be a
+  // msgpack-encoded map; non-map seeds yield TYPE_MISMATCH.
+  optional bytes InitialMsgpackOnCreate = 5;
+
+  // Meta sets timestamp/identity metadata on every patched treasure in this
+  // request. Created* fields apply only to treasures that are created in
+  // this call.
+  optional PatchMeta Meta = 6;
+}
+
+// TreasurePatch is the unit of per-key atomicity. The Ops list is applied
+// in order under a single guard hold; if any op fails, none are committed
+// and the patch result reflects the first failing op.
+message TreasurePatch {
+  // Key identifies the treasure within the swamp.
+  string Key = 1;
+
+  // Ops is the ordered list of mutations to apply on this key.
+  repeated PatchOp Ops = 2;
+
+  // Condition is an optional pre-check evaluated against the existing
+  // msgpack blob before any Op runs. Failure short-circuits with
+  // CONDITION_NOT_MET and does not apply ops.
+  optional PatchCondition Condition = 3;
+}
+
+// PatchOp describes one structural mutation. Path uses dot notation for
+// nested fields and bracket notation for array indices, e.g. "Foo.Bar",
+// "Tags[3]", "Tags[]" (append marker, valid only with APPEND/PREPEND).
+message PatchOp {
+  enum Kind {
+    // SET replaces or creates the value at Path. Auto-creates missing
+    // intermediate maps. Final segment must be a field name.
+    SET = 0;
+
+    // DELETE removes the field/index at Path. Missing target is a no-op.
+    DELETE = 1;
+
+    // INC adds the numeric Value (delta) to the existing numeric leaf at
+    // Path, preserving the target's exact msgpack type code (int8 stays
+    // int8, float32 stays float32). Missing field auto-creates with the
+    // delta's type. Class mismatch (int vs float etc.) is TYPE_MISMATCH.
+    INC = 2;
+
+    // APPEND inserts Value at the end of the array at Path. Path must end
+    // in [] (append marker); missing array auto-creates as a single-element
+    // array. Non-array targets yield TYPE_MISMATCH.
+    APPEND = 3;
+
+    // PREPEND inserts Value at the beginning of the array at Path. Same
+    // path/type rules as APPEND.
+    PREPEND = 4;
+
+    // REMOVE_AT removes the array element at the index in Path (e.g.
+    // "Tags[3]"). Out-of-range indices yield PATH_INVALID.
+    REMOVE_AT = 5;
+
+    // REMOVE_VAL removes the first array element whose msgpack-encoded
+    // bytes equal Value. Path points at the array. Not present is a no-op.
+    REMOVE_VAL = 6;
+
+    // MERGE shallow-merges the msgpack map in Value into the map at Path.
+    // Conflicting keys overwrite; non-conflicting target keys retain their
+    // exact wire encoding. Non-map target/value yield TYPE_MISMATCH.
+    MERGE = 7;
+  }
+
+  // Op is the mutation kind.
+  Kind Op = 1;
+
+  // Path is the field expression (e.g. "Foo.Bar[3].Baz"). Wildcards ([*])
+  // are not allowed in mutation paths.
+  string Path = 2;
+
+  // Value is a pre-encoded msgpack blob. Required for SET / INC / APPEND /
+  // PREPEND / REMOVE_VAL / MERGE; ignored for DELETE / REMOVE_AT.
+  optional bytes Value = 3;
+}
+
+// PatchCondition gates an entire TreasurePatch on a single field-level
+// comparison. Only one comparison is supported per patch in V1; compound
+// conditions can be expressed via multiple sequential PatchTreasures calls
+// (atomicity is then lost, by design).
+message PatchCondition {
+  enum Op {
+    EQUAL = 0;
+    NOT_EQUAL = 1;
+    GREATER_THAN = 2;
+    GREATER_THAN_OR_EQUAL = 3;
+    LESS_THAN = 4;
+    LESS_THAN_OR_EQUAL = 5;
+
+    // EXISTS / NOT_EXISTS test for the presence of a leaf field at Path.
+    // Threshold is ignored for these operators.
+    EXISTS = 6;
+    NOT_EXISTS = 7;
+  }
+
+  // Path is the field expression to evaluate against.
+  string Path = 1;
+
+  // Operator is the comparator.
+  Op Operator = 2;
+
+  // Threshold is a pre-encoded msgpack value to compare against. Ignored
+  // for EXISTS / NOT_EXISTS.
+  optional bytes Threshold = 3;
+}
+
+// PatchMeta sets timestamp/identity metadata on patched treasures.
+message PatchMeta {
+  // SetUpdatedAt: when true, the server stamps UpdatedAt = now on patched
+  // treasures.
+  bool SetUpdatedAt = 1;
+
+  // SetUpdatedBy is recorded as UpdatedBy when set.
+  optional string SetUpdatedBy = 2;
+
+  // SetCreatedAt: when true and the treasure is created in this call, the
+  // server stamps CreatedAt = now. Ignored on existing treasures.
+  bool SetCreatedAt = 3;
+
+  // SetCreatedBy is recorded as CreatedBy when set and the treasure is
+  // created in this call.
+  optional string SetCreatedBy = 4;
+}
+
+// PatchTreasuresResponse holds per-key outcomes in the same order as the
+// request's Patches field.
+message PatchTreasuresResponse {
+  repeated PatchResult Results = 1;
+}
+
+// PatchResult is the per-key outcome.
+message PatchResult {
+  enum StatusCode {
+    // PATCHED indicates the ops were applied to an existing treasure.
+    PATCHED = 0;
+
+    // CREATED indicates CreateIfNotExist was true, the treasure did not
+    // exist, and was created and patched.
+    CREATED = 1;
+
+    // KEY_NOT_FOUND indicates the treasure did not exist and
+    // CreateIfNotExist was false.
+    KEY_NOT_FOUND = 2;
+
+    // CONDITION_NOT_MET indicates the patch's PatchCondition evaluated
+    // to false; ops were not applied.
+    CONDITION_NOT_MET = 3;
+
+    // FIELD_NOT_FOUND is reserved for ops that strictly require an
+    // existing field and find none (currently unused; SET/INC/etc.
+    // auto-create or no-op as documented).
+    FIELD_NOT_FOUND = 4;
+
+    // TYPE_MISMATCH indicates an op or condition crossed a type boundary
+    // (e.g. INC on a string field, MERGE on a non-map target).
+    TYPE_MISMATCH = 5;
+
+    // PATH_INVALID indicates a malformed path or an unresolvable
+    // structural reference (e.g. array index out of range).
+    PATH_INVALID = 6;
+
+    // ENCODING_NOT_SUPPORTED indicates the existing treasure is not
+    // a msgpack-encoded byte array (e.g. raw int8 or GOB-encoded).
+    ENCODING_NOT_SUPPORTED = 7;
+
+    // INTERNAL_ERROR is a catch-all for unexpected server failures. The
+    // Error field carries a description.
+    INTERNAL_ERROR = 8;
+  }
+
+  // Key identifies which patch this result belongs to.
+  string Key = 1;
+
+  // Status is the outcome code.
+  StatusCode Status = 2;
+
+  // Error is a free-form description for non-success statuses.
+  optional string Error = 3;
+
+  // NewMsgpack carries the mutated msgpack blob when the request opted in
+  // to receiving it. Reserved for future use.
+  optional bytes NewMsgpack = 4;
 }

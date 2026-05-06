@@ -13,6 +13,7 @@ import (
 	"github.com/hydraide/hydraide/app/core/hydra/swamp/metadata"
 	"github.com/hydraide/hydraide/app/core/hydra/swamp/treasure"
 	"github.com/hydraide/hydraide/app/core/hydra/swamp/treasure/guard"
+	"github.com/hydraide/hydraide/app/core/hydra/swamp/treasure/msgpackpatch"
 	"github.com/hydraide/hydraide/app/core/hydra/swamp/vigil"
 	"github.com/hydraide/hydraide/app/name"
 )
@@ -749,6 +750,17 @@ type Swamp interface {
 	// }
 	// fmt.Println("New Value:", newValue, "Incremented:", incremented)
 	IncrementFloat64(key string, f float64, condition *IncrementFloat64Condition, metadataRequestIfNotExist *IncrementMetadataRequest, metadataRequestIfExist *IncrementMetadataRequest) (newValue float64, incremented bool, metadataResponse *IncrementMetadataResponse, err error)
+
+	// PatchFields applies field-level structural mutations to a msgpack-encoded
+	// ByteArray treasure value at the given key. The mutations preserve the
+	// exact wire encoding of untouched fields (e.g. int8 stays int8,
+	// time.Time stays its canonical extension form) by splicing pre-encoded
+	// bytes through a structural skeleton. Ops are applied in order under
+	// the per-key guard, so concurrent callers serialize via the existing
+	// FIFO queue.
+	//
+	// See app/core/hydra/swamp/treasure/msgpackpatch for op semantics.
+	PatchFields(key string, ops []msgpackpatch.Op, condition *msgpackpatch.Condition, opts PatchFieldsOptions) (PatchFieldsResult, error)
 }
 
 const (
