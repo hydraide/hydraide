@@ -74,6 +74,25 @@ jobs:
             [ -f "$f" ] && cp "$f" "$PLUGIN_DIR/docs/hydraidectl/"
           done
 
+      - name: Bump plugin patch version
+        run: |
+          set -euo pipefail
+          # Claude Code resolves "is there an update?" by comparing plugin.json
+          # version. The skill/command/doc trees can change all day long, but
+          # without a version bump no end user ever sees the change. Auto-bump
+          # the patch on every successful sync. Manual minor/major bumps land
+          # via direct edits to the mirror's plugin.json before pushing.
+          PLUGIN_JSON=claude/plugins/hydraide/.claude-plugin/plugin.json
+          CURRENT=$(jq -r .version "$PLUGIN_JSON")
+          MAJOR=$(echo "$CURRENT" | cut -d. -f1)
+          MINOR=$(echo "$CURRENT" | cut -d. -f2)
+          PATCH=$(echo "$CURRENT" | cut -d. -f3)
+          NEW_PATCH=$((PATCH + 1))
+          NEW_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
+          jq --arg v "$NEW_VERSION" '.version = $v' "$PLUGIN_JSON" > "${PLUGIN_JSON}.tmp"
+          mv "${PLUGIN_JSON}.tmp" "$PLUGIN_JSON"
+          echo "plugin.json bumped: ${CURRENT} -> ${NEW_VERSION}"
+
       - name: Rewrite relative links inside SKILL.md files
         run: |
           set -euo pipefail
