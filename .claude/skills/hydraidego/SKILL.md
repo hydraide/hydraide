@@ -1167,6 +1167,8 @@ Metadata helpers:
 
 - `WithUpdatedAt()` — server stamps the patched Treasure's `ModifiedAt` to now.
 - `WithUpdatedBy(userID)` — server stamps `ModifiedBy`.
+- `WithExpiredAt(t time.Time)` — server sets `ExpiredAt` on the patched Treasure (whether existing or newly created). Use this to attach a TTL at patch time, or to slide an existing TTL forward or backward without rewriting the body. Passing a zero `time.Time` clears the TTL, equivalent to `WithoutExpiredAt()`. Requires server v3.13.0 or newer; older servers silently drop the field.
+- `WithoutExpiredAt()` — server resets `ExpiredAt` to "never expires". Wins over a prior `WithExpiredAt` on the same builder.
 
 ### Patch result codes
 

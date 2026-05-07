@@ -18,7 +18,7 @@ When a client issues a `PatchTreasures` RPC, it carries a multi-key batch. Each 
 
 * an ordered list of **typed ops** — `SET`, `DELETE`, `INC`, `APPEND`, `PREPEND`, `REMOVE_AT`, `REMOVE_VAL`, `MERGE`,
 * an optional **pre-condition** (`EQUAL`, `NOT_EQUAL`, `GREATER_THAN`/`OR_EQUAL`, `LESS_THAN`/`OR_EQUAL`, `EXISTS`, `NOT_EXISTS`),
-* metadata flags (`SetUpdatedAt`, `SetUpdatedBy`, `SetCreatedAt`, `SetCreatedBy`).
+* metadata flags (`SetUpdatedAt`, `SetUpdatedBy`, `SetCreatedAt`, `SetCreatedBy`, `SetExpiredAt`, `ClearExpiredAt`).
 
 For each key the server walks the FIFO lock queue, summons the existing MessagePack body, parses only its **structural skeleton** (no leaf decoding — leaves stay as raw byte ranges into the original blob), evaluates the condition, applies every op against the skeleton in order, and emits a freshly serialized blob where every untouched leaf is byte-copied verbatim from the input. Mutated leaves carry their pre-encoded msgpack bytes from the client.
 
@@ -53,7 +53,7 @@ A `PatchCondition` is evaluated once, before any op runs. If the comparison does
 * **Atomic multi-field updates** — flip several flags at once with one guard hold and one disk write
 * **Concurrency-friendly** — different keys run in parallel; the same key serializes via the existing FIFO queue that powers `IncrementInt8`
 * **Conditional safety** — optimistic-style pre-checks built into the wire format
-* **Auto-create + metadata in one call** — `CreateIfNotExist` plus `SetCreatedAt`/`SetCreatedBy`/`SetUpdatedAt`/`SetUpdatedBy` removes the ceremony around new-record bootstrapping
+* **Auto-create + metadata in one call** — `CreateIfNotExist` plus `SetCreatedAt`/`SetCreatedBy`/`SetUpdatedAt`/`SetUpdatedBy`/`SetExpiredAt`/`ClearExpiredAt` removes the ceremony around new-record bootstrapping and lets you attach, slide, or drop a TTL in the same call as the body mutation
 
 ## Comparable primitives elsewhere
 
