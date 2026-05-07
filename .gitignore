@@ -65,6 +65,7 @@ app/server/e2etests/data/
 .claude/settings.json
 .claude/settings.local.json
 .claude/skills/content-writing/
+.claude/skills/hydraide-release/
 
 # Local planning docs (not for git)
 plan/
