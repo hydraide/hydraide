@@ -262,10 +262,13 @@ func (c *systemdController) stopInstanceOp(ctx context.Context, service string) 
 		})
 	}
 
-	// Poll the service status to ensure it has fully shut down.
+	// Poll the service status to ensure it has fully shut down. We bound this
+	// by the configured graceful timeout — `systemctl stop` already blocks until
+	// the unit is reported stopped, so the poll is normally a fast confirmation,
+	// but we must allow at least as long as the systemd unit's TimeoutStopSec.
 	logger.Info("Waiting for service to be fully stopped...", "service_name", service)
 
-	pollingCtx, pollingCancel := context.WithTimeout(ctx, 5*time.Second)
+	pollingCtx, pollingCancel := context.WithTimeout(ctx, c.gracefulStartStopTimeout)
 	defer pollingCancel()
 	logger.Debug("Created polling with timeout context to check service status")
 
@@ -909,12 +912,26 @@ func checkNssmExists() bool {
 	return err == nil
 }
 
+// DefaultGracefulStopTimeout is the time we give HydrAIDE to flush its in-memory
+// state to disk before considering the stop a failure. HydrAIDE may need 90–180s
+// when many swamps are dirty and the underlying disk is slow, so we standardise
+// on 180s across every command that stops the service (stop, restart, upgrade,
+// destroy, backup, restore, compact, migrate). The systemd unit file mirrors
+// this value via TimeoutStopSec so systemd does not SIGKILL before the CLI
+// gives up.
+const DefaultGracefulStopTimeout = 180 * time.Second
+
+// DefaultCmdTimeout caps the overall lifecycle command (issuing the stop/start
+// + polling). It is set slightly above DefaultGracefulStopTimeout to leave room
+// for the systemctl invocation itself and the post-stop confirmation poll.
+const DefaultCmdTimeout = 200 * time.Second
+
 // NewInstanceController returns the appropriate controller based on the OS.
 // Currently, it supports "linux" and "windows". For any other OS, it returns nil.
 // Take timeout in seconds to time out start/stop/restart operations.
 func NewInstanceController(options ...Option) InstanceController {
 
-	cfg := &opts{timeout: 20 * time.Second, startStopTimout: 10 * time.Second}
+	cfg := &opts{timeout: DefaultCmdTimeout, startStopTimout: DefaultGracefulStopTimeout}
 	for _, option := range options {
 		option(cfg)
 	}

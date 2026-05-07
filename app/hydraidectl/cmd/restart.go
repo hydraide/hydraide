@@ -173,8 +173,8 @@ func init() {
 	rootCmd.AddCommand(restartCmd)
 
 	restartCmd.Flags().StringVarP(&restartInstance, "instance", "i", "", "Name of the service instance")
-	restartCmd.Flags().DurationVar(&restartCmdTimeout, "cmd-timeout", 30*time.Second, "Timeout for the command execution (min: 1s, max: 15m)")
-	restartCmd.Flags().DurationVar(&restartGracefulTimeout, "graceful-timeout", 60*time.Second, "Timeout for graceful start/stop operations (min: 1s, max: 15m)")
+	restartCmd.Flags().DurationVar(&restartCmdTimeout, "cmd-timeout", instancerunner.DefaultCmdTimeout, "Timeout for the command execution (min: 1s, max: 15m)")
+	restartCmd.Flags().DurationVar(&restartGracefulTimeout, "graceful-timeout", instancerunner.DefaultGracefulStopTimeout, "Timeout for graceful start/stop operations (min: 1s, max: 15m)")
 	if err := restartCmd.MarkFlagRequired("instance"); err != nil {
 		fmt.Printf("Error marking 'instance' flag as required: %v\n", err)
 		os.Exit(1)

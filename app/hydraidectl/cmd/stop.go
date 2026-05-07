@@ -148,8 +148,8 @@ func init() {
 	rootCmd.AddCommand(stopCmd)
 
 	stopCmd.Flags().StringVarP(&stopInstance, "instance", "i", "", "Name of the service instance")
-	stopCmd.Flags().DurationVar(&stopCmdTimeout, "cmd-timeout", 20*time.Second, "Timeout for the command execution (min: 1s, max: 15m)")
-	stopCmd.Flags().DurationVar(&stopGracefulTimeout, "graceful-timeout", 60*time.Second, "Timeout for graceful start/stop operations (min: 1s, max: 15m)")
+	stopCmd.Flags().DurationVar(&stopCmdTimeout, "cmd-timeout", instancerunner.DefaultCmdTimeout, "Timeout for the command execution (min: 1s, max: 15m)")
+	stopCmd.Flags().DurationVar(&stopGracefulTimeout, "graceful-timeout", instancerunner.DefaultGracefulStopTimeout, "Timeout for graceful start/stop operations (min: 1s, max: 15m)")
 	if err := stopCmd.MarkFlagRequired("instance"); err != nil {
 		fmt.Println("Error marking 'instance' flag as required:", err)
 		os.Exit(1)

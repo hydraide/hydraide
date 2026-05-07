@@ -1,9 +1,11 @@
 package cmd
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	buildmeta "github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/buildmetadata"
@@ -97,17 +99,20 @@ for example before running a migration.`,
 		defer cancel()
 
 		serviceHelperInterface := servicehelper.New()
-		instanceController := instancerunner.NewInstanceController(
-			instancerunner.WithTimeout(90*time.Second),
-			instancerunner.WithGracefulStartStopTimeout(600*time.Second),
-		)
+		// Use the package defaults (200s cmd / 180s graceful) so every command
+		// that stops the HydrAIDE service shares the same shutdown budget.
+		instanceController := instancerunner.NewInstanceController()
 
-		// Graceful stop if active
+		// Detect whether the instance is currently running. We branch on this:
+		//   - running     → confirm clients stopped, gracefully stop, upgrade, restart
+		//   - not running → skip the stop, upgrade, then ask y/n whether to start
 		status, err := detector.GetInstanceStatus(ctx, updateInstance)
 		if err != nil {
 			fmt.Printf("Warning: failed to get instance status for %q: %v\n", updateInstance, err)
 		}
-		if status != "inactive" && status != "unknown" {
+		wasRunning := status != "inactive" && status != "unknown"
+
+		if wasRunning {
 			if !confirmClientsStopped("upgrade (stop+download+restart)", updateYes) {
 				fmt.Println("🚫 Upgrade cancelled.")
 				return
@@ -117,6 +122,8 @@ for example before running a migration.`,
 				os.Exit(1)
 			}
 			fmt.Printf("Instance %q stopped gracefully.\n", updateInstance)
+		} else {
+			fmt.Printf("Instance %q is not running — skipping stop step.\n", updateInstance)
 		}
 
 		// Wire progress bar
@@ -153,11 +160,20 @@ for example before running a migration.`,
 		// (Re)create service definition for the updated binary
 		_ = serviceHelperInterface.RemoveService(updateInstance)
 
-		// If --no-start flag is set, register service without starting
-		if updateNoStart {
+		// Decide whether to (re)start the instance after the upgrade:
+		//   --no-start            → never start
+		//   was running           → always restart (preserve prior state)
+		//   was not running + -y  → start (script-friendly default)
+		//   was not running       → interactive y/n prompt
+		shouldStart := !updateNoStart
+		if shouldStart && !wasRunning && !updateYes {
+			shouldStart = promptStartAfterUpgrade(updateInstance)
+		}
+
+		if !shouldStart {
 			_ = serviceHelperInterface.GenerateServiceFileNoStart(updateInstance, instanceMeta.BasePath)
 			fmt.Printf("Instance %q has been successfully updated to version %s.\n", updateInstance, downloadedVersion)
-			fmt.Println("The instance was NOT started (--no-start flag). Start it manually with:")
+			fmt.Println("The instance was NOT started. Start it manually with:")
 			fmt.Printf("  sudo hydraidectl start --instance %s\n", updateInstance)
 			return
 		}
@@ -192,6 +208,20 @@ for example before running a migration.`,
 		}
 
 	},
+}
+
+// promptStartAfterUpgrade asks the operator whether to start an instance that
+// was not running before the upgrade. Default is "n" so an unattended Enter
+// keeps the instance stopped — matches the principle of least surprise when
+// the operator chose to upgrade a stopped instance.
+func promptStartAfterUpgrade(instance string) bool {
+	fmt.Println()
+	fmt.Printf("Instance %q was not running before the upgrade.\n", instance)
+	fmt.Print("Start it now? (y/n) [default: n]: ")
+	reader := bufio.NewReader(os.Stdin)
+	in, _ := reader.ReadString('\n')
+	in = strings.ToLower(strings.TrimSpace(in))
+	return in == "y" || in == "yes"
 }
 
 func init() {

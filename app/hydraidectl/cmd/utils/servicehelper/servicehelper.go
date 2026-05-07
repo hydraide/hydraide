@@ -276,6 +276,7 @@ ExecStart=%s
 WorkingDirectory=%s
 Restart=always
 RestartSec=5
+TimeoutStopSec=180
 StandardOutput=journal
 StandardError=journal
 
@@ -343,6 +344,7 @@ ExecStart=%s
 WorkingDirectory=%s
 Restart=always
 RestartSec=5
+TimeoutStopSec=180
 StandardOutput=journal
 StandardError=journal
 
@@ -458,6 +460,7 @@ func (s *serviceManagerImpl) generateLaunchdService(instanceName, basePath strin
 		<key>SuccessfulExit</key><false/>
 	</dict>
 	<key>ProcessType</key><string>Background</string>
+	<key>ExitTimeOut</key><integer>180</integer>
 </dict>
 </plist>
 `, label, executablePath, basePath)
@@ -521,6 +524,7 @@ func (s *serviceManagerImpl) generateLaunchdServiceNoStart(instanceName, basePat
 		<key>SuccessfulExit</key><false/>
 	</dict>
 	<key>ProcessType</key><string>Background</string>
+	<key>ExitTimeOut</key><integer>180</integer>
 </dict>
 </plist>
 `, label, executablePath, basePath)
@@ -967,6 +971,14 @@ func (s *serviceManagerImpl) generateWindowsNSSMService(instanceName, basePath s
 		{"set", serviceName, "Description", fmt.Sprintf("HydrAIDE Service Instance: %s", instanceName)},
 		{"set", serviceName, "Start", "SERVICE_AUTO_START"},
 		{"set", serviceName, "AppDirectory", basePath},
+		// Give HydrAIDE up to 180s to flush before NSSM force-terminates it.
+		// AppStopMethodSkip=0 means use the full sequence (Console → WM_CLOSE
+		// → SIGINT → TerminateProcess); each timeout below is in milliseconds.
+		{"set", serviceName, "AppStopMethodSkip", "0"},
+		{"set", serviceName, "AppStopMethodConsole", "180000"},
+		{"set", serviceName, "AppStopMethodWindow", "180000"},
+		{"set", serviceName, "AppStopMethodThreads", "180000"},
+		{"set", serviceName, "AppKillProcessTree", "1"},
 	}
 	for _, cfg := range configs {
 		if output, err := s.d.runner.Run("nssm", cfg...); err != nil {
