@@ -193,6 +193,50 @@ func TestBuilder_MetaAccumulates(t *testing.T) {
 	assert.Equal(t, "alice", b.meta.GetSetUpdatedBy())
 }
 
+func TestBuilder_WithExpiredAt(t *testing.T) {
+	want := time.Now().Add(2 * time.Hour).UTC()
+	b := newBuilderForTest().WithExpiredAt(want)
+
+	require.NotNil(t, b.meta)
+	require.NotNil(t, b.meta.GetSetExpiredAt())
+	assert.Equal(t, want.UnixNano(), b.meta.GetSetExpiredAt().AsTime().UnixNano())
+	assert.False(t, b.meta.GetClearExpiredAt())
+}
+
+func TestBuilder_WithExpiredAtZeroClearsTTL(t *testing.T) {
+	b := newBuilderForTest().
+		WithExpiredAt(time.Now().Add(1 * time.Hour)).
+		WithExpiredAt(time.Time{})
+
+	require.NotNil(t, b.meta)
+	assert.Nil(t, b.meta.GetSetExpiredAt(), "zero time must clear SetExpiredAt")
+	assert.True(t, b.meta.GetClearExpiredAt())
+}
+
+func TestBuilder_WithoutExpiredAt(t *testing.T) {
+	b := newBuilderForTest().
+		WithExpiredAt(time.Now().Add(1 * time.Hour)).
+		WithoutExpiredAt()
+
+	require.NotNil(t, b.meta)
+	assert.Nil(t, b.meta.GetSetExpiredAt())
+	assert.True(t, b.meta.GetClearExpiredAt(), "WithoutExpiredAt must win over a prior WithExpiredAt")
+}
+
+func TestBuilder_MetaCombined(t *testing.T) {
+	want := time.Now().Add(30 * time.Minute).UTC()
+	b := newBuilderForTest().
+		WithUpdatedAt().
+		WithUpdatedBy("alice").
+		WithExpiredAt(want)
+
+	require.NotNil(t, b.meta)
+	assert.True(t, b.meta.GetSetUpdatedAt())
+	assert.Equal(t, "alice", b.meta.GetSetUpdatedBy())
+	require.NotNil(t, b.meta.GetSetExpiredAt())
+	assert.Equal(t, want.UnixNano(), b.meta.GetSetExpiredAt().AsTime().UnixNano())
+}
+
 func TestBuilder_EncodeErrorShortCircuits(t *testing.T) {
 	// Passing nil to Set must surface as an encode error on Exec, not
 	// a panic.

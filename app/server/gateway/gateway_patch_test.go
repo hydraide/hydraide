@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/vmihailenco/msgpack/v5"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // gatewayPatchTestRig spins up a real Zeus + Hydra wired Gateway so the
@@ -295,4 +296,132 @@ func TestGatewayPatch_MetaUpdatedAtPropagates(t *testing.T) {
 	require.NoError(t, err)
 	assert.Greater(t, tr.GetModifiedAt(), before, "ModifiedAt must advance")
 	assert.Equal(t, "tester", tr.GetModifiedBy())
+}
+
+// ---------- ExpiredAt wire-up ----------
+
+// patchExpiredAtRig seeds a single key in a fresh swamp and returns the rig.
+func patchExpiredAtRig(t *testing.T, sanctuary, realm, swampN string) *gatewayPatchTestRig {
+	t.Helper()
+	rig := newGatewayPatchTestRig(t, sanctuary, realm, swampN)
+	_, err := rig.gw.PatchTreasures(context.Background(), &hydrapb.PatchTreasuresRequest{
+		IslandID:         rig.islandID,
+		SwampName:        rig.swampName,
+		CreateIfNotExist: true,
+		Patches: []*hydrapb.TreasurePatch{
+			{Key: "k", Ops: []*hydrapb.PatchOp{{Op: hydrapb.PatchOp_SET, Path: "x", Value: encMsgpack(t, int8(1))}}},
+		},
+	})
+	require.NoError(t, err)
+	return rig
+}
+
+// readExpiration loads the treasure and returns its ExpirationTime in UnixNano.
+func readExpiration(t *testing.T, rig *gatewayPatchTestRig, key string) int64 {
+	t.Helper()
+	hydraInterface := rig.gw.ZeusInterface.GetHydra()
+	loaded := name.Load(rig.swampName)
+	swampObj, err := hydraInterface.SummonSwamp(context.Background(), rig.islandID, loaded)
+	require.NoError(t, err)
+	swampObj.BeginVigil()
+	defer swampObj.CeaseVigil()
+	tr, err := swampObj.GetTreasure(key)
+	require.NoError(t, err)
+	return tr.GetExpirationTime()
+}
+
+func TestGatewayPatch_MetaSetExpiredAtPropagates(t *testing.T) {
+	rig := patchExpiredAtRig(t, "gw-patch-expat-set", "meta", "set-expired-at")
+
+	want := time.Now().Add(2 * time.Hour).UTC().Truncate(time.Microsecond)
+	_, err := rig.gw.PatchTreasures(context.Background(), &hydrapb.PatchTreasuresRequest{
+		IslandID:  rig.islandID,
+		SwampName: rig.swampName,
+		Meta:      &hydrapb.PatchMeta{SetExpiredAt: timestamppb.New(want)},
+		Patches: []*hydrapb.TreasurePatch{
+			{Key: "k", Ops: []*hydrapb.PatchOp{{Op: hydrapb.PatchOp_INC, Path: "x", Value: encMsgpack(t, int8(1))}}},
+		},
+	})
+	require.NoError(t, err)
+
+	got := readExpiration(t, rig, "k")
+	assert.Equal(t, want.UnixNano(), got)
+}
+
+func TestGatewayPatch_MetaClearExpiredAtPropagates(t *testing.T) {
+	rig := patchExpiredAtRig(t, "gw-patch-expat-clear", "meta", "clear-expired-at")
+
+	// Stamp a TTL via patch first.
+	initial := time.Now().Add(1 * time.Hour).UTC()
+	_, err := rig.gw.PatchTreasures(context.Background(), &hydrapb.PatchTreasuresRequest{
+		IslandID:  rig.islandID,
+		SwampName: rig.swampName,
+		Meta:      &hydrapb.PatchMeta{SetExpiredAt: timestamppb.New(initial)},
+		Patches: []*hydrapb.TreasurePatch{
+			{Key: "k", Ops: []*hydrapb.PatchOp{{Op: hydrapb.PatchOp_SET, Path: "x", Value: encMsgpack(t, int8(2))}}},
+		},
+	})
+	require.NoError(t, err)
+	require.NotEqualValues(t, 0, readExpiration(t, rig, "k"))
+
+	// Now clear it.
+	_, err = rig.gw.PatchTreasures(context.Background(), &hydrapb.PatchTreasuresRequest{
+		IslandID:  rig.islandID,
+		SwampName: rig.swampName,
+		Meta:      &hydrapb.PatchMeta{ClearExpiredAt: true},
+		Patches: []*hydrapb.TreasurePatch{
+			{Key: "k", Ops: []*hydrapb.PatchOp{{Op: hydrapb.PatchOp_SET, Path: "x", Value: encMsgpack(t, int8(3))}}},
+		},
+	})
+	require.NoError(t, err)
+	assert.EqualValues(t, 0, readExpiration(t, rig, "k"))
+}
+
+func TestGatewayPatch_MetaExpiredAtAbsentLeavesUnchanged(t *testing.T) {
+	rig := patchExpiredAtRig(t, "gw-patch-expat-untouched", "meta", "expired-at-untouched")
+
+	// Stamp a TTL.
+	want := time.Now().Add(3 * time.Hour).UTC()
+	_, err := rig.gw.PatchTreasures(context.Background(), &hydrapb.PatchTreasuresRequest{
+		IslandID:  rig.islandID,
+		SwampName: rig.swampName,
+		Meta:      &hydrapb.PatchMeta{SetExpiredAt: timestamppb.New(want)},
+		Patches: []*hydrapb.TreasurePatch{
+			{Key: "k", Ops: []*hydrapb.PatchOp{{Op: hydrapb.PatchOp_SET, Path: "x", Value: encMsgpack(t, int8(2))}}},
+		},
+	})
+	require.NoError(t, err)
+	before := readExpiration(t, rig, "k")
+	require.NotEqualValues(t, 0, before)
+
+	// Patch again WITHOUT touching ExpiredAt (only ModifiedAt).
+	_, err = rig.gw.PatchTreasures(context.Background(), &hydrapb.PatchTreasuresRequest{
+		IslandID:  rig.islandID,
+		SwampName: rig.swampName,
+		Meta:      &hydrapb.PatchMeta{SetUpdatedAt: true},
+		Patches: []*hydrapb.TreasurePatch{
+			{Key: "k", Ops: []*hydrapb.PatchOp{{Op: hydrapb.PatchOp_SET, Path: "x", Value: encMsgpack(t, int8(4))}}},
+		},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, before, readExpiration(t, rig, "k"), "ExpiredAt must survive a patch that does not address it")
+}
+
+func TestGatewayPatch_MetaSetExpiredAtOnCreate(t *testing.T) {
+	rig := newGatewayPatchTestRig(t, "gw-patch-expat-create", "meta", "expired-on-create")
+
+	want := time.Now().Add(45 * time.Minute).UTC()
+	resp, err := rig.gw.PatchTreasures(context.Background(), &hydrapb.PatchTreasuresRequest{
+		IslandID:         rig.islandID,
+		SwampName:        rig.swampName,
+		CreateIfNotExist: true,
+		Meta:             &hydrapb.PatchMeta{SetExpiredAt: timestamppb.New(want)},
+		Patches: []*hydrapb.TreasurePatch{
+			{Key: "newkey", Ops: []*hydrapb.PatchOp{{Op: hydrapb.PatchOp_SET, Path: "x", Value: encMsgpack(t, int8(7))}}},
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, hydrapb.PatchResult_CREATED, resp.GetResults()[0].GetStatus())
+
+	assert.Equal(t, want.UnixNano(), readExpiration(t, rig, "newkey"))
 }

@@ -3,12 +3,14 @@ package hydraidego
 import (
 	"context"
 	"fmt"
+	"time"
 
 	hydraidepbgo "github.com/hydraide/hydraide/sdk/go/hydraidego/v3/hydraidepbgo"
 	"github.com/hydraide/hydraide/sdk/go/hydraidego/v3/name"
 	"github.com/vmihailenco/msgpack/v5"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // PatchStatus mirrors the wire-level PatchResult.StatusCode values from the
@@ -422,6 +424,35 @@ func (b *PatchBuilder) WithUpdatedBy(userID string) *PatchBuilder {
 		b.meta = &hydraidepbgo.PatchMeta{}
 	}
 	b.meta.SetUpdatedBy = &userID
+	return b
+}
+
+// WithExpiredAt stamps ExpiredAt = expireAt on the patched treasure (both
+// newly-created and existing). Use this to attach a TTL at patch time, or to
+// slide an existing TTL without rewriting the body. A zero time.Time clears
+// any existing ExpiredAt — equivalent to WithoutExpiredAt().
+func (b *PatchBuilder) WithExpiredAt(expireAt time.Time) *PatchBuilder {
+	if b.meta == nil {
+		b.meta = &hydraidepbgo.PatchMeta{}
+	}
+	if expireAt.IsZero() {
+		b.meta.ClearExpiredAt = true
+		b.meta.SetExpiredAt = nil
+		return b
+	}
+	b.meta.SetExpiredAt = timestamppb.New(expireAt)
+	b.meta.ClearExpiredAt = false
+	return b
+}
+
+// WithoutExpiredAt resets ExpiredAt to "never expires" on the patched
+// treasure. Wins over a previous WithExpiredAt call on the same builder.
+func (b *PatchBuilder) WithoutExpiredAt() *PatchBuilder {
+	if b.meta == nil {
+		b.meta = &hydraidepbgo.PatchMeta{}
+	}
+	b.meta.ClearExpiredAt = true
+	b.meta.SetExpiredAt = nil
 	return b
 }
 

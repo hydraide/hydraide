@@ -155,6 +155,152 @@ func TestSwampPatch_UpdatesUpdatedAt(t *testing.T) {
 	assert.Equal(t, "tester", tr.GetModifiedBy())
 }
 
+// ---------- B.3.a — meta does NOT change ExpiredAt by default ----------
+
+func TestSwampPatch_LeavesExpiredAtUnchangedWhenMetaOmitted(t *testing.T) {
+	s := patchTestSwamp(t, "patch", "expired-at-untouched")
+	seedMsgpack(t, s, "k", map[string]any{"x": int8(1)})
+
+	// Pre-stamp an ExpiredAt so we can verify the patch leaves it alone.
+	tr, err := s.GetTreasure("k")
+	require.NoError(t, err)
+	gid := tr.StartTreasureGuard(true)
+	original := time.Now().Add(2 * time.Hour).UTC()
+	tr.SetExpirationTime(gid, original)
+	tr.Save(gid)
+	tr.ReleaseTreasureGuard(gid)
+
+	_, err = s.PatchFields("k",
+		[]msgpackpatch.Op{{Kind: msgpackpatch.OpSet, Path: "x", Value: encMsgpack(t, int8(2))}},
+		nil,
+		PatchFieldsOptions{Meta: &PatchFieldsMeta{SetUpdatedAt: true}},
+	)
+	require.NoError(t, err)
+
+	tr, err = s.GetTreasure("k")
+	require.NoError(t, err)
+	assert.Equal(t, original.UnixNano(), tr.GetExpirationTime(),
+		"ExpiredAt must be untouched when SetExpiredAt and ClearExpiredAt are both unset")
+}
+
+// ---------- B.3.b — SetExpiredAt stamps the new TTL ----------
+
+func TestSwampPatch_SetExpiredAt(t *testing.T) {
+	s := patchTestSwamp(t, "patch", "set-expired-at")
+	seedMsgpack(t, s, "k", map[string]any{"x": int8(1)})
+
+	want := time.Now().Add(1 * time.Hour).UTC()
+	_, err := s.PatchFields("k",
+		[]msgpackpatch.Op{{Kind: msgpackpatch.OpSet, Path: "x", Value: encMsgpack(t, int8(2))}},
+		nil,
+		PatchFieldsOptions{Meta: &PatchFieldsMeta{SetExpiredAt: want}},
+	)
+	require.NoError(t, err)
+
+	tr, err := s.GetTreasure("k")
+	require.NoError(t, err)
+	assert.Equal(t, want.UnixNano(), tr.GetExpirationTime())
+	assert.False(t, tr.IsExpired(), "future TTL must not read as expired")
+}
+
+// ---------- B.3.c — SetExpiredAt slides an existing TTL ----------
+
+func TestSwampPatch_SetExpiredAtSlidesExistingTTL(t *testing.T) {
+	s := patchTestSwamp(t, "patch", "slide-expired-at")
+	seedMsgpack(t, s, "k", map[string]any{"x": int8(1)})
+
+	// Initial short TTL.
+	tr, err := s.GetTreasure("k")
+	require.NoError(t, err)
+	gid := tr.StartTreasureGuard(true)
+	tr.SetExpirationTime(gid, time.Now().Add(1*time.Minute).UTC())
+	tr.Save(gid)
+	tr.ReleaseTreasureGuard(gid)
+
+	// Patch slides it further into the future.
+	want := time.Now().Add(7 * 24 * time.Hour).UTC()
+	_, err = s.PatchFields("k",
+		[]msgpackpatch.Op{{Kind: msgpackpatch.OpSet, Path: "x", Value: encMsgpack(t, int8(2))}},
+		nil,
+		PatchFieldsOptions{Meta: &PatchFieldsMeta{SetExpiredAt: want}},
+	)
+	require.NoError(t, err)
+
+	tr, err = s.GetTreasure("k")
+	require.NoError(t, err)
+	assert.Equal(t, want.UnixNano(), tr.GetExpirationTime())
+}
+
+// ---------- B.3.d — ClearExpiredAt drops the TTL ----------
+
+func TestSwampPatch_ClearExpiredAt(t *testing.T) {
+	s := patchTestSwamp(t, "patch", "clear-expired-at")
+	seedMsgpack(t, s, "k", map[string]any{"x": int8(1)})
+
+	// Seed a TTL.
+	tr, err := s.GetTreasure("k")
+	require.NoError(t, err)
+	gid := tr.StartTreasureGuard(true)
+	tr.SetExpirationTime(gid, time.Now().Add(1*time.Hour).UTC())
+	tr.Save(gid)
+	tr.ReleaseTreasureGuard(gid)
+
+	_, err = s.PatchFields("k",
+		[]msgpackpatch.Op{{Kind: msgpackpatch.OpSet, Path: "x", Value: encMsgpack(t, int8(2))}},
+		nil,
+		PatchFieldsOptions{Meta: &PatchFieldsMeta{ClearExpiredAt: true}},
+	)
+	require.NoError(t, err)
+
+	tr, err = s.GetTreasure("k")
+	require.NoError(t, err)
+	assert.EqualValues(t, 0, tr.GetExpirationTime(), "ClearExpiredAt must reset to 0")
+	assert.False(t, tr.IsExpired())
+}
+
+// ---------- B.3.e — ClearExpiredAt wins over SetExpiredAt ----------
+
+func TestSwampPatch_ClearExpiredAtBeatsSet(t *testing.T) {
+	s := patchTestSwamp(t, "patch", "clear-beats-set")
+	seedMsgpack(t, s, "k", map[string]any{"x": int8(1)})
+
+	_, err := s.PatchFields("k",
+		[]msgpackpatch.Op{{Kind: msgpackpatch.OpSet, Path: "x", Value: encMsgpack(t, int8(2))}},
+		nil,
+		PatchFieldsOptions{Meta: &PatchFieldsMeta{
+			SetExpiredAt:   time.Now().Add(1 * time.Hour).UTC(),
+			ClearExpiredAt: true,
+		}},
+	)
+	require.NoError(t, err)
+
+	tr, err := s.GetTreasure("k")
+	require.NoError(t, err)
+	assert.EqualValues(t, 0, tr.GetExpirationTime(), "ClearExpiredAt must take precedence")
+}
+
+// ---------- B.3.f — SetExpiredAt also applies on creation ----------
+
+func TestSwampPatch_SetExpiredAtOnCreate(t *testing.T) {
+	s := patchTestSwamp(t, "patch", "expired-on-create")
+
+	want := time.Now().Add(30 * time.Minute).UTC()
+	res, err := s.PatchFields("newkey",
+		[]msgpackpatch.Op{{Kind: msgpackpatch.OpSet, Path: "x", Value: encMsgpack(t, int8(1))}},
+		nil,
+		PatchFieldsOptions{
+			CreateIfNotExist: true,
+			Meta:             &PatchFieldsMeta{SetExpiredAt: want},
+		},
+	)
+	require.NoError(t, err)
+	assert.Equal(t, PatchStatusCreated, res.Status)
+
+	tr, err := s.GetTreasure("newkey")
+	require.NoError(t, err)
+	assert.Equal(t, want.UnixNano(), tr.GetExpirationTime())
+}
+
 // ---------- B.4 — condition met ----------
 
 func TestSwampPatch_ConditionMet(t *testing.T) {

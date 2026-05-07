@@ -134,12 +134,17 @@ func protoMetaToSwampMeta(in *hydrapb.PatchMeta) *swamp.PatchFieldsMeta {
 	if in == nil {
 		return nil
 	}
-	return &swamp.PatchFieldsMeta{
-		SetUpdatedAt: in.GetSetUpdatedAt(),
-		SetUpdatedBy: in.GetSetUpdatedBy(),
-		SetCreatedAt: in.GetSetCreatedAt(),
-		SetCreatedBy: in.GetSetCreatedBy(),
+	out := &swamp.PatchFieldsMeta{
+		SetUpdatedAt:   in.GetSetUpdatedAt(),
+		SetUpdatedBy:   in.GetSetUpdatedBy(),
+		SetCreatedAt:   in.GetSetCreatedAt(),
+		SetCreatedBy:   in.GetSetCreatedBy(),
+		ClearExpiredAt: in.GetClearExpiredAt(),
 	}
+	if exp := in.GetSetExpiredAt(); exp != nil {
+		out.SetExpiredAt = exp.AsTime()
+	}
+	return out
 }
 
 // protoStr returns a *string with the given content, mirroring the proto

@@ -2055,6 +2055,16 @@ func (s *swamp) SaveFunction(t treasure.Treasure, guardID guard.ID) treasure.Tre
 			if t.GetContentType() != treasure.ContentTypeVoid {
 				s.addTreasureToBeacons(t)
 			}
+		} else if t.IsExpirationTimeChanged() {
+			// ExpirationTime moved (e.g. via PatchTreasures meta). Refresh
+			// only the expiration-time beacon: drop the stale entry and
+			// re-add it under the new sort key — unless the new value is 0
+			// ("never expires"), in which case leave it removed.
+			s.deleteTreasureIfBeaconInitialized(s.expirationTimeBeaconASC, t.GetKey())
+			s.deleteTreasureIfBeaconInitialized(s.expirationTimeBeaconDESC, t.GetKey())
+			if t.GetExpirationTime() != 0 {
+				s.addToExpirationTimeBeacon(t)
+			}
 		}
 
 		// the treasure is modified, we need to add it to the swamp and write it to the chroniclerInterface

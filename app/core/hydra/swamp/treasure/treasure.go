@@ -1452,6 +1452,14 @@ func (t *treasure) GetKey() string {
 func (t *treasure) SetExpirationTime(guardID guard.ID, expirationTime time.Time) {
 	_ = t.Guard.CanExecute(guardID)
 	t.expirationTimeChanged = true
+	// A zero time.Time means "no expiration" (matches the ExpirationTime == 0
+	// convention used by IsExpired and the EXPIRATION_TIME index). UnixNano
+	// on a zero time would otherwise produce -6795364578871345152, which the
+	// engine would treat as a valid (already-expired) timestamp.
+	if expirationTime.IsZero() {
+		t.treasure.ExpirationTime = 0
+		return
+	}
 	t.treasure.ExpirationTime = expirationTime.UTC().UnixNano()
 }
 

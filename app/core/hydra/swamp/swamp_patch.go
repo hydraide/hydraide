@@ -68,6 +68,17 @@ type PatchFieldsMeta struct {
 	// SetCreatedBy is recorded as CreatedBy when non-empty and the treasure
 	// is created in this call.
 	SetCreatedBy string
+
+	// SetExpiredAt sets ExpiredAt on the patched treasure when non-zero.
+	// Applied to both newly-created and existing treasures, so callers can
+	// attach or slide a TTL through a patch without rewriting the body.
+	// Ignored when ClearExpiredAt is true.
+	SetExpiredAt time.Time
+
+	// ClearExpiredAt: when true, ExpiredAt is reset to "never expires" on
+	// the patched treasure. Takes precedence over SetExpiredAt when both
+	// are set.
+	ClearExpiredAt bool
 }
 
 // PatchFieldsOptions controls per-key patch behavior.
@@ -259,5 +270,13 @@ func applyPatchMeta(treasureObj treasure.Treasure, guardID guard.ID, meta *Patch
 		if meta.SetCreatedBy != "" {
 			treasureObj.SetCreatedBy(guardID, meta.SetCreatedBy)
 		}
+	}
+	// ExpiredAt applies to both newly-created and existing treasures.
+	// ClearExpiredAt takes precedence so callers can unambiguously reset
+	// the TTL even if SetExpiredAt is also populated.
+	if meta.ClearExpiredAt {
+		treasureObj.SetExpirationTime(guardID, time.Time{})
+	} else if !meta.SetExpiredAt.IsZero() {
+		treasureObj.SetExpirationTime(guardID, meta.SetExpiredAt)
 	}
 }

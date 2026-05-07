@@ -876,9 +876,14 @@ func (b *beacon) ShiftExpired(howMany int) []treasure.Treasure {
 	var remainingTreasures []treasure.Treasure
 
 	counter := 0
+	now := time.Now().UTC().UnixNano()
 	for _, treasureObj := range b.treasuresByOrder {
 		lockerID := treasureObj.StartTreasureGuard(true)
-		if counter < howMany && treasureObj.GetExpirationTime() < time.Now().UTC().UnixNano() {
+		// ExpirationTime == 0 means "never expires" (matches IsExpired);
+		// guard against returning rows whose TTL was cleared after they
+		// were originally indexed.
+		exp := treasureObj.GetExpirationTime()
+		if counter < howMany && exp != 0 && exp < now {
 			clonedTreasure := treasureObj.Clone(lockerID)
 			shiftedTreasures = append(shiftedTreasures, clonedTreasure)
 			delete(b.treasuresByKeys, treasureObj.GetKey())

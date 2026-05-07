@@ -2878,6 +2878,17 @@ message PatchMeta {
   // SetCreatedBy is recorded as CreatedBy when set and the treasure is
   // created in this call.
   optional string SetCreatedBy = 4;
+
+  // SetExpiredAt sets ExpiredAt on patched treasures (both newly-created and
+  // existing). Use this to attach a TTL at patch time, or to slide an
+  // existing TTL forward / backward without rewriting the body. Ignored
+  // when ClearExpiredAt is true.
+  optional google.protobuf.Timestamp SetExpiredAt = 5;
+
+  // ClearExpiredAt: when true, ExpiredAt is reset to "never expires" on
+  // patched treasures. Takes precedence over SetExpiredAt when both are
+  // present.
+  bool ClearExpiredAt = 6;
 }
 
 // PatchTreasuresResponse holds per-key outcomes in the same order as the
