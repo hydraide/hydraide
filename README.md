@@ -57,14 +57,6 @@ Works on Linux, macOS and Windows. On Windows, run from inside WSL2 with Docker 
 
 → More: [example tree README](docs/sdk/go/examples/), [testing your own models](docs/sdk/go/testing.md)
 
-### Add the Go SDK to your own project
-
-```bash
-go get github.com/hydraide/hydraide/sdk/go/hydraidego@latest
-```
-
-Pinned version, upgrade, version compatibility, and troubleshooting in the [Go SDK install guide](docs/sdk/go/install.md).
-
 ### Install for real (Linux service, single binary)
 
 Best for staging, production, or anywhere you want HydrAIDE running as a long-lived service. No config files, no Docker required.

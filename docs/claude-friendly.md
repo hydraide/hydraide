@@ -66,15 +66,12 @@ The directory layout is consistent and named after the concepts in the docs. If 
 - `docs/sdk/go/`: Go SDK docs (install, reference, examples, testing).
 - `docs/benchmarks/`: measured numbers and run scripts.
 
-## English code, English commits, Hungarian discussion
+## English everywhere
 
 Per [`CLAUDE.md`](../CLAUDE.md):
 
 - Code, comments, and commit messages are in English.
-- Discussion with the maintainer is in Hungarian.
-- Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/).
-
-The split is enforced by a pre-commit hook.
+- Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/), enforced by a pre-commit hook.
 
 ## How to get the most out of Claude on this repo
 
