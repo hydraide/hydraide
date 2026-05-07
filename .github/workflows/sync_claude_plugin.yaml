@@ -28,32 +28,37 @@ jobs:
           path: claude
           ssh-key: ${{ secrets.CLAUDE_PLUGIN_DEPLOY_KEY }}
 
-      - name: Sync skills, commands, and feature docs
+      - name: Sync skills, commands, and feature docs into the plugin tree
         run: |
           set -euo pipefail
-          # Wipe and re-mirror the three synced trees.
-          rm -rf claude/skills claude/commands claude/docs/features
-          mkdir -p claude/skills claude/commands claude/docs/features
+          # The plugin repo is a Claude Code marketplace with one plugin under plugins/hydraide.
+          PLUGIN_DIR=claude/plugins/hydraide
+
+          rm -rf "$PLUGIN_DIR/skills" "$PLUGIN_DIR/commands" "$PLUGIN_DIR/docs/features"
+          mkdir -p "$PLUGIN_DIR/skills" "$PLUGIN_DIR/commands" "$PLUGIN_DIR/docs/features"
 
           if [ -d hydraide/.claude/skills ]; then
-            cp -r hydraide/.claude/skills/* claude/skills/
+            cp -r hydraide/.claude/skills/* "$PLUGIN_DIR/skills/"
           fi
           if [ -d hydraide/.claude/commands ]; then
-            cp -r hydraide/.claude/commands/* claude/commands/
+            cp -r hydraide/.claude/commands/* "$PLUGIN_DIR/commands/"
           fi
           if [ -d hydraide/docs/features ]; then
-            cp hydraide/docs/features/*.md claude/docs/features/
+            cp hydraide/docs/features/*.md "$PLUGIN_DIR/docs/features/"
           fi
 
       - name: Rewrite relative links inside SKILL.md files
         run: |
           set -euo pipefail
           # In the monorepo, SKILL.md is at .claude/skills/<name>/SKILL.md (depth 3 from repo root).
-          # In the plugin repo, SKILL.md is at skills/<name>/SKILL.md (depth 2).
-          # Internal docs/features links: ../../../docs/features/ -> ../../docs/features/
-          # Other ../../../ refs (app/, sdk/, proto/, docs/install/, docs/hydraidectl/, docs/benchmarks/, CLAUDE.md, docs/why-hydraide.md):
-          # rewrite to absolute GitHub URLs so they remain navigable from the plugin repo.
-          for f in claude/skills/*/SKILL.md; do
+          # In the plugin tree, SKILL.md is at plugins/hydraide/skills/<name>/SKILL.md.
+          # Two levels up from the SKILL.md ends at plugins/hydraide/, so the relative path
+          # to feature docs is ../../docs/features/ in both cases (the plugin keeps its own
+          # docs/features/ tree alongside skills/).
+          # Other ../../../ refs (app/, sdk/, proto/, docs/install/, docs/hydraidectl/,
+          # docs/benchmarks/, CLAUDE.md, docs/why-hydraide.md) get rewritten to absolute
+          # GitHub URLs so they remain navigable from the plugin repo.
+          for f in claude/plugins/hydraide/skills/*/SKILL.md; do
             sed -i 's|\.\./\.\./\.\./docs/features/|../../docs/features/|g' "$f"
             sed -i 's|\.\./\.\./\.\./|https://github.com/hydraide/hydraide/blob/main/|g' "$f"
           done
