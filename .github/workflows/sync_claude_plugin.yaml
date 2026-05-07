@@ -7,6 +7,12 @@ on:
       - '.claude/skills/**'
       - '.claude/commands/**'
       - 'docs/features/**'
+      - 'docs/install/**'
+      - 'docs/sdk/go/install.md'
+      - 'docs/sdk/go/contributor-setup.md'
+      - 'docs/hydraidectl/hydraidectl-install.md'
+      - 'docs/hydraidectl/upgrades.md'
+      - 'docs/hydraidectl/hydraidectl-migration.md'
       - '.github/workflows/sync_claude_plugin.yaml'
   workflow_dispatch:
 
@@ -28,14 +34,19 @@ jobs:
           path: claude
           ssh-key: ${{ secrets.CLAUDE_PLUGIN_DEPLOY_KEY }}
 
-      - name: Sync skills, commands, and feature docs into the plugin tree
+      - name: Sync skills, commands, and docs into the plugin tree
         run: |
           set -euo pipefail
           # The plugin repo is a Claude Code marketplace with one plugin under plugins/hydraide.
           PLUGIN_DIR=claude/plugins/hydraide
 
-          rm -rf "$PLUGIN_DIR/skills" "$PLUGIN_DIR/commands" "$PLUGIN_DIR/docs/features"
-          mkdir -p "$PLUGIN_DIR/skills" "$PLUGIN_DIR/commands" "$PLUGIN_DIR/docs/features"
+          # Wipe and re-mirror everything skills/commands/docs from the source.
+          rm -rf "$PLUGIN_DIR/skills" "$PLUGIN_DIR/commands" "$PLUGIN_DIR/docs"
+          mkdir -p "$PLUGIN_DIR/skills" "$PLUGIN_DIR/commands" \
+                   "$PLUGIN_DIR/docs/features" \
+                   "$PLUGIN_DIR/docs/install" \
+                   "$PLUGIN_DIR/docs/sdk/go" \
+                   "$PLUGIN_DIR/docs/hydraidectl"
 
           if [ -d hydraide/.claude/skills ]; then
             cp -r hydraide/.claude/skills/* "$PLUGIN_DIR/skills/"
@@ -43,23 +54,49 @@ jobs:
           if [ -d hydraide/.claude/commands ]; then
             cp -r hydraide/.claude/commands/* "$PLUGIN_DIR/commands/"
           fi
+          # Concept docs routed by the `hydraide` skill.
           if [ -d hydraide/docs/features ]; then
             cp hydraide/docs/features/*.md "$PLUGIN_DIR/docs/features/"
           fi
+          # Install docs routed by the `hydraide-install-and-upgrade` skill.
+          if [ -d hydraide/docs/install ]; then
+            cp hydraide/docs/install/*.md "$PLUGIN_DIR/docs/install/"
+          fi
+          # Go SDK install + contributor setup, also routed by hydraide-install-and-upgrade.
+          for f in hydraide/docs/sdk/go/install.md hydraide/docs/sdk/go/contributor-setup.md; do
+            [ -f "$f" ] && cp "$f" "$PLUGIN_DIR/docs/sdk/go/"
+          done
+          # hydraidectl install, upgrade, and migration docs, also routed by hydraide-install-and-upgrade.
+          for f in \
+            hydraide/docs/hydraidectl/hydraidectl-install.md \
+            hydraide/docs/hydraidectl/upgrades.md \
+            hydraide/docs/hydraidectl/hydraidectl-migration.md; do
+            [ -f "$f" ] && cp "$f" "$PLUGIN_DIR/docs/hydraidectl/"
+          done
 
       - name: Rewrite relative links inside SKILL.md files
         run: |
           set -euo pipefail
           # In the monorepo, SKILL.md is at .claude/skills/<name>/SKILL.md (depth 3 from repo root).
           # In the plugin tree, SKILL.md is at plugins/hydraide/skills/<name>/SKILL.md.
-          # Two levels up from the SKILL.md ends at plugins/hydraide/, so the relative path
-          # to feature docs is ../../docs/features/ in both cases (the plugin keeps its own
-          # docs/features/ tree alongside skills/).
-          # Other ../../../ refs (app/, sdk/, proto/, docs/install/, docs/hydraidectl/,
+          # Two levels up from the SKILL.md ends at plugins/hydraide/, so any relative path
+          # of the form ../../<subtree>/<file> resolves the same way in the plugin as
+          # ../../../<subtree>/<file> does in the monorepo (because the plugin keeps the
+          # synced docs trees alongside skills/).
+          #
+          # Mirrored doc trees (paths shorten by one level):
+          #   docs/features/, docs/install/, docs/sdk/go/, docs/hydraidectl/
+          # All other ../../../ refs (app/, sdk/ subpaths we don't mirror, proto/,
           # docs/benchmarks/, CLAUDE.md, docs/why-hydraide.md) get rewritten to absolute
-          # GitHub URLs so they remain navigable from the plugin repo.
+          # GitHub URLs so they stay navigable from the plugin repo.
           for f in claude/plugins/hydraide/skills/*/SKILL.md; do
             sed -i 's|\.\./\.\./\.\./docs/features/|../../docs/features/|g' "$f"
+            sed -i 's|\.\./\.\./\.\./docs/install/|../../docs/install/|g' "$f"
+            sed -i 's|\.\./\.\./\.\./docs/sdk/go/install\.md|../../docs/sdk/go/install.md|g' "$f"
+            sed -i 's|\.\./\.\./\.\./docs/sdk/go/contributor-setup\.md|../../docs/sdk/go/contributor-setup.md|g' "$f"
+            sed -i 's|\.\./\.\./\.\./docs/hydraidectl/hydraidectl-install\.md|../../docs/hydraidectl/hydraidectl-install.md|g' "$f"
+            sed -i 's|\.\./\.\./\.\./docs/hydraidectl/upgrades\.md|../../docs/hydraidectl/upgrades.md|g' "$f"
+            sed -i 's|\.\./\.\./\.\./docs/hydraidectl/hydraidectl-migration\.md|../../docs/hydraidectl/hydraidectl-migration.md|g' "$f"
             sed -i 's|\.\./\.\./\.\./|https://github.com/hydraide/hydraide/blob/main/|g' "$f"
           done
 

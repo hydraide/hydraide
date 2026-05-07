@@ -2,10 +2,12 @@
 
 Guidance for Claude Code (and other AI coding assistants) working on this repository.
 
-Two bundled skills cover the depth:
+Four bundled skills cover the depth:
 
-- [`.claude/skills/hydraidego/SKILL.md`](.claude/skills/hydraidego/SKILL.md) — Go SDK side: modelling, filters, patches, locks, subscriptions, common pitfalls.
-- [`.claude/skills/hydraidectl/SKILL.md`](.claude/skills/hydraidectl/SKILL.md) — operations side: install, upgrade, backup/restore, migrate, observe.
+- [`.claude/skills/hydraide-install-and-upgrade/SKILL.md`](.claude/skills/hydraide-install-and-upgrade/SKILL.md): install / upgrade entry point. Server (Linux or Docker), Go SDK, upgrades, V1 to V2 migration.
+- [`.claude/skills/hydraidego/SKILL.md`](.claude/skills/hydraidego/SKILL.md): Go SDK side. Modelling, filters, patches, locks, subscriptions, common pitfalls.
+- [`.claude/skills/hydraidectl/SKILL.md`](.claude/skills/hydraidectl/SKILL.md): operations side. Day-to-day instance management.
+- [`.claude/skills/hydraide/SKILL.md`](.claude/skills/hydraide/SKILL.md): concept router into `docs/features/` for "how does X work" questions.
 
 ## Communication
 

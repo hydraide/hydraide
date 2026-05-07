@@ -15,12 +15,13 @@ The plugin source lives in [`hydraide/claude`](https://github.com/hydraide/claud
 
 ## What the plugin gives you
 
-### Three skills (auto-activated by question shape)
+### Four skills (auto-activated by question shape)
 
 | Skill | Activates when you ask about |
 |---|---|
+| [`hydraide-install-and-upgrade`](../.claude/skills/hydraide-install-and-upgrade/SKILL.md) | Bootstrapping HydrAIDE. Server install on Linux as systemd or via Docker, Go SDK install in your application, server and SDK upgrades, V1 to V2 storage migration, filesystem and hardware guidance, troubleshooting install errors. The first stop for "how do I get HydrAIDE running". |
 | [`hydraidego`](../.claude/skills/hydraidego/SKILL.md) | Building Go applications. Profile vs Catalog modelling, struct tags, server-side filters (AND/OR, vector, geo, nested-slice, phrase, IN), atomic increments, distributed locks, real-time subscriptions, structural patches, indexing and pagination, common pitfalls. |
-| [`hydraidectl`](../.claude/skills/hydraidectl/SKILL.md) | Operating a server instance. Install, start/stop/restart, upgrade, backup/restore, V1 to V2 migration, inspect, observe, compact, explore, destroy, certs. |
+| [`hydraidectl`](../.claude/skills/hydraidectl/SKILL.md) | Operating a running server instance. Start/stop/restart, backup/restore, inspect, observe, compact, explore, destroy, certs. The day-to-day operations companion. |
 | [`hydraide`](../.claude/skills/hydraide/SKILL.md) | "How does X work" questions. Routes to the right concept doc in [`docs/features/`](features/) (Swamp lifecycle, addressing, query engine, msgpack patch, storage engine internals, etc.) without bloating the conversation context. |
 
 If you ask a question that spans two of them (for example "explain Swamps and then write me a Catalog model"), Claude reads the relevant concept doc first and then hands off to `hydraidego` for the code.
