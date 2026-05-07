@@ -1,396 +1,39 @@
 //go:build e2e
 
-package hydraidego
+package e2etests
 
 import (
+	"context"
 	"fmt"
-	"log/slog"
-	"os"
-	"reflect"
-	"strconv"
-	"strings"
+	"sync"
 	"testing"
 	"time"
 
-	"github.com/hydraide/hydraide/app/server/server"
-	"github.com/hydraide/hydraide/generated/hydraidepbgo"
-	"github.com/hydraide/hydraide/sdk/go/hydraidego/client"
-	"github.com/hydraide/hydraide/sdk/go/hydraidego/config"
+	"github.com/hydraide/hydraide/sdk/go/hydraidego"
 	"github.com/hydraide/hydraide/sdk/go/hydraidego/name"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/context"
 )
 
-var hydraidegoInterface Hydraidego
-var clientInterface client.Client
-var serverInterface server.Server
-var testConfig *config.E2ETestConfig
+// hydraidegoInterface is the SDK client used by the moved e2e tests. It is
+// lazily constructed from the package-level clientInterface (set up by the
+// shared TestMain in e2etests_test.go) on first access.
+var (
+	hydraidegoInterfaceOnce sync.Once
+	hydraidegoInterfaceVal  hydraidego.Hydraidego
+)
 
-func TestMain(m *testing.M) {
-	fmt.Println("Setting up test environment...")
-	setup() // start the testing environment
-	code := m.Run()
-	fmt.Println("Tearing down test environment...")
-	teardown() // Stop the testing environment
-	os.Exit(code)
-}
-
-func setup() {
-	// Load E2E test configuration from .env file
-	var err error
-	testConfig, err = config.LoadE2ETestConfig()
-	if err != nil {
-		slog.Error("Failed to load E2E test configuration", "error", err)
-		panic(fmt.Sprintf("Failed to load E2E test configuration: %v", err))
-	}
-
-	// Validate that all certificate files exist
-	if err := testConfig.Validate(); err != nil {
-		slog.Error("E2E test configuration validation failed", "error", err)
-		panic(fmt.Sprintf("E2E test configuration validation failed: %v", err))
-	}
-
-	// Parse server address to get port
-	port := strings.Split(testConfig.TestServerAddr, ":")
-	if len(port) != 2 {
-		slog.Error("HYDRAIDE_E2E_TEST_SERVER_ADDR environment variable is invalid, expected format: host:port")
-		panic("HYDRAIDE_E2E_TEST_SERVER_ADDR environment variable is invalid, expected format: host:port")
-	}
-
-	portAsNumber, err := strconv.Atoi(port[1])
-	if err != nil {
-		slog.Error("HYDRAIDE_E2E_TEST_SERVER_ADDR port is not a valid number", "error", err)
-		panic(fmt.Sprintf("HYDRAIDE_E2E_TEST_SERVER_ADDR port is not a valid number: %v", err))
-	}
-
-	// Start the new Hydra server
-	serverInterface = server.New(&server.Configuration{
-		CertificateCrtFile:  testConfig.ServerCertFile,
-		CertificateKeyFile:  testConfig.ServerKeyFile,
-		ClientCAFile:        testConfig.CACertFile, // this is the CA that signed the client certificates
-		HydraServerPort:     portAsNumber,
-		HydraMaxMessageSize: 1024 * 1024 * 1024, // 1 GB
+func hydraidegoIface() hydraidego.Hydraidego {
+	hydraidegoInterfaceOnce.Do(func() {
+		hydraidegoInterfaceVal = hydraidego.New(clientInterface)
 	})
-
-	if err := serverInterface.Start(); err != nil {
-		slog.Error("error while starting the server", "error", err)
-		panic(fmt.Sprintf("error while starting the server: %v", err))
-	}
-
-	// Create a new Hydraidego interface
-	createGrpcClient()
-}
-
-func createGrpcClient() {
-	// Create a new gRPC client object
-	servers := []*client.Server{
-		{
-			Host:          testConfig.TestServerAddr,
-			FromIsland:    0,
-			ToIsland:      100,
-			CACrtPath:     testConfig.CACertFile,
-			ClientCrtPath: testConfig.ClientCertFile,
-			ClientKeyPath: testConfig.ClientKeyFile,
-		},
-	}
-
-	// 100 folders and 2 gig message size
-	clientInterface = client.New(servers, 100, 2147483648)
-	if err := clientInterface.Connect(testConfig.GRPCConnAnalysis); err != nil {
-		slog.Error("error while connecting to the server", "error", err)
-	}
-
-	hydraidegoInterface = New(clientInterface)
-
-}
-
-func teardown() {
-	// stop the microservice and exit the program
-	clientInterface.CloseConnection()
-	slog.Info("HydrAIDE server stopped gracefully. Program is exiting...")
-	// waiting for logs to be written to the file
-	time.Sleep(1 * time.Second)
-	// exit the program if the microservice is stopped gracefully
-	os.Exit(0)
+	return hydraidegoInterfaceVal
 }
 
 // TestHydraidego_Heartbeat tests the heartbeat functionality of the Hydraidego interface.
 func TestHydraidego_Heartbeat(t *testing.T) {
-	err := hydraidegoInterface.Heartbeat(context.Background())
+	err := hydraidegoIface().Heartbeat(context.Background())
 	assert.NoError(t, err, "Heartbeat should not return an error")
-}
-
-func TestConvertCatalogModelWithOmitEmpty(t *testing.T) {
-	// Get current time for non-empty time values
-	now := time.Now().UTC()
-
-	testCases := []struct {
-		name           string
-		input          interface{}
-		expectedKey    string
-		expectedValues map[string]bool // Fields that should be set in the result
-	}{
-		{
-			name: "basic key-value without omitempty",
-			input: &struct {
-				Key   string `hydraide:"key"`
-				Value string `hydraide:"value"`
-			}{"test-key", "test-value"},
-			expectedKey: "test-key",
-			expectedValues: map[string]bool{
-				"voidVal":   false, // Not all fields omitted, VoidVal should be false
-				"stringVal": true,
-			},
-		},
-		{
-			name: "value with omitempty - non-empty",
-			input: &struct {
-				Key   string `hydraide:"key"`
-				Value string `hydraide:"value,omitempty"`
-			}{"test-key", "test-value"},
-			expectedKey: "test-key",
-			expectedValues: map[string]bool{
-				"voidVal":   false, // Not all fields omitted, VoidVal should be false
-				"stringVal": true,
-			},
-		},
-		{
-			name: "value with omitempty - empty string",
-			input: &struct {
-				Key   string `hydraide:"key"`
-				Value string `hydraide:"value,omitempty"`
-			}{"test-key", ""},
-			expectedKey: "test-key",
-			expectedValues: map[string]bool{
-				"voidVal": true, // All fields omitted, VoidVal should be true
-			},
-		},
-		{
-			name: "all metadata fields - non-empty",
-			input: &struct {
-				Key       string    `hydraide:"key"`
-				Value     int       `hydraide:"value"`
-				ExpireAt  time.Time `hydraide:"expireAt"`
-				CreatedAt time.Time `hydraide:"createdAt"`
-				CreatedBy string    `hydraide:"createdBy"`
-				UpdatedAt time.Time `hydraide:"updatedAt"`
-				UpdatedBy string    `hydraide:"updatedBy"`
-			}{
-				"test-key", 123, now, now, "user1", now, "user2",
-			},
-			expectedKey: "test-key",
-			expectedValues: map[string]bool{
-				"voidVal":   false, // Not all fields omitted, VoidVal should be false
-				"int64Val":  true,
-				"expiredAt": true,
-				"createdAt": true,
-				"createdBy": true,
-				"updatedAt": true,
-				"updatedBy": true,
-			},
-		},
-		{
-			name: "all metadata fields - are omitempty - non-empty",
-			input: &struct {
-				Key       string    `hydraide:"key"`
-				Value     int       `hydraide:"value,omitempty"`
-				ExpireAt  time.Time `hydraide:"expireAt,omitempty"`
-				CreatedAt time.Time `hydraide:"createdAt,omitempty"`
-				CreatedBy string    `hydraide:"createdBy,omitempty"`
-				UpdatedAt time.Time `hydraide:"updatedAt,omitempty"`
-				UpdatedBy string    `hydraide:"updatedBy,omitempty"`
-			}{
-				"test-key", 123, now, now, "user1", now, "user2",
-			},
-			expectedKey: "test-key",
-			expectedValues: map[string]bool{
-				"voidVal":   false, // Not all fields omitted, VoidVal should be false
-				"int64Val":  true,
-				"expiredAt": true,
-				"createdAt": true,
-				"createdBy": true,
-				"updatedAt": true,
-				"updatedBy": true,
-			},
-		},
-		{
-			name: "metadata fields with omitempty - empty",
-			input: &struct {
-				Key       string    `hydraide:"key"`
-				Value     int       `hydraide:"value"`
-				ExpireAt  time.Time `hydraide:"expireAt,omitempty"`
-				CreatedAt time.Time `hydraide:"createdAt,omitempty"`
-				CreatedBy string    `hydraide:"createdBy,omitempty"`
-				UpdatedAt time.Time `hydraide:"updatedAt,omitempty"`
-				UpdatedBy string    `hydraide:"updatedBy,omitempty"`
-			}{
-				"test-key", 123, time.Time{}, time.Time{}, "", time.Time{}, "",
-			},
-			expectedKey: "test-key",
-			expectedValues: map[string]bool{
-				"voidVal":   false, // Not all fields omitted, VoidVal should be false
-				"int64Val":  true,
-				"expiredAt": false,
-				"createdAt": false,
-				"createdBy": false,
-				"updatedAt": false,
-				"updatedBy": false,
-			},
-		},
-		{
-			name: "mixed empty and non-empty with omitempty",
-			input: &struct {
-				Key       string    `hydraide:"key"`
-				Value     int       `hydraide:"value"`
-				ExpireAt  time.Time `hydraide:"expireAt,omitempty"`
-				CreatedAt time.Time `hydraide:"createdAt,omitempty"`
-				CreatedBy string    `hydraide:"createdBy,omitempty"`
-				UpdatedAt time.Time `hydraide:"updatedAt"`           // No omitempty
-				UpdatedBy string    `hydraide:"updatedBy,omitempty"` // With omitempty
-			}{
-				"test-key", 123, time.Time{}, now, "user1", now, "",
-			},
-			expectedKey: "test-key",
-			expectedValues: map[string]bool{
-				"voidVal":   false, // Not all fields omitted, VoidVal should be false
-				"int64Val":  true,
-				"expiredAt": false, // Should be omitted (empty with omitempty)
-				"createdAt": true,  // Should be included (non-empty)
-				"createdBy": true,  // Should be included (non-empty)
-				"updatedAt": true,  // Should be included (no omitempty tag)
-				"updatedBy": false, // Should be omitted (empty with omitempty)
-			},
-		},
-		{
-			name: "pointer values with omitempty",
-			input: &struct {
-				Key    string  `hydraide:"key"`
-				Value  *string `hydraide:"value,omitempty"`
-				IntPtr *int    `hydraide:"createdBy,omitempty"` // Repurposing field for testing
-			}{
-				"test-key", nil, nil,
-			},
-			expectedKey: "test-key",
-			expectedValues: map[string]bool{
-				"voidVal":   true,  // All fields omitted, VoidVal should be true
-				"stringVal": false, // Should be omitted (nil with omitempty)
-				"createdBy": false, // Should be omitted (nil with omitempty)
-			},
-		},
-		{
-			name: "slice and map with omitempty",
-			input: &struct {
-				Key      string         `hydraide:"key"`
-				Value    []int          `hydraide:"value,omitempty"`
-				MapField map[string]int `hydraide:"createdBy,omitempty"` // Repurposing field
-			}{
-				"test-key", []int{}, map[string]int{},
-			},
-			expectedKey: "test-key",
-			expectedValues: map[string]bool{
-				"voidVal":   true,  // All fields omitted, VoidVal should be true
-				"bytesVal":  false, // Should be omitted (empty slice with omitempty)
-				"createdBy": false, // Should be omitted (empty map with omitempty)
-			},
-		},
-		{
-			name: "non-empty slice",
-			input: &struct {
-				Key       string `hydraide:"key"`
-				Value     []int  `hydraide:"value,omitempty"`
-				CreatedBy string `hydraide:"createdBy,omitempty"` // Repurposing field
-			}{
-				"test-key", []int{1, 2, 3}, "admin",
-			},
-			expectedKey: "test-key",
-			expectedValues: map[string]bool{
-				"voidVal":   false, // Not all fields omitted, VoidVal should be false
-				"bytesVal":  true,  // Should be included (non-empty slice with omitempty)
-				"createdBy": true,  // Should be included (non-empty map with omitempty)
-			},
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-
-			// Convert to key-value pair
-			kv, err := convertCatalogModelToKeyValuePair(tc.input, EncodingGOB)
-
-			require.NoError(t, err, "Conversion should succeed")
-
-			// Check key
-			assert.Equal(t, tc.expectedKey, kv.Key, "Key should match expected value")
-
-			if tc.expectedValues == nil {
-				assert.True(t, *kv.VoidVal, "All fields should be omitted, VoidVal should be true")
-			} else {
-
-				for field, expected := range tc.expectedValues {
-					switch field {
-					case "voidVal":
-						if expected {
-							assert.True(t, *kv.VoidVal, "voidVal should be set to true")
-						} else {
-							assert.Nil(t, kv.VoidVal, "voidVal should be set to false")
-						}
-					case "stringVal":
-						if expected {
-							assert.NotEmpty(t, kv.StringVal, "stringVal should be set")
-						} else {
-							assert.Empty(t, kv.StringVal, "stringVal should be empty")
-						}
-					case "int64Val":
-						if expected {
-							assert.NotZero(t, kv.Int64Val, "int64Val should be set")
-						} else {
-							assert.Zero(t, kv.Int64Val, "int64Val should be zero")
-						}
-					case "expiredAt":
-						if expected {
-							assert.False(t, kv.ExpiredAt.AsTime().IsZero(), "expiredAt should be set")
-						} else {
-							assert.Nil(t, kv.ExpiredAt, "expiredAt should be nil")
-						}
-					case "createdAt":
-						if expected {
-							assert.False(t, kv.CreatedAt.AsTime().IsZero(), "createdAt should be set")
-						} else {
-							assert.Nil(t, kv.CreatedAt, "createdAt should be nil")
-						}
-					case "createdBy":
-						if expected {
-							assert.NotEmpty(t, kv.CreatedBy, "createdBy should be set")
-						} else {
-							assert.Empty(t, kv.CreatedBy, "createdBy should be empty")
-						}
-					case "updatedAt":
-						if expected {
-							assert.False(t, kv.UpdatedAt.AsTime().IsZero(), "updatedAt should be set")
-						} else {
-							assert.Nil(t, kv.UpdatedAt, "updatedAt should be nil")
-						}
-					case "updatedBy":
-						if expected {
-							assert.NotEmpty(t, kv.UpdatedBy, "updatedBy should be set")
-						} else {
-							assert.Empty(t, kv.UpdatedBy, "updatedBy should be empty")
-						}
-					case "bytesVal":
-						if expected {
-							assert.NotEmpty(t, kv.BytesVal, "bytesVal should be set")
-						} else {
-							assert.Empty(t, kv.BytesVal, "bytesVal should be empty")
-						}
-					}
-
-				}
-			}
-
-		})
-	}
-
 }
 
 // --- Helpers ---
@@ -419,7 +62,7 @@ func TestHydraidego_IsSwampExist(t *testing.T) {
 
 	swampName := name.New().Sanctuary("test").Realm("in").Swamp("isSwampExist")
 	defer func() {
-		if err := hydraidegoInterface.Destroy(context.Background(), swampName); err != nil {
+		if err := hydraidegoIface().Destroy(context.Background(), swampName); err != nil {
 			t.Logf("Cleanup failed: could not destroy swamp %s: %v", swampName.Get(), err)
 		}
 	}()
@@ -428,7 +71,7 @@ func TestHydraidego_IsSwampExist(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	isExist, err := hydraidegoInterface.IsSwampExist(ctx, swampName)
+	isExist, err := hydraidegoIface().IsSwampExist(ctx, swampName)
 	assert.NoError(t, err, "IsSwampExist should not return an error")
 	assert.False(t, isExist, "Swamp should not exist")
 
@@ -443,16 +86,15 @@ func TestHydraidego_IsSwampExist(t *testing.T) {
 	}
 
 	// add a treasure to create the swamp
-	_, err = hydraidegoInterface.CatalogSave(ctx, swampName, treasure)
+	_, err = hydraidegoIface().CatalogSave(ctx, swampName, treasure)
 
 	assert.NoError(t, err, "CatalogSave should not return an error")
-	isExist, err = hydraidegoInterface.IsSwampExist(ctx, swampName)
+	isExist, err = hydraidegoIface().IsSwampExist(ctx, swampName)
 	assert.NoError(t, err, "IsSwampExist should not return an error")
 	assert.True(t, isExist, "Swamp should exist after adding a treasure")
 
 }
 
-// Verifies: creation path (setIfNotExist), update path (setIfExist), ExpiredAt handling.
 func TestIncrementInt8_WithMetadata_CreateThenUpdate(t *testing.T) {
 	swamp := newTestSwamp("int8-meta")
 	key := "user-1"
@@ -466,24 +108,24 @@ func TestIncrementInt8_WithMetadata_CreateThenUpdate(t *testing.T) {
 	exp1 := now.Add(1 * time.Hour)
 	exp2 := now.Add(2 * time.Hour)
 
-	setIfNotExist := &IncrementMetaRequest{
+	setIfNotExist := &hydraidego.IncrementMetaRequest{
 		SetCreatedAt: true,
 		SetCreatedBy: "test-suite",
 		ExpiredAt:    exp1,
 	}
-	setIfExist := &IncrementMetaRequest{
+	setIfExist := &hydraidego.IncrementMetaRequest{
 		SetUpdatedAt: true,
 		SetUpdatedBy: "test-suite",
 		ExpiredAt:    exp2, // refresh TTL on update
 	}
 
 	// --- First call: should create + increment ---
-	val1, meta1, err := hydraidegoInterface.IncrementInt8(
+	val1, meta1, err := hydraidegoIface().IncrementInt8(
 		ctx,
 		swamp,
 		key,
 		1,
-		&Int8Condition{RelationalOperator: LessThan, Value: 10},
+		&hydraidego.Int8Condition{RelationalOperator: hydraidego.LessThan, Value: 10},
 		setIfNotExist,
 		setIfExist,
 	)
@@ -499,12 +141,12 @@ func TestIncrementInt8_WithMetadata_CreateThenUpdate(t *testing.T) {
 	}
 
 	// --- Second call: update path + increment ---
-	val2, meta2, err := hydraidegoInterface.IncrementInt8(
+	val2, meta2, err := hydraidegoIface().IncrementInt8(
 		ctx,
 		swamp,
 		key,
 		1,
-		&Int8Condition{RelationalOperator: LessThan, Value: 10},
+		&hydraidego.Int8Condition{RelationalOperator: hydraidego.LessThan, Value: 10},
 		setIfNotExist,
 		setIfExist,
 	)
@@ -531,35 +173,35 @@ func TestIncrementInt8_ConditionNotMet_ReturnsValueAndMeta(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	setIfNotExist := &IncrementMetaRequest{
+	setIfNotExist := &hydraidego.IncrementMetaRequest{
 		SetCreatedAt: true,
 		SetCreatedBy: "test-suite",
 		ExpiredAt:    time.Now().UTC().Add(30 * time.Minute),
 	}
-	setIfExist := &IncrementMetaRequest{
+	setIfExist := &hydraidego.IncrementMetaRequest{
 		SetUpdatedAt: true,
 		SetUpdatedBy: "test-suite",
 	}
 
 	// Prime the counter to 3
 	for i := 0; i < 3; i++ {
-		_, _, err := hydraidegoInterface.IncrementInt8(
+		_, _, err := hydraidegoIface().IncrementInt8(
 			ctx, swamp, key, 1,
-			&Int8Condition{RelationalOperator: LessThan, Value: 100},
+			&hydraidego.Int8Condition{RelationalOperator: hydraidego.LessThan, Value: 100},
 			setIfNotExist, setIfExist,
 		)
 		assert.NoError(t, err)
 	}
 
 	// Now force a failing condition: current must be < 0 (false)
-	val, meta, err := hydraidegoInterface.IncrementInt8(
+	val, meta, err := hydraidegoIface().IncrementInt8(
 		ctx, swamp, key, 1,
-		&Int8Condition{RelationalOperator: LessThan, Value: 0},
+		&hydraidego.Int8Condition{RelationalOperator: hydraidego.LessThan, Value: 0},
 		setIfNotExist, setIfExist,
 	)
 
 	// We expect condition-not-met error, but value+meta returned
-	if isCond := IsConditionNotMet(err); !isCond {
+	if isCond := hydraidego.IsConditionNotMet(err); !isCond {
 		t.Fatalf("expected ErrConditionNotMet, got: %v", err)
 	}
 	assert.Equal(t, int8(3), val, "value should remain unchanged on condition fail")
@@ -578,15 +220,15 @@ func TestIncrementInt8_MetadataOnlyCreate(t *testing.T) {
 
 	exp := time.Now().UTC().Add(10 * time.Minute)
 
-	val, meta, err := hydraidegoInterface.IncrementInt8(
+	val, meta, err := hydraidegoIface().IncrementInt8(
 		ctx, swamp, key, 5,
 		nil, // no condition
-		&IncrementMetaRequest{
+		&hydraidego.IncrementMetaRequest{
 			SetCreatedAt: true,
 			SetCreatedBy: "test-suite",
 			ExpiredAt:    exp,
 		},
-		&IncrementMetaRequest{
+		&hydraidego.IncrementMetaRequest{
 			SetUpdatedAt: true,
 			SetUpdatedBy: "test-suite",
 		},
@@ -624,12 +266,12 @@ func TestCreatedByUpdatedBy(t *testing.T) {
 		UpdatedBy: userID,
 	}
 
-	_, err := hydraidegoInterface.CatalogSave(ctx, swamp, item)
+	_, err := hydraidegoIface().CatalogSave(ctx, swamp, item)
 	assert.NoError(t, err)
 
 	// Read back and verify fields
 	var out CatalogItem
-	err = hydraidegoInterface.CatalogRead(ctx, swamp, key, &out)
+	err = hydraidegoIface().CatalogRead(ctx, swamp, key, &out)
 	assert.NoError(t, err)
 	assert.Equal(t, userID, out.CreatedBy)
 	assert.Equal(t, userID, out.UpdatedBy)
@@ -646,7 +288,7 @@ func TestIsDeletable(t *testing.T) {
 	// elmentünk egy swampba
 	swampName := name.New().Sanctuary("test").Realm("in").Swamp("IsDeletable")
 	defer func() {
-		if err := hydraidegoInterface.Destroy(context.Background(), swampName); err != nil {
+		if err := hydraidegoIface().Destroy(context.Background(), swampName); err != nil {
 			t.Logf("Cleanup failed: could not destroy swamp %s: %v", swampName.Get(), err)
 		}
 	}()
@@ -661,13 +303,13 @@ func TestIsDeletable(t *testing.T) {
 		DeletableField: "to-be-deleted",
 	}
 
-	if err := hydraidegoInterface.ProfileSave(ctx, swampName, treasure); err != nil {
+	if err := hydraidegoIface().ProfileSave(ctx, swampName, treasure); err != nil {
 		t.Fatalf("ProfileSave failed: %v", err)
 	}
 
 	// try to get the treasure bac after adding it
 	retrieved := &IsDeletableProfileTest{}
-	if err := hydraidegoInterface.ProfileRead(ctx, swampName, retrieved); err != nil {
+	if err := hydraidegoIface().ProfileRead(ctx, swampName, retrieved); err != nil {
 		t.Fatalf("ProfileRead failed: %v", err)
 	}
 
@@ -676,13 +318,13 @@ func TestIsDeletable(t *testing.T) {
 
 	// try to save again, but without the deletable field
 	treasure.DeletableField = ""
-	if err := hydraidegoInterface.ProfileSave(ctx, swampName, treasure); err != nil {
+	if err := hydraidegoIface().ProfileSave(ctx, swampName, treasure); err != nil {
 		t.Fatalf("ProfileSave (2nd) failed: %v", err)
 	}
 
 	// read back and verify the deletable field is removed
 	retrieved2 := &IsDeletableProfileTest{}
-	if err := hydraidegoInterface.ProfileRead(ctx, swampName, retrieved2); err != nil {
+	if err := hydraidegoIface().ProfileRead(ctx, swampName, retrieved2); err != nil {
 		t.Fatalf("ProfileRead (2nd) failed: %v", err)
 	}
 
@@ -695,7 +337,7 @@ func TestUint32SlicePush(t *testing.T) {
 
 	swampName := name.New().Sanctuary("test").Realm("in").Swamp("TestUint32SlicePush")
 	defer func() {
-		if err := hydraidegoInterface.Destroy(context.Background(), swampName); err != nil {
+		if err := hydraidegoIface().Destroy(context.Background(), swampName); err != nil {
 			t.Logf("Cleanup failed: could not destroy swamp %s: %v", swampName.Get(), err)
 		}
 	}()
@@ -704,19 +346,19 @@ func TestUint32SlicePush(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	testData := make([]*KeyValuesPair, 1)
-	testData[0] = &KeyValuesPair{
+	testData := make([]*hydraidego.KeyValuesPair, 1)
+	testData[0] = &hydraidego.KeyValuesPair{
 		Key:    "test-key",
 		Values: []uint32{1, 2, 3},
 	}
 
-	err := hydraidegoInterface.Uint32SlicePush(ctx, swampName, testData)
+	err := hydraidegoIface().Uint32SlicePush(ctx, swampName, testData)
 	if err != nil {
 		t.Fatalf("Uint32SlicePush failed: %v", err)
 	}
 
 	// try to get the treasure back after adding it
-	size, err := hydraidegoInterface.Uint32SliceSize(ctx, swampName, "test-key")
+	size, err := hydraidegoIface().Uint32SliceSize(ctx, swampName, "test-key")
 	assert.NoError(t, err)
 	assert.Equal(t, int64(3), size, "Slice size should be 3")
 
@@ -727,7 +369,7 @@ func TestUint32SlicePush(t *testing.T) {
 	}
 
 	response := &MyTest{}
-	err = hydraidegoInterface.CatalogRead(context.Background(), swampName, "test-key", response)
+	err = hydraidegoIface().CatalogRead(context.Background(), swampName, "test-key", response)
 	assert.NoError(t, err)
 	assert.Equal(t, []uint32{1, 2, 3}, response.Slice, "Slice content should match")
 
@@ -741,7 +383,7 @@ func TestCatalogReadMany_TimeFiltering(t *testing.T) {
 	// Setup: Create a unique Swamp for this test
 	swampName := name.New().Sanctuary("test").Realm("catalog").Swamp("time-filtering")
 	defer func() {
-		if err := hydraidegoInterface.Destroy(context.Background(), swampName); err != nil {
+		if err := hydraidegoIface().Destroy(context.Background(), swampName); err != nil {
 			t.Logf("cleanup warning: %v", err)
 		}
 	}()
@@ -770,7 +412,7 @@ func TestCatalogReadMany_TimeFiltering(t *testing.T) {
 
 	// Insert all treasures
 	for _, treasure := range treasures {
-		_, err := hydraidegoInterface.CatalogSave(ctx, swampName, treasure)
+		_, err := hydraidegoIface().CatalogSave(ctx, swampName, treasure)
 		require.NoError(t, err, "failed to save treasure: %s", treasure.Key)
 	}
 
@@ -837,9 +479,9 @@ func TestCatalogReadMany_TimeFiltering(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Create index with time filtering
-			index := &Index{
-				IndexType:  IndexCreationTime,
-				IndexOrder: IndexOrderAsc,
+			index := &hydraidego.Index{
+				IndexType:  hydraidego.IndexCreationTime,
+				IndexOrder: hydraidego.IndexOrderAsc,
 				From:       0,
 				Limit:      0, // Get all
 				FromTime:   tc.fromTime,
@@ -848,7 +490,7 @@ func TestCatalogReadMany_TimeFiltering(t *testing.T) {
 
 			// Collect results using the iterator
 			var collectedKeys []string
-			err := hydraidegoInterface.CatalogReadMany(
+			err := hydraidegoIface().CatalogReadMany(
 				ctx,
 				swampName,
 				index,
@@ -875,7 +517,7 @@ func TestCatalogReadMany_OrderAndPagination(t *testing.T) {
 
 	swampName := name.New().Sanctuary("test").Realm("catalog").Swamp("order-pagination")
 	defer func() {
-		if err := hydraidegoInterface.Destroy(context.Background(), swampName); err != nil {
+		if err := hydraidegoIface().Destroy(context.Background(), swampName); err != nil {
 			t.Logf("cleanup warning: %v", err)
 		}
 	}()
@@ -896,7 +538,7 @@ func TestCatalogReadMany_OrderAndPagination(t *testing.T) {
 			Value:     i + 1,
 			CreatedAt: baseTime.Add(-time.Duration(i+1) * time.Hour),
 		}
-		_, err := hydraidegoInterface.CatalogSave(ctx, swampName, treasure)
+		_, err := hydraidegoIface().CatalogSave(ctx, swampName, treasure)
 		require.NoError(t, err)
 	}
 
@@ -904,42 +546,42 @@ func TestCatalogReadMany_OrderAndPagination(t *testing.T) {
 
 	testCases := []struct {
 		name         string
-		order        IndexOrder
+		order        hydraidego.IndexOrder
 		from         int32
 		limit        int32
 		expectedKeys []string
 	}{
 		{
 			name:         "Ascending order - all",
-			order:        IndexOrderDesc,
+			order:        hydraidego.IndexOrderDesc,
 			from:         0,
 			limit:        0,
 			expectedKeys: []string{"item-1", "item-2", "item-3", "item-4", "item-5"},
 		},
 		{
 			name:         "Descending order - all",
-			order:        IndexOrderAsc,
+			order:        hydraidego.IndexOrderAsc,
 			from:         0,
 			limit:        0,
 			expectedKeys: []string{"item-5", "item-4", "item-3", "item-2", "item-1"},
 		},
 		{
 			name:         "Ascending with offset",
-			order:        IndexOrderDesc,
+			order:        hydraidego.IndexOrderDesc,
 			from:         2,
 			limit:        0,
 			expectedKeys: []string{"item-3", "item-4", "item-5"},
 		},
 		{
 			name:         "Ascending with limit",
-			order:        IndexOrderDesc,
+			order:        hydraidego.IndexOrderDesc,
 			from:         0,
 			limit:        3,
 			expectedKeys: []string{"item-1", "item-2", "item-3"},
 		},
 		{
 			name:         "Ascending with offset and limit",
-			order:        IndexOrderDesc,
+			order:        hydraidego.IndexOrderDesc,
 			from:         1,
 			limit:        2,
 			expectedKeys: []string{"item-2", "item-3"},
@@ -949,15 +591,15 @@ func TestCatalogReadMany_OrderAndPagination(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 
-			index := &Index{
-				IndexType:  IndexCreationTime,
+			index := &hydraidego.Index{
+				IndexType:  hydraidego.IndexCreationTime,
 				IndexOrder: tc.order,
 				From:       tc.from,
 				Limit:      tc.limit,
 			}
 
 			var collectedKeys []string
-			err := hydraidegoInterface.CatalogReadMany(
+			err := hydraidegoIface().CatalogReadMany(
 				ctx,
 				swampName,
 				index,
@@ -987,7 +629,7 @@ func TestCatalogReadBatch(t *testing.T) {
 	// Setup: Create a unique Swamp for this test
 	swampName := name.New().Sanctuary("test").Realm("catalog").Swamp("batch-read")
 	defer func() {
-		if err := hydraidegoInterface.Destroy(context.Background(), swampName); err != nil {
+		if err := hydraidegoIface().Destroy(context.Background(), swampName); err != nil {
 			t.Logf("cleanup warning: %v", err)
 		}
 	}()
@@ -1010,7 +652,7 @@ func TestCatalogReadBatch(t *testing.T) {
 				Value:     fmt.Sprintf("batch-value-%d", i),
 				CreatedAt: time.Now().UTC(),
 			}
-			_, err := hydraidegoInterface.CatalogSave(ctx, swampName, treasure)
+			_, err := hydraidegoIface().CatalogSave(ctx, swampName, treasure)
 			require.NoError(t, err, "failed to save treasure: %s", treasure.Key)
 		}
 		time.Sleep(100 * time.Millisecond) // Ensure writes are committed
@@ -1024,7 +666,7 @@ func TestCatalogReadBatch(t *testing.T) {
 		}
 
 		var collected []*BatchTreasure
-		err := hydraidegoInterface.CatalogReadBatch(
+		err := hydraidegoIface().CatalogReadBatch(
 			ctx,
 			swampName,
 			keys,
@@ -1055,7 +697,7 @@ func TestCatalogReadBatch(t *testing.T) {
 		keys := []string{"batch-key-2", "batch-key-5", "batch-key-8"}
 
 		var collected []*BatchTreasure
-		err := hydraidegoInterface.CatalogReadBatch(
+		err := hydraidegoIface().CatalogReadBatch(
 			ctx,
 			swampName,
 			keys,
@@ -1089,7 +731,7 @@ func TestCatalogReadBatch(t *testing.T) {
 		}
 
 		var collected []*BatchTreasure
-		err := hydraidegoInterface.CatalogReadBatch(
+		err := hydraidegoIface().CatalogReadBatch(
 			ctx,
 			swampName,
 			keys,
@@ -1118,7 +760,7 @@ func TestCatalogReadBatch(t *testing.T) {
 		keys := []string{}
 
 		var collected []*BatchTreasure
-		err := hydraidegoInterface.CatalogReadBatch(
+		err := hydraidegoIface().CatalogReadBatch(
 			ctx,
 			swampName,
 			keys,
@@ -1139,7 +781,7 @@ func TestCatalogReadBatch(t *testing.T) {
 		keys := []string{"non-existent-1", "non-existent-2", "non-existent-3"}
 
 		var collected []*BatchTreasure
-		err := hydraidegoInterface.CatalogReadBatch(
+		err := hydraidegoIface().CatalogReadBatch(
 			ctx,
 			swampName,
 			keys,
@@ -1162,7 +804,7 @@ func TestCatalogReadBatch(t *testing.T) {
 		expectedErr := fmt.Errorf("iterator intentional error")
 		callCount := 0
 
-		err := hydraidegoInterface.CatalogReadBatch(
+		err := hydraidegoIface().CatalogReadBatch(
 			ctx,
 			swampName,
 			keys,
@@ -1185,7 +827,7 @@ func TestCatalogReadBatch(t *testing.T) {
 	t.Run("Nil iterator validation", func(t *testing.T) {
 		keys := []string{"batch-key-1"}
 
-		err := hydraidegoInterface.CatalogReadBatch(
+		err := hydraidegoIface().CatalogReadBatch(
 			ctx,
 			swampName,
 			keys,
@@ -1201,7 +843,7 @@ func TestCatalogReadBatch(t *testing.T) {
 	t.Run("Pointer model validation", func(t *testing.T) {
 		keys := []string{"batch-key-1"}
 
-		err := hydraidegoInterface.CatalogReadBatch(
+		err := hydraidegoIface().CatalogReadBatch(
 			ctx,
 			swampName,
 			keys,
@@ -1218,7 +860,7 @@ func TestCatalogReadBatch(t *testing.T) {
 		// Create 100 more treasures for this test
 		largeSwampName := name.New().Sanctuary("test").Realm("catalog").Swamp("large-batch")
 		defer func() {
-			if err := hydraidegoInterface.Destroy(context.Background(), largeSwampName); err != nil {
+			if err := hydraidegoIface().Destroy(context.Background(), largeSwampName); err != nil {
 				t.Logf("cleanup warning: %v", err)
 			}
 		}()
@@ -1230,7 +872,7 @@ func TestCatalogReadBatch(t *testing.T) {
 				Value:     fmt.Sprintf("large-value-%d", i),
 				CreatedAt: time.Now().UTC(),
 			}
-			_, err := hydraidegoInterface.CatalogSave(ctx, largeSwampName, treasure)
+			_, err := hydraidegoIface().CatalogSave(ctx, largeSwampName, treasure)
 			require.NoError(t, err)
 		}
 		time.Sleep(200 * time.Millisecond)
@@ -1244,7 +886,7 @@ func TestCatalogReadBatch(t *testing.T) {
 		// Read all in one batch
 		var collected []*BatchTreasure
 		startTime := time.Now()
-		err := hydraidegoInterface.CatalogReadBatch(
+		err := hydraidegoIface().CatalogReadBatch(
 			ctx,
 			largeSwampName,
 			keys,
@@ -1263,172 +905,6 @@ func TestCatalogReadBatch(t *testing.T) {
 	})
 }
 
-type conversionTestCase struct {
-	name     string
-	input    any
-	expected any
-}
-
-func convertKeyValuePairToTreasure(kv *hydraidepbgo.KeyValuePair) *hydraidepbgo.Treasure {
-	return &hydraidepbgo.Treasure{
-		Key:        kv.Key,
-		IsExist:    true,
-		StringVal:  kv.StringVal,
-		Uint8Val:   kv.Uint8Val,
-		Uint16Val:  kv.Uint16Val,
-		Uint32Val:  kv.Uint32Val,
-		Uint64Val:  kv.Uint64Val,
-		Int8Val:    kv.Int8Val,
-		Int16Val:   kv.Int16Val,
-		Int32Val:   kv.Int32Val,
-		Int64Val:   kv.Int64Val,
-		Float32Val: kv.Float32Val,
-		Float64Val: kv.Float64Val,
-		BoolVal:    kv.BoolVal,
-		BytesVal:   kv.BytesVal,
-		ExpiredAt:  kv.ExpiredAt,
-		CreatedBy:  kv.CreatedBy,
-		CreatedAt:  kv.CreatedAt,
-		UpdatedBy:  kv.UpdatedBy,
-		UpdatedAt:  kv.UpdatedAt,
-	}
-}
-
-func TestHydraideTypeConversions(t *testing.T) {
-
-	type StructX struct {
-		Field string
-	}
-
-	testCases := []conversionTestCase{
-		{
-			name: "string value",
-			input: &struct {
-				Key   string `hydraide:"key"`
-				Value string `hydraide:"value"`
-			}{"str-key", "hello"},
-			expected: struct {
-				Key   string `hydraide:"key"`
-				Value string `hydraide:"value"`
-			}{"str-key", "hello"},
-		},
-		{
-			name: "int64 value",
-			input: &struct {
-				Key   string `hydraide:"key"`
-				Value int64  `hydraide:"value"`
-			}{"int64-key", 123456789},
-			expected: struct {
-				Key   string `hydraide:"key"`
-				Value int64  `hydraide:"value"`
-			}{"int64-key", 123456789},
-		},
-		{
-			name: "bool value",
-			input: &struct {
-				Key   string `hydraide:"key"`
-				Value bool   `hydraide:"value"`
-			}{"bool-key", true},
-			expected: struct {
-				Key   string `hydraide:"key"`
-				Value bool   `hydraide:"value"`
-			}{"bool-key", true},
-		},
-		{
-			name: "[]string slice",
-			input: &struct {
-				Key   string   `hydraide:"key"`
-				Value []string `hydraide:"value"`
-			}{"slice-key", []string{"a", "b"}},
-			expected: struct {
-				Key   string   `hydraide:"key"`
-				Value []string `hydraide:"value"`
-			}{"slice-key", []string{"a", "b"}},
-		},
-		{
-			name: "map[string]int",
-			input: &struct {
-				Key   string         `hydraide:"key"`
-				Value map[string]int `hydraide:"value"`
-			}{"map-key", map[string]int{"a": 1, "b": 2}},
-			expected: struct {
-				Key   string         `hydraide:"key"`
-				Value map[string]int `hydraide:"value"`
-			}{"map-key", map[string]int{"a": 1, "b": 2}},
-		},
-		{
-			name: "float64 value",
-			input: &struct {
-				Key   string  `hydraide:"key"`
-				Value float64 `hydraide:"value"`
-			}{"float64-key", 3.1415},
-			expected: struct {
-				Key   string  `hydraide:"key"`
-				Value float64 `hydraide:"value"`
-			}{"float64-key", 3.1415},
-		},
-		{
-			name: "[]int64 slice",
-			input: &struct {
-				Key   string  `hydraide:"key"`
-				Value []int64 `hydraide:"value"`
-			}{"slice-int64-key", []int64{100, 200}},
-			expected: struct {
-				Key   string  `hydraide:"key"`
-				Value []int64 `hydraide:"value"`
-			}{"slice-int64-key", []int64{100, 200}},
-		},
-		{
-			name: "[]byte value",
-			input: &struct {
-				Key   string `hydraide:"key"`
-				Value []byte `hydraide:"value"`
-			}{"byte-key", []byte("hello")},
-			expected: struct {
-				Key   string `hydraide:"key"`
-				Value []byte `hydraide:"value"`
-			}{"byte-key", []byte("hello")},
-		},
-		{
-			name: "time.Time as value",
-			input: &struct {
-				Key   string    `hydraide:"key"`
-				Value time.Time `hydraide:"value"`
-			}{"time-key", time.Unix(1700000000, 0).UTC()},
-			expected: struct {
-				Key   string    `hydraide:"key"`
-				Value time.Time `hydraide:"value"`
-			}{"time-key", time.Unix(1700000000, 0).UTC()},
-		},
-		{
-			name: "pointer to struct",
-			input: &struct {
-				Key   string   `hydraide:"key"`
-				Value *StructX `hydraide:"value"`
-			}{"ptr-key", &StructX{Field: "val"}},
-			expected: struct {
-				Key   string   `hydraide:"key"`
-				Value *StructX `hydraide:"value"`
-			}{"ptr-key", &StructX{Field: "val"}},
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			kv, err := convertCatalogModelToKeyValuePair(tc.input, EncodingGOB)
-			require.NoError(t, err)
-
-			treasure := convertKeyValuePairToTreasure(kv)
-
-			restored := reflect.New(reflect.TypeOf(tc.expected)).Interface()
-			err = convertProtoTreasureToCatalogModel(treasure, restored)
-			require.NoError(t, err)
-
-			require.Equal(t, tc.expected, reflect.ValueOf(restored).Elem().Interface())
-		})
-	}
-}
-
 // TestOmitEmptyFieldsE2E tests the real behavior of omitempty fields with the server
 // This test validates that:
 // 1. Creating data without updatedAt, updatedBy, and expiredAt works correctly (omitempty)
@@ -1445,14 +921,14 @@ func TestOmitEmptyFieldsE2E(t *testing.T) {
 		Swamp(fmt.Sprintf("test-omit-%d", time.Now().UnixNano()))
 
 	// Register the swamp
-	err := hydraidegoInterface.RegisterSwamp(ctx, &RegisterSwampRequest{
+	err := hydraidegoIface().RegisterSwamp(ctx, &hydraidego.RegisterSwampRequest{
 		SwampPattern: swampName,
 	})
 	require.Empty(t, err, "Failed to register swamp")
 
 	// Clean up
 	defer func() {
-		if destroyErr := hydraidegoInterface.Destroy(ctx, swampName); destroyErr != nil {
+		if destroyErr := hydraidegoIface().Destroy(ctx, swampName); destroyErr != nil {
 			t.Logf("Failed to destroy swamp: %v", destroyErr)
 		}
 	}()
@@ -1474,14 +950,14 @@ func TestOmitEmptyFieldsE2E(t *testing.T) {
 			// UpdatedAt, UpdatedBy, ExpiredAt are intentionally not set (zero values)
 		}
 
-		err := hydraidegoInterface.CatalogCreate(ctx, swampName, initialData)
+		err := hydraidegoIface().CatalogCreate(ctx, swampName, initialData)
 		require.NoError(t, err, "Failed to create data without omitempty fields")
 	})
 
 	// Step 2: Read data and verify that updatedAt, updatedBy, and expiredAt are empty
 	t.Run("Step2_ReadAndVerifyEmptyFields", func(t *testing.T) {
 		readData := &TestModel{}
-		err := hydraidegoInterface.CatalogRead(ctx, swampName, "test-key-1", readData)
+		err := hydraidegoIface().CatalogRead(ctx, swampName, "test-key-1", readData)
 		require.NoError(t, err, "Failed to read data")
 
 		assert.Equal(t, "test-key-1", readData.Key, "Key should match")
@@ -1504,14 +980,14 @@ func TestOmitEmptyFieldsE2E(t *testing.T) {
 			ExpiredAt: futureTime,
 		}
 
-		err := hydraidegoInterface.CatalogUpdate(ctx, swampName, updateData)
+		err := hydraidegoIface().CatalogUpdate(ctx, swampName, updateData)
 		require.NoError(t, err, "Failed to update data with omitempty fields")
 	})
 
 	// Step 4: Read data and verify that updatedAt, updatedBy, and expiredAt are now populated
 	t.Run("Step4_ReadAndVerifyPopulatedFields", func(t *testing.T) {
 		readData := &TestModel{}
-		err := hydraidegoInterface.CatalogRead(ctx, swampName, "test-key-1", readData)
+		err := hydraidegoIface().CatalogRead(ctx, swampName, "test-key-1", readData)
 		require.NoError(t, err, "Failed to read updated data")
 
 		assert.Equal(t, "test-key-1", readData.Key, "Key should match")
@@ -1538,12 +1014,12 @@ func TestOmitEmptyFieldsE2E(t *testing.T) {
 			ExpiredAt: futureTime,
 		}
 
-		err := hydraidegoInterface.CatalogCreate(ctx, swampName, fullData)
+		err := hydraidegoIface().CatalogCreate(ctx, swampName, fullData)
 		require.NoError(t, err, "Failed to create data with all fields populated")
 
 		// Read back and verify
 		readData := &TestModel{}
-		err = hydraidegoInterface.CatalogRead(ctx, swampName, "test-key-2", readData)
+		err = hydraidegoIface().CatalogRead(ctx, swampName, "test-key-2", readData)
 		require.NoError(t, err, "Failed to read fully populated data")
 
 		assert.Equal(t, "test-key-2", readData.Key, "Key should match")
@@ -1569,7 +1045,7 @@ func TestCatalogSaveWithOmitEmptyRealWorldScenario(t *testing.T) {
 
 	// Clean up
 	defer func() {
-		if destroyErr := hydraidegoInterface.Destroy(ctx, swampName); destroyErr != nil {
+		if destroyErr := hydraidegoIface().Destroy(ctx, swampName); destroyErr != nil {
 			t.Logf("Failed to destroy swamp: %v", destroyErr)
 		}
 	}()
@@ -1605,7 +1081,7 @@ func TestCatalogSaveWithOmitEmptyRealWorldScenario(t *testing.T) {
 			// UpdatedAt and UpdatedBy are intentionally NOT set (zero values)
 		}
 
-		_, err := hydraidegoInterface.CatalogSave(ctx, swampName, testModel)
+		_, err := hydraidegoIface().CatalogSave(ctx, swampName, testModel)
 		require.NoError(t, err, "Initial save should succeed")
 	})
 
@@ -1615,7 +1091,7 @@ func TestCatalogSaveWithOmitEmptyRealWorldScenario(t *testing.T) {
 			EmailID: "test-email-1",
 		}
 
-		err := hydraidegoInterface.CatalogRead(ctx, swampName, "test-email-1", loadedModel)
+		err := hydraidegoIface().CatalogRead(ctx, swampName, "test-email-1", loadedModel)
 		require.NoError(t, err, "Load should succeed")
 
 		// Verify initial state
@@ -1632,7 +1108,7 @@ func TestCatalogSaveWithOmitEmptyRealWorldScenario(t *testing.T) {
 		loadedModel := &TestCatalog{
 			EmailID: "test-email-1",
 		}
-		err := hydraidegoInterface.CatalogRead(ctx, swampName, "test-email-1", loadedModel)
+		err := hydraidegoIface().CatalogRead(ctx, swampName, "test-email-1", loadedModel)
 		require.NoError(t, err)
 
 		// Modify the model
@@ -1643,7 +1119,7 @@ func TestCatalogSaveWithOmitEmptyRealWorldScenario(t *testing.T) {
 		loadedModel.UpdatedBy = "unittest-updater"
 
 		// Save using CatalogSave (like user does)
-		_, err = hydraidegoInterface.CatalogSave(ctx, swampName, loadedModel)
+		_, err = hydraidegoIface().CatalogSave(ctx, swampName, loadedModel)
 		require.NoError(t, err, "Save with UpdatedAt/UpdatedBy should succeed")
 	})
 
@@ -1653,7 +1129,7 @@ func TestCatalogSaveWithOmitEmptyRealWorldScenario(t *testing.T) {
 			EmailID: "test-email-1",
 		}
 
-		err := hydraidegoInterface.CatalogRead(ctx, swampName, "test-email-1", reloadedModel)
+		err := hydraidegoIface().CatalogRead(ctx, swampName, "test-email-1", reloadedModel)
 		require.NoError(t, err, "Reload should succeed")
 
 		// Verify updated fields
@@ -1707,7 +1183,7 @@ func TestProfileReadBatch(t *testing.T) {
 				LastLoginTime: time.Now().UTC(),
 			}
 
-			err := hydraidegoInterface.ProfileSave(ctx, swampName, profile)
+			err := hydraidegoIface().ProfileSave(ctx, swampName, profile)
 			require.NoError(t, err, "ProfileSave should succeed for %s", p.username)
 		}
 	})
@@ -1725,7 +1201,7 @@ func TestProfileReadBatch(t *testing.T) {
 		var results []*UserProfile
 		var callCount int
 
-		err := hydraidegoInterface.ProfileReadBatch(ctx, swampNames, &UserProfile{}, func(swampName name.Name, model any, err error) error {
+		err := hydraidegoIface().ProfileReadBatch(ctx, swampNames, &UserProfile{}, func(swampName name.Name, model any, err error) error {
 			callCount++
 			require.NoError(t, err, "ProfileReadBatch should not return error for swamp: %s", swampName.Get())
 
@@ -1772,7 +1248,7 @@ func TestProfileReadBatch(t *testing.T) {
 		var successCount int
 		var errorCount int
 
-		err := hydraidegoInterface.ProfileReadBatch(ctx, swampNames, &UserProfile{}, func(swampName name.Name, model any, err error) error {
+		err := hydraidegoIface().ProfileReadBatch(ctx, swampNames, &UserProfile{}, func(swampName name.Name, model any, err error) error {
 			if err != nil {
 				errorCount++
 				assert.Contains(t, swampName.Get(), "user-nonexistent", "Error should be for non-existent swamp")
@@ -1792,7 +1268,7 @@ func TestProfileReadBatch(t *testing.T) {
 		var swampNames []name.Name
 		var callCount int
 
-		err := hydraidegoInterface.ProfileReadBatch(ctx, swampNames, &UserProfile{}, func(swampName name.Name, model any, err error) error {
+		err := hydraidegoIface().ProfileReadBatch(ctx, swampNames, &UserProfile{}, func(swampName name.Name, model any, err error) error {
 			callCount++
 			return nil
 		})
@@ -1807,7 +1283,7 @@ func TestProfileReadBatch(t *testing.T) {
 		swampIDs := []string{"user-alice", "user-bob", "user-charlie", "user-diana", "user-eve"}
 		for _, swampID := range swampIDs {
 			swampName := name.New().Sanctuary("unittest-profiles").Realm("batch-test").Swamp(swampID)
-			err := hydraidegoInterface.Destroy(ctx, swampName)
+			err := hydraidegoIface().Destroy(ctx, swampName)
 			assert.NoError(t, err, "Destroy should succeed for %s", swampID)
 		}
 	})
@@ -1848,7 +1324,7 @@ func TestProfileSaveBatch(t *testing.T) {
 		var successCount int
 		var errorCount int
 
-		err := hydraidegoInterface.ProfileSaveBatch(ctx, swampNames, profiles, func(swampName name.Name, err error) error {
+		err := hydraidegoIface().ProfileSaveBatch(ctx, swampNames, profiles, func(swampName name.Name, err error) error {
 			if err != nil {
 				errorCount++
 				t.Logf("❌ Failed to save %s: %v", swampName.Get(), err)
@@ -1875,7 +1351,7 @@ func TestProfileSaveBatch(t *testing.T) {
 
 		var results []*UserProfile
 
-		err := hydraidegoInterface.ProfileReadBatch(ctx, swampNames, &UserProfile{}, func(swampName name.Name, model any, err error) error {
+		err := hydraidegoIface().ProfileReadBatch(ctx, swampNames, &UserProfile{}, func(swampName name.Name, model any, err error) error {
 			require.NoError(t, err, "ProfileReadBatch should not return error for swamp: %s", swampName.Get())
 			profile := model.(*UserProfile)
 			results = append(results, profile)
@@ -1924,7 +1400,7 @@ func TestProfileSaveBatch(t *testing.T) {
 
 		var successCount int
 
-		err := hydraidegoInterface.ProfileSaveBatch(ctx, swampNames, profiles, func(swampName name.Name, err error) error {
+		err := hydraidegoIface().ProfileSaveBatch(ctx, swampNames, profiles, func(swampName name.Name, err error) error {
 			require.NoError(t, err, "Should save successfully for %s", swampName.Get())
 			successCount++
 			return nil
@@ -1935,7 +1411,7 @@ func TestProfileSaveBatch(t *testing.T) {
 
 		// Verify updates
 		var results []*UserProfile
-		err = hydraidegoInterface.ProfileReadBatch(ctx, swampNames, &UserProfile{}, func(swampName name.Name, model any, err error) error {
+		err = hydraidegoIface().ProfileReadBatch(ctx, swampNames, &UserProfile{}, func(swampName name.Name, model any, err error) error {
 			require.NoError(t, err)
 			results = append(results, model.(*UserProfile))
 			return nil
@@ -1970,7 +1446,7 @@ func TestProfileSaveBatch(t *testing.T) {
 			&UserProfile{Username: "alice", Email: "alice@test.com", Age: 25, IsActive: true, LastLoginTime: time.Now().UTC()},
 		}
 
-		err := hydraidegoInterface.ProfileSaveBatch(ctx, swampNames, profiles, func(swampName name.Name, err error) error {
+		err := hydraidegoIface().ProfileSaveBatch(ctx, swampNames, profiles, func(swampName name.Name, err error) error {
 			return nil
 		})
 
@@ -1983,7 +1459,7 @@ func TestProfileSaveBatch(t *testing.T) {
 		var swampNames []name.Name
 		var profiles []any
 
-		err := hydraidegoInterface.ProfileSaveBatch(ctx, swampNames, profiles, func(swampName name.Name, err error) error {
+		err := hydraidegoIface().ProfileSaveBatch(ctx, swampNames, profiles, func(swampName name.Name, err error) error {
 			return nil
 		})
 
@@ -1995,7 +1471,7 @@ func TestProfileSaveBatch(t *testing.T) {
 		swampIDs := []string{"user-alice", "user-bob", "user-charlie", "user-diana", "user-eve"}
 		for _, swampID := range swampIDs {
 			swampName := name.New().Sanctuary("unittest-profiles").Realm("batch-save-test").Swamp(swampID)
-			err := hydraidegoInterface.Destroy(ctx, swampName)
+			err := hydraidegoIface().Destroy(ctx, swampName)
 			assert.NoError(t, err, "Destroy should succeed for %s", swampID)
 		}
 	})
@@ -2006,7 +1482,7 @@ func TestCatalogShiftBatch(t *testing.T) {
 	// Setup: Create a unique Swamp for this test
 	swampName := name.New().Sanctuary("test").Realm("catalog").Swamp("batch-shift")
 	defer func() {
-		if err := hydraidegoInterface.Destroy(context.Background(), swampName); err != nil {
+		if err := hydraidegoIface().Destroy(context.Background(), swampName); err != nil {
 			t.Logf("cleanup warning: %v", err)
 		}
 	}()
@@ -2033,7 +1509,7 @@ func TestCatalogShiftBatch(t *testing.T) {
 				CreatedAt: time.Now().UTC(),
 				CreatedBy: "test-user",
 			}
-			_, err := hydraidegoInterface.CatalogSave(ctx, swampName, treasure)
+			_, err := hydraidegoIface().CatalogSave(ctx, swampName, treasure)
 			require.NoError(t, err, "failed to save treasure: %s", treasure.Key)
 		}
 		time.Sleep(100 * time.Millisecond) // Ensure writes are committed
@@ -2044,7 +1520,7 @@ func TestCatalogShiftBatch(t *testing.T) {
 		keys := []string{"shift-key-1", "shift-key-3", "shift-key-5", "shift-key-7"}
 
 		var shifted []*ShiftTreasure
-		err := hydraidegoInterface.CatalogShiftBatch(
+		err := hydraidegoIface().CatalogShiftBatch(
 			ctx,
 			swampName,
 			keys,
@@ -2073,7 +1549,7 @@ func TestCatalogShiftBatch(t *testing.T) {
 
 		// Verify shifted treasures are deleted from swamp
 		var stillExists []*ShiftTreasure
-		err = hydraidegoInterface.CatalogReadBatch(
+		err = hydraidegoIface().CatalogReadBatch(
 			ctx,
 			swampName,
 			keys,
@@ -2090,7 +1566,7 @@ func TestCatalogShiftBatch(t *testing.T) {
 		// Verify other treasures still exist
 		remainingKeys := []string{"shift-key-2", "shift-key-4", "shift-key-6"}
 		var remaining []*ShiftTreasure
-		err = hydraidegoInterface.CatalogReadBatch(
+		err = hydraidegoIface().CatalogReadBatch(
 			ctx,
 			swampName,
 			remainingKeys,
@@ -2116,7 +1592,7 @@ func TestCatalogShiftBatch(t *testing.T) {
 		}
 
 		var shifted []*ShiftTreasure
-		err := hydraidegoInterface.CatalogShiftBatch(
+		err := hydraidegoIface().CatalogShiftBatch(
 			ctx,
 			swampName,
 			keys,
@@ -2141,7 +1617,7 @@ func TestCatalogShiftBatch(t *testing.T) {
 
 		// Verify all shifted treasures are deleted
 		var stillExists []*ShiftTreasure
-		err = hydraidegoInterface.CatalogReadBatch(
+		err = hydraidegoIface().CatalogReadBatch(
 			ctx,
 			swampName,
 			expectedKeys,
@@ -2161,7 +1637,7 @@ func TestCatalogShiftBatch(t *testing.T) {
 		keys := []string{}
 
 		var shifted []*ShiftTreasure
-		err := hydraidegoInterface.CatalogShiftBatch(
+		err := hydraidegoIface().CatalogShiftBatch(
 			ctx,
 			swampName,
 			keys,
@@ -2182,7 +1658,7 @@ func TestCatalogShiftBatch(t *testing.T) {
 		keys := []string{"non-existent-1", "non-existent-2", "non-existent-3"}
 
 		var shifted []*ShiftTreasure
-		err := hydraidegoInterface.CatalogShiftBatch(
+		err := hydraidegoIface().CatalogShiftBatch(
 			ctx,
 			swampName,
 			keys,
@@ -2208,7 +1684,7 @@ func TestCatalogShiftBatch(t *testing.T) {
 				CreatedAt: time.Now().UTC(),
 				CreatedBy: "test-user",
 			}
-			_, err := hydraidegoInterface.CatalogSave(ctx, swampName, treasure)
+			_, err := hydraidegoIface().CatalogSave(ctx, swampName, treasure)
 			require.NoError(t, err)
 		}
 		time.Sleep(100 * time.Millisecond)
@@ -2218,7 +1694,7 @@ func TestCatalogShiftBatch(t *testing.T) {
 		expectedErr := fmt.Errorf("iterator intentional error")
 		callCount := 0
 
-		err := hydraidegoInterface.CatalogShiftBatch(
+		err := hydraidegoIface().CatalogShiftBatch(
 			ctx,
 			swampName,
 			keys,
@@ -2244,7 +1720,7 @@ func TestCatalogShiftBatch(t *testing.T) {
 	t.Run("Nil iterator validation", func(t *testing.T) {
 		keys := []string{"shift-key-8"}
 
-		err := hydraidegoInterface.CatalogShiftBatch(
+		err := hydraidegoIface().CatalogShiftBatch(
 			ctx,
 			swampName,
 			keys,
@@ -2260,7 +1736,7 @@ func TestCatalogShiftBatch(t *testing.T) {
 	t.Run("Pointer model validation", func(t *testing.T) {
 		keys := []string{"shift-key-8"}
 
-		err := hydraidegoInterface.CatalogShiftBatch(
+		err := hydraidegoIface().CatalogShiftBatch(
 			ctx,
 			swampName,
 			keys,
@@ -2296,7 +1772,7 @@ func TestCatalogShiftBatch(t *testing.T) {
 
 		// Save original data
 		for _, treasure := range originalTreasures {
-			_, err := hydraidegoInterface.CatalogSave(ctx, swampName, treasure)
+			_, err := hydraidegoIface().CatalogSave(ctx, swampName, treasure)
 			require.NoError(t, err)
 		}
 		time.Sleep(100 * time.Millisecond)
@@ -2304,7 +1780,7 @@ func TestCatalogShiftBatch(t *testing.T) {
 		// Shift treasures
 		keys := []string{"data-integrity-1", "data-integrity-2"}
 		var shifted []*ShiftTreasure
-		err := hydraidegoInterface.CatalogShiftBatch(
+		err := hydraidegoIface().CatalogShiftBatch(
 			ctx,
 			swampName,
 			keys,
@@ -2347,7 +1823,7 @@ func TestCatalogShiftBatch(t *testing.T) {
 				CreatedAt: time.Now().UTC(),
 				CreatedBy: "concurrent-test",
 			}
-			_, err := hydraidegoInterface.CatalogSave(ctx, swampName, treasure)
+			_, err := hydraidegoIface().CatalogSave(ctx, swampName, treasure)
 			require.NoError(t, err)
 		}
 		time.Sleep(100 * time.Millisecond)
@@ -2355,7 +1831,7 @@ func TestCatalogShiftBatch(t *testing.T) {
 		// Shift first batch
 		firstBatch := []string{"concurrent-key-30", "concurrent-key-31", "concurrent-key-32"}
 		var firstShifted []*ShiftTreasure
-		err := hydraidegoInterface.CatalogShiftBatch(
+		err := hydraidegoIface().CatalogShiftBatch(
 			ctx,
 			swampName,
 			firstBatch,
@@ -2371,7 +1847,7 @@ func TestCatalogShiftBatch(t *testing.T) {
 
 		// Try to shift the same keys again - should get nothing
 		var secondShifted []*ShiftTreasure
-		err = hydraidegoInterface.CatalogShiftBatch(
+		err = hydraidegoIface().CatalogShiftBatch(
 			ctx,
 			swampName,
 			firstBatch, // same keys as before
@@ -2388,7 +1864,7 @@ func TestCatalogShiftBatch(t *testing.T) {
 		// Shift remaining keys
 		remainingBatch := []string{"concurrent-key-33", "concurrent-key-34", "concurrent-key-35"}
 		var remainingShifted []*ShiftTreasure
-		err = hydraidegoInterface.CatalogShiftBatch(
+		err = hydraidegoIface().CatalogShiftBatch(
 			ctx,
 			swampName,
 			remainingBatch,

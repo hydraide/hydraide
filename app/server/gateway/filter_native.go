@@ -3,7 +3,7 @@ package gateway
 import (
 	"sort"
 
-	hydrapb "github.com/hydraide/hydraide/generated/hydraidepbgo"
+	hydrapb "github.com/hydraide/hydraide/sdk/go/hydraidego/hydraidepbgo"
 	"github.com/hydraide/hydraide/app/core/hydra/swamp/treasure"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )

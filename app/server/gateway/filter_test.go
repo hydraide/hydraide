@@ -7,7 +7,7 @@ import (
 
 	"github.com/hydraide/hydraide/app/core/hydra/swamp/treasure"
 	"github.com/hydraide/hydraide/app/core/hydra/swamp/treasure/guard"
-	hydrapb "github.com/hydraide/hydraide/generated/hydraidepbgo"
+	hydrapb "github.com/hydraide/hydraide/sdk/go/hydraidego/hydraidepbgo"
 	"github.com/vmihailenco/msgpack/v5"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )

@@ -2,7 +2,11 @@ module github.com/hydraide/hydraide
 
 go 1.26.2
 
+replace github.com/hydraide/hydraide/sdk/go/hydraidego => ./sdk/go/hydraidego
+
 require (
+	github.com/hydraide/hydraide/sdk/go/hydraidego v0.0.0-00010101000000-000000000000
+
 	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/charmbracelet/bubbles v1.0.0

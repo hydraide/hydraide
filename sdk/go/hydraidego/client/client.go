@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hydraide/hydraide/generated/hydraidepbgo"
+	"github.com/hydraide/hydraide/sdk/go/hydraidego/hydraidepbgo"
 	"github.com/hydraide/hydraide/sdk/go/hydraidego/name"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"

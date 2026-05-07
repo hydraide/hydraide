@@ -33,7 +33,7 @@ cmake-build-*/
 *.out
 
 # Go modules
-go.work
+# go.work is committed (multi-module monorepo: SDK + parent share one workspace).
 go.work.sum
 
 # ---- Dependency directories ----

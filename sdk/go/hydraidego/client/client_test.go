@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/hydraide/hydraide/generated/hydraidepbgo"
+	"github.com/hydraide/hydraide/sdk/go/hydraidego/hydraidepbgo"
 	"github.com/hydraide/hydraide/sdk/go/hydraidego/name"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	hydrapb "github.com/hydraide/hydraide/generated/hydraidepbgo"
+	hydrapb "github.com/hydraide/hydraide/sdk/go/hydraidego/hydraidepbgo"
 	"github.com/vmihailenco/msgpack/v5"
 )
 

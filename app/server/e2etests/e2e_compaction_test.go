@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/hydraide/hydraide/app/core/hydra/swamp/chronicler/v2"
-	"github.com/hydraide/hydraide/generated/hydraidepbgo"
+	"github.com/hydraide/hydraide/sdk/go/hydraidego/hydraidepbgo"
 	"github.com/hydraide/hydraide/sdk/go/hydraidego/name"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

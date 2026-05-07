@@ -22,7 +22,7 @@
 help:
 	@echo "HydrAIDE Makefile - local developer targets"
 	@echo ""
-	@echo "  make proto-go            Generate Go gRPC stubs into ./generated/hydraidepbgo"
+	@echo "  make proto-go            Generate Go gRPC stubs into ./sdk/go/hydraidego/hydraidepbgo"
 	@echo "  make build-hydraidectl   Build the hydraidectl CLI locally (with version ldflags)"
 	@echo "  make clean               Remove generated stubs and local binaries"
 	@echo ""
@@ -33,11 +33,11 @@ help:
 # Run this whenever proto/hydraide.proto changes.
 # Requires: protoc, protoc-gen-go, protoc-gen-go-grpc on PATH.
 proto-go:
-	@echo "Generating Go gRPC stubs into ./generated/hydraidepbgo"
-	@mkdir -p ./generated/hydraidepbgo
+	@echo "Generating Go gRPC stubs into ./sdk/go/hydraidego/hydraidepbgo"
+	@mkdir -p ./sdk/go/hydraidego/hydraidepbgo
 	protoc --proto_path=proto \
-		--go_out=./generated/hydraidepbgo --go_opt=paths=source_relative \
-		--go-grpc_out=./generated/hydraidepbgo --go-grpc_opt=paths=source_relative \
+		--go_out=./sdk/go/hydraidego/hydraidepbgo --go_opt=paths=source_relative \
+		--go-grpc_out=./sdk/go/hydraidego/hydraidepbgo --go-grpc_opt=paths=source_relative \
 		proto/hydraide.proto
 
 # Build hydraidectl locally with version / commit / build-date ldflags.
@@ -57,5 +57,5 @@ build-hydraidectl:
 
 # Remove generated proto stubs and any local hydraidectl binary.
 clean:
-	rm -rf generated/hydraidepbgo*
+	rm -f sdk/go/hydraidego/hydraidepbgo/*.pb.go
 	rm -f hydraidectl

@@ -7,7 +7,6 @@ on:
       - 'docs/sdk/go/examples/**'
       - 'sdk/go/**'
       - 'proto/**'
-      - 'generated/**'
       - 'scripts/gen-dev-certs.sh'
       - '.github/workflows/examples-test.yml'
   pull_request:
@@ -15,7 +14,6 @@ on:
       - 'docs/sdk/go/examples/**'
       - 'sdk/go/**'
       - 'proto/**'
-      - 'generated/**'
       - 'scripts/gen-dev-certs.sh'
       - '.github/workflows/examples-test.yml'
   workflow_dispatch:

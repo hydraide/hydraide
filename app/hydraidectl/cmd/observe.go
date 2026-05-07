@@ -16,7 +16,7 @@ import (
 	buildmeta "github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/buildmetadata"
 	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/filesystem"
 	"github.com/hydraide/hydraide/app/hydraidectl/cmd/utils/instancerunner"
-	hydrapb "github.com/hydraide/hydraide/generated/hydraidepbgo"
+	hydrapb "github.com/hydraide/hydraide/sdk/go/hydraidego/hydraidepbgo"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"

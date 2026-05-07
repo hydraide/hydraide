@@ -14,7 +14,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/hydraide/hydraide/app/server/explorer"
-	hydrapb "github.com/hydraide/hydraide/generated/hydraidepbgo"
+	hydrapb "github.com/hydraide/hydraide/sdk/go/hydraidego/hydraidepbgo"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )

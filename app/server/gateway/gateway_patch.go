@@ -6,7 +6,7 @@ import (
 
 	"github.com/hydraide/hydraide/app/core/hydra/swamp"
 	"github.com/hydraide/hydraide/app/core/hydra/swamp/treasure/msgpackpatch"
-	hydrapb "github.com/hydraide/hydraide/generated/hydraidepbgo"
+	hydrapb "github.com/hydraide/hydraide/sdk/go/hydraidego/hydraidepbgo"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

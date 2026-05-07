@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	hydrapb "github.com/hydraide/hydraide/generated/hydraidepbgo"
+	hydrapb "github.com/hydraide/hydraide/sdk/go/hydraidego/hydraidepbgo"
 	"github.com/hydraide/hydraide/sdk/go/hydraidego"
 )
 

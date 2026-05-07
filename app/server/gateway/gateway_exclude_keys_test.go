@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/hydraide/hydraide/app/core/hydra/swamp/treasure"
-	hydrapb "github.com/hydraide/hydraide/generated/hydraidepbgo"
+	hydrapb "github.com/hydraide/hydraide/sdk/go/hydraidego/hydraidepbgo"
 )
 
 // --- Test helpers ---

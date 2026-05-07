@@ -9,7 +9,7 @@ import (
 	"github.com/hydraide/hydraide/app/core/settings"
 	"github.com/hydraide/hydraide/app/core/zeus"
 	"github.com/hydraide/hydraide/app/name"
-	hydrapb "github.com/hydraide/hydraide/generated/hydraidepbgo"
+	hydrapb "github.com/hydraide/hydraide/sdk/go/hydraidego/hydraidepbgo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/vmihailenco/msgpack/v5"

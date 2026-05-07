@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	hydraidepbgo "github.com/hydraide/hydraide/generated/hydraidepbgo"
+	hydraidepbgo "github.com/hydraide/hydraide/sdk/go/hydraidego/hydraidepbgo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/vmihailenco/msgpack/v5"
