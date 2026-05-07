@@ -58,18 +58,22 @@ sdk/go/hydraidego/settings/*/**
 */**/settings.json
 app/server/e2etests/data/
 
-# Claude Code — ship the public skill and CLAUDE.md, keep per-developer config private.
+# Claude Code, ship the public skill and CLAUDE.md, keep per-developer config private.
 # Re-include .claude/ here to override the global ~/.config/git/ignore that
 # excludes the whole directory; then selectively hide developer-specific files.
 !.claude/
 .claude/settings.json
 .claude/settings.local.json
+.claude/skills/content-writing/
 
 # Local planning docs (not for git)
 plan/
 plan/VECTOR_SEARCH_PLAN.md
 plan/EMBEDDING_SIMILARITY_SEARCH_TERV.md
 plan/EXPLORER_FIX_PLAN.md
+
+# Local content workspace (articles, posts, discussions drafts), not for git
+content/
 
 # Build artifacts
 /server
