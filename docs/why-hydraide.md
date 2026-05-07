@@ -83,7 +83,7 @@ What we deliberately did not chase: SQL compatibility, OLAP, multi-key cross-Swa
 
 There is a happy accident worth flagging. The same properties that let a human Go developer be productive on day one — code is the schema, no separate query language, native Go structs round-trip to disk and back — turn out to make HydrAIDE unusually easy for AI coding assistants to work with. Claude and similar tools generate correct HydrAIDE models on the first try, because there is no second mental model to bridge.
 
-We did not build HydrAIDE for AI. We built it so that humans could stay in their codebase. AI tools happen to benefit from the same shape, which is a useful coincidence in 2026 — and one of the reasons we ship a [Claude Code skill](../.claude/skills/hydraide/SKILL.md) and [project guidance](../CLAUDE.md) alongside the engine itself.
+We did not build HydrAIDE for AI. We built it so that humans could stay in their codebase. AI tools happen to benefit from the same shape, which is a useful coincidence in 2026 — and one of the reasons we ship [Claude Code skills](../.claude/skills/) and [project guidance](../CLAUDE.md) alongside the engine itself.
 
 ## Why this matters if you're evaluating HydrAIDE
 

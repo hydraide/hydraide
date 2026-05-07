@@ -14,7 +14,7 @@ The repository ships two Claude Code skills under [`.claude/skills/`](../.claude
 
 | Skill | Use it for |
 |---|---|
-| [`hydraide`](../.claude/skills/hydraide/SKILL.md) | Building applications on HydrAIDE — Profile/Catalog modelling, struct tags, server-side filters (AND/OR, vector, geo, nested-slice, phrase, IN), atomic increments, distributed locks, real-time subscriptions, structural patches, indexing/pagination, common pitfalls. |
+| [`hydraidego`](../.claude/skills/hydraidego/SKILL.md) | Building Go applications on HydrAIDE — Profile/Catalog modelling, struct tags, server-side filters (AND/OR, vector, geo, nested-slice, phrase, IN), atomic increments, distributed locks, real-time subscriptions, structural patches, indexing/pagination, common pitfalls. |
 | [`hydraidectl`](../.claude/skills/hydraidectl/SKILL.md) | Operating HydrAIDE servers — install, start/stop/restart, upgrade, backup/restore, V1→V2 migration, inspect, observe, compact, explore, destroy, certs. |
 
 To use either skill **in your own project that depends on HydrAIDE**, copy the matching folder from this repo's `.claude/skills/` into your own project's `.claude/skills/`. Claude Code will load it for that project as well.

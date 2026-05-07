@@ -4,7 +4,7 @@ Guidance for Claude Code (and other AI coding assistants) working on this reposi
 
 Two bundled skills cover the depth:
 
-- [`.claude/skills/hydraide/SKILL.md`](.claude/skills/hydraide/SKILL.md) — application side: modelling, filters, patches, locks, subscriptions, common pitfalls.
+- [`.claude/skills/hydraidego/SKILL.md`](.claude/skills/hydraidego/SKILL.md) — Go SDK side: modelling, filters, patches, locks, subscriptions, common pitfalls.
 - [`.claude/skills/hydraidectl/SKILL.md`](.claude/skills/hydraidectl/SKILL.md) — operations side: install, upgrade, backup/restore, migrate, observe.
 
 ## Communication
@@ -102,7 +102,7 @@ go mod tidy
 | Looking for | Start here |
 |---|---|
 | Wire-level API | [`proto/hydraide.proto`](proto/hydraide.proto) |
-| Modelling, filters, patches, locks, subscriptions | [`.claude/skills/hydraide/SKILL.md`](.claude/skills/hydraide/SKILL.md) |
+| Go SDK modelling, filters, patches, locks, subscriptions | [`.claude/skills/hydraidego/SKILL.md`](.claude/skills/hydraidego/SKILL.md) |
 | Operating an instance (`hydraidectl`) | [`.claude/skills/hydraidectl/SKILL.md`](.claude/skills/hydraidectl/SKILL.md) |
 | Concept docs | [`docs/features/`](docs/features/) |
 | Benchmarks and methodology | [`docs/benchmarks/`](docs/benchmarks/) |

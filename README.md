@@ -174,7 +174,7 @@ The features below are grouped to follow the order you'd want to read them in: t
 |---|---|---|
 | 🤖 | [Claude Code-friendly notes](docs/claude-friendly.md) | What's in place for AI coding tools |
 | 📒 | [`CLAUDE.md`](CLAUDE.md) | Project-level guidance auto-loaded by Claude Code (architecture, conventions, build) |
-| 📜 | [`hydraide` skill](.claude/skills/hydraide/SKILL.md) | Application-side reference — modelling, filters, patches, locks, subscriptions |
+| 📜 | [`hydraidego` skill](.claude/skills/hydraidego/SKILL.md) | Go SDK reference — modelling, filters, patches, locks, subscriptions |
 | 🛠️ | [`hydraidectl` skill](.claude/skills/hydraidectl/SKILL.md) | Operations reference — install, upgrade, backup/restore, migrate, observe |
 
 ---

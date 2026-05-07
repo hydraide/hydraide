@@ -1,11 +1,11 @@
 ---
 name: hydraidectl
-description: Operating HydrAIDE instances with the hydraidectl CLI — install, start/stop/restart, upgrade, backup/restore, migrate (V1→V2), inspect, observe, compact, explore, destroy, certs. Use when installing, deploying, upgrading, migrating, backing up, debugging, or otherwise operating a HydrAIDE server instance. For data modelling and SDK usage, use the hydraide skill instead.
+description: Operating HydrAIDE instances with the hydraidectl CLI — install, start/stop/restart, upgrade, backup/restore, migrate (V1→V2), inspect, observe, compact, explore, destroy, certs. Use when installing, deploying, upgrading, migrating, backing up, debugging, or otherwise operating a HydrAIDE server instance. For Go SDK usage and data modelling, use the `hydraidego` skill instead.
 ---
 
 # hydraidectl — Operations Skill
 
-`hydraidectl` is the management CLI for HydrAIDE server instances on a host. This skill is the working reference for operating instances. For data modelling, SDK usage, and writing application code against HydrAIDE, see the sibling [`hydraide` skill](../hydraide/SKILL.md).
+`hydraidectl` is the management CLI for HydrAIDE server instances on a host. This skill is the working reference for operating instances. For Go SDK usage and writing application code against HydrAIDE, see the sibling [`hydraidego` skill](../hydraidego/SKILL.md).
 
 The full per-command flag reference is in [`docs/hydraidectl/`](../../../docs/hydraidectl/README.md) — one focused page per category (lifecycle, monitoring, upgrades, data). This skill is a tighter "what to reach for and when" overview.
 
@@ -306,4 +306,4 @@ For deeper diagnostics, the `journalctl` log of the instance unit is the first p
 | Migration guide | [`docs/hydraidectl/hydraidectl-migration.md`](../../../docs/hydraidectl/hydraidectl-migration.md) |
 | Filesystem and hardware guidance | [`docs/install/README.md`](../../../docs/install/README.md) |
 | Storage engine internals | [`docs/features/v2-storage-engine.md`](../../../docs/features/v2-storage-engine.md) |
-| Data modelling, SDK, filters, patches | [`hydraide` skill](../hydraide/SKILL.md) |
+| Go SDK modelling, filters, patches | [`hydraidego` skill](../hydraidego/SKILL.md) |

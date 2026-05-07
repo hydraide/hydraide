@@ -102,4 +102,4 @@ Read-only commands run as a regular user:
 | Install the CLI itself | [hydraidectl-install.md](hydraidectl-install.md) |
 | Migrate V1 → V2 storage | [Migration guide](hydraidectl-migration.md) |
 | Pick a filesystem / hardware | [Install README](../install/README.md) |
-| Build apps against an instance | [hydraide skill](../../.claude/skills/hydraide/SKILL.md) and the [Go SDK](../../sdk/go/hydraidego/) |
+| Build Go apps against an instance | [hydraidego skill](../../.claude/skills/hydraidego/SKILL.md) and the [Go SDK](../../sdk/go/hydraidego/) |
