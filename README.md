@@ -57,6 +57,14 @@ Works on Linux, macOS and Windows. On Windows, run from inside WSL2 with Docker 
 
 → More: [example tree README](docs/sdk/go/examples/), [testing your own models](docs/sdk/go/testing.md)
 
+### Add the Go SDK to your own project
+
+```bash
+go get github.com/hydraide/hydraide/sdk/go/hydraidego@latest
+```
+
+Pinned version, upgrade, version compatibility, and troubleshooting in the [Go SDK install guide](docs/sdk/go/install.md).
+
 ### Install for real (Linux service, single binary)
 
 Best for staging, production, or anywhere you want HydrAIDE running as a long-lived service. No config files, no Docker required.
@@ -160,6 +168,7 @@ The features below are grouped to follow the order you'd want to read them in: t
 
 | | Resource | |
 |---|---|---|
+| 📥 | [Go SDK install + upgrade](docs/sdk/go/install.md) | `go get`, version compatibility, troubleshooting |
 | 📘 | [Go SDK reference](docs/sdk/go/go-sdk.md) | Full API with code samples |
 | 🔧 | [hydraidectl CLI](docs/hydraidectl/README.md) | Instance management, monitoring, migration |
 | 🔄 | [Migration guide](docs/hydraidectl/hydraidectl-migration.md) | V1→V2 format migration |
@@ -170,12 +179,22 @@ The features below are grouped to follow the order you'd want to read them in: t
 
 ### Working with Claude Code
 
+Install the [HydrAIDE Claude Code plugin](https://github.com/hydraide/claude) to get three skills (Go SDK reference, server operations, conceptual explanations) and three slash commands ready to use:
+
+```
+/plugin marketplace add hydraide/claude
+/plugin install hydraide
+```
+
+The skills activate automatically when you ask a HydrAIDE-related question. Slash commands: `/hydraide-new-model` (interactive Profile/Catalog wizard), `/hydraide-review` (pitfall checklist code review), `/hydraide-debug` (diagnostic flow). Full breakdown of what the plugin does in [Claude Code-friendly notes](docs/claude-friendly.md).
+
 | | Resource | |
 |---|---|---|
-| 🤖 | [Claude Code-friendly notes](docs/claude-friendly.md) | What's in place for AI coding tools |
+| 🤖 | [Claude Code-friendly notes](docs/claude-friendly.md) | What the plugin does, install, skills, slash commands |
 | 📒 | [`CLAUDE.md`](CLAUDE.md) | Project-level guidance auto-loaded by Claude Code (architecture, conventions, build) |
-| 📜 | [`hydraidego` skill](.claude/skills/hydraidego/SKILL.md) | Go SDK reference — modelling, filters, patches, locks, subscriptions |
-| 🛠️ | [`hydraidectl` skill](.claude/skills/hydraidectl/SKILL.md) | Operations reference — install, upgrade, backup/restore, migrate, observe |
+| 📜 | [`hydraidego` skill](.claude/skills/hydraidego/SKILL.md) | Go SDK reference: modelling, filters, patches, locks, subscriptions |
+| 🛠️ | [`hydraidectl` skill](.claude/skills/hydraidectl/SKILL.md) | Operations reference: install, upgrade, backup/restore, migrate, observe |
+| 🧠 | [`hydraide` skill](.claude/skills/hydraide/SKILL.md) | Conceptual / "how does X work" router into the feature docs |
 
 ---
 
