@@ -12,7 +12,11 @@ WORKDIR /src
 
 RUN apk --no-cache add git build-base
 
-COPY go.mod go.sum ./
+# The SDK is a separate Go module inside the monorepo and the root go.mod
+# uses a `replace` directive that points at it, so we need its go.mod/go.sum
+# in place before `go mod download`.
+COPY go.mod go.sum go.work ./
+COPY sdk/go/hydraidego/go.mod sdk/go/hydraidego/go.sum ./sdk/go/hydraidego/
 RUN go mod download
 
 COPY . .

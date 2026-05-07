@@ -46,9 +46,16 @@ func TestGetFolderNumberDistribution(t *testing.T) {
 		t.Logf("Server %d: %d entries", folder, count)
 	}
 
-	// Check if the distribution is reasonably even
+	// Check if the distribution is reasonably even.
+	// 100k random keys hashed into 100 buckets has a per-bucket stddev of
+	// ~sqrt(1000) which is ~32. The maximum of 100 such samples sits 3 to 4
+	// stddev above the mean, so the realistic worst-case bucket deviates by
+	// ~120 to 150. A 10% threshold flagged this as "broken" on roughly 1 in
+	// 5 runs even though the hash is fine. 20% keeps the test stable while
+	// still catching a real distribution bug (a broken hash would cluster
+	// far worse).
 	expectedPerServer := testDataCount / allFolders
-	threshold := expectedPerServer / 10 // Allow 10% deviation
+	threshold := expectedPerServer / 5 // Allow 20% deviation
 
 	for server, count := range folderCounts {
 		if count < expectedPerServer-threshold || count > expectedPerServer+threshold {
