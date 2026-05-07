@@ -178,7 +178,7 @@ Install the [HydrAIDE Claude Code plugin](https://github.com/hydraide/claude) to
 /plugin install hydraide
 ```
 
-Four skills activate automatically when you ask a HydrAIDE-related question: `hydraide-install-and-upgrade` (the install / upgrade entry point), `hydraidego` (Go SDK), `hydraidectl` (operations), and `hydraide` (conceptual "how does X work" router). Slash commands: `/hydraide-new-model` (interactive Profile/Catalog wizard), `/hydraide-review` (pitfall checklist code review), `/hydraide-debug` (diagnostic flow). Full breakdown of what the plugin does in [Claude Code-friendly notes](docs/claude-friendly.md).
+Five skills activate automatically when you ask a HydrAIDE-related question: `hydraide-install-and-upgrade` (install / upgrade entry point), `hydraidego` (Go SDK application code), `hydraidectl` (server operations), `hydraide-data-ops` (ad-hoc data migration / cleanup / import CLIs), and `hydraide` (conceptual "how does X work" router). Slash commands: `/hydraide-new-model` (interactive Profile/Catalog wizard), `/hydraide-review` (pitfall checklist code review), `/hydraide-debug` (diagnostic flow). Full breakdown of what the plugin does in [Claude Code-friendly notes](docs/claude-friendly.md).
 
 | | Resource | |
 |---|---|---|
@@ -187,6 +187,7 @@ Four skills activate automatically when you ask a HydrAIDE-related question: `hy
 | 📥 | [`hydraide-install-and-upgrade` skill](.claude/skills/hydraide-install-and-upgrade/SKILL.md) | First-stop installer router: server (Linux or Docker), Go SDK, upgrades, V1→V2 migration |
 | 📜 | [`hydraidego` skill](.claude/skills/hydraidego/SKILL.md) | Go SDK reference: modelling, filters, patches, locks, subscriptions |
 | 🛠️ | [`hydraidectl` skill](.claude/skills/hydraidectl/SKILL.md) | Operations reference: start/stop/restart, backup/restore, observe, compact, explore |
+| 🧰 | [`hydraide-data-ops` skill](.claude/skills/hydraide-data-ops/SKILL.md) | Ad-hoc data ops CLIs: migrations, bulk imports, mass deletes, orphan cleanup, restore |
 | 🧠 | [`hydraide` skill](.claude/skills/hydraide/SKILL.md) | Conceptual / "how does X work" router into the feature docs |
 
 ---
