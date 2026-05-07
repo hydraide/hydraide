@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hydraide/hydraide/sdk/go/hydraidego/utils/repo"
+	"github.com/hydraide/hydraide/sdk/go/hydraidego/v3/utils/repo"
 )
 
 // CreateHydraContext creates a context with a 5-second timeout.

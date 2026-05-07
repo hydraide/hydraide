@@ -9,10 +9,10 @@ lock-free operations, real-time subscriptions, and stateless routing, all tailor
 ## 📦 Install
 
 ```bash
-go get github.com/hydraide/hydraide/sdk/go/hydraidego@latest
+go get github.com/hydraide/hydraide/sdk/go/hydraidego/v3@latest
 ```
 
-Pinned version: `go get github.com/hydraide/hydraide/sdk/go/hydraidego@v3.0.0`. Upgrade with `go get -u`. Full instructions, version compatibility, and troubleshooting in [`install.md`](install.md). For HydrAIDE contributors working on the SDK itself, see [`contributor-setup.md`](contributor-setup.md).
+Pinned version: `go get github.com/hydraide/hydraide/sdk/go/hydraidego/v3@v3.0.1`. Upgrade with `go get -u`. Full instructions, version compatibility, and troubleshooting in [`install.md`](install.md). For HydrAIDE contributors working on the SDK itself, see [`contributor-setup.md`](contributor-setup.md).
 
 ## 📚 Table of Contents
 

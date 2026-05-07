@@ -27,8 +27,8 @@
 package repo
 
 import (
-	"github.com/hydraide/hydraide/sdk/go/hydraidego"
-	"github.com/hydraide/hydraide/sdk/go/hydraidego/client"
+	"github.com/hydraide/hydraide/sdk/go/hydraidego/v3"
+	"github.com/hydraide/hydraide/sdk/go/hydraidego/v3/client"
 )
 
 // Repo is an interface that provides access to the HydrAIDE Go SDK (hydraidego).

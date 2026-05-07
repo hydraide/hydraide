@@ -72,7 +72,7 @@ The config package automatically:
 Example usage in your own code:
 
 ```go
-import "github.com/hydraide/hydraide/sdk/go/hydraidego/config"
+import "github.com/hydraide/hydraide/sdk/go/hydraidego/v3/config"
 
 cfg, err := config.LoadE2ETestConfig()
 if err != nil {

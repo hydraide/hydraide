@@ -2,11 +2,9 @@ module github.com/hydraide/hydraide
 
 go 1.26.2
 
-replace github.com/hydraide/hydraide/sdk/go/hydraidego => ./sdk/go/hydraidego
+replace github.com/hydraide/hydraide/sdk/go/hydraidego/v3 => ./sdk/go/hydraidego
 
 require (
-	github.com/hydraide/hydraide/sdk/go/hydraidego v0.0.0-00010101000000-000000000000
-
 	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/charmbracelet/bubbles v1.0.0
@@ -14,6 +12,7 @@ require (
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/golang/snappy v1.0.0
 	github.com/google/uuid v1.6.0
+	github.com/hydraide/hydraide/sdk/go/hydraidego/v3 v3.0.0-00010101000000-000000000000
 	github.com/joho/godotenv v1.5.1
 	github.com/klauspost/compress v1.18.5
 	github.com/pierrec/lz4 v2.6.1+incompatible
@@ -22,10 +21,15 @@ require (
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
 	github.com/vmihailenco/msgpack/v5 v5.4.1
-	golang.org/x/net v0.53.0
+	golang.org/x/net v0.53.0 // indirect
 	golang.org/x/sys v0.43.0
-	google.golang.org/grpc v1.80.0
+	google.golang.org/grpc v1.81.0
 	google.golang.org/protobuf v1.36.11
+)
+
+require (
+	github.com/fasthttp/router v1.5.4
+	github.com/valyala/fasthttp v1.70.0
 )
 
 require (
@@ -39,7 +43,6 @@ require (
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect
-	github.com/fasthttp/router v1.5.4 // indirect
 	github.com/frankban/quicktest v1.14.6 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
@@ -58,7 +61,6 @@ require (
 	github.com/tklauser/go-sysconf v0.3.16 // indirect
 	github.com/tklauser/numcpus v0.11.0 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
-	github.com/valyala/fasthttp v1.70.0 // indirect
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect

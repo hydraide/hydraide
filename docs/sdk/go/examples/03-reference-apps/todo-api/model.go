@@ -14,7 +14,7 @@ package main
 import (
 	"time"
 
-	"github.com/hydraide/hydraide/sdk/go/hydraidego/name"
+	"github.com/hydraide/hydraide/sdk/go/hydraidego/v3/name"
 )
 
 // Todo is the Catalog model. The msgpack value (TodoBody) is the body

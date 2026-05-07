@@ -46,7 +46,7 @@ jobs:
 
             Install:
             ```
-            go get github.com/hydraide/hydraide/sdk/go/hydraidego@${{ steps.version.outputs.version }}
+            go get github.com/hydraide/hydraide/sdk/go/hydraidego/v3@${{ steps.version.outputs.version }}
             ```
 
             See [`sdk/go/hydraidego/`](https://github.com/hydraide/hydraide/tree/${{ github.ref_name }}/sdk/go/hydraidego) for the SDK source and the [`hydraidego` Claude Code skill](https://github.com/hydraide/hydraide/tree/${{ github.ref_name }}/.claude/skills/hydraidego) for usage guidance.

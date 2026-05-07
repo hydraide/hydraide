@@ -11754,7 +11754,7 @@ const file_hydraide_proto_rawDesc = "" +
 	"\x10GetByIndexStream\x12%.hydraidepbgo.GetByIndexStreamRequest\x1a&.hydraidepbgo.GetByIndexStreamResponse\"\x000\x01\x12}\n" +
 	"\x18GetByIndexStreamFromMany\x12-.hydraidepbgo.GetByIndexStreamFromManyRequest\x1a..hydraidepbgo.GetByIndexStreamFromManyResponse\"\x000\x01\x12W\n" +
 	"\fCompactSwamp\x12!.hydraidepbgo.CompactSwampRequest\x1a\".hydraidepbgo.CompactSwampResponse\"\x00\x12P\n" +
-	"\tGetStream\x12\x1e.hydraidepbgo.GetStreamRequest\x1a\x1f.hydraidepbgo.GetStreamResponse\"\x000\x01BJZHgithub.com/hydraide/hydraide/sdk/go/hydraidego/hydraidepbgo;hydraidepbgob\x06proto3"
+	"\tGetStream\x12\x1e.hydraidepbgo.GetStreamRequest\x1a\x1f.hydraidepbgo.GetStreamResponse\"\x000\x01BMZKgithub.com/hydraide/hydraide/sdk/go/hydraidego/v3/hydraidepbgo;hydraidepbgob\x06proto3"
 
 var (
 	file_hydraide_proto_rawDescOnce sync.Once

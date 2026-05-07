@@ -21,7 +21,7 @@ import (
 	"github.com/hydraide/hydraide/app/name"
 	"github.com/hydraide/hydraide/app/server/observer"
 	"github.com/hydraide/hydraide/app/server/telemetry"
-	hydrapb "github.com/hydraide/hydraide/sdk/go/hydraidego/hydraidepbgo"
+	hydrapb "github.com/hydraide/hydraide/sdk/go/hydraidego/v3/hydraidepbgo"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"

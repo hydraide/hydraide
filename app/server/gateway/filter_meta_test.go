@@ -4,7 +4,7 @@ import (
 	"math"
 	"testing"
 
-	hydrapb "github.com/hydraide/hydraide/sdk/go/hydraidego/hydraidepbgo"
+	hydrapb "github.com/hydraide/hydraide/sdk/go/hydraidego/v3/hydraidepbgo"
 	"github.com/vmihailenco/msgpack/v5"
 )
 

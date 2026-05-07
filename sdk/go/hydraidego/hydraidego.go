@@ -15,9 +15,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hydraide/hydraide/sdk/go/hydraidego/hydraidepbgo"
-	"github.com/hydraide/hydraide/sdk/go/hydraidego/client"
-	"github.com/hydraide/hydraide/sdk/go/hydraidego/name"
+	"github.com/hydraide/hydraide/sdk/go/hydraidego/v3/hydraidepbgo"
+	"github.com/hydraide/hydraide/sdk/go/hydraidego/v3/client"
+	"github.com/hydraide/hydraide/sdk/go/hydraidego/v3/name"
 	"github.com/vmihailenco/msgpack/v5"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

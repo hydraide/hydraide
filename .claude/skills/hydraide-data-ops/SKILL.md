@@ -84,10 +84,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hydraide/hydraide/sdk/go/hydraidego"
-	"github.com/hydraide/hydraide/sdk/go/hydraidego/client"
-	"github.com/hydraide/hydraide/sdk/go/hydraidego/name"
-	"github.com/hydraide/hydraide/sdk/go/hydraidego/utils/repo"
+	"github.com/hydraide/hydraide/sdk/go/hydraidego/v3"
+	"github.com/hydraide/hydraide/sdk/go/hydraidego/v3/client"
+	"github.com/hydraide/hydraide/sdk/go/hydraidego/v3/name"
+	"github.com/hydraide/hydraide/sdk/go/hydraidego/v3/utils/repo"
 )
 
 func main() {

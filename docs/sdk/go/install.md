@@ -3,7 +3,7 @@
 The HydrAIDE Go SDK lives in its own Go module inside the monorepo:
 
 ```
-github.com/hydraide/hydraide/sdk/go/hydraidego
+github.com/hydraide/hydraide/sdk/go/hydraidego/v3
 ```
 
 Pulling the SDK does **not** drag the rest of the monorepo (server, hydraidectl, examples) into your dependency graph. Only the SDK module's own dependencies (gRPC, protobuf, msgpack, xxhash) end up in your `go.sum`.
@@ -13,13 +13,13 @@ Pulling the SDK does **not** drag the rest of the monorepo (server, hydraidectl,
 In an existing Go module:
 
 ```bash
-go get github.com/hydraide/hydraide/sdk/go/hydraidego@latest
+go get github.com/hydraide/hydraide/sdk/go/hydraidego/v3@latest
 ```
 
 Pinning to a specific version:
 
 ```bash
-go get github.com/hydraide/hydraide/sdk/go/hydraidego@v3.0.0
+go get github.com/hydraide/hydraide/sdk/go/hydraidego/v3@v3.0.1
 ```
 
 In a fresh project:
@@ -27,37 +27,37 @@ In a fresh project:
 ```bash
 mkdir myapp && cd myapp
 go mod init github.com/you/myapp
-go get github.com/hydraide/hydraide/sdk/go/hydraidego@latest
+go get github.com/hydraide/hydraide/sdk/go/hydraidego/v3@latest
 ```
 
 After install, import it:
 
 ```go
 import (
-    "github.com/hydraide/hydraide/sdk/go/hydraidego"
-    "github.com/hydraide/hydraide/sdk/go/hydraidego/name"
-    "github.com/hydraide/hydraide/sdk/go/hydraidego/utils/hydraidehelper"
-    "github.com/hydraide/hydraide/sdk/go/hydraidego/utils/repo"
+    "github.com/hydraide/hydraide/sdk/go/hydraidego/v3"
+    "github.com/hydraide/hydraide/sdk/go/hydraidego/v3/name"
+    "github.com/hydraide/hydraide/sdk/go/hydraidego/v3/utils/hydraidehelper"
+    "github.com/hydraide/hydraide/sdk/go/hydraidego/v3/utils/repo"
 )
 ```
 
 ## Upgrade
 
 ```bash
-go get -u github.com/hydraide/hydraide/sdk/go/hydraidego@latest
+go get -u github.com/hydraide/hydraide/sdk/go/hydraidego/v3@latest
 go mod tidy
 ```
 
 To check the version you currently use:
 
 ```bash
-go list -m github.com/hydraide/hydraide/sdk/go/hydraidego
+go list -m github.com/hydraide/hydraide/sdk/go/hydraidego/v3
 ```
 
 To see all available versions:
 
 ```bash
-go list -m -versions github.com/hydraide/hydraide/sdk/go/hydraidego
+go list -m -versions github.com/hydraide/hydraide/sdk/go/hydraidego/v3
 ```
 
 The `@latest` query resolves to the highest semver tag on the proxy. There is no separate moving "latest" tag to maintain; `@latest` is computed automatically.
@@ -89,7 +89,7 @@ See [`docs/claude-friendly.md`](../../claude-friendly.md) for what the plugin ac
 
 ## Troubleshooting
 
-**`go: module github.com/hydraide/hydraide/sdk/go/hydraidego: reading … 410 Gone`**: the proxy has not yet cached the version. Wait a minute, or run `GOPROXY=direct go get …` once to bypass the proxy.
+**`go: module github.com/hydraide/hydraide/sdk/go/hydraidego/v3: reading … 410 Gone`**: the proxy has not yet cached the version. Wait a minute, or run `GOPROXY=direct go get …` once to bypass the proxy.
 
 **`ambiguous import: found package … in multiple modules`**: your project has a `go.work` that pulls in both the parent `hydraide/hydraide` and the SDK, or a stale `replace` directive. Remove the parent module from your workspace, or drop the `replace` if you do not need a local checkout.
 

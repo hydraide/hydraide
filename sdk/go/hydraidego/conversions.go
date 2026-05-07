@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hydraide/hydraide/sdk/go/hydraidego/hydraidepbgo"
+	"github.com/hydraide/hydraide/sdk/go/hydraidego/v3/hydraidepbgo"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 

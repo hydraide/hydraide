@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hydraide/hydraide/sdk/go/hydraidego"
-	"github.com/hydraide/hydraide/sdk/go/hydraidego/name"
+	"github.com/hydraide/hydraide/sdk/go/hydraidego/v3"
+	"github.com/hydraide/hydraide/sdk/go/hydraidego/v3/name"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

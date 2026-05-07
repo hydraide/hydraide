@@ -20,7 +20,7 @@ import (
 	"time"
 
 	"github.com/hydraide/hydraide/docs/sdk/go/examples/internal/setup"
-	"github.com/hydraide/hydraide/sdk/go/hydraidego/utils/repo"
+	"github.com/hydraide/hydraide/sdk/go/hydraidego/v3/utils/repo"
 )
 
 func main() {

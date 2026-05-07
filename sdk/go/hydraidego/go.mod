@@ -1,4 +1,4 @@
-module github.com/hydraide/hydraide/sdk/go/hydraidego
+module github.com/hydraide/hydraide/sdk/go/hydraidego/v3
 
 go 1.26.2
 

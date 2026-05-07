@@ -91,7 +91,7 @@ func BenchmarkName_Load(b *testing.B) {
 //
 // goos: linux
 // goarch: amd64
-// pkg: github.com/hydraide/hydraide/sdk/go/hydraidego/name
+// pkg: github.com/hydraide/hydraide/sdk/go/hydraidego/v3/name
 // cpu: AMD Ryzen Threadripper 2950X 16-Core Processor
 // BenchmarkName_Get
 // BenchmarkName_Get-32    	1000000000	         0.5228 ns/op
@@ -116,7 +116,7 @@ func BenchmarkName_Get(b *testing.B) {
 //
 // goos: linux
 // goarch: amd64
-// pkg: github.com/hydraide/hydraide/sdk/go/hydraidego/name
+// pkg: github.com/hydraide/hydraide/sdk/go/hydraidego/v3/name
 // cpu: AMD Ryzen Threadripper 2950X 16-Core Processor
 // BenchmarkName_Add
 // BenchmarkName_Add-32    	25031070	        41.09 ns/op
@@ -139,7 +139,7 @@ func BenchmarkName_Add(b *testing.B) {
 //
 // goos: linux
 // goarch: amd64
-// pkg: github.com/hydraide/hydraide/sdk/go/hydraidego/name
+// pkg: github.com/hydraide/hydraide/sdk/go/hydraidego/v3/name
 // cpu: AMD Ryzen Threadripper 2950X 16-Core Processor
 // BenchmarkGetFolderNumber
 // BenchmarkGetFolderNumber-32    	76946376	        15.19 ns/op

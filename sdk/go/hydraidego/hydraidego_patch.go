@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	hydraidepbgo "github.com/hydraide/hydraide/sdk/go/hydraidego/hydraidepbgo"
-	"github.com/hydraide/hydraide/sdk/go/hydraidego/name"
+	hydraidepbgo "github.com/hydraide/hydraide/sdk/go/hydraidego/v3/hydraidepbgo"
+	"github.com/hydraide/hydraide/sdk/go/hydraidego/v3/name"
 	"github.com/vmihailenco/msgpack/v5"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

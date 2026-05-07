@@ -30,9 +30,9 @@ import (
     "time"
 
     // Helper packages from the example repo (create context, access SDK, build names)
-    "github.com/hydraide/hydraide/sdk/go/hydraidego/utils/hydraidehelper"
-    "github.com/hydraide/hydraide/sdk/go/hydraidego/utils/repo"
-    "github.com/hydraide/hydraide/sdk/go/hydraidego/name"
+    "github.com/hydraide/hydraide/sdk/go/hydraidego/v3/utils/hydraidehelper"
+    "github.com/hydraide/hydraide/sdk/go/hydraidego/v3/utils/repo"
+    "github.com/hydraide/hydraide/sdk/go/hydraidego/v3/name"
 )
 
 // CatalogModelUserSaveExample defines a typed record (Treasure) stored in a Catalog-type Swamp.

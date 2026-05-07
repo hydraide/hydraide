@@ -73,7 +73,7 @@ tool) to the host running your application. The Go SDK then takes them like
 this:
 
 ```go
-import "github.com/hydraide/hydraide/sdk/go/hydraidego/client"
+import "github.com/hydraide/hydraide/sdk/go/hydraidego/v3/client"
 
 client := hydraidego.New(&client.Config{
     ServerHost: "localhost:4900",

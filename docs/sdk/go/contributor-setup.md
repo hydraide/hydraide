@@ -9,14 +9,14 @@ Two Go modules live in this repository:
 | Path | Module | What it contains |
 |---|---|---|
 | `./` | `github.com/hydraide/hydraide` | Server, hydraidectl, examples, e2e tests |
-| `./sdk/go/hydraidego/` | `github.com/hydraide/hydraide/sdk/go/hydraidego` | The Go SDK and the generated proto stubs |
+| `./sdk/go/hydraidego/` | `github.com/hydraide/hydraide/sdk/go/hydraidego/v3` | The Go SDK and the generated proto stubs (the `/v3` suffix is required by Go's semantic import versioning for major versions ≥ 2) |
 
 The two modules are tied together by `go.work` at the repo root, which lets you edit both modules in one checkout and have them resolve each other locally.
 
 The root `go.mod` carries a `replace` directive that points the SDK module path at the in-tree path:
 
 ```
-replace github.com/hydraide/hydraide/sdk/go/hydraidego => ./sdk/go/hydraidego
+replace github.com/hydraide/hydraide/sdk/go/hydraidego/v3 => ./sdk/go/hydraidego
 ```
 
 This means a build of the server or hydraidectl from this checkout always uses the in-tree SDK source, not whatever version the Go proxy serves. External consumers of the SDK never see this `replace`; the published module on the proxy is self-contained.
@@ -77,7 +77,7 @@ Match the major to the server era. Do not move existing tags; if you need to fix
 
 ## Why split the SDK out
 
-Before the split, the entire monorepo was one Go module. That meant `go get github.com/hydraide/hydraide/sdk/go/hydraidego@latest` did not work cleanly (the existing `v2.0.7` root tag violated semantic import versioning since the module path lacked `/v2`), and consumers pulled the whole monorepo into their dependency graph. Splitting fixes both: `@latest` now resolves to the highest `sdk/go/hydraidego/v*` tag, and the SDK module ships only its own runtime dependencies.
+Before the split, the entire monorepo was one Go module. That meant `go get github.com/hydraide/hydraide/sdk/go/hydraidego/v3@latest` did not work cleanly (the existing `v2.0.7` root tag violated semantic import versioning since the module path lacked `/v2`), and consumers pulled the whole monorepo into their dependency graph. Splitting fixes both: `@latest` now resolves to the highest `sdk/go/hydraidego/v3.x.y` tag, and the SDK module ships only its own runtime dependencies. The SDK module path itself carries the `/v3` major-version suffix, as Go requires for any module at major version ≥ 2.
 
 ## Common gotchas
 

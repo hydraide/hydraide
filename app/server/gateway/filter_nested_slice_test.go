@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/hydraide/hydraide/app/core/hydra/swamp/treasure"
-	hydrapb "github.com/hydraide/hydraide/sdk/go/hydraidego/hydraidepbgo"
+	hydrapb "github.com/hydraide/hydraide/sdk/go/hydraidego/v3/hydraidepbgo"
 )
 
 // =============================================================================

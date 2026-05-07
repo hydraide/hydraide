@@ -60,8 +60,8 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/hydraide/hydraide/sdk/go/hydraidego"
-	"github.com/hydraide/hydraide/sdk/go/hydraidego/name"
+	"github.com/hydraide/hydraide/sdk/go/hydraidego/v3"
+	"github.com/hydraide/hydraide/sdk/go/hydraidego/v3/name"
 
 	"time"
 )

@@ -23,7 +23,7 @@ This skill is a router. Pick the matching topic, read the linked doc, and answer
 | Try HydrAIDE locally in 2 minutes | Docker compose quickstart from the example tree (server + auto-generated TLS certs) |
 | Production server on Linux | `hydraidectl` single-binary install with a systemd unit |
 | Production server in containers | Docker install with the published `ghcr.io/hydraide/hydraide` image |
-| Add the Go SDK to my application | `go get github.com/hydraide/hydraide/sdk/go/hydraidego@latest` |
+| Add the Go SDK to my application | `go get github.com/hydraide/hydraide/sdk/go/hydraidego/v3@latest` |
 | Upgrade an existing HydrAIDE server | server upgrade page (rolling vs full restart, version compat) |
 | Upgrade the Go SDK in my application | `go get -u`, with the version-compatibility table |
 | Move a v1 storage to v3 | V1 to V2 storage migration **before** upgrading the running server |

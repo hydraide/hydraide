@@ -4,8 +4,8 @@ import (
 	"reflect"
 	"testing"
 
-	hydrapb "github.com/hydraide/hydraide/sdk/go/hydraidego/hydraidepbgo"
-	"github.com/hydraide/hydraide/sdk/go/hydraidego"
+	hydrapb "github.com/hydraide/hydraide/sdk/go/hydraidego/v3/hydraidepbgo"
+	"github.com/hydraide/hydraide/sdk/go/hydraidego/v3"
 )
 
 // These tests verify the SDK-level searchMeta tag population via setSearchMetaOnModel.

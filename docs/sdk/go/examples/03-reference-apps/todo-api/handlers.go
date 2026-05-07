@@ -9,8 +9,8 @@ import (
 
 	"github.com/fasthttp/router"
 	"github.com/google/uuid"
-	"github.com/hydraide/hydraide/sdk/go/hydraidego"
-	"github.com/hydraide/hydraide/sdk/go/hydraidego/utils/repo"
+	"github.com/hydraide/hydraide/sdk/go/hydraidego/v3"
+	"github.com/hydraide/hydraide/sdk/go/hydraidego/v3/utils/repo"
 	"github.com/valyala/fasthttp"
 )
 

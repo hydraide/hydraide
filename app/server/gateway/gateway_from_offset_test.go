@@ -12,7 +12,7 @@ import (
 	"github.com/hydraide/hydraide/app/core/hydra/swamp/treasure"
 	"github.com/hydraide/hydraide/app/core/settings"
 	"github.com/hydraide/hydraide/app/name"
-	hydrapb "github.com/hydraide/hydraide/sdk/go/hydraidego/hydraidepbgo"
+	hydrapb "github.com/hydraide/hydraide/sdk/go/hydraidego/v3/hydraidepbgo"
 )
 
 // TestGateway_FromOffset_WithFilter reproduces the bug-report scenario where

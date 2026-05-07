@@ -28,8 +28,8 @@ import (
 
 	"github.com/fasthttp/router"
 	"github.com/hydraide/hydraide/docs/sdk/go/examples/internal/setup"
-	"github.com/hydraide/hydraide/sdk/go/hydraidego/name"
-	"github.com/hydraide/hydraide/sdk/go/hydraidego/utils/repo"
+	"github.com/hydraide/hydraide/sdk/go/hydraidego/v3/name"
+	"github.com/hydraide/hydraide/sdk/go/hydraidego/v3/utils/repo"
 	"github.com/valyala/fasthttp"
 )
 
