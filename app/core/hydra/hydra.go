@@ -284,6 +284,24 @@ type Hydra interface {
 	// Employing GracefulStop is in our interest as it allows us to maintain high availability and reliability
 	// in our services, ensuring a seamless user experience even during maintenance periods.
 	GracefulStop()
+
+	// IsShuttingDown reports whether the engine is in the process of shutting down.
+	// gRPC interceptors check this so that new write requests can be rejected with
+	// codes.Unavailable as soon as a SIGTERM is received, while in-flight writes are
+	// allowed to drain naturally.
+	IsShuttingDown() bool
+
+	// MarkShuttingDown atomically flips the shutting-down flag and clears the
+	// event/info subscriber maps. This is the first stage of shutdown — it does NOT
+	// touch open swamps. After this call:
+	//   - SummonSwamp and other write-path entries return ErrorHydraIsShuttingDown.
+	//   - IsShuttingDown returns true.
+	//   - Subscribers can be detected (via IsShuttingDown) and exit their stream loops.
+	//
+	// Calling MarkShuttingDown is idempotent and safe to call before GracefulStop.
+	// GracefulStop will still perform the same flag flip if MarkShuttingDown was not
+	// invoked first.
+	MarkShuttingDown()
 }
 
 const (
@@ -682,6 +700,24 @@ func (h *hydra) UnsubscribeFromSwampEvents(clientID uuid.UUID, swampName name.Na
 
 }
 
+// IsShuttingDown returns whether MarkShuttingDown / GracefulStop has been called.
+// Cheap atomic read — safe to call from gRPC interceptors on every request.
+func (h *hydra) IsShuttingDown() bool {
+	return atomic.LoadInt32(&h.shuttingDown) == 1
+}
+
+// MarkShuttingDown flips the shutting-down flag and detaches subscribers.
+// Idempotent. Does not touch open swamps; that is GracefulStop's job.
+func (h *hydra) MarkShuttingDown() {
+	if !atomic.CompareAndSwapInt32(&h.shuttingDown, 0, 1) {
+		return
+	}
+	slog.Info("Hydra marked as shutting down — new writes will be rejected")
+	// Drop subscribers so subscribe loops watching IsShuttingDown can exit promptly.
+	h.eventSubscribers = sync.Map{}
+	h.infoSubscribers = sync.Map{}
+}
+
 // GracefulStop close function for the graceful stop package
 // DO NOT CALL THIS FUNCTION DIRECTLY
 // the graceful stop package calls this function when the server is shutting down
@@ -690,14 +726,9 @@ func (h *hydra) GracefulStop() {
 
 	slog.Info("Graceful stop of the hydra executed")
 
-	// set the shutting down flag to true and prevent the creation of new swamps
-	// and all public functions will return error, because the hydra is shutting down
-	atomic.StoreInt32(&h.shuttingDown, 1)
-
-	// Remove all event and info subscribers to prevent them from waiting for new events or information
-	// from Hydra. We close all subscriber channels, which notifies the subscribers accordingly.
-	h.eventSubscribers = sync.Map{}
-	h.infoSubscribers = sync.Map{}
+	// Idempotent flag set + subscriber detach. Safe even if MarkShuttingDown
+	// was already called from server.Stop().
+	h.MarkShuttingDown()
 
 	// start a new routine and close all swamps
 	panichandler.SafeGo("swamp-closing", func() {

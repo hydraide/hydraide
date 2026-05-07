@@ -70,6 +70,47 @@ type server struct {
 	zeusInterface      zeus.Zeus
 	observerInterface  observer.Observer
 	telemetryCollector telemetry.Collector
+	// shutdownCtx is cancelled at the very start of Stop(). Stream RPCs
+	// (Subscribe*) listen on it so they can exit promptly and let
+	// grpcServer.GracefulStop() return instead of blocking forever.
+	shutdownCtx       context.Context
+	shutdownCancel    context.CancelFunc
+}
+
+// gRPCGracefulStopTimeout caps how long we wait for in-flight RPCs to finish
+// after Stop() is called. After this elapses we force-stop the gRPC server so
+// the swamp-flush phase always gets a chance to run before the
+// hydraidectl/systemd SIGKILL hits us at 180s.
+const gRPCGracefulStopTimeout = 60 * time.Second
+
+// shutdownWriteAllowlist enumerates RPC methods that are SAFE to serve while
+// the engine is shutting down. Anything not on this list is rejected with
+// codes.Unavailable as soon as MarkShuttingDown() flips the flag.
+//
+// Rule of thumb: read-only and observability methods stay open; anything that
+// can mutate Swamp state (Set / Delete / Destroy / Lock / Increment / patch /
+// Uint32Slice push|delete / RegisterSwamp / DeRegisterSwamp / CompactSwamp /
+// Shift*) is rejected so the on-disk state can be flushed cleanly.
+var shutdownWriteAllowlist = map[string]struct{}{
+	"Heartbeat":              {},
+	"Get":                    {},
+	"GetAll":                 {},
+	"GetByIndex":             {},
+	"GetByKeys":              {},
+	"GetByIndexStream":       {},
+	"GetByIndexStreamFromMany": {},
+	"GetStream":              {},
+	"Count":                  {},
+	"IsSwampExist":           {},
+	"IsKeyExist":             {},
+	"AreKeysExist":           {},
+	"Uint32SliceSize":        {},
+	"Uint32SliceIsValueExist": {},
+	"GetTelemetryHistory":    {},
+	"GetErrorDetails":        {},
+	"GetTelemetryStats":      {},
+	// Subscribe* are intentionally NOT here: shutdown context cancels them
+	// directly inside the gateway so they exit with Unavailable.
 }
 
 func New(configuration *Configuration) Server {
@@ -110,6 +151,10 @@ func (s *server) Start() error {
 	s.zeusInterface = zeus.New(settingsInterface, filesystem.New())
 	s.zeusInterface.StartHydra()
 
+	// shutdown context — cancelled in Stop(). Cheap to create here so the
+	// gateway can hold a non-nil reference for the lifetime of the server.
+	s.shutdownCtx, s.shutdownCancel = context.WithCancel(context.Background())
+
 	var ctx context.Context
 	ctx, s.observerCancelFunc = context.WithCancel(context.Background())
 	s.observerInterface = observer.New(ctx, s.configuration.SystemResourceLogging)
@@ -128,6 +173,23 @@ func (s *server) Start() error {
 		DefaultWriteInterval:  s.configuration.DefaultWriteInterval,
 		DefaultFileSize:       s.configuration.DefaultFileSize,
 		TelemetryCollector:    s.telemetryCollector,
+		ShutdownCtx:           s.shutdownCtx,
+	}
+
+	// rejectIfShuttingDown returns a non-nil error when the engine is shutting
+	// down AND the requested method is not on shutdownWriteAllowlist. The
+	// returned error is codes.Unavailable so clients can retry on a healthy
+	// instance. Reads keep flowing during the shutdown drain window.
+	rejectIfShuttingDown := func(fullMethod string) error {
+		hydraIface := s.zeusInterface.GetHydra()
+		if hydraIface == nil || !hydraIface.IsShuttingDown() {
+			return nil
+		}
+		method := extractMethodName(fullMethod)
+		if _, ok := shutdownWriteAllowlist[method]; ok {
+			return nil
+		}
+		return status.Error(codes.Unavailable, "server is shutting down — retry later")
 	}
 
 	unaryInterceptor := func(
@@ -145,6 +207,10 @@ func (s *server) Start() error {
 			if addr, ok := p.Addr.(*net.TCPAddr); ok {
 				clientIP = addr.IP.String()
 			}
+		}
+
+		if rejectErr := rejectIfShuttingDown(info.FullMethod); rejectErr != nil {
+			return nil, rejectErr
 		}
 
 		resp, err := handler(ctx, req)
@@ -292,13 +358,26 @@ func (s *server) Start() error {
 		// - Message size limits (protects memory / abuse)
 		// - Unary interceptor for centralized logging/metrics/auth decisions
 		// - Keepalive parameters (connection hygiene)
+		streamInterceptor := func(
+			srv interface{},
+			ss grpc.ServerStream,
+			info *grpc.StreamServerInfo,
+			handler grpc.StreamHandler,
+		) error {
+			if rejectErr := rejectIfShuttingDown(info.FullMethod); rejectErr != nil {
+				return rejectErr
+			}
+			return handler(srv, ss)
+		}
+
 		s.grpcServer = grpc.NewServer(
 			grpc.Creds(creds),
 			grpc.MaxSendMsgSize(s.configuration.HydraMaxMessageSize),
 			grpc.MaxRecvMsgSize(s.configuration.HydraMaxMessageSize),
-			grpc.UnaryInterceptor(unaryInterceptor), // add the interceptor
-			grpc.KeepaliveParams(kaParams),          // keepalive parameters
-			grpc.KeepaliveEnforcementPolicy(ep),     // enforcement policy
+			grpc.UnaryInterceptor(unaryInterceptor),
+			grpc.StreamInterceptor(streamInterceptor),
+			grpc.KeepaliveParams(kaParams),
+			grpc.KeepaliveEnforcementPolicy(ep),
 		)
 
 		// Register the Hydraide gRPC service implementation.
@@ -318,7 +397,22 @@ func (s *server) Start() error {
 
 }
 
-// Stop stops the microservice gracefully
+// Stop stops the microservice gracefully.
+//
+// Order of operations matters — these phases must run in this exact sequence
+// so that the on-disk state is always flushed before SIGKILL arrives at 180s
+// from hydraidectl/systemd:
+//
+//  1. Mark Hydra as shutting down. The interceptors immediately start rejecting
+//     new writes with codes.Unavailable; reads keep flowing.
+//  2. Cancel shutdownCtx. Subscribe* stream handlers exit promptly.
+//  3. grpcServer.GracefulStop() — wait up to gRPCGracefulStopTimeout for the
+//     remaining in-flight unary RPCs to finish. After that fire-stop the gRPC
+//     server so the socket is closed even if a handler is wedged.
+//  4. WaitingForAllProcessesFinished — drain background goroutines.
+//  5. zeus.StopHydra → hydra.GracefulStop — flush every open swamp to disk
+//     (10s graceful + force-flush + 30s hard cap inside hydra.go).
+//  6. Telemetry + observer cancellation.
 func (s *server) Stop() {
 
 	slog.Info("stopping the HydrAIDE server...")
@@ -332,31 +426,61 @@ func (s *server) Stop() {
 	s.serverRunning = false
 	s.mu.Unlock()
 
-	if s.grpcServer != nil {
-		// stops the gRPC server gracefully because we don't want to get new requests from the crawler
-		s.grpcServer.GracefulStop()
+	// Phase 1: flip shutdown flag so interceptors reject new writes.
+	if s.zeusInterface != nil {
+		if hydraIface := s.zeusInterface.GetHydra(); hydraIface != nil {
+			hydraIface.MarkShuttingDown()
+		}
 	}
 
-	// waiting for all processes to finish. This is a blocker function until all processes are finished
+	// Phase 2: cancel the shutdown context so streams exit.
+	if s.shutdownCancel != nil {
+		s.shutdownCancel()
+	}
+
+	// Phase 3: gRPC graceful stop with hard timeout. We can't simply call
+	// GracefulStop() inline — a wedged stream or an in-flight RPC that takes
+	// longer than our 180s SIGKILL deadline would prevent the swamp flush
+	// from ever running. Run it in a goroutine and force-stop after the cap.
+	if s.grpcServer != nil {
+		gracefulDone := make(chan struct{})
+		panichandler.SafeGo("grpc-graceful-stop", func() {
+			s.grpcServer.GracefulStop()
+			close(gracefulDone)
+		})
+
+		select {
+		case <-gracefulDone:
+			slog.Info("gRPC server stopped gracefully")
+		case <-time.After(gRPCGracefulStopTimeout):
+			slog.Warn("gRPC GracefulStop did not return in time — forcing Stop()",
+				"timeout", gRPCGracefulStopTimeout)
+			s.grpcServer.Stop()
+			<-gracefulDone
+		}
+	}
+
+	// Phase 4: drain background goroutines.
 	if s.observerInterface != nil {
 		slog.Info("waiting for all processes to finish in the background")
 		s.observerInterface.WaitingForAllProcessesFinished()
 		slog.Info("all processes are finished in the background")
 	}
 
+	// Phase 5: flush every open swamp.
 	if s.zeusInterface != nil {
-		// stop the HydrAIDE gracefully. This is a blocker function until all swamps are stopped gracefully
 		s.zeusInterface.StopHydra()
 		slog.Info("HydrAIDE server stopped gracefully. Program is exiting...")
 	}
 
-	// Close telemetry collector
+	// Phase 6: telemetry + observer.
 	if s.telemetryCollector != nil {
 		s.telemetryCollector.Close()
 	}
 
-	// stop the observer's monitoring process
-	s.observerCancelFunc()
+	if s.observerCancelFunc != nil {
+		s.observerCancelFunc()
+	}
 
 }
 

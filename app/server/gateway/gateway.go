@@ -36,6 +36,12 @@ type Gateway struct {
 	DefaultWriteInterval  int64
 	DefaultFileSize       int64
 	TelemetryCollector    telemetry.Collector
+	// ShutdownCtx is cancelled at the very start of server.Stop(). Long-running
+	// stream handlers (Subscribe*) select on this so they exit promptly during
+	// shutdown instead of blocking grpcServer.GracefulStop() forever.
+	// Nil is allowed (handlers fall back to client-context-only) so existing
+	// tests/wiring keep working.
+	ShutdownCtx context.Context
 }
 
 // buildKeySet creates a set from a list of keys for O(1) inclusion/exclusion lookup.
@@ -1585,31 +1591,46 @@ func (g Gateway) SubscribeToEvents(in *hydrapb.SubscribeToEventsRequest, eventSe
 		return status.Error(codes.Internal, fmt.Sprintf("internal server error in hydra: %s", err.Error()))
 	}
 
-	for {
-		select {
-		// we are waiting for the client to close the connection
-		case <-eventServer.Context().Done():
+	// Resolve the shutdown channel exactly once. Nil ShutdownCtx is allowed
+	// (legacy wiring); reading from a nil channel blocks forever, which
+	// preserves the original behaviour of waiting purely on the client.
+	var shutdownDone <-chan struct{}
+	if g.ShutdownCtx != nil {
+		shutdownDone = g.ShutdownCtx.Done()
+	}
 
-			err := eventServer.Context().Err()
-			if err != nil && !errors.Is(err, context.Canceled) {
-				slog.Warn("connection closed with an unexpected error",
-					"uuid", subscriberUUID,
-					"error", err.Error())
-			} else {
-				slog.Debug("the client closed the connection gracefully",
-					"uuid", subscriberUUID)
-			}
-
-			// Unsubscribe logic
-			if err := hydraInterface.UnsubscribeFromSwampEvents(subscriberUUID, swampName); err != nil {
-				slog.Error("failed to unsubscribe the subscriber from the swamp",
-					"uuid", subscriberUUID,
-					"error", err.Error())
-			}
-
-			return nil
-
+	unsubscribe := func() {
+		if err := hydraInterface.UnsubscribeFromSwampEvents(subscriberUUID, swampName); err != nil {
+			slog.Error("failed to unsubscribe the subscriber from the swamp",
+				"uuid", subscriberUUID,
+				"error", err.Error())
 		}
+	}
+
+	select {
+	case <-eventServer.Context().Done():
+
+		err := eventServer.Context().Err()
+		if err != nil && !errors.Is(err, context.Canceled) {
+			slog.Warn("connection closed with an unexpected error",
+				"uuid", subscriberUUID,
+				"error", err.Error())
+		} else {
+			slog.Debug("the client closed the connection gracefully",
+				"uuid", subscriberUUID)
+		}
+
+		unsubscribe()
+		return nil
+
+	case <-shutdownDone:
+		// Server is shutting down — terminate the stream so grpcServer.GracefulStop()
+		// can return. The client receives codes.Unavailable.
+		slog.Info("subscribe stream terminated by server shutdown",
+			"uuid", subscriberUUID,
+			"swamp", swampName.Get())
+		unsubscribe()
+		return status.Error(codes.Unavailable, "server is shutting down")
 	}
 
 }
@@ -1670,20 +1691,21 @@ func (g Gateway) SubscribeToInfo(in *hydrapb.SubscribeToInfoRequest, infoServer 
 		)
 	}()
 
-	for {
-		select {
-		// várunk arra, hogy a user bezárja a kapcsolatot
-		case <-infoServer.Context().Done():
-			// remove the subscriber from the swamp when the client closes the connection
-			if err := hydraInterface.UnsubscribeFromSwampInfo(subscriberUUID, swampName); err != nil {
-				slog.Error("failed to unsubscribe the subscriber from the swamp",
-					"uuid", subscriberUUID,
-					"error", err.Error(),
-				)
-			}
-			return nil
+	var shutdownDone <-chan struct{}
+	if g.ShutdownCtx != nil {
+		shutdownDone = g.ShutdownCtx.Done()
+	}
 
-		}
+	select {
+	case <-infoServer.Context().Done():
+		// the deferred cleanup above handles unsubscribe
+		return nil
+
+	case <-shutdownDone:
+		slog.Info("info subscribe stream terminated by server shutdown",
+			"uuid", subscriberUUID,
+			"swamp", swampName.Get())
+		return status.Error(codes.Unavailable, "server is shutting down")
 	}
 
 }
@@ -2939,9 +2961,16 @@ func (g Gateway) SubscribeToTelemetry(req *hydrapb.TelemetrySubscribeRequest, st
 	ch, unsubscribe := g.TelemetryCollector.Subscribe(filter)
 	defer unsubscribe()
 
+	var shutdownDone <-chan struct{}
+	if g.ShutdownCtx != nil {
+		shutdownDone = g.ShutdownCtx.Done()
+	}
+
 	// Stream events to the client
 	for {
 		select {
+		case <-shutdownDone:
+			return status.Error(codes.Unavailable, "server is shutting down")
 		case event, ok := <-ch:
 			if !ok {
 				// Channel closed, telemetry collector is shutting down

@@ -73,3 +73,4 @@ plan/EXPLORER_FIX_PLAN.md
 
 # Build artifacts
 /server
+.shutdown-smoke/
