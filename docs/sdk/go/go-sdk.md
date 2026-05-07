@@ -1940,6 +1940,25 @@ if status == hydraidego.PatchStatusConditionNotMet {
 }
 ```
 
+##### 6. Slide or clear `ExpiredAt` in the same patch (server v3.13.0+)
+
+```go
+// Attach (or refresh) a 24h TTL while bumping a counter.
+status, err := h.
+    CatalogPatch(ctx, swampName, "session:abc").
+    Inc("HitCount", int32(1)).
+    WithUpdatedAt().
+    WithExpiredAt(time.Now().UTC().Add(24 * time.Hour)).
+    Exec()
+
+// Promote a transient row to permanent — drop the TTL atomically.
+status, err = h.
+    CatalogPatch(ctx, swampName, "session:abc").
+    Set("Tier", "permanent").
+    WithoutExpiredAt().
+    Exec()
+```
+
 #### 📚 Op Reference
 
 | Builder Method          | Wire Op       | Notes                                                                                              |
@@ -1967,6 +1986,17 @@ if status == hydraidego.PatchStatusConditionNotMet {
 | `IfFieldNotExists(path)`                  | `NOT_EXISTS`             |
 
 Conditions are evaluated **before any op runs**. If the comparison fails, you get `PatchStatusConditionNotMet` and the blob is left untouched. Only one condition is supported per patch in V1; for compound logic, issue multiple sequential `PatchTreasures` calls (atomicity is then per-call, not across calls).
+
+#### 🏷️ Metadata Helpers
+
+| Builder Method                | Wire Field         | Notes                                                                                                        |
+| ----------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------ |
+| `WithUpdatedAt()`             | `SetUpdatedAt`     | Server stamps `ModifiedAt` to now on the patched Treasure.                                                   |
+| `WithUpdatedBy(userID)`       | `SetUpdatedBy`     | Server stamps `ModifiedBy = userID`.                                                                         |
+| `WithExpiredAt(t time.Time)`  | `SetExpiredAt`     | Server sets `ExpiredAt` (existing or newly created Treasure). Slide a TTL or attach one. Zero `time.Time` clears the TTL, equivalent to `WithoutExpiredAt()`. Requires server **v3.13.0+**; older servers silently drop the field. |
+| `WithoutExpiredAt()`          | `ClearExpiredAt`   | Resets `ExpiredAt` to "never expires". Wins over a prior `WithExpiredAt` on the same builder.                |
+
+Metadata is applied under the same per-key guard as the ops, so the body and metadata changes commit atomically. Created\* helpers (set via raw `PatchMeta` in lower-level calls) only apply to Treasures created in the same call.
 
 #### 📊 Status Codes
 
