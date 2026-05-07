@@ -1,0 +1,55 @@
+name: Release Go SDK
+
+on:
+  push:
+    tags:
+      - "sdk/go/hydraidego/v*"
+
+jobs:
+  test-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Extract version from tag
+        id: version
+        shell: bash
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/sdk/go/hydraidego/}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Build SDK module
+        run: |
+          cd sdk/go/hydraidego
+          go build ./...
+
+      - name: Run SDK unit tests
+        run: |
+          cd sdk/go/hydraidego
+          go test ./...
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "Go SDK ${{ steps.version.outputs.version }}"
+          body: |
+            HydrAIDE Go SDK release `${{ steps.version.outputs.version }}`.
+
+            Install:
+            ```
+            go get github.com/hydraide/hydraide/sdk/go/hydraidego@${{ steps.version.outputs.version }}
+            ```
+
+            See [`sdk/go/hydraidego/`](https://github.com/hydraide/hydraide/tree/${{ github.ref_name }}/sdk/go/hydraidego) for the SDK source and the [`hydraidego` Claude Code skill](https://github.com/hydraide/hydraide/tree/${{ github.ref_name }}/.claude/skills/hydraidego) for usage guidance.
+          generate_release_notes: false
+          draft: false
+          prerelease: false
