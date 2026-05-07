@@ -55,6 +55,7 @@ const (
 	HydraideService_IncrementFloat32_FullMethodName         = "/hydraidepbgo.HydraideService/IncrementFloat32"
 	HydraideService_IncrementFloat64_FullMethodName         = "/hydraidepbgo.HydraideService/IncrementFloat64"
 	HydraideService_PatchTreasures_FullMethodName           = "/hydraidepbgo.HydraideService/PatchTreasures"
+	HydraideService_PatchExpiredTreasures_FullMethodName    = "/hydraidepbgo.HydraideService/PatchExpiredTreasures"
 	HydraideService_SubscribeToTelemetry_FullMethodName     = "/hydraidepbgo.HydraideService/SubscribeToTelemetry"
 	HydraideService_GetTelemetryHistory_FullMethodName      = "/hydraidepbgo.HydraideService/GetTelemetryHistory"
 	HydraideService_GetErrorDetails_FullMethodName          = "/hydraidepbgo.HydraideService/GetErrorDetails"
@@ -457,6 +458,35 @@ type HydraideServiceClient interface {
 	// for fine-grained mutations. Per-key Conditions enable optimistic-style
 	// pre-checks; failed checks return CONDITION_NOT_MET without applying ops.
 	PatchTreasures(ctx context.Context, in *PatchTreasuresRequest, opts ...grpc.CallOption) (*PatchTreasuresResponse, error)
+	// PatchExpiredTreasures atomically selects up to HowMany expired treasures
+	// from a swamp and applies the same op-set + meta to each one in place.
+	//
+	// Selection is by ExpiredAt < server-now, oldest-first, exactly like
+	// ShiftExpiredTreasures — but the treasures are NOT deleted. Each
+	// selected treasure is patched under its per-key guard and re-indexed
+	// with the new ExpiredAt set via PatchMeta.SetExpiredAt (or its
+	// unchanged ExpiredAt if Meta is nil).
+	//
+	// Concurrent callers receive disjoint subsets: the server pulls
+	// selected treasures out of the expired index under the beacon lock
+	// before patching, so two callers cannot both observe the same
+	// treasure as expired in the same window.
+	//
+	// Optional Condition is evaluated per-treasure under the per-key guard
+	// after selection. Treasures that fail the condition are reported with
+	// CONDITION_NOT_MET, are NOT patched, and are re-inserted into the
+	// expired index with their unchanged ExpiredAt — the next call can
+	// retry them.
+	//
+	// Typical use: queue claim. Patch ExpiredAt forward to lease a batch
+	// of items to a worker; the new ExpiredAt acts both as the lease
+	// deadline and as the recovery trigger if the worker crashes.
+	//
+	// Use this for:
+	// - Crash-safe queue claims (no separate fetch + lock RPC pair)
+	// - Bulk TTL slides on expired entries (empty Ops + Meta only)
+	// - Periodic recheck scheduling driven by ExpiredAt
+	PatchExpiredTreasures(ctx context.Context, in *PatchExpiredTreasuresRequest, opts ...grpc.CallOption) (*PatchExpiredTreasuresResponse, error)
 	// SubscribeToTelemetry opens a real-time stream of all gRPC calls and their results.
 	//
 	// Each event includes:
@@ -928,6 +958,16 @@ func (c *hydraideServiceClient) PatchTreasures(ctx context.Context, in *PatchTre
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(PatchTreasuresResponse)
 	err := c.cc.Invoke(ctx, HydraideService_PatchTreasures_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *hydraideServiceClient) PatchExpiredTreasures(ctx context.Context, in *PatchExpiredTreasuresRequest, opts ...grpc.CallOption) (*PatchExpiredTreasuresResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PatchExpiredTreasuresResponse)
+	err := c.cc.Invoke(ctx, HydraideService_PatchExpiredTreasures_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1442,6 +1482,35 @@ type HydraideServiceServer interface {
 	// for fine-grained mutations. Per-key Conditions enable optimistic-style
 	// pre-checks; failed checks return CONDITION_NOT_MET without applying ops.
 	PatchTreasures(context.Context, *PatchTreasuresRequest) (*PatchTreasuresResponse, error)
+	// PatchExpiredTreasures atomically selects up to HowMany expired treasures
+	// from a swamp and applies the same op-set + meta to each one in place.
+	//
+	// Selection is by ExpiredAt < server-now, oldest-first, exactly like
+	// ShiftExpiredTreasures — but the treasures are NOT deleted. Each
+	// selected treasure is patched under its per-key guard and re-indexed
+	// with the new ExpiredAt set via PatchMeta.SetExpiredAt (or its
+	// unchanged ExpiredAt if Meta is nil).
+	//
+	// Concurrent callers receive disjoint subsets: the server pulls
+	// selected treasures out of the expired index under the beacon lock
+	// before patching, so two callers cannot both observe the same
+	// treasure as expired in the same window.
+	//
+	// Optional Condition is evaluated per-treasure under the per-key guard
+	// after selection. Treasures that fail the condition are reported with
+	// CONDITION_NOT_MET, are NOT patched, and are re-inserted into the
+	// expired index with their unchanged ExpiredAt — the next call can
+	// retry them.
+	//
+	// Typical use: queue claim. Patch ExpiredAt forward to lease a batch
+	// of items to a worker; the new ExpiredAt acts both as the lease
+	// deadline and as the recovery trigger if the worker crashes.
+	//
+	// Use this for:
+	// - Crash-safe queue claims (no separate fetch + lock RPC pair)
+	// - Bulk TTL slides on expired entries (empty Ops + Meta only)
+	// - Periodic recheck scheduling driven by ExpiredAt
+	PatchExpiredTreasures(context.Context, *PatchExpiredTreasuresRequest) (*PatchExpiredTreasuresResponse, error)
 	// SubscribeToTelemetry opens a real-time stream of all gRPC calls and their results.
 	//
 	// Each event includes:
@@ -1645,6 +1714,9 @@ func (UnimplementedHydraideServiceServer) IncrementFloat64(context.Context, *Inc
 }
 func (UnimplementedHydraideServiceServer) PatchTreasures(context.Context, *PatchTreasuresRequest) (*PatchTreasuresResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method PatchTreasures not implemented")
+}
+func (UnimplementedHydraideServiceServer) PatchExpiredTreasures(context.Context, *PatchExpiredTreasuresRequest) (*PatchExpiredTreasuresResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method PatchExpiredTreasures not implemented")
 }
 func (UnimplementedHydraideServiceServer) SubscribeToTelemetry(*TelemetrySubscribeRequest, grpc.ServerStreamingServer[TelemetryEvent]) error {
 	return status.Error(codes.Unimplemented, "method SubscribeToTelemetry not implemented")
@@ -2314,6 +2386,24 @@ func _HydraideService_PatchTreasures_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _HydraideService_PatchExpiredTreasures_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PatchExpiredTreasuresRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HydraideServiceServer).PatchExpiredTreasures(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HydraideService_PatchExpiredTreasures_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HydraideServiceServer).PatchExpiredTreasures(ctx, req.(*PatchExpiredTreasuresRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _HydraideService_SubscribeToTelemetry_Handler(srv interface{}, stream grpc.ServerStream) error {
 	m := new(TelemetrySubscribeRequest)
 	if err := stream.RecvMsg(m); err != nil {
@@ -2568,6 +2658,10 @@ var HydraideService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "PatchTreasures",
 			Handler:    _HydraideService_PatchTreasures_Handler,
+		},
+		{
+			MethodName: "PatchExpiredTreasures",
+			Handler:    _HydraideService_PatchExpiredTreasures_Handler,
 		},
 		{
 			MethodName: "GetTelemetryHistory",

@@ -91,6 +91,59 @@ type PatchManyRequest struct {
 	// on the encoded msgpack body; nested paths use dot notation
 	// ("Foo.Bar.Baz").
 	Fields map[string]any
+
+	// Cond is an optional pre-check evaluated under the per-key guard
+	// before any op runs. Failure short-circuits with
+	// PatchStatusConditionNotMet and applies no ops. Mirrors the builder
+	// API's IfField* surface, exposed here for batch use (atomic CAS
+	// across many keys in a single round-trip).
+	Cond *PatchCond
+}
+
+// PatchCondOp identifies the comparator for a PatchCond. Mirrors the wire
+// PatchCondition_Op enum without exposing the generated type to SDK
+// callers.
+type PatchCondOp int
+
+const (
+	// PatchCondEqual matches when the field equals Value (exact msgpack
+	// byte equality).
+	PatchCondEqual PatchCondOp = iota
+	// PatchCondNotEqual is the inverse of PatchCondEqual.
+	PatchCondNotEqual
+	// PatchCondGreaterThan matches when the field is strictly greater
+	// than Value (numeric / string lexicographic comparison).
+	PatchCondGreaterThan
+	// PatchCondGreaterThanOrEqual matches when the field is greater than
+	// or equal to Value.
+	PatchCondGreaterThanOrEqual
+	// PatchCondLessThan matches when the field is strictly less than
+	// Value.
+	PatchCondLessThan
+	// PatchCondLessThanOrEqual matches when the field is less than or
+	// equal to Value.
+	PatchCondLessThanOrEqual
+	// PatchCondExists matches when a leaf value is present at Path. The
+	// PatchCond.Value field is ignored.
+	PatchCondExists
+	// PatchCondNotExists matches when no leaf is present at Path. The
+	// PatchCond.Value field is ignored.
+	PatchCondNotExists
+)
+
+// PatchCond is a single field-level pre-check applied to a patch under
+// the per-key guard.
+type PatchCond struct {
+	// Op is the comparator.
+	Op PatchCondOp
+
+	// Path is the dot-notation field expression to evaluate.
+	Path string
+
+	// Value is compared against the field at Path. Required for all
+	// operators except PatchCondExists / PatchCondNotExists, where it
+	// must be nil.
+	Value any
 }
 
 // PatchManyIteratorFunc is invoked once per result in a CatalogPatchFieldsMany
@@ -168,9 +221,14 @@ func (h *hydraidego) CatalogPatchFieldsMany(ctx context.Context, swampName name.
 				Value: encoded,
 			})
 		}
+		wireCond, condErr := patchCondToWire(req.Cond)
+		if condErr != nil {
+			return NewError(ErrCodeInvalidModel, fmt.Sprintf("request %d, condition: %v", i, condErr))
+		}
 		patches = append(patches, &hydraidepbgo.TreasurePatch{
-			Key: req.Key,
-			Ops: ops,
+			Key:       req.Key,
+			Ops:       ops,
+			Condition: wireCond,
 		})
 	}
 
@@ -249,6 +307,65 @@ func encodePatchValue(v any) ([]byte, error) {
 		return nil, fmt.Errorf("patch value cannot be nil")
 	}
 	return msgpack.Marshal(v)
+}
+
+// patchCondOpToWire maps the SDK enum to the wire enum.
+func patchCondOpToWire(op PatchCondOp) (hydraidepbgo.PatchCondition_Op, error) {
+	switch op {
+	case PatchCondEqual:
+		return hydraidepbgo.PatchCondition_EQUAL, nil
+	case PatchCondNotEqual:
+		return hydraidepbgo.PatchCondition_NOT_EQUAL, nil
+	case PatchCondGreaterThan:
+		return hydraidepbgo.PatchCondition_GREATER_THAN, nil
+	case PatchCondGreaterThanOrEqual:
+		return hydraidepbgo.PatchCondition_GREATER_THAN_OR_EQUAL, nil
+	case PatchCondLessThan:
+		return hydraidepbgo.PatchCondition_LESS_THAN, nil
+	case PatchCondLessThanOrEqual:
+		return hydraidepbgo.PatchCondition_LESS_THAN_OR_EQUAL, nil
+	case PatchCondExists:
+		return hydraidepbgo.PatchCondition_EXISTS, nil
+	case PatchCondNotExists:
+		return hydraidepbgo.PatchCondition_NOT_EXISTS, nil
+	}
+	return 0, fmt.Errorf("unknown PatchCondOp %d", int(op))
+}
+
+// patchCondToWire converts an SDK PatchCond to the wire-level
+// PatchCondition. Returns (nil, nil) when in is nil.
+//
+// Validation:
+//   - For Exists / NotExists, Value must be nil (the threshold is ignored
+//     on the wire and a non-nil Value would be silently dropped, which is
+//     a footgun).
+//   - For all other operators, Value is required.
+func patchCondToWire(in *PatchCond) (*hydraidepbgo.PatchCondition, error) {
+	if in == nil {
+		return nil, nil
+	}
+	wireOp, err := patchCondOpToWire(in.Op)
+	if err != nil {
+		return nil, err
+	}
+	if in.Op == PatchCondExists || in.Op == PatchCondNotExists {
+		if in.Value != nil {
+			return nil, fmt.Errorf("PatchCond.Value must be nil for Exists / NotExists")
+		}
+		return &hydraidepbgo.PatchCondition{Path: in.Path, Operator: wireOp}, nil
+	}
+	if in.Value == nil {
+		return nil, fmt.Errorf("PatchCond.Value cannot be nil for operator %d", int(in.Op))
+	}
+	encoded, err := encodePatchValue(in.Value)
+	if err != nil {
+		return nil, fmt.Errorf("encode condition value: %w", err)
+	}
+	return &hydraidepbgo.PatchCondition{
+		Path:      in.Path,
+		Operator:  wireOp,
+		Threshold: encoded,
+	}, nil
 }
 
 // translatePatchGRPCError maps gRPC error codes onto the SDK's existing

@@ -423,6 +423,36 @@ service HydraideService {
   // pre-checks; failed checks return CONDITION_NOT_MET without applying ops.
   rpc PatchTreasures(PatchTreasuresRequest) returns (PatchTreasuresResponse) {}
 
+  // PatchExpiredTreasures atomically selects up to HowMany expired treasures
+  // from a swamp and applies the same op-set + meta to each one in place.
+  //
+  // Selection is by ExpiredAt < server-now, oldest-first, exactly like
+  // ShiftExpiredTreasures — but the treasures are NOT deleted. Each
+  // selected treasure is patched under its per-key guard and re-indexed
+  // with the new ExpiredAt set via PatchMeta.SetExpiredAt (or its
+  // unchanged ExpiredAt if Meta is nil).
+  //
+  // Concurrent callers receive disjoint subsets: the server pulls
+  // selected treasures out of the expired index under the beacon lock
+  // before patching, so two callers cannot both observe the same
+  // treasure as expired in the same window.
+  //
+  // Optional Condition is evaluated per-treasure under the per-key guard
+  // after selection. Treasures that fail the condition are reported with
+  // CONDITION_NOT_MET, are NOT patched, and are re-inserted into the
+  // expired index with their unchanged ExpiredAt — the next call can
+  // retry them.
+  //
+  // Typical use: queue claim. Patch ExpiredAt forward to lease a batch
+  // of items to a worker; the new ExpiredAt acts both as the lease
+  // deadline and as the recovery trigger if the worker crashes.
+  //
+  // Use this for:
+  // - Crash-safe queue claims (no separate fetch + lock RPC pair)
+  // - Bulk TTL slides on expired entries (empty Ops + Meta only)
+  // - Periodic recheck scheduling driven by ExpiredAt
+  rpc PatchExpiredTreasures(PatchExpiredTreasuresRequest) returns (PatchExpiredTreasuresResponse) {}
+
   // ============ TELEMETRY ENDPOINTS ============
   //
   // These endpoints provide real-time observability into the HydrAIDE server.
@@ -2949,4 +2979,74 @@ message PatchResult {
   // NewMsgpack carries the mutated msgpack blob when the request opted in
   // to receiving it. Reserved for future use.
   optional bytes NewMsgpack = 4;
+}
+
+// ============ PATCH EXPIRED TREASURES ============
+
+// PatchExpiredTreasuresRequest carries an in-place patch over up to
+// HowMany expired treasures of a single swamp. All selected treasures
+// receive the same Ops + Meta. Selection follows ShiftExpiredTreasures
+// semantics (oldest expired first, disjoint subsets across concurrent
+// callers).
+message PatchExpiredTreasuresRequest {
+  // IslandID is the deterministic storage zone where the swamp lives.
+  uint64 IslandID = 1;
+
+  // SwampName addresses the swamp containing the patched treasures.
+  string SwampName = 2;
+
+  // HowMany caps the result count. 0 means "all currently-expired
+  // treasures" (matches ShiftExpiredTreasures behaviour). Use bounded
+  // batches in production to keep RPC latency predictable.
+  int32 HowMany = 3;
+
+  // Ops is the ordered list of mutations applied to every selected
+  // treasure under its per-key guard. Empty Ops is allowed only when
+  // Meta is non-nil (meta-only patch — typical for sliding ExpiredAt
+  // forward without changing the body).
+  repeated PatchOp Ops = 4;
+
+  // Meta sets timestamp/identity metadata on every patched treasure.
+  // SetExpiredAt is the typical knob for queue-claim and recheck flows
+  // — the new ExpiredAt doubles as the worker's lease deadline and as
+  // the recovery trigger if the worker crashes.
+  optional PatchMeta Meta = 5;
+
+  // Condition is an optional per-treasure pre-check evaluated under
+  // the per-key guard after selection. Treasures failing the condition
+  // are reported as CONDITION_NOT_MET, are NOT patched, and are
+  // re-inserted into the expired index with their unchanged ExpiredAt
+  // — the next call can retry them.
+  optional PatchCondition Condition = 6;
+}
+
+// PatchExpiredTreasuresResponse holds per-treasure outcomes for the
+// expired-batch patch. The Patched list is in the same order as the
+// server-side selection (oldest expired first).
+message PatchExpiredTreasuresResponse {
+  repeated PatchedExpiredTreasure Patched = 1;
+}
+
+// PatchedExpiredTreasure carries the outcome and the post-patch state
+// for one selected treasure.
+message PatchedExpiredTreasure {
+  // Key identifies the patched treasure within the swamp.
+  string Key = 1;
+
+  // Status mirrors PatchResult.StatusCode for this treasure. PATCHED
+  // is typical; CONDITION_NOT_MET / TYPE_MISMATCH /
+  // ENCODING_NOT_SUPPORTED / INTERNAL_ERROR can occur per-treasure.
+  PatchResult.StatusCode Status = 2;
+
+  // Error is a free-form description for non-success statuses.
+  optional string Error = 3;
+
+  // NewMsgpack carries the post-patch msgpack body of the treasure
+  // (stripped of HydrAIDE's 2-byte msgpack magic prefix). Empty when
+  // Status != PATCHED, or when the body was not msgpack-encoded.
+  optional bytes NewMsgpack = 4;
+
+  // ExpiredAt is the treasure's expiration time after the patch (post
+  // PatchMeta application). Unset when the treasure has no expiration.
+  optional google.protobuf.Timestamp ExpiredAt = 5;
 }

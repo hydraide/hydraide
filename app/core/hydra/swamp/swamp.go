@@ -761,6 +761,50 @@ type Swamp interface {
 	//
 	// See app/core/hydra/swamp/treasure/msgpackpatch for op semantics.
 	PatchFields(key string, ops []msgpackpatch.Op, condition *msgpackpatch.Condition, opts PatchFieldsOptions) (PatchFieldsResult, error)
+
+	// PatchExpired atomically selects up to howMany expired treasures
+	// from the swamp and applies the same op-set + meta to each one
+	// in place. Selection is by ExpirationTime < server-now,
+	// oldest-first, exactly like CloneAndDeleteExpiredTreasures, but
+	// the treasures are not deleted; they are patched and re-indexed.
+	//
+	// Concurrent callers receive disjoint subsets — selection holds
+	// the expirationTimeBeacon mutex and removes the chosen treasures
+	// from the ordered slice before patching.
+	//
+	// The condition (when non-nil) is evaluated per-treasure under
+	// the per-key guard. Treasures that fail the condition are
+	// reported as PatchStatusConditionNotMet and re-inserted into the
+	// expired index with their unchanged ExpirationTime, so a
+	// subsequent call can retry them.
+	//
+	// Empty ops is allowed when meta is non-nil (meta-only patch,
+	// typically for sliding ExpiredAt forward without changing the
+	// body); both empty is a programmer error and yields an empty
+	// result.
+	PatchExpired(howMany int32, ops []msgpackpatch.Op, condition *msgpackpatch.Condition, meta *PatchFieldsMeta) ([]PatchExpiredEntry, error)
+}
+
+// PatchExpiredEntry carries the per-treasure outcome of a PatchExpired call.
+type PatchExpiredEntry struct {
+	// Key identifies the patched treasure within the swamp.
+	Key string
+
+	// Status is the outcome code (PATCHED is typical;
+	// CONDITION_NOT_MET / TYPE_MISMATCH / INTERNAL_ERROR per-treasure).
+	Status PatchFieldsStatus
+
+	// Error carries a free-form description for non-success statuses.
+	Error string
+
+	// NewMsgpack is the post-patch msgpack body (no magic prefix).
+	// Populated on PATCHED outcomes; nil otherwise.
+	NewMsgpack []byte
+
+	// ExpiredAt is the treasure's expiration time after the patch
+	// (post PatchFieldsMeta application). Zero when the treasure has
+	// no expiration (cleared via meta or never set).
+	ExpiredAt time.Time
 }
 
 const (

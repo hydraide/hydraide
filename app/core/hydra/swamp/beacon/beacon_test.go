@@ -10,6 +10,7 @@ import (
 	"github.com/hydraide/hydraide/app/core/hydra/swamp/treasure"
 	"github.com/hydraide/hydraide/app/core/hydra/swamp/treasure/guard"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func MySaveFunction(_ treasure.Treasure, _ guard.ID) treasure.TreasureStatus {
@@ -1283,4 +1284,248 @@ func TestBeacon_GetManyFromOrderPosition_TimeFiltering(t *testing.T) {
 			}
 		})
 	}
+}
+
+// ============================================================================
+// SelectExpiredForPatch + ReindexExpiration
+// ============================================================================
+
+// makeExpirationBeaconWithEntries builds an ordered beacon and seeds it
+// with `total` treasures. The first `expired` treasures get an
+// already-elapsed ExpirationTime; the rest get a future ExpirationTime.
+// Keys are key-0..key-(total-1) with the expired ones at the front so
+// the oldest-first selection is deterministic.
+func makeExpirationBeaconWithEntries(t *testing.T, total, expired int) Beacon {
+	t.Helper()
+	b := New()
+	b.SetInitialized(true)
+	b.SetIsOrdered(true)
+
+	now := time.Now().UTC()
+	for i := 0; i < total; i++ {
+		tr := treasure.New(MySaveFunction)
+		gID := tr.StartTreasureGuard(true, guard.BodyAuthID)
+		tr.BodySetKey(gID, fmt.Sprintf("key-%05d", i))
+		tr.SetContentString(gID, fmt.Sprintf("content-%d", i))
+		var exp time.Time
+		if i < expired {
+			// stagger the expired ones so oldest-first ordering is
+			// deterministic
+			exp = now.Add(-time.Hour).Add(time.Duration(i) * time.Second)
+		} else {
+			exp = now.Add(time.Hour).Add(time.Duration(i) * time.Second)
+		}
+		tr.SetExpirationTime(gID, exp)
+		tr.ReleaseTreasureGuard(gID)
+		b.Add(tr)
+	}
+	if err := b.SortByExpirationTimeAsc(); err != nil {
+		t.Fatalf("sort: %v", err)
+	}
+	return b
+}
+
+func TestSelectExpiredForPatch_OldestFirstUpToN(t *testing.T) {
+	b := makeExpirationBeaconWithEntries(t, 10, 5)
+	got := b.SelectExpiredForPatch(3)
+	assert.Equal(t, 3, len(got))
+	for i, tr := range got {
+		assert.Equal(t, fmt.Sprintf("key-%05d", i), tr.GetKey(), "index %d", i)
+	}
+}
+
+func TestSelectExpiredForPatch_AllExpired(t *testing.T) {
+	b := makeExpirationBeaconWithEntries(t, 10, 5)
+	got := b.SelectExpiredForPatch(100)
+	assert.Equal(t, 5, len(got), "should return only the 5 actually-expired entries")
+}
+
+func TestSelectExpiredForPatch_KeepsKeysMap(t *testing.T) {
+	b := makeExpirationBeaconWithEntries(t, 10, 5)
+	got := b.SelectExpiredForPatch(5)
+	require.Equal(t, 5, len(got))
+	// All selected keys must still resolve via Get — that's the
+	// difference between SelectExpiredForPatch and ShiftExpired.
+	for _, tr := range got {
+		assert.NotNil(t, b.Get(tr.GetKey()), "key %s must remain in keys map", tr.GetKey())
+	}
+	// Total count is unchanged (treasuresByKeys is intact).
+	assert.Equal(t, 10, b.Count(), "Count() should be unchanged")
+}
+
+func TestSelectExpiredForPatch_SkipsZeroExpiration(t *testing.T) {
+	b := New()
+	b.SetInitialized(true)
+	b.SetIsOrdered(true)
+
+	// One expired, one with ExpirationTime == 0 (never expires).
+	t1 := treasure.New(MySaveFunction)
+	g1 := t1.StartTreasureGuard(true, guard.BodyAuthID)
+	t1.BodySetKey(g1, "expired")
+	t1.SetExpirationTime(g1, time.Now().UTC().Add(-time.Minute))
+	t1.ReleaseTreasureGuard(g1)
+	b.Add(t1)
+
+	t2 := treasure.New(MySaveFunction)
+	g2 := t2.StartTreasureGuard(true, guard.BodyAuthID)
+	t2.BodySetKey(g2, "never-expires")
+	// no ExpirationTime call → 0
+	t2.ReleaseTreasureGuard(g2)
+	b.Add(t2)
+
+	require.NoError(t, b.SortByExpirationTimeAsc())
+
+	got := b.SelectExpiredForPatch(10)
+	require.Equal(t, 1, len(got))
+	assert.Equal(t, "expired", got[0].GetKey())
+}
+
+func TestSelectExpiredForPatch_EmptyBeacon(t *testing.T) {
+	b := New()
+	b.SetInitialized(true)
+	b.SetIsOrdered(true)
+	got := b.SelectExpiredForPatch(10)
+	assert.Empty(t, got)
+}
+
+func TestSelectExpiredForPatch_HowManyZero(t *testing.T) {
+	b := makeExpirationBeaconWithEntries(t, 10, 5)
+	got := b.SelectExpiredForPatch(0)
+	assert.Empty(t, got, "howMany=0 must select nothing")
+}
+
+func TestSelectExpiredForPatch_ConcurrentDisjointSubsets(t *testing.T) {
+	const (
+		totalEntries  = 200
+		totalExpired  = 200
+		concurrency   = 5
+		batchPerCall  = 20
+		expectedTotal = 100 // 5 * 20
+	)
+	b := makeExpirationBeaconWithEntries(t, totalEntries, totalExpired)
+
+	type result struct {
+		keys []string
+	}
+	resCh := make(chan result, concurrency)
+
+	for i := 0; i < concurrency; i++ {
+		go func() {
+			selected := b.SelectExpiredForPatch(batchPerCall)
+			r := result{keys: make([]string, 0, len(selected))}
+			for _, tr := range selected {
+				r.keys = append(r.keys, tr.GetKey())
+			}
+			resCh <- r
+		}()
+	}
+
+	seen := make(map[string]int)
+	totalReturned := 0
+	for i := 0; i < concurrency; i++ {
+		r := <-resCh
+		totalReturned += len(r.keys)
+		for _, k := range r.keys {
+			seen[k]++
+		}
+	}
+
+	assert.Equal(t, expectedTotal, totalReturned, "total across all callers")
+	for k, count := range seen {
+		assert.Equal(t, 1, count, "key %s must be returned exactly once across all callers", k)
+	}
+}
+
+func TestReindexExpiration_PutsBackInOrder(t *testing.T) {
+	b := makeExpirationBeaconWithEntries(t, 10, 5)
+	got := b.SelectExpiredForPatch(5)
+	require.Equal(t, 5, len(got))
+
+	// Slide each expired treasure's ExpirationTime forward, in shuffled
+	// order, then reindex. The ascending order must reflect the new
+	// values.
+	now := time.Now().UTC()
+	for i, tr := range got {
+		gID := tr.StartTreasureGuard(true)
+		// give them new TTLs increasing in the OPPOSITE order from
+		// selection, so reindexing has to actually re-sort.
+		tr.SetExpirationTime(gID, now.Add(time.Duration(100-i)*time.Hour))
+		tr.ReleaseTreasureGuard(gID)
+	}
+
+	b.ReindexExpiration(got)
+
+	// Walk the ordered slice via Iterate(IterationTypeOrdered) and
+	// check that ExpirationTime is monotonically non-decreasing.
+	var prev int64 = 0
+	count := 0
+	b.Iterate(func(tr treasure.Treasure) bool {
+		exp := tr.GetExpirationTime()
+		if exp != 0 {
+			assert.GreaterOrEqual(t, exp, prev,
+				"order broken at key=%s exp=%d prev=%d", tr.GetKey(), exp, prev)
+			prev = exp
+		}
+		count++
+		return true
+	}, IterationTypeOrdered)
+	assert.Equal(t, 10, count, "all 10 entries must be in the ordered slice")
+}
+
+func TestReindexExpiration_Idempotent(t *testing.T) {
+	// Calling ReindexExpiration with treasures already present in the
+	// ordered slice must not double-insert.
+	b := makeExpirationBeaconWithEntries(t, 10, 5)
+	got := b.SelectExpiredForPatch(5)
+	b.ReindexExpiration(got)
+
+	// Second call with the same set must be a no-op modulo a re-sort.
+	b.ReindexExpiration(got)
+
+	count := 0
+	seen := make(map[string]int)
+	b.Iterate(func(tr treasure.Treasure) bool {
+		seen[tr.GetKey()]++
+		count++
+		return true
+	}, IterationTypeOrdered)
+	assert.Equal(t, 10, count)
+	for k, n := range seen {
+		assert.Equal(t, 1, n, "key %s appears %d times", k, n)
+	}
+}
+
+func TestReindexExpiration_SkipsZeroExpiration(t *testing.T) {
+	b := makeExpirationBeaconWithEntries(t, 10, 5)
+	got := b.SelectExpiredForPatch(5)
+	require.Equal(t, 5, len(got))
+
+	// Clear ExpirationTime on the first selected entry. ReindexExpiration
+	// must skip it (entries with ExpirationTime == 0 do not belong in
+	// the expiration index).
+	tr := got[0]
+	clearedKey := tr.GetKey()
+	gID := tr.StartTreasureGuard(true)
+	tr.SetExpirationTime(gID, time.Time{})
+	tr.ReleaseTreasureGuard(gID)
+
+	b.ReindexExpiration(got)
+
+	// The cleared entry must not be in the ordered slice.
+	found := false
+	b.Iterate(func(tr treasure.Treasure) bool {
+		if tr.GetKey() == clearedKey {
+			found = true
+			return false
+		}
+		return true
+	}, IterationTypeOrdered)
+	assert.False(t, found, "treasure with ExpirationTime=0 must not be re-indexed")
+}
+
+func TestReindexExpiration_EmptyInput(t *testing.T) {
+	b := makeExpirationBeaconWithEntries(t, 5, 0)
+	// must not panic and not change the order
+	b.ReindexExpiration(nil)
+	assert.Equal(t, 5, b.Count())
 }

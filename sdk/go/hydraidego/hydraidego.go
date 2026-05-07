@@ -114,6 +114,7 @@ type Hydraidego interface {
 	CatalogPatchFields(ctx context.Context, swampName name.Name, key string, fields map[string]any) (PatchStatus, error)
 	CatalogPatchFieldsMany(ctx context.Context, swampName name.Name, requests []*PatchManyRequest, iterator PatchManyIteratorFunc) error
 	CatalogPatch(ctx context.Context, swampName name.Name, key string) *PatchBuilder
+	CatalogPatchExpired(ctx context.Context, swampName name.Name, howMany int32, model any, iterator CatalogPatchExpiredIteratorFunc, builder *PatchExpiredOps) error
 }
 
 // Index defines the configuration for index-based queries in HydrAIDE.

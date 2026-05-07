@@ -246,3 +246,83 @@ func TestBuilder_EncodeErrorShortCircuits(t *testing.T) {
 	// to keep the builder safe to chain even when errors occur.
 	assert.Len(t, b.ops, 0, "ops not appended after encode error")
 }
+
+// ---------- PatchCond / patchCondToWire ----------
+
+func TestPatchCondOp_AlignsWithWireEnum(t *testing.T) {
+	// Direct correspondence is not asserted (the SDK enum is independent),
+	// but every SDK op must map deterministically.
+	cases := map[PatchCondOp]hydraidepbgo.PatchCondition_Op{
+		PatchCondEqual:              hydraidepbgo.PatchCondition_EQUAL,
+		PatchCondNotEqual:           hydraidepbgo.PatchCondition_NOT_EQUAL,
+		PatchCondGreaterThan:        hydraidepbgo.PatchCondition_GREATER_THAN,
+		PatchCondGreaterThanOrEqual: hydraidepbgo.PatchCondition_GREATER_THAN_OR_EQUAL,
+		PatchCondLessThan:           hydraidepbgo.PatchCondition_LESS_THAN,
+		PatchCondLessThanOrEqual:    hydraidepbgo.PatchCondition_LESS_THAN_OR_EQUAL,
+		PatchCondExists:             hydraidepbgo.PatchCondition_EXISTS,
+		PatchCondNotExists:          hydraidepbgo.PatchCondition_NOT_EXISTS,
+	}
+	for sdkOp, wantWire := range cases {
+		gotWire, err := patchCondOpToWire(sdkOp)
+		require.NoError(t, err, "PatchCondOp %d", sdkOp)
+		assert.Equal(t, wantWire, gotWire)
+	}
+}
+
+func TestPatchCondOp_UnknownRejected(t *testing.T) {
+	_, err := patchCondOpToWire(PatchCondOp(99))
+	assert.Error(t, err)
+}
+
+func TestPatchCondToWire_NilInput(t *testing.T) {
+	got, err := patchCondToWire(nil)
+	require.NoError(t, err)
+	assert.Nil(t, got)
+}
+
+func TestPatchCondToWire_EqualEncodesValue(t *testing.T) {
+	got, err := patchCondToWire(&PatchCond{Op: PatchCondEqual, Path: "X", Value: int8(7)})
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	assert.Equal(t, "X", got.GetPath())
+	assert.Equal(t, hydraidepbgo.PatchCondition_EQUAL, got.GetOperator())
+	require.NotEmpty(t, got.GetThreshold())
+	// 0xd0 is msgpack int8 leading code.
+	assert.Equal(t, byte(0xd0), got.GetThreshold()[0])
+}
+
+func TestPatchCondToWire_LessThanTime(t *testing.T) {
+	now := time.Now().UTC()
+	got, err := patchCondToWire(&PatchCond{Op: PatchCondLessThan, Path: "ExpireAt", Value: now})
+	require.NoError(t, err)
+	assert.Equal(t, hydraidepbgo.PatchCondition_LESS_THAN, got.GetOperator())
+	require.NotEmpty(t, got.GetThreshold())
+}
+
+func TestPatchCondToWire_ExistsIgnoresValue(t *testing.T) {
+	got, err := patchCondToWire(&PatchCond{Op: PatchCondExists, Path: "X"})
+	require.NoError(t, err)
+	assert.Equal(t, hydraidepbgo.PatchCondition_EXISTS, got.GetOperator())
+	assert.Empty(t, got.GetThreshold(), "Threshold must be empty for EXISTS")
+}
+
+func TestPatchCondToWire_ExistsRejectsValue(t *testing.T) {
+	_, err := patchCondToWire(&PatchCond{Op: PatchCondExists, Path: "X", Value: int8(1)})
+	assert.Error(t, err, "non-nil Value with EXISTS must be rejected")
+}
+
+func TestPatchCondToWire_NotExistsRejectsValue(t *testing.T) {
+	_, err := patchCondToWire(&PatchCond{Op: PatchCondNotExists, Path: "X", Value: int8(1)})
+	assert.Error(t, err)
+}
+
+func TestPatchCondToWire_NonExistsRequiresValue(t *testing.T) {
+	for _, op := range []PatchCondOp{
+		PatchCondEqual, PatchCondNotEqual,
+		PatchCondGreaterThan, PatchCondGreaterThanOrEqual,
+		PatchCondLessThan, PatchCondLessThanOrEqual,
+	} {
+		_, err := patchCondToWire(&PatchCond{Op: op, Path: "X", Value: nil})
+		assert.Error(t, err, "operator %d must require Value", op)
+	}
+}

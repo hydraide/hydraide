@@ -303,6 +303,37 @@ type Beacon interface {
 	// 5. When implementing rate-limiting or leasing systems where expired items should be processed separately.
 	ShiftExpired(howMany int) []treasure.Treasure
 
+	// SelectExpiredForPatch removes up to howMany expired treasures from
+	// the ordered slice (treasuresByOrder) and returns the live pointers.
+	// Unlike ShiftExpired, the entries are kept in treasuresByKeys, so
+	// per-key operations on them still resolve.
+	//
+	// This is the atomic-claim primitive for in-place patch-of-expired
+	// flows: the beacon mu serializes selection, so two concurrent
+	// callers receive disjoint subsets. After mutating the returned
+	// treasures (typically setting a new ExpirationTime via per-key
+	// patch + meta), the caller must re-insert them with
+	// ReindexExpiration to keep the ordered slice consistent. Treasures
+	// that the caller decides not to patch (e.g. CONDITION_NOT_MET) are
+	// also re-inserted with their unchanged ExpirationTime.
+	//
+	// Returns:
+	// - []treasure.Treasure: live treasure pointers selected for patching.
+	SelectExpiredForPatch(howMany int) []treasure.Treasure
+
+	// ReindexExpiration inserts the given treasures into treasuresByOrder
+	// at their correct sorted position based on the current value of
+	// GetExpirationTime(). Use after SelectExpiredForPatch + a round of
+	// per-key mutations to put the treasures back into the expiration
+	// index.
+	//
+	// The implementation appends all entries and re-runs the
+	// SortByExpirationTime comparator over the slice. For batch sizes
+	// far smaller than the swamp size, this is O(N log N) on the slice
+	// length; consider lazy reindexing only if measurements show this
+	// dominating.
+	ReindexExpiration(treasures []treasure.Treasure)
+
 	// CloneOrderedTreasures clones and returns all treasure objects from the treasuresByOrder slice.
 	// Optionally, it also resets the internal state of the beacon based on the 'thenReset' flag.
 	// Thread safety is ensured via a write transaction.
@@ -896,6 +927,103 @@ func (b *beacon) ShiftExpired(howMany int) []treasure.Treasure {
 	b.treasuresByOrder = remainingTreasures
 	return shiftedTreasures
 
+}
+
+// SelectExpiredForPatch removes up to howMany expired treasures from
+// treasuresByOrder and returns them. Entries remain in treasuresByKeys
+// (unlike ShiftExpired which removes them from both). Selection holds
+// the beacon mu for the entire pass, so concurrent callers cannot
+// observe the same treasure as expired.
+func (b *beacon) SelectExpiredForPatch(howMany int) []treasure.Treasure {
+
+	atomic.StoreInt32(&b.initialized, 1)
+
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	var (
+		selected           []treasure.Treasure
+		remainingTreasures []treasure.Treasure
+	)
+
+	counter := 0
+	now := time.Now().UTC().UnixNano()
+	for _, treasureObj := range b.treasuresByOrder {
+		// ExpirationTime == 0 means "never expires" (matches IsExpired).
+		// Guard against picking up rows whose TTL was cleared after they
+		// were originally indexed.
+		exp := treasureObj.GetExpirationTime()
+		if counter < howMany && exp != 0 && exp < now {
+			selected = append(selected, treasureObj)
+			counter++
+		} else {
+			remainingTreasures = append(remainingTreasures, treasureObj)
+		}
+	}
+	b.treasuresByOrder = remainingTreasures
+	return selected
+}
+
+// ReindexExpiration inserts the given treasures back into treasuresByOrder
+// at the position determined by their current GetExpirationTime(). The
+// operation is idempotent — entries already present (matched by key)
+// are removed first, then all input treasures are appended and the
+// slice is re-sorted ascending by expiration time. This handles the
+// case where the swamp's Save path has already re-added a treasure via
+// its IsExpirationTimeChanged branch, so the caller can always pass
+// the full selected set without worrying about double-insertion.
+//
+// ExpirationTime == 0 entries are skipped (the convention is that 0
+// means "never expires" and such entries do not belong in the
+// expiration index).
+func (b *beacon) ReindexExpiration(treasures []treasure.Treasure) {
+	if len(treasures) == 0 {
+		return
+	}
+
+	atomic.StoreInt32(&b.initialized, 1)
+
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	if !b.isOrdered {
+		// Defensive: an unordered beacon has no ordered slice to reindex.
+		// SelectExpiredForPatch only makes sense on ordered beacons, so
+		// hitting this branch indicates a programmer error upstream.
+		return
+	}
+
+	// Build a key set from the input so we can drop existing entries
+	// for those keys in a single pass (dedupe + Save-already-readded
+	// cases both handled).
+	incomingKeys := make(map[string]struct{}, len(treasures))
+	for _, t := range treasures {
+		incomingKeys[t.GetKey()] = struct{}{}
+	}
+	if len(b.treasuresByOrder) > 0 {
+		filtered := b.treasuresByOrder[:0]
+		for _, t := range b.treasuresByOrder {
+			if _, drop := incomingKeys[t.GetKey()]; drop {
+				continue
+			}
+			filtered = append(filtered, t)
+		}
+		b.treasuresByOrder = filtered
+	}
+	for _, t := range treasures {
+		if t.GetExpirationTime() == 0 {
+			continue
+		}
+		b.treasuresByOrder = append(b.treasuresByOrder, t)
+	}
+	// Mirror SortByExpirationTimeAsc's comparator. We always sort
+	// ascending here because callers of SelectExpiredForPatch use the
+	// ASC beacon (oldest expired first); the matching DESC beacon does
+	// not feed expired-shift / expired-patch flows.
+	sort.Slice(b.treasuresByOrder, func(k, l int) bool {
+		return b.treasuresByOrder[k].GetExpirationTime() < b.treasuresByOrder[l].GetExpirationTime()
+	})
+	b.sortOrder = SortByExpirationTimeAsc
 }
 
 // CloneOrderedTreasures returns the clone of all the orderedTreasures in the beacon
