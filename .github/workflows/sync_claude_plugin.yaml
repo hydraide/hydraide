@@ -1,0 +1,78 @@
+name: Sync Claude plugin mirror
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.claude/skills/**'
+      - '.claude/commands/**'
+      - 'docs/features/**'
+      - '.github/workflows/sync_claude_plugin.yaml'
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout HydrAIDE monorepo
+        uses: actions/checkout@v5
+        with:
+          path: hydraide
+
+      - name: Checkout hydraide/claude plugin repo
+        uses: actions/checkout@v5
+        with:
+          repository: hydraide/claude
+          path: claude
+          ssh-key: ${{ secrets.CLAUDE_PLUGIN_DEPLOY_KEY }}
+
+      - name: Sync skills, commands, and feature docs
+        run: |
+          set -euo pipefail
+          # Wipe and re-mirror the three synced trees.
+          rm -rf claude/skills claude/commands claude/docs/features
+          mkdir -p claude/skills claude/commands claude/docs/features
+
+          if [ -d hydraide/.claude/skills ]; then
+            cp -r hydraide/.claude/skills/* claude/skills/
+          fi
+          if [ -d hydraide/.claude/commands ]; then
+            cp -r hydraide/.claude/commands/* claude/commands/
+          fi
+          if [ -d hydraide/docs/features ]; then
+            cp hydraide/docs/features/*.md claude/docs/features/
+          fi
+
+      - name: Rewrite relative links inside SKILL.md files
+        run: |
+          set -euo pipefail
+          # In the monorepo, SKILL.md is at .claude/skills/<name>/SKILL.md (depth 3 from repo root).
+          # In the plugin repo, SKILL.md is at skills/<name>/SKILL.md (depth 2).
+          # Internal docs/features links: ../../../docs/features/ -> ../../docs/features/
+          # Other ../../../ refs (app/, sdk/, proto/, docs/install/, docs/hydraidectl/, docs/benchmarks/, CLAUDE.md, docs/why-hydraide.md):
+          # rewrite to absolute GitHub URLs so they remain navigable from the plugin repo.
+          for f in claude/skills/*/SKILL.md; do
+            sed -i 's|\.\./\.\./\.\./docs/features/|../../docs/features/|g' "$f"
+            sed -i 's|\.\./\.\./\.\./|https://github.com/hydraide/hydraide/blob/main/|g' "$f"
+          done
+
+      - name: Commit and push if changed
+        working-directory: claude
+        run: |
+          set -euo pipefail
+          git config user.name "hydraide-sync-bot"
+          git config user.email "hydraide-sync-bot@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to sync."
+            exit 0
+          fi
+          SOURCE_SHA="${GITHUB_SHA}"
+          git commit -m "sync: skills, commands, and feature docs from hydraide@${SOURCE_SHA:0:7}
+
+          Auto-synced from hydraide/hydraide commit ${SOURCE_SHA}.
+          Source of truth lives in the HydrAIDE monorepo. To change anything
+          here, open a PR against hydraide/hydraide."
+          git push origin main
