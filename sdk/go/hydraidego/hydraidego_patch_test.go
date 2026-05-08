@@ -550,6 +550,41 @@ func TestPopulateCatalogModelFromPatchedExpired_NoBody(t *testing.T) {
 	assert.Equal(t, int8(0), m.Counter, "no body → defaults")
 }
 
+// Map-body Catalogs use hydraide:"FieldName" tags as the wire keys, so the
+// patch decoder must look up by tag value rather than by Go field name.
+func TestPopulateCatalogModelFromPatchedExpired_MapBodyTagged(t *testing.T) {
+	type Tagged struct {
+		Key       string    `hydraide:"key"`
+		ASN       string    `hydraide:"ASN"`
+		ClaimedBy string    `hydraide:"ClaimedBy"`
+		ClaimedAt time.Time `hydraide:"ClaimedAt"`
+		ExpireAt  time.Time `hydraide:"expireAt"`
+	}
+	when := time.Date(2026, 5, 8, 9, 0, 0, 0, time.UTC)
+	body, err := msgpack.Marshal(map[string]any{
+		"ASN":       "AS42",
+		"ClaimedBy": "worker-9",
+		"ClaimedAt": when,
+	})
+	require.NoError(t, err)
+
+	exp := time.Date(2026, 5, 8, 12, 0, 0, 0, time.UTC)
+	entry := &hydraidepbgo.PatchedExpiredTreasure{
+		Key:        "k-1",
+		Status:     hydraidepbgo.PatchResult_PATCHED,
+		NewMsgpack: body,
+		ExpiredAt:  timestamppb.New(exp),
+	}
+
+	var m Tagged
+	require.NoError(t, populateCatalogModelFromPatchedExpired(entry, &m))
+	assert.Equal(t, "k-1", m.Key)
+	assert.Equal(t, "AS42", m.ASN)
+	assert.Equal(t, "worker-9", m.ClaimedBy)
+	assert.True(t, m.ClaimedAt.Equal(when))
+	assert.True(t, m.ExpireAt.Equal(exp))
+}
+
 func TestPopulateCatalogModelFromPatchedExpired_NonStructRejected(t *testing.T) {
 	entry := &hydraidepbgo.PatchedExpiredTreasure{Key: "x"}
 	var s string

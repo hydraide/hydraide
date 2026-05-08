@@ -240,8 +240,12 @@ func (h *hydraidego) runPatch(
 	createIfNotExist bool,
 	meta *hydraidepbgo.PatchMeta,
 ) (PatchStatus, error) {
-	if len(ops) == 0 {
-		return PatchStatusInternalError, NewError(ErrCodeInvalidModel, "ops list is empty")
+	// Meta-only patches (no ops, but non-nil meta) are valid: this is the
+	// "slide ExpireAt forward / refresh updatedAt without changing the
+	// body" form used by lease extensions and recheck deferrals. The
+	// server applies the meta on top of the existing body.
+	if len(ops) == 0 && meta == nil {
+		return PatchStatusInternalError, NewError(ErrCodeInvalidModel, "ops list is empty and meta is nil")
 	}
 	resp, err := h.client.GetServiceClient(swampName).PatchTreasures(ctx, &hydraidepbgo.PatchTreasuresRequest{
 		IslandID:         swampName.GetIslandID(h.client.GetAllIslands()),

@@ -33,6 +33,7 @@ Conceptual questions sometimes blur into implementation. If the user asks "how d
 | Built-in business locks | Cross-service distributed locks, FIFO queue, TTL semantics, when to use them | [`docs/features/built-in-business-lock.md`](../../../docs/features/built-in-business-lock.md) |
 | Reactivity & subscriptions | How writes emit events, why there's no separate broker, FIFO ordering, what Subscribe is *not* | [`docs/features/reactivity-and-subscription-logic.md`](../../../docs/features/reactivity-and-subscription-logic.md) |
 | Structural msgpack patch | Atomic field-level mutations on msgpack Treasures, conditions, ops, when not to use | [`docs/features/structural-msgpack-patch.md`](../../../docs/features/structural-msgpack-patch.md) |
+| Map-body Catalogs | Single-value vs map-body shape, wire format, Save/Read/Patch symmetry, version compatibility | [`docs/features/map-body-catalog.md`](../../../docs/features/map-body-catalog.md) |
 | Pure gRPC control | Why the proto is the contract, why there is no REST gateway or SDK-only API, polyglot story | [`docs/features/pure-grpc-control.md`](../../../docs/features/pure-grpc-control.md) |
 
 ## How to answer

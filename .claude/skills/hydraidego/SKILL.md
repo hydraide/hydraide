@@ -269,7 +269,11 @@ type CrawlQueueCatalog struct {
 
 Mixing the two shapes silently misbehaves: a `Set("ClaimedBy", X)` against a single-value Catalog patches the inner msgpack map's `ClaimedBy` key on the wire, but the Patch / PatchExpired iterator decodes that map into the **top-level** model struct — where there is no `ClaimedBy` field, only a `Payload` pointer. The pointer stays `nil`, only `key` and `expireAt` come back populated, and the body fields look lost. The data on disk is fine; the model just cannot represent it. See §14 for the iterator contract.
 
+The encoder enforces this at runtime: a model that carries both a `hydraide:"value"` field and one or more `hydraide:"FieldName"` body fields is rejected at `CatalogSave` time with an explicit "model mixes hydraide:\"value\" with map-body fields" error.
+
 Rule of thumb: pick single-value when the body is opaque to the server (you only Save/Read it whole), and map-body when any field will be mutated, conditioned on, or filtered server-side via Patch.
+
+Both shapes round-trip through `CatalogSave` / `CatalogRead` / `CatalogReadMany` since SDK v3.4.0. The map-body encoder marshals every `hydraide:"FieldName"`-tagged top-level field into a single msgpack map keyed by tag value, wraps it with HydrAIDE's 2-byte msgpack magic prefix, and stores it in `BytesVal`. The decoder is the symmetric counterpart and assigns by tag value, so a Catalog that is alternately Saved and Patched sees the same body shape on every path. `omitempty` on a body field is honored: zero-valued fields are skipped on the wire and round-trip back as the type's zero value. Older SDKs (v3.3.x and below) silently skipped these flat-tagged fields on Save and Read — see [`docs/features/map-body-catalog.md`](../../../docs/features/map-body-catalog.md) for the version-compatibility matrix and migration notes.
 
 ### Addressing
 
@@ -1330,6 +1334,8 @@ err := h.CatalogPatchExpired(ctx, swamp, 50, MyCatalog{},
 Crashed workers' claims expire on their own (the new `ExpireAt` was 24 h in the future, so 24 h after the crash the entry is expired again and the next call re-claims it). **The recovery mechanism is the primitive itself** — no separate cleanup job.
 
 Empty ops + non-nil meta is the "slide ExpireAt forward without changing the body" form (lease extension, recheck deferral). Both empty is rejected as `ErrCodeInvalidModel`.
+
+The same meta-only form is also valid on the single-key `CatalogPatch(...).Exec()` path since SDK v3.4.0: a builder that carries only `WithUpdatedAt` / `WithUpdatedBy` / `WithExpiredAt` / `WithoutExpiredAt` and no ops dispatches as a meta-only patch and the server stamps the metadata on the existing body. Older SDKs short-circuited meta-only `Exec()` calls client-side with `ErrCodeInvalidModel "ops list is empty"` — if you saw that error against an existing record, it was the SDK guard, not the server.
 
 `PatchExpiredOps` mirrors `PatchBuilder` minus the per-key `Exec`:
 

@@ -316,7 +316,17 @@ func populateCatalogModelFromPatchedExpired(entry *hydraidepbgo.PatchedExpiredTr
 	}
 
 	if body := entry.GetNewMsgpack(); len(body) > 0 {
-		if err := msgpack.Unmarshal(body, model); err != nil {
+		// When the model declares map-body fields with hydraide:"FieldName"
+		// tags, decode by tag value (so the wire key follows the tag, not
+		// the Go field name). For models that rely on Go-field-name matching
+		// (no body tags), fall back to direct msgpack.Unmarshal — the
+		// vmihailenco decoder matches by Go field name out of the box.
+		shape, mapBodyFields, shapeErr := inspectCatalogModel(v.Elem().Type())
+		if shapeErr == nil && shape == catalogShapeMapBody {
+			if err := decodeMapBodyInto(body, v.Elem(), mapBodyFields); err != nil {
+				return fmt.Errorf("decode msgpack body: %w", err)
+			}
+		} else if err := msgpack.Unmarshal(body, model); err != nil {
 			return fmt.Errorf("decode msgpack body: %w", err)
 		}
 	}

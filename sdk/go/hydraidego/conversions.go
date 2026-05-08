@@ -69,6 +69,13 @@ func convertCatalogModelToKeyValuePair(model any, encoding EncodingFormat) (*hyd
 	v = v.Elem()
 	t := v.Type()
 
+	// Classify the Catalog shape (single-value vs map-body vs key-only) so
+	// we can encode the body correctly and reject mixed-shape models early.
+	shape, mapBodyFields, shapeErr := inspectCatalogModel(t)
+	if shapeErr != nil {
+		return nil, shapeErr
+	}
+
 	for i := 0; i < t.NumField(); i++ {
 
 		field := t.Field(i)
@@ -269,6 +276,16 @@ func convertCatalogModelToKeyValuePair(model any, encoding EncodingFormat) (*hyd
 
 	}
 
+	// Map-body Catalog shape: collect non-reserved tagged fields into a
+	// msgpack map and store it (wrapped with the magic prefix) in BytesVal.
+	// This produces a body that is symmetric with the patch flow — Save and
+	// later Patch operate on the same on-disk msgpack map.
+	if shape == catalogShapeMapBody {
+		if err := applyMapBodyToKvPair(kvPair, v, mapBodyFields); err != nil {
+			return nil, err
+		}
+	}
+
 	// Final validation: the key must be present and non-empty.
 	// This is a hard requirement — all Treasures in HydrAIDE must have a key.
 	if kvPair.Key == "" {
@@ -303,6 +320,17 @@ func convertProtoTreasureToCatalogModel(treasure *hydraidepbgo.Treasure, model a
 	}
 
 	t := v.Elem().Type()
+
+	// For map-body Catalogs, decode the wrapped msgpack BytesVal into the
+	// non-reserved tagged fields. This is the symmetric counterpart of the
+	// encoder's map-body branch and keeps Save/Read round-trippable with
+	// the patch flow.
+	if shape, mapBodyFields, shapeErr := inspectCatalogModel(t); shapeErr == nil && shape == catalogShapeMapBody {
+		if err := decodeMapBodyInto(treasure.GetBytesVal(), v.Elem(), mapBodyFields); err != nil {
+			return err
+		}
+	}
+
 	for i := 0; i < t.NumField(); i++ {
 
 		if key, ok := t.Field(i).Tag.Lookup(tagHydrAIDE); ok && strings.Contains(key, tagKey) {
