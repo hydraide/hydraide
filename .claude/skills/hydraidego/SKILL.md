@@ -242,6 +242,35 @@ type OrderPayload struct {
 
 If you do add an `msgpack` tag (e.g. `msgpack:"cur"`), the filter must then reference the tag value (`"cur"`), not the field name. By default, omit the tag.
 
+### Two Catalog shapes: single-value vs map-body
+
+The struct above (`Payload *OrderPayload hydraide:"value"`) is the **single-value** Catalog shape — the body is one msgpack-encoded value. This shape is for `Save` / `CatalogRead` / `CatalogReadMany` / filter-based reads. It is **not compatible with the Patch family** (`CatalogPatch`, `CatalogPatchField(s)`, `CatalogPatchFieldsMany`, `CatalogPatchExpired`, `CatalogPatchExpiredManyFromMany`).
+
+If the Catalog will ever be patched — typical example: queue-claim flows that mutate `ClaimedBy` / `ClaimedAt` on expired entries — model it with **flat top-level fields** instead, each with its own `hydraide:"FieldName"` tag, no `hydraide:"value"` wrapper:
+
+```go
+type CrawlQueueCatalog struct {
+    Domain    string    `hydraide:"key"`
+
+    // Body fields — flat, each tagged. The wire body is a msgpack map keyed
+    // by field name; Patch ops address these keys directly via Set("ASN", ...).
+    ASN       string    `hydraide:"ASN"`
+    TLD       string    `hydraide:"TLD"`
+    Source    string    `hydraide:"Source"`
+    Priority  int8      `hydraide:"Priority"`
+    ClaimedBy string    `hydraide:"ClaimedBy"`
+    ClaimedAt time.Time `hydraide:"ClaimedAt"`
+
+    CreatedAt time.Time `hydraide:"createdAt"`
+    UpdatedAt time.Time `hydraide:"updatedAt,omitempty"`
+    ExpireAt  time.Time `hydraide:"expireAt"`
+}
+```
+
+Mixing the two shapes silently misbehaves: a `Set("ClaimedBy", X)` against a single-value Catalog patches the inner msgpack map's `ClaimedBy` key on the wire, but the Patch / PatchExpired iterator decodes that map into the **top-level** model struct — where there is no `ClaimedBy` field, only a `Payload` pointer. The pointer stays `nil`, only `key` and `expireAt` come back populated, and the body fields look lost. The data on disk is fine; the model just cannot represent it. See §14 for the iterator contract.
+
+Rule of thumb: pick single-value when the body is opaque to the server (you only Save/Read it whole), and map-body when any field will be mutated, conditioned on, or filtered server-side via Patch.
+
 ### Addressing
 
 ```go
@@ -670,7 +699,11 @@ Other system ops:
 type MyModel struct {
     // === Catalog-only ===
     Key     string     `hydraide:"key"`              // Required for Catalog
-    Payload *MyPayload `hydraide:"value"`            // Stored as msgpack binary
+    Payload *MyPayload `hydraide:"value"`            // Stored as msgpack binary.
+                                                     // Save/Read shape only — NOT compatible with Patch flows.
+                                                     // For Patch-target Catalogs, drop this and use flat
+                                                     // top-level body fields with their own hydraide:"Name"
+                                                     // tags. See §3 "Two Catalog shapes".
 
     // === Optional metadata (Catalog) ===
     CreatedAt time.Time `hydraide:"createdAt,omitempty"`
@@ -1144,6 +1177,14 @@ Use `CatalogShiftExpired` for periodic cleanup of orphaned locks; use `AreKeysEx
 - You need the change to be conditional (compare-and-swap style).
 - You want incremental updates (counters, append to slices) without locking.
 
+### Model shape requirement (read this first)
+
+Every Patch entry point in this section — `CatalogPatch`, `CatalogPatchField(s)`, `CatalogPatchFieldsMany`, `CatalogPatchExpired`, `CatalogPatchExpiredManyFromMany` — operates on **map-body Catalogs**: the Catalog struct must use flat top-level fields, each with its own `hydraide:"FieldName"` tag, and **must not** carry a `hydraide:"value"` wrapper. Patch ops address keys in that top-level msgpack map directly (`Set("ClaimedBy", X)` writes the body's `ClaimedBy` key).
+
+If a Catalog uses the single-value shape (`Payload *MyPayload hydraide:"value"`) and you patch it anyway, the Patch RPC itself succeeds on the wire — but the iterator's post-patch model decode writes the body's keys into the top-level struct, where the corresponding fields don't exist (only `Payload` does). The result: the iterator's `model` argument has only `key` and `expireAt` populated; `Payload` stays `nil`, and the rest of the body looks empty. The data on disk is correct; the model just cannot represent it.
+
+Pick the shape **at modelling time**, before the first `RegisterPattern`. See §3 "Two Catalog shapes" for the side-by-side example.
+
 ### Convenience entry points
 
 ```go
@@ -1267,6 +1308,8 @@ case status == hydraidego.PatchStatusPatched:
 ### Patch expired treasures (in-place TTL-driven claim)
 
 `CatalogPatchExpired` is the in-place sibling of `CatalogShiftExpired`. It atomically selects up to `howMany` treasures whose `ExpireAt < server-now`, applies the same op-set + meta to each one under its per-key guard, re-indexes them with their new `ExpireAt`, and streams the post-patch state to the iterator. Concurrent callers receive **disjoint subsets** — same atomic-claim guarantee as `ShiftExpired`, but the data stays in the swamp.
+
+The iterator's `model` argument is the full post-patch record, but only when the Catalog uses the map-body shape required by all Patch flows (see "Model shape requirement" above). With a `hydraide:"value"` Catalog the body fields will appear empty in the iterator even though the patch itself succeeded.
 
 The classic use is a crash-safe queue claim with no separate fetch + lock RPCs:
 
