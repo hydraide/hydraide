@@ -104,9 +104,9 @@ func TestPatchE2E_CatalogPatchFieldsMany(t *testing.T) {
 	defer cancel()
 
 	requests := []*hydraidego.PatchManyRequest{
-		{Key: "d1.hu", Fields: map[string]any{"IsInQueue": true}},
-		{Key: "d2.hu", Fields: map[string]any{"IsInQueue": false, "IsCrawling": true}},
-		{Key: "d3.hu", Fields: map[string]any{"IsRejected": true, "RejectedReason": int16(7)}},
+		{Builder: hydraidego.NewPatchBuilder("d1.hu").Set("IsInQueue", true)},
+		{Builder: hydraidego.NewPatchBuilder("d2.hu").Set("IsInQueue", false).Set("IsCrawling", true)},
+		{Builder: hydraidego.NewPatchBuilder("d3.hu").Set("IsRejected", true).Set("RejectedReason", int16(7))},
 	}
 
 	results := make([]hydraidego.PatchStatus, 0, len(requests))

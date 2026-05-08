@@ -248,84 +248,47 @@ func TestBuilder_EncodeErrorShortCircuits(t *testing.T) {
 	assert.Len(t, b.ops, 0, "ops not appended after encode error")
 }
 
-// ---------- PatchCond / patchCondToWire ----------
+// ---------- NewPatchBuilder + PatchManyRequest (R2-2) ----------
 
-func TestPatchCondOp_AlignsWithWireEnum(t *testing.T) {
-	// Direct correspondence is not asserted (the SDK enum is independent),
-	// but every SDK op must map deterministically.
-	cases := map[PatchCondOp]hydraidepbgo.PatchCondition_Op{
-		PatchCondEqual:              hydraidepbgo.PatchCondition_EQUAL,
-		PatchCondNotEqual:           hydraidepbgo.PatchCondition_NOT_EQUAL,
-		PatchCondGreaterThan:        hydraidepbgo.PatchCondition_GREATER_THAN,
-		PatchCondGreaterThanOrEqual: hydraidepbgo.PatchCondition_GREATER_THAN_OR_EQUAL,
-		PatchCondLessThan:           hydraidepbgo.PatchCondition_LESS_THAN,
-		PatchCondLessThanOrEqual:    hydraidepbgo.PatchCondition_LESS_THAN_OR_EQUAL,
-		PatchCondExists:             hydraidepbgo.PatchCondition_EXISTS,
-		PatchCondNotExists:          hydraidepbgo.PatchCondition_NOT_EXISTS,
-	}
-	for sdkOp, wantWire := range cases {
-		gotWire, err := patchCondOpToWire(sdkOp)
-		require.NoError(t, err, "PatchCondOp %d", sdkOp)
-		assert.Equal(t, wantWire, gotWire)
-	}
+// TestNewPatchBuilder_DataOnlyHasNoClient verifies that a builder
+// returned by NewPatchBuilder is data-only (no client / no swamp), so
+// Exec() refuses to dispatch.
+func TestNewPatchBuilder_DataOnlyHasNoClient(t *testing.T) {
+	b := NewPatchBuilder("k").Set("X", int8(1))
+	require.Nil(t, b.h, "data-only builder must not be bound to a client")
+	require.Nil(t, b.ctx, "data-only builder must not carry a context")
+	require.True(t, b.create, "CreateIfNotExist defaults to true")
+
+	_, err := b.Exec()
+	require.Error(t, err, "Exec on a data-only builder must fail")
 }
 
-func TestPatchCondOp_UnknownRejected(t *testing.T) {
-	_, err := patchCondOpToWire(PatchCondOp(99))
-	assert.Error(t, err)
+// TestNewPatchBuilder_NoCreateFlag flips the create flag.
+func TestNewPatchBuilder_NoCreateFlag(t *testing.T) {
+	b := NewPatchBuilder("k").NoCreate().Set("X", int8(1))
+	require.False(t, b.create)
 }
 
-func TestPatchCondToWire_NilInput(t *testing.T) {
-	got, err := patchCondToWire(nil)
-	require.NoError(t, err)
-	assert.Nil(t, got)
-}
+// TestNewPatchBuilder_OpsAndCondAndMetaCarried verifies the data-only
+// builder accumulates ops, condition, and meta the same way as a bound
+// builder.
+func TestNewPatchBuilder_OpsAndCondAndMetaCarried(t *testing.T) {
+	exp := time.Now().Add(time.Hour).UTC()
+	b := NewPatchBuilder("k").
+		Inc("Counter", int32(1)).
+		Set("Name", "alice").
+		IfFieldGreaterThanOrEqual("Counter", int32(0)).
+		WithExpiredAt(exp).
+		WithUpdatedAt()
 
-func TestPatchCondToWire_EqualEncodesValue(t *testing.T) {
-	got, err := patchCondToWire(&PatchCond{Op: PatchCondEqual, Path: "X", Value: int8(7)})
-	require.NoError(t, err)
-	require.NotNil(t, got)
-	assert.Equal(t, "X", got.GetPath())
-	assert.Equal(t, hydraidepbgo.PatchCondition_EQUAL, got.GetOperator())
-	require.NotEmpty(t, got.GetThreshold())
-	// 0xd0 is msgpack int8 leading code.
-	assert.Equal(t, byte(0xd0), got.GetThreshold()[0])
-}
-
-func TestPatchCondToWire_LessThanTime(t *testing.T) {
-	now := time.Now().UTC()
-	got, err := patchCondToWire(&PatchCond{Op: PatchCondLessThan, Path: "ExpireAt", Value: now})
-	require.NoError(t, err)
-	assert.Equal(t, hydraidepbgo.PatchCondition_LESS_THAN, got.GetOperator())
-	require.NotEmpty(t, got.GetThreshold())
-}
-
-func TestPatchCondToWire_ExistsIgnoresValue(t *testing.T) {
-	got, err := patchCondToWire(&PatchCond{Op: PatchCondExists, Path: "X"})
-	require.NoError(t, err)
-	assert.Equal(t, hydraidepbgo.PatchCondition_EXISTS, got.GetOperator())
-	assert.Empty(t, got.GetThreshold(), "Threshold must be empty for EXISTS")
-}
-
-func TestPatchCondToWire_ExistsRejectsValue(t *testing.T) {
-	_, err := patchCondToWire(&PatchCond{Op: PatchCondExists, Path: "X", Value: int8(1)})
-	assert.Error(t, err, "non-nil Value with EXISTS must be rejected")
-}
-
-func TestPatchCondToWire_NotExistsRejectsValue(t *testing.T) {
-	_, err := patchCondToWire(&PatchCond{Op: PatchCondNotExists, Path: "X", Value: int8(1)})
-	assert.Error(t, err)
-}
-
-func TestPatchCondToWire_NonExistsRequiresValue(t *testing.T) {
-	for _, op := range []PatchCondOp{
-		PatchCondEqual, PatchCondNotEqual,
-		PatchCondGreaterThan, PatchCondGreaterThanOrEqual,
-		PatchCondLessThan, PatchCondLessThanOrEqual,
-	} {
-		_, err := patchCondToWire(&PatchCond{Op: op, Path: "X", Value: nil})
-		assert.Error(t, err, "operator %d must require Value", op)
-	}
+	require.Len(t, b.ops, 2)
+	assert.Equal(t, hydraidepbgo.PatchOp_INC, b.ops[0].GetOp())
+	assert.Equal(t, hydraidepbgo.PatchOp_SET, b.ops[1].GetOp())
+	require.NotNil(t, b.cond)
+	assert.Equal(t, hydraidepbgo.PatchCondition_GREATER_THAN_OR_EQUAL, b.cond.GetOperator())
+	require.NotNil(t, b.meta)
+	assert.True(t, b.meta.GetSetUpdatedAt())
+	require.NotNil(t, b.meta.GetSetExpiredAt())
 }
 
 // ---------- PatchExpiredOps builder ----------

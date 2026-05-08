@@ -82,68 +82,29 @@ func (s PatchStatus) String() string {
 }
 
 // PatchManyRequest is one entry in a multi-key patch batch issued via
-// CatalogPatchFieldsMany.
+// CatalogPatchFieldsMany. The Builder carries the key, ops, optional
+// condition, and optional metadata for one treasure.
+//
+// Build the per-key patch with NewPatchBuilder(key) and the same fluent
+// API used by single-key CatalogPatch. The builder is data-only (no
+// client / context binding); the batch dispatcher executes the ops on
+// the swamp passed to CatalogPatchFieldsMany.
+//
+// Example:
+//
+//	requests := []*PatchManyRequest{
+//	    {Builder: NewPatchBuilder("alice").
+//	        Set("Score", int32(42)).
+//	        WithUpdatedAt()},
+//	    {Builder: NewPatchBuilder("bob").
+//	        Inc("Counter", int32(1)).
+//	        IfFieldGreaterThanOrEqual("Counter", int32(0))},
+//	}
+//	err := h.CatalogPatchFieldsMany(ctx, swamp, requests, iterator)
 type PatchManyRequest struct {
-	// Key identifies the treasure within the swamp.
-	Key string
-
-	// Fields is a flat field-path → value map. Each entry becomes a SET op
-	// on the encoded msgpack body; nested paths use dot notation
-	// ("Foo.Bar.Baz").
-	Fields map[string]any
-
-	// Cond is an optional pre-check evaluated under the per-key guard
-	// before any op runs. Failure short-circuits with
-	// PatchStatusConditionNotMet and applies no ops. Mirrors the builder
-	// API's IfField* surface, exposed here for batch use (atomic CAS
-	// across many keys in a single round-trip).
-	Cond *PatchCond
-}
-
-// PatchCondOp identifies the comparator for a PatchCond. Mirrors the wire
-// PatchCondition_Op enum without exposing the generated type to SDK
-// callers.
-type PatchCondOp int
-
-const (
-	// PatchCondEqual matches when the field equals Value (exact msgpack
-	// byte equality).
-	PatchCondEqual PatchCondOp = iota
-	// PatchCondNotEqual is the inverse of PatchCondEqual.
-	PatchCondNotEqual
-	// PatchCondGreaterThan matches when the field is strictly greater
-	// than Value (numeric / string lexicographic comparison).
-	PatchCondGreaterThan
-	// PatchCondGreaterThanOrEqual matches when the field is greater than
-	// or equal to Value.
-	PatchCondGreaterThanOrEqual
-	// PatchCondLessThan matches when the field is strictly less than
-	// Value.
-	PatchCondLessThan
-	// PatchCondLessThanOrEqual matches when the field is less than or
-	// equal to Value.
-	PatchCondLessThanOrEqual
-	// PatchCondExists matches when a leaf value is present at Path. The
-	// PatchCond.Value field is ignored.
-	PatchCondExists
-	// PatchCondNotExists matches when no leaf is present at Path. The
-	// PatchCond.Value field is ignored.
-	PatchCondNotExists
-)
-
-// PatchCond is a single field-level pre-check applied to a patch under
-// the per-key guard.
-type PatchCond struct {
-	// Op is the comparator.
-	Op PatchCondOp
-
-	// Path is the dot-notation field expression to evaluate.
-	Path string
-
-	// Value is compared against the field at Path. Required for all
-	// operators except PatchCondExists / PatchCondNotExists, where it
-	// must be nil.
-	Value any
+	// Builder holds the key + ops + optional cond + optional meta for
+	// this single treasure. Use NewPatchBuilder(key) to obtain one.
+	Builder *PatchBuilder
 }
 
 // PatchManyIteratorFunc is invoked once per result in a CatalogPatchFieldsMany
@@ -195,40 +156,54 @@ func (h *hydraidego) CatalogPatchFields(ctx context.Context, swampName name.Name
 }
 
 // CatalogPatchFieldsMany dispatches a batch of per-key patches in a single
-// PatchTreasures RPC. The iterator (if non-nil) is invoked once per result
-// in request order. Returning an error from the iterator stops iteration.
+// PatchTreasures RPC. Each request carries a PatchBuilder with the key,
+// ops, optional condition, and optional metadata for one treasure. Ops
+// run in declaration order under the per-key guard. The iterator (if
+// non-nil) is invoked once per result in request order. Returning an
+// error from the iterator stops iteration.
 //
 // All requests are dispatched against the same swampName. CreateIfNotExist
-// is enabled for every key.
+// is honored per-builder via NoCreate(); by default each builder creates
+// missing treasures.
+//
+// When a builder carries Meta (WithUpdatedAt / WithExpiredAt / etc.), the
+// per-key Meta fully replaces any request-level Meta on that key (no
+// field-level merge). For a batch where every key shares the same Meta,
+// set it on each builder — there is no batch-level Meta knob on this API.
 func (h *hydraidego) CatalogPatchFieldsMany(ctx context.Context, swampName name.Name, requests []*PatchManyRequest, iterator PatchManyIteratorFunc) error {
 	if len(requests) == 0 {
 		return nil
 	}
 	patches := make([]*hydraidepbgo.TreasurePatch, 0, len(requests))
+	var createIfNotExist bool
 	for i, req := range requests {
-		if req == nil {
-			return NewError(ErrCodeInvalidModel, fmt.Sprintf("request %d is nil", i))
+		if req == nil || req.Builder == nil {
+			return NewError(ErrCodeInvalidModel, fmt.Sprintf("request %d: nil request or nil Builder", i))
 		}
-		ops := make([]*hydraidepbgo.PatchOp, 0, len(req.Fields))
-		for path, v := range req.Fields {
-			encoded, err := encodePatchValue(v)
-			if err != nil {
-				return NewError(ErrCodeInvalidModel, fmt.Sprintf("request %d, field %q: %v", i, path, err))
-			}
-			ops = append(ops, &hydraidepbgo.PatchOp{
-				Op:    hydraidepbgo.PatchOp_SET,
-				Path:  path,
-				Value: encoded,
-			})
+		b := req.Builder
+		if b.encodeError != nil {
+			return NewError(ErrCodeInvalidModel, fmt.Sprintf("request %d (%q): %v", i, b.key, b.encodeError))
 		}
-		wireCond, condErr := patchCondToWire(req.Cond)
-		if condErr != nil {
-			return NewError(ErrCodeInvalidModel, fmt.Sprintf("request %d, condition: %v", i, condErr))
+		if b.key == "" {
+			return NewError(ErrCodeInvalidModel, fmt.Sprintf("request %d: builder has empty key", i))
+		}
+		if len(b.ops) == 0 && b.meta == nil {
+			return NewError(ErrCodeInvalidModel, fmt.Sprintf("request %d (%q): builder has no ops and no meta", i, b.key))
+		}
+		// CreateIfNotExist is a request-level wire knob; require all
+		// builders in one batch to agree to keep the semantics
+		// per-builder explicit. Mixed flags would silently apply the OR
+		// of the two, which is a footgun.
+		if i == 0 {
+			createIfNotExist = b.create
+		} else if b.create != createIfNotExist {
+			return NewError(ErrCodeInvalidModel, fmt.Sprintf("request %d (%q): NoCreate flag differs from request 0; split the batch", i, b.key))
 		}
 		patches = append(patches, &hydraidepbgo.TreasurePatch{
-			Key:       req.Key,
-			Ops:       ops,
-			Condition: wireCond,
+			Key:       b.key,
+			Ops:       b.ops,
+			Condition: b.cond,
+			Meta:      b.meta,
 		})
 	}
 
@@ -236,7 +211,7 @@ func (h *hydraidego) CatalogPatchFieldsMany(ctx context.Context, swampName name.
 		IslandID:         swampName.GetIslandID(h.client.GetAllIslands()),
 		SwampName:        swampName.Get(),
 		Patches:          patches,
-		CreateIfNotExist: true,
+		CreateIfNotExist: createIfNotExist,
 	})
 	if err != nil {
 		return translatePatchGRPCError(err)
@@ -309,65 +284,6 @@ func encodePatchValue(v any) ([]byte, error) {
 	return msgpack.Marshal(v)
 }
 
-// patchCondOpToWire maps the SDK enum to the wire enum.
-func patchCondOpToWire(op PatchCondOp) (hydraidepbgo.PatchCondition_Op, error) {
-	switch op {
-	case PatchCondEqual:
-		return hydraidepbgo.PatchCondition_EQUAL, nil
-	case PatchCondNotEqual:
-		return hydraidepbgo.PatchCondition_NOT_EQUAL, nil
-	case PatchCondGreaterThan:
-		return hydraidepbgo.PatchCondition_GREATER_THAN, nil
-	case PatchCondGreaterThanOrEqual:
-		return hydraidepbgo.PatchCondition_GREATER_THAN_OR_EQUAL, nil
-	case PatchCondLessThan:
-		return hydraidepbgo.PatchCondition_LESS_THAN, nil
-	case PatchCondLessThanOrEqual:
-		return hydraidepbgo.PatchCondition_LESS_THAN_OR_EQUAL, nil
-	case PatchCondExists:
-		return hydraidepbgo.PatchCondition_EXISTS, nil
-	case PatchCondNotExists:
-		return hydraidepbgo.PatchCondition_NOT_EXISTS, nil
-	}
-	return 0, fmt.Errorf("unknown PatchCondOp %d", int(op))
-}
-
-// patchCondToWire converts an SDK PatchCond to the wire-level
-// PatchCondition. Returns (nil, nil) when in is nil.
-//
-// Validation:
-//   - For Exists / NotExists, Value must be nil (the threshold is ignored
-//     on the wire and a non-nil Value would be silently dropped, which is
-//     a footgun).
-//   - For all other operators, Value is required.
-func patchCondToWire(in *PatchCond) (*hydraidepbgo.PatchCondition, error) {
-	if in == nil {
-		return nil, nil
-	}
-	wireOp, err := patchCondOpToWire(in.Op)
-	if err != nil {
-		return nil, err
-	}
-	if in.Op == PatchCondExists || in.Op == PatchCondNotExists {
-		if in.Value != nil {
-			return nil, fmt.Errorf("PatchCond.Value must be nil for Exists / NotExists")
-		}
-		return &hydraidepbgo.PatchCondition{Path: in.Path, Operator: wireOp}, nil
-	}
-	if in.Value == nil {
-		return nil, fmt.Errorf("PatchCond.Value cannot be nil for operator %d", int(in.Op))
-	}
-	encoded, err := encodePatchValue(in.Value)
-	if err != nil {
-		return nil, fmt.Errorf("encode condition value: %w", err)
-	}
-	return &hydraidepbgo.PatchCondition{
-		Path:      in.Path,
-		Operator:  wireOp,
-		Threshold: encoded,
-	}, nil
-}
-
 // translatePatchGRPCError maps gRPC error codes onto the SDK's existing
 // error vocabulary (mirrors CatalogSave's error translation block).
 func translatePatchGRPCError(err error) error {
@@ -396,34 +312,56 @@ func translatePatchGRPCError(err error) error {
 // Builder API
 // ============================================================================
 
-// PatchBuilder accumulates ops and an optional condition for a single
-// (swamp, key) target, then issues the PatchTreasures RPC on Exec().
+// PatchBuilder accumulates ops, an optional condition, and optional
+// metadata for one treasure key. The fluent style mirrors common ORM
+// idioms; ops are appended in call order, so chained calls produce a
+// deterministic op sequence.
 //
-// The fluent style mirrors common ORM idioms; ops are appended in call
-// order, so chained calls produce a deterministic op sequence (unlike
-// CatalogPatchFields which iterates an unordered map).
+// Two construction paths exist:
+//
+//   - CatalogPatch(ctx, swamp, key) returns a builder bound to a client
+//     and swamp; call Exec() on it to dispatch a single PatchTreasures RPC.
+//
+//   - NewPatchBuilder(key) returns a data-only builder (no client / no
+//     swamp); pass it inside a PatchManyRequest to CatalogPatchFieldsMany,
+//     CatalogPatchManyToMany, etc., where the dispatcher provides the
+//     swamp and the gRPC client.
+//
+// Both paths share the same fluent API.
 type PatchBuilder struct {
-	h               *hydraidego
-	ctx             context.Context
-	swampName       name.Name
-	key             string
-	ops             []*hydraidepbgo.PatchOp
-	cond            *hydraidepbgo.PatchCondition
-	create          bool
-	meta            *hydraidepbgo.PatchMeta
-	encodeError     error
+	h           *hydraidego
+	ctx         context.Context
+	swampName   name.Name
+	key         string
+	ops         []*hydraidepbgo.PatchOp
+	cond        *hydraidepbgo.PatchCondition
+	create      bool
+	meta        *hydraidepbgo.PatchMeta
+	encodeError error
 }
 
-// CatalogPatch returns a new builder for a single (swamp, key) target.
+// NewPatchBuilder returns a data-only builder for one treasure key, ready
+// to be carried inside a PatchManyRequest in batch APIs (e.g.
+// CatalogPatchFieldsMany). The builder is not bound to a client or
+// context; calling Exec() on it returns an error.
+//
 // CreateIfNotExist defaults to true; call NoCreate() to disable.
-func (h *hydraidego) CatalogPatch(ctx context.Context, swampName name.Name, key string) *PatchBuilder {
+func NewPatchBuilder(key string) *PatchBuilder {
 	return &PatchBuilder{
-		h:         h,
-		ctx:       ctx,
-		swampName: swampName,
-		key:       key,
-		create:    true,
+		key:    key,
+		create: true,
 	}
+}
+
+// CatalogPatch returns a new builder bound to (swamp, key) and ready to
+// dispatch its accumulated ops via Exec(). CreateIfNotExist defaults to
+// true; call NoCreate() to disable.
+func (h *hydraidego) CatalogPatch(ctx context.Context, swampName name.Name, key string) *PatchBuilder {
+	b := NewPatchBuilder(key)
+	b.h = h
+	b.ctx = ctx
+	b.swampName = swampName
+	return b
 }
 
 // NoCreate disables the auto-create behavior. Use this when you want a
@@ -573,10 +511,16 @@ func (b *PatchBuilder) WithoutExpiredAt() *PatchBuilder {
 	return b
 }
 
-// Exec dispatches the accumulated patch as a single RPC.
+// Exec dispatches the accumulated patch as a single RPC. Only valid on
+// builders returned by CatalogPatch (which bind a client, context, and
+// swamp). Builders created via NewPatchBuilder are data-only and must be
+// dispatched through a batch API instead.
 func (b *PatchBuilder) Exec() (PatchStatus, error) {
 	if b.encodeError != nil {
 		return PatchStatusInternalError, NewError(ErrCodeInvalidModel, b.encodeError.Error())
+	}
+	if b.h == nil {
+		return PatchStatusInternalError, NewError(ErrCodeInvalidModel, "PatchBuilder is not bound to a client; use CatalogPatch(ctx, swamp, key) for single-key dispatch, or pass it via PatchManyRequest to a batch API")
 	}
 	return b.h.runPatch(b.ctx, b.swampName, b.key, b.ops, b.cond, b.create, b.meta)
 }

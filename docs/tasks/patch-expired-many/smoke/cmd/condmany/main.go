@@ -35,13 +35,9 @@ func main() {
 	requests := make([]*hydraidego.PatchManyRequest, 0, 10)
 	for i := 0; i < 10; i++ {
 		requests = append(requests, &hydraidego.PatchManyRequest{
-			Key:    fmt.Sprintf("k%d", i),
-			Fields: map[string]any{"Counter": int32(99)},
-			Cond: &hydraidego.PatchCond{
-				Op:    hydraidego.PatchCondLessThan,
-				Path:  "Counter",
-				Value: int32(1),
-			},
+			Builder: hydraidego.NewPatchBuilder(fmt.Sprintf("k%d", i)).
+				Set("Counter", int32(99)).
+				IfFieldLessThan("Counter", int32(1)),
 		})
 	}
 
