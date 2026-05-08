@@ -984,16 +984,16 @@ StringIn, Int32In, Int64In
 
 ```go
 index := &hydraidego.Index{
-    IndexType:    hydraidego.IndexCreationTime, // Key, CreationTime, UpdateTime
-    IndexOrder:   hydraidego.IndexOrderDesc,    // Asc or Desc
-    From:         0,                             // offset (records to skip)
-    Limit:        100,                           // pre-filter scan limit
-    FromTime:     &startTime,                    // inclusive lower time bound
-    ToTime:       &endTime,                      // exclusive upper time bound
-    MaxResults:   20,                            // post-filter max returned
-    ExcludeKeys:  []string{"k1", "k2"},          // pre-filter blacklist (O(1))
-    IncludedKeys: []string{"k3"},                // pre-filter whitelist (O(1))
-    KeysOnly:     true,                          // only Key + IsExist
+    IndexType:    hydraidego.IndexCreationTime,  // Key, CreationTime, UpdateTime, ExpirationTime, ValueInt*/Float*/String
+    IndexOrder:   hydraidego.IndexOrderDesc,      // Asc or Desc
+    From:         0,                              // offset (records to skip)
+    Limit:        100,                            // pre-filter scan limit
+    FromTime:     &startTime,                     // inclusive lower time bound
+    ToTime:       &endTime,                       // exclusive upper time bound
+    MaxResults:   20,                             // post-filter max returned
+    ExcludeKeys:  []string{"k1", "k2"},           // pre-filter blacklist (O(1))
+    IncludedKeys: []string{"k3"},                 // pre-filter whitelist (O(1))
+    KeysOnly:     true,                           // only Key + IsExist
 }
 ```
 
@@ -1002,6 +1002,43 @@ Notes:
 - **`ExcludeKeys`** runs before filters with O(1) lookup — ideal for "show me more" pagination without offsets, and for dedupe.
 - **`IncludedKeys`** is a pre-filter whitelist. Order: `IncludedKeys → ExcludeKeys → Filters → Response`.
 - **`KeysOnly`** is the fastest read mode (no value/metadata transport). `SearchMeta` still works — read keys with their match labels and vector scores, then `CatalogReadBatch` the top-N.
+
+### Index types
+
+| `IndexType` | Sorts by | Typical use |
+|---|---|---|
+| `IndexKey` | Treasure key (alphabetical) | "list everything in name order" |
+| `IndexCreationTime` | `createdAt` metadata | newest-first feed, append-only logs |
+| `IndexUpdateTime` | `updatedAt` metadata | "recently changed" view |
+| `IndexExpirationTime` | `expireAt` metadata | "next to fire" — see below |
+| `IndexValueInt8` … `IndexValueFloat64` / `IndexValueString` | scalar value of a Profile-mode treasure | leaderboards, range scans |
+
+### `IndexExpirationTime` — "next to be picked" view
+
+Sort by `expireAt` ascending to show the entries that will fire soonest — the operator-facing view of any TTL-driven queue (claim-by-`PatchExpired`, scheduled recheck, lease-based work).
+
+```go
+type QueueRow struct {
+    DomainName string    `hydraide:"key"`
+    ClaimedBy  string    `hydraide:"value"`
+    ExpireAt   time.Time `hydraide:"expireAt"`
+}
+
+index := &hydraidego.Index{
+    IndexType:  hydraidego.IndexExpirationTime,
+    IndexOrder: hydraidego.IndexOrderAsc,        // soonest first
+    MaxResults: 50,
+}
+
+err := h.CatalogReadManyStream(ctx, queueSwamp, index, nil, QueueRow{},
+    func(model any) error {
+        row := model.(*QueueRow)
+        // row.DomainName is next in line; row.ExpireAt tells the dashboard when
+        return nil
+    })
+```
+
+Entries without an `expireAt` are skipped by this index — the same way `IndexCreationTime` skips treasures with no `createdAt`. Combine with `Filters` for "next 50 ready, excluding ones already claimed by me" type queries.
 
 ### Pagination via `ExcludeKeys`
 
@@ -1119,31 +1156,32 @@ status, err := h.CatalogPatchFields(ctx, swamp, key, map[string]any{
     "AmountCent": int64(1990),
 })
 
-// Many keys in one RPC
+// Many keys in one RPC — builder-reuse style, full ops + cond + meta per key
 err := h.CatalogPatchFieldsMany(ctx, swamp, requests,
     func(key string, status hydraidego.PatchStatus, errMsg string) error {
         return nil
     })
 ```
 
-`PatchManyRequest` carries an optional per-request `Cond *PatchCond` for batched CAS — same `IfField*` semantics as the single-key builder, expressed as a value:
+`PatchManyRequest` carries a single `*PatchBuilder` per key — the same fluent surface used for single-key `CatalogPatch`, but built without a swamp via `NewPatchBuilder(key)`. Every op (Set / Inc / Append / Prepend / Delete / RemoveAt / RemoveVal / Merge), every condition (`IfField*`), and every metadata helper (`WithUpdatedAt` / `WithExpiredAt` / `WithoutExpiredAt`) is available per batch entry, ordered, atomic per key:
 
 ```go
 requests := []*hydraidego.PatchManyRequest{
-    {
-        Key:    "k1",
-        Fields: map[string]any{"ClaimedBy": "worker-A"},
-        Cond:   &hydraidego.PatchCond{Op: hydraidego.PatchCondEqual, Path: "ClaimedBy", Value: ""},
-    },
-    {
-        Key:    "k2",
-        Fields: map[string]any{"Counter": int32(1)},
-        Cond:   &hydraidego.PatchCond{Op: hydraidego.PatchCondLessThan, Path: "Counter", Value: int32(3)},
-    },
+    {Builder: hydraidego.NewPatchBuilder("k1").
+        Set("ClaimedBy", "worker-A").
+        IfFieldEquals("ClaimedBy", "")},
+
+    {Builder: hydraidego.NewPatchBuilder("k2").
+        Inc("Counter", int32(1)).
+        IfFieldLessThan("Counter", int32(3))},
+
+    {Builder: hydraidego.NewPatchBuilder("k3").
+        Set("ClaimedBy", "worker-A").
+        WithExpiredAt(time.Now().UTC().Add(24 * time.Hour))},   // per-key TTL
 }
 ```
 
-CAS failures surface as `PatchStatusConditionNotMet` per request — they don't short-circuit the rest of the batch. For `Exists` / `NotExists`, leave `Value` nil; for any other op, `Value` is required.
+CAS failures surface as `PatchStatusConditionNotMet` per request — they don't short-circuit the rest of the batch. `CreateIfNotExist` is honored per builder via `NoCreate()`; the dispatcher requires every builder in one batch to agree, since the wire knob is request-level.
 
 ### Builder API (ordered ops, conditions, metadata)
 
@@ -1259,6 +1297,71 @@ Empty ops + non-nil meta is the "slide ExpireAt forward without changing the bod
 Conditions failed treasures are reported with `PatchStatusConditionNotMet` and **stay in the expired index** with their unchanged `ExpireAt` — the next call retries them. This makes "claim only the entries where `ClaimedBy == ''`" a one-line builder addition rather than a per-call fetch + filter.
 
 For the conceptual model and atomicity contract, see [`docs/features/patch-expired-treasures.md`](../../../docs/features/patch-expired-treasures.md).
+
+### Multi-swamp batch APIs (one RPC per server)
+
+When a single worker patches into several swamps in one round-trip — e.g. a crawler return flow that writes results into a TLD-sharded `domain-state` swamp, or a combined-mode crawler that claims from both a direct and a proxy ready-queue — three multi-swamp helpers turn `N` per-swamp RPCs into `1` per server. The SDK groups requests by destination server (consistent hashing on `SwampName`) and sends one RPC per server.
+
+| Helper | Single-swamp counterpart | Per entry |
+|---|---|---|
+| `CatalogPatchManyToMany` | `CatalogPatchFieldsMany` | `SwampName` + `[]*PatchManyRequest` (builder-reuse) |
+| `CatalogPatchExpiredManyFromMany` | `CatalogPatchExpired` | `SwampName` + `HowMany` + `*PatchExpiredOps` |
+| `CatalogShiftExpiredManyFromMany` | `CatalogShiftExpired` | `SwampName` + `HowMany` |
+
+Per-swamp failures (missing swamp, summon failure, invalid `Ops`/`Meta`) surface to the iterator via a dedicated `swampErr` argument and **do not abort the rest of the batch**. Per-key statuses (`CONDITION_NOT_MET`, `KEY_NOT_FOUND`, `TYPE_MISMATCH`, …) reach the iterator via the existing `status` argument, same as the single-swamp counterparts.
+
+```go
+// Combined-mode crawler claim: 40 from direct, 10 from proxy, in one RPC.
+requests := []*hydraidego.PatchExpiredManyFromManyRequest{
+    {SwampName: directReady, HowMany: 40,
+        Builder: hydraidego.NewPatchExpiredOps().
+            Set("ClaimedBy", workerID).
+            WithExpiredAt(time.Now().UTC().Add(24 * time.Hour))},
+    {SwampName: proxyReady, HowMany: 10,
+        Builder: hydraidego.NewPatchExpiredOps().
+            Set("ClaimedBy", workerID).
+            WithExpiredAt(time.Now().UTC().Add(24 * time.Hour))},
+}
+err := h.CatalogPatchExpiredManyFromMany(ctx, requests, CrawlReady{},
+    func(swampName name.Name, model any, status hydraidego.PatchStatus, swampErr error) error {
+        if swampErr != nil {
+            // swamp-level failure (missing Ops, summon failed); skip the rest of this swamp
+            return nil
+        }
+        m := model.(*CrawlReady)
+        // route the claimed entry to the matching crawler subsystem
+        return nil
+    })
+```
+
+### Per-key Meta in batches
+
+Every `PatchBuilder.WithUpdatedAt` / `WithUpdatedBy` / `WithExpiredAt` / `WithoutExpiredAt` call on a builder inside a `PatchManyRequest` is honored on the wire as a **per-key** Meta on the `TreasurePatch`. The wire protocol guarantees per-key Meta fully replaces any request-level Meta on that key (no field-level merge): if you set both, the per-key Meta wins for that key only, and request-level Meta still applies to the rest of the batch.
+
+The typical use is sliding ExpiredAt forward by per-domain amounts in one RPC:
+
+```go
+requests := make([]*hydraidego.PatchManyRequest, 0, len(rejected))
+for _, d := range rejected {
+    requests = append(requests, &hydraidego.PatchManyRequest{
+        Builder: hydraidego.NewPatchBuilder(d.Domain).
+            Set("ClaimedBy", "").
+            WithExpiredAt(d.ASNCooldownEnd).      // per-domain cooldown
+            IfFieldEquals("ClaimedBy", crawlerID),
+    })
+}
+err := h.CatalogPatchFieldsMany(ctx, readySwamp, requests, callback)
+```
+
+### Read-after-write consistency
+
+A successful `Patch.Exec()` and the read that immediately follows it observe the **same** value:
+
+- **Sequential, same client:** when `Exec()` returns `PatchStatusPatched` (or `PatchStatusCreated`), an immediately-following `CatalogRead` on that key returns the post-patch state. The swamp lives in memory, the patch commits under the per-key guard, and every subsequent read sees the same in-memory state.
+- **Concurrent, two clients:** a reader on the same key sees either the complete pre-patch state or the complete post-patch state — never a half-applied mixture. The patch is an atomic rewrite of the Treasure's msgpack body under the per-key guard.
+- **Subscribe:** subscribers receive the post-patch event after the patch's per-key guard releases, so the model handed to a subscriber callback is always the committed state.
+
+In practice this means batch flows like "patch and then iterate the same swamp's `IndexExpirationTime` to prove the new `ExpireAt` is in the right place" can rely on the read seeing what the patch wrote, without an explicit fence. The `Patch` callback's `model` argument (where one exists, e.g. `CatalogPatchExpired`) is already the post-patch state for the same reason.
 
 ### When NOT to use Patch
 

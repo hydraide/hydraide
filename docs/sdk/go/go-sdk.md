@@ -1396,6 +1396,34 @@ Available types: `NestedSliceAnyString`, `NestedSliceAnyInt8`, `NestedSliceAnyBo
 
 ---
 
+##### ⏰ IndexExpirationTime — "next to be picked"
+
+Sort by `expireAt` ascending to surface the entries that will fire soonest — the operator-facing view of any TTL-driven queue (claim-by-`PatchExpired`, scheduled recheck, lease-based work). Entries without an `expireAt` are skipped (same way `IndexCreationTime` skips treasures with no `createdAt`).
+
+```go
+type QueueRow struct {
+    DomainName string    `hydraide:"key"`
+    ClaimedBy  string    `hydraide:"value"`
+    ExpireAt   time.Time `hydraide:"expireAt"`
+}
+
+index := &hydraidego.Index{
+    IndexType:  hydraidego.IndexExpirationTime,
+    IndexOrder: hydraidego.IndexOrderAsc,            // soonest first
+    MaxResults: 50,
+}
+err := h.CatalogReadManyStream(ctx, queueSwamp, index, nil, QueueRow{},
+    func(model any) error {
+        row := model.(*QueueRow)
+        // row.DomainName is next in line; row.ExpireAt is when it fires
+        return nil
+    })
+```
+
+Pair with `Filters` for "next 50 ready, excluding ones already claimed by me" type dashboard queries.
+
+---
+
 ##### 🚫 ExcludeKeys — server-side key exclusion
 
 Skip specified keys before filter evaluation. O(1) lookup per treasure (~10ns).
@@ -1891,13 +1919,15 @@ _, err := h.CatalogPatchFields(ctx, swampName, "domain1.hu", map[string]any{
 })
 ```
 
-##### 3. Multi-key batch with iterator
+##### 3. Multi-key batch with iterator (builder-reuse)
+
+`PatchManyRequest` carries a single `*PatchBuilder` per key — the same fluent surface as single-key `CatalogPatch`, but built without a swamp via `NewPatchBuilder(key)`. Every op (Set / Inc / Append / Prepend / Delete / RemoveAt / RemoveVal / Merge), every condition (`IfField*`), and every metadata helper (`WithUpdatedAt` / `WithExpiredAt` / `WithoutExpiredAt`) is available per batch entry, ordered, atomic per key:
 
 ```go
 err := h.CatalogPatchFieldsMany(ctx, swampName, []*hydraidego.PatchManyRequest{
-    {Key: "d1.hu", Fields: map[string]any{"IsInQueue": true}},
-    {Key: "d2.hu", Fields: map[string]any{"IsCrawling": false}},
-    {Key: "d3.hu", Fields: map[string]any{"IsRejected": true}},
+    {Builder: hydraidego.NewPatchBuilder("d1.hu").Set("IsInQueue", true)},
+    {Builder: hydraidego.NewPatchBuilder("d2.hu").Set("IsCrawling", false)},
+    {Builder: hydraidego.NewPatchBuilder("d3.hu").Set("IsRejected", true)},
 }, func(key string, status hydraidego.PatchStatus, errMsg string) error {
     if status != hydraidego.PatchStatusPatched && status != hydraidego.PatchStatusCreated {
         slog.Warn("patch outcome", "key", key, "status", status, "error", errMsg)
@@ -1906,24 +1936,38 @@ err := h.CatalogPatchFieldsMany(ctx, swampName, []*hydraidego.PatchManyRequest{
 })
 ```
 
-Each `PatchManyRequest` can also carry an optional `Cond *PatchCond` for **batched optimistic CAS** in a single round-trip — the per-request equivalent of the builder's `IfField*` chain:
+Mixed ops, per-key conditions, per-key metadata in one batch:
 
 ```go
 requests := []*hydraidego.PatchManyRequest{
-    {
-        Key:    "d1.hu",
-        Fields: map[string]any{"ClaimedBy": "worker-A"},
-        Cond:   &hydraidego.PatchCond{Op: hydraidego.PatchCondEqual, Path: "ClaimedBy", Value: ""},
-    },
-    {
-        Key:    "d2.hu",
-        Fields: map[string]any{"Counter": int32(1)},
-        Cond:   &hydraidego.PatchCond{Op: hydraidego.PatchCondLessThan, Path: "Counter", Value: int32(3)},
-    },
+    {Builder: hydraidego.NewPatchBuilder("d1.hu").
+        Set("ClaimedBy", "worker-A").
+        IfFieldEquals("ClaimedBy", "")},
+
+    {Builder: hydraidego.NewPatchBuilder("d2.hu").
+        Inc("Counter", int32(1)).
+        IfFieldLessThan("Counter", int32(3))},
+
+    {Builder: hydraidego.NewPatchBuilder("d3.hu").
+        Set("ClaimedBy", "worker-A").
+        WithExpiredAt(time.Now().UTC().Add(24 * time.Hour))},   // per-key TTL slide
 }
+err := h.CatalogPatchFieldsMany(ctx, swampName, requests, callback)
 ```
 
-CAS failures surface as `PatchStatusConditionNotMet` per request; the rest of the batch still applies.
+CAS failures surface as `PatchStatusConditionNotMet` per request; the rest of the batch still applies. `CreateIfNotExist` is honored per builder via `NoCreate()`; the dispatcher requires every builder in one batch to agree, since the wire knob is request-level.
+
+> **Migration note.** The pre-3.x `PatchManyRequest{Key, Fields, Cond}` shape and the `PatchCond` / `PatchCondOp` types were removed in v3 in favor of the builder reuse above. Migrate
+>
+> ```go
+> {Key: "k", Fields: map[string]any{"X": v}, Cond: &PatchCond{Op: PatchCondLessThan, Path: "Y", Value: t}}
+> ```
+>
+> to
+>
+> ```go
+> {Builder: NewPatchBuilder("k").Set("X", v).IfFieldLessThan("Y", t)}
+> ```
 
 ##### 4. Builder API — conditional, multi-op
 
@@ -2020,6 +2064,68 @@ err := h.CatalogPatchExpired(ctx, swampName, 100, MyCatalog{},
 | Meta        | `WithUpdatedAt`, `WithUpdatedBy`, `WithExpiredAt(t)`, `WithoutExpiredAt()`    |
 
 > Read the philosophy and atomicity contract here: [`docs/features/patch-expired-treasures.md`](../../features/patch-expired-treasures.md). Requires server v3.14.0 or newer.
+
+##### 8. Multi-swamp batch APIs
+
+When a single worker patches into several swamps in one round-trip — e.g. a crawler return flow that writes results into a TLD-sharded `domain-state` swamp, or a combined-mode crawler that claims from both a direct and a proxy ready-queue — three multi-swamp helpers turn `N` per-swamp RPCs into `1` per server. The SDK groups requests by destination server (consistent hashing on `SwampName`) and sends one `*Many` RPC per server.
+
+| Helper                                | Single-swamp counterpart  | Per entry                                                  |
+| ------------------------------------- | ------------------------- | ---------------------------------------------------------- |
+| `CatalogPatchManyToMany`              | `CatalogPatchFieldsMany`  | `SwampName` + `[]*PatchManyRequest` (builder-reuse)        |
+| `CatalogPatchExpiredManyFromMany`     | `CatalogPatchExpired`     | `SwampName` + `HowMany` + `*PatchExpiredOps`               |
+| `CatalogShiftExpiredManyFromMany`     | `CatalogShiftExpired`     | `SwampName` + `HowMany`                                    |
+
+Per-swamp failures (missing swamp, summon failure, invalid `Ops`/`Meta`) surface to the iterator via a dedicated `swampErr` argument and **do not abort** the rest of the batch. Per-key statuses (`CONDITION_NOT_MET`, `KEY_NOT_FOUND`, `TYPE_MISMATCH`, …) reach the iterator via the existing `status` argument, same as the single-swamp counterparts.
+
+```go
+// Combined-mode crawler claim: 40 from direct, 10 from proxy, in one RPC.
+requests := []*hydraidego.PatchExpiredManyFromManyRequest{
+    {SwampName: directReady, HowMany: 40,
+        Builder: hydraidego.NewPatchExpiredOps().
+            Set("ClaimedBy", workerID).
+            WithExpiredAt(time.Now().UTC().Add(24 * time.Hour))},
+    {SwampName: proxyReady, HowMany: 10,
+        Builder: hydraidego.NewPatchExpiredOps().
+            Set("ClaimedBy", workerID).
+            WithExpiredAt(time.Now().UTC().Add(24 * time.Hour))},
+}
+err := h.CatalogPatchExpiredManyFromMany(ctx, requests, CrawlReady{},
+    func(swampName name.Name, model any, status hydraidego.PatchStatus, swampErr error) error {
+        if swampErr != nil {
+            return nil   // skip this swamp, continue with the rest
+        }
+        m := model.(*CrawlReady)
+        // route the claimed entry to the matching subsystem
+        return nil
+    })
+```
+
+##### 9. Per-key Meta in batches
+
+Every `PatchBuilder.WithUpdatedAt` / `WithUpdatedBy` / `WithExpiredAt` / `WithoutExpiredAt` call on a builder inside a `PatchManyRequest` is honored on the wire as a **per-key** Meta on the `TreasurePatch`. The wire protocol guarantees per-key Meta fully replaces any request-level Meta on that key (no field-level merge). Entries that carry no per-key Meta still inherit any request-level Meta on the underlying RPC.
+
+The typical use is sliding `ExpiredAt` forward by per-domain amounts in one RPC — e.g. ASN cooldowns where each domain gets its own deadline:
+
+```go
+requests := make([]*hydraidego.PatchManyRequest, 0, len(rejected))
+for _, d := range rejected {
+    requests = append(requests, &hydraidego.PatchManyRequest{
+        Builder: hydraidego.NewPatchBuilder(d.Domain).
+            Set("ClaimedBy", "").
+            WithExpiredAt(d.ASNCooldownEnd).            // per-domain cooldown
+            IfFieldEquals("ClaimedBy", crawlerID),
+    })
+}
+err := h.CatalogPatchFieldsMany(ctx, readySwamp, requests, callback)
+```
+
+##### 10. Read-after-write consistency
+
+A successful `Patch.Exec()` and the read that immediately follows it observe the **same** value. The atomicity boundary is per (Swamp, Key); cross-key atomic updates need a [distributed lock](../../features/built-in-business-lock.md), not Patch.
+
+- **Sequential, same client:** when `Exec()` returns `PatchStatusPatched` (or `PatchStatusCreated`), an immediately-following `CatalogRead` on that key returns the post-patch state. The swamp lives in memory, the patch commits under the per-key guard, and every subsequent read sees the same in-memory state.
+- **Concurrent, two clients:** a reader on the same key sees either the complete pre-patch state or the complete post-patch state — never a half-applied mixture.
+- **Subscribe:** subscribers receive the post-patch event after the patch's per-key guard releases, so the model handed to a subscriber callback is always the committed state.
 
 #### 📚 Op Reference
 

@@ -82,29 +82,56 @@ Stick with `CatalogSave` (full-record overwrite) when:
 * You don't have concurrent writers per key (and never will)
 * You're working with Profile Swamps — those store one field per Treasure, so the patch primitive doesn't apply; `ProfileSave` already gives you field-level overrides
 
-## Batched Patches with Per-Request Conditions
+## Batched Patches with Per-Key Builders
 
-`CatalogPatchFieldsMany` dispatches a multi-key batch of patches in a single `PatchTreasures` RPC. Each `PatchManyRequest` can carry its own `Cond *PatchCond` — the same `IfField*` semantics as the single-key builder, expressed as a value rather than a fluent chain so a slice of independent CAS-gated patches travels in one round-trip:
+`CatalogPatchFieldsMany` dispatches a multi-key batch of patches in a single `PatchTreasures` RPC. Each `PatchManyRequest` carries a `*PatchBuilder` — the same fluent surface as single-key `CatalogPatch`, but built without a swamp via `NewPatchBuilder(key)`. Every op (Set / Inc / Append / Prepend / Delete / RemoveAt / RemoveVal / Merge), every condition (`IfField*`), and every metadata helper (`WithUpdatedAt` / `WithExpiredAt` / `WithoutExpiredAt`) is available per batch entry, ordered, atomic per key:
 
 ```go
 requests := []*hydraidego.PatchManyRequest{
-    {
-        Key:    "domain1.hu",
-        Fields: map[string]any{"ClaimedBy": "worker-A", "Counter": int32(1)},
-        Cond:   &hydraidego.PatchCond{Op: hydraidego.PatchCondEqual, Path: "ClaimedBy", Value: ""},
-    },
-    {
-        Key:    "domain2.hu",
-        Fields: map[string]any{"ClaimedBy": "worker-A", "Counter": int32(1)},
-        Cond:   &hydraidego.PatchCond{Op: hydraidego.PatchCondLessThan, Path: "Counter", Value: int32(3)},
-    },
+    {Builder: hydraidego.NewPatchBuilder("domain1.hu").
+        Set("ClaimedBy", "worker-A").
+        Inc("Counter", int32(1)).
+        IfFieldEquals("ClaimedBy", "")},
+
+    {Builder: hydraidego.NewPatchBuilder("domain2.hu").
+        Set("ClaimedBy", "worker-A").
+        Inc("Counter", int32(1)).
+        IfFieldLessThan("Counter", int32(3)).
+        WithExpiredAt(time.Now().UTC().Add(24 * time.Hour))},   // per-key TTL slide
 }
 err := h.CatalogPatchFieldsMany(ctx, swamp, requests, callback)
 ```
 
-Each request reports its own `PatchStatus` — `PATCHED`, `CONDITION_NOT_MET`, `TYPE_MISMATCH`, etc. — exactly like the single-key builder, so per-key business outcomes never short-circuit the rest of the batch. Use this for batched optimistic-style claims, idempotent counter increments with monotonic guards, and any flow where you'd otherwise issue many `IfField*().Exec()` calls in sequence.
+Each request reports its own `PatchStatus` — `PATCHED`, `CONDITION_NOT_MET`, `TYPE_MISMATCH`, etc. — exactly like the single-key builder, so per-key business outcomes never short-circuit the rest of the batch. Use this for batched optimistic-style claims, idempotent counter increments with monotonic guards, mixed ops + per-key TTL slides, and any flow where you'd otherwise issue many `Exec()` calls in sequence.
 
 For TTL-driven claim flows (where the *selection* itself should be expiration-aware), reach for [`patch-expired-treasures.md`](patch-expired-treasures.md) — the per-treasure condition there fires after an atomic disjoint-subset selection, not as a per-request gate.
+
+## Per-Key Metadata Across a Batch
+
+The wire-level `TreasurePatch` carries an optional `Meta` field. When a batch entry's builder calls any of the metadata helpers (`WithUpdatedAt`, `WithUpdatedBy`, `WithExpiredAt`, `WithoutExpiredAt`), that Meta travels per-key on the wire and **fully replaces** any request-level Meta on that key — there is no field-level merge. Entries that carry no per-key Meta still inherit the request-level Meta (when one is set on the underlying RPC).
+
+This unblocks batches where each key needs a different `ExpiredAt` (per-domain ASN cooldowns slid forward by different amounts in one RPC), without losing the option to share a common Meta across the rest of the batch. The override is opt-in: leave the metadata helpers unset on a builder and the request-level Meta still applies to that key.
+
+## Multi-Swamp Batches
+
+Two SDK helpers extend the batch APIs to multiple swamps in one round-trip per server (the SDK groups by destination server via consistent hashing on `SwampName`):
+
+| Helper | Single-swamp counterpart | Per entry |
+|---|---|---|
+| `CatalogPatchManyToMany` | `CatalogPatchFieldsMany` | `SwampName` + `[]*PatchManyRequest` (builder-reuse) |
+| `CatalogPatchExpiredManyFromMany` | `CatalogPatchExpired` | `SwampName` + `HowMany` + `*PatchExpiredOps` |
+
+Per-swamp failures (missing swamp, summon failure, invalid `Ops`/`Meta`) surface to the iterator via a dedicated `swampErr` argument and do not abort the rest of the batch. Per-key statuses (`CONDITION_NOT_MET`, `KEY_NOT_FOUND`, `TYPE_MISMATCH`, …) reach the iterator via the existing `status` argument, same as the single-swamp counterparts. Use these for combined-mode queue claims (one worker pulling work from several ready-queues in proportion) or return flows that touch a TLD-sharded state swamp.
+
+## Read-After-Write Consistency
+
+A successful `Patch.Exec()` and the read that immediately follows it observe the **same** value:
+
+- **Sequential, same client:** when `Exec()` returns `PATCHED` (or `CREATED`), an immediately-following `CatalogRead` on that key returns the post-patch state. The swamp lives in memory, the patch commits under the per-key guard, and every subsequent read sees the same in-memory state.
+- **Concurrent, two clients:** a reader on the same key sees either the complete pre-patch state or the complete post-patch state — never a half-applied mixture. The patch is an atomic rewrite of the Treasure's msgpack body under the per-key guard.
+- **Subscribe:** subscribers receive the post-patch event after the patch's per-key guard releases, so the model handed to a subscriber callback is always the committed state.
+
+The atomicity boundary is **per (Swamp, Key)**: it does not extend across keys or swamps. Cross-key atomic updates need a [distributed lock](built-in-business-lock.md), not Patch.
 
 ## See Also
 
