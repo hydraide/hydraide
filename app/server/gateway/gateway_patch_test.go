@@ -425,3 +425,146 @@ func TestGatewayPatch_MetaSetExpiredAtOnCreate(t *testing.T) {
 
 	assert.Equal(t, want.UnixNano(), readExpiration(t, rig, "newkey"))
 }
+
+// ---------- per-key Meta override (R2-1) ----------
+
+// TestGatewayPatch_PerKeyMetaOverridesRequestMeta verifies that when a
+// TreasurePatch carries its own Meta, the request-level Meta is fully
+// replaced for that key (not merged). Both keys are patched in the same
+// batch: key "shared" inherits the request-level Meta, while key "custom"
+// overrides it with its own SetExpiredAt.
+func TestGatewayPatch_PerKeyMetaOverridesRequestMeta(t *testing.T) {
+	rig := newGatewayPatchTestRig(t, "gw-patch-perkey-meta", "meta", "override")
+
+	requestExpire := time.Now().Add(1 * time.Hour).UTC().Truncate(time.Microsecond)
+	customExpire := time.Now().Add(72 * time.Hour).UTC().Truncate(time.Microsecond)
+
+	resp, err := rig.gw.PatchTreasures(context.Background(), &hydrapb.PatchTreasuresRequest{
+		IslandID:         rig.islandID,
+		SwampName:        rig.swampName,
+		CreateIfNotExist: true,
+		Meta:             &hydrapb.PatchMeta{SetExpiredAt: timestamppb.New(requestExpire)},
+		Patches: []*hydrapb.TreasurePatch{
+			{
+				Key: "shared",
+				Ops: []*hydrapb.PatchOp{{Op: hydrapb.PatchOp_SET, Path: "x", Value: encMsgpack(t, int8(1))}},
+			},
+			{
+				Key: "custom",
+				Ops: []*hydrapb.PatchOp{{Op: hydrapb.PatchOp_SET, Path: "x", Value: encMsgpack(t, int8(2))}},
+				Meta: &hydrapb.PatchMeta{SetExpiredAt: timestamppb.New(customExpire)},
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, resp.GetResults(), 2)
+
+	assert.Equal(t, requestExpire.UnixNano(), readExpiration(t, rig, "shared"),
+		"shared key inherits request-level Meta")
+	assert.Equal(t, customExpire.UnixNano(), readExpiration(t, rig, "custom"),
+		"custom key gets its per-key Meta")
+}
+
+// TestGatewayPatch_PerKeyMetaReplacesNotMerges verifies the no-merge
+// guarantee: when both request-level Meta and per-key Meta are non-nil, the
+// per-key Meta REPLACES the entire request-level object — not field-level
+// merge. Here the request asks for SetUpdatedBy + SetExpiredAt, but the
+// per-key Meta carries only SetExpiredAt, so SetUpdatedBy must NOT propagate
+// to that key.
+func TestGatewayPatch_PerKeyMetaReplacesNotMerges(t *testing.T) {
+	rig := newGatewayPatchTestRig(t, "gw-patch-perkey-replace", "meta", "no-merge")
+
+	requestExpire := time.Now().Add(1 * time.Hour).UTC().Truncate(time.Microsecond)
+	perKeyExpire := time.Now().Add(2 * time.Hour).UTC().Truncate(time.Microsecond)
+	requestUpdatedBy := "request-user"
+
+	_, err := rig.gw.PatchTreasures(context.Background(), &hydrapb.PatchTreasuresRequest{
+		IslandID:         rig.islandID,
+		SwampName:        rig.swampName,
+		CreateIfNotExist: true,
+		Meta: &hydrapb.PatchMeta{
+			SetUpdatedAt: true,
+			SetUpdatedBy: &requestUpdatedBy,
+			SetExpiredAt: timestamppb.New(requestExpire),
+		},
+		Patches: []*hydrapb.TreasurePatch{
+			{
+				Key:  "perkey",
+				Ops:  []*hydrapb.PatchOp{{Op: hydrapb.PatchOp_SET, Path: "x", Value: encMsgpack(t, int8(9))}},
+				Meta: &hydrapb.PatchMeta{SetExpiredAt: timestamppb.New(perKeyExpire)},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	// ExpiredAt comes from per-key Meta, not request-level.
+	assert.Equal(t, perKeyExpire.UnixNano(), readExpiration(t, rig, "perkey"))
+
+	// UpdatedBy must NOT have been stamped from the request-level Meta on
+	// this key — the per-key Meta replaces the whole object.
+	hydraInterface := rig.gw.ZeusInterface.GetHydra()
+	loaded := name.Load(rig.swampName)
+	swampObj, err := hydraInterface.SummonSwamp(context.Background(), rig.islandID, loaded)
+	require.NoError(t, err)
+	swampObj.BeginVigil()
+	defer swampObj.CeaseVigil()
+	tr, err := swampObj.GetTreasure("perkey")
+	require.NoError(t, err)
+	assert.Empty(t, tr.GetModifiedBy(), "per-key Meta replaces request-level Meta; SetUpdatedBy must not leak")
+}
+
+// TestGatewayPatch_PerKeyMetaNilFallsBackToRequestMeta verifies that when
+// the per-key Meta is nil, the request-level Meta still applies — i.e. the
+// override is opt-in.
+func TestGatewayPatch_PerKeyMetaNilFallsBackToRequestMeta(t *testing.T) {
+	rig := newGatewayPatchTestRig(t, "gw-patch-perkey-fallback", "meta", "fallback")
+
+	requestExpire := time.Now().Add(90 * time.Minute).UTC().Truncate(time.Microsecond)
+	_, err := rig.gw.PatchTreasures(context.Background(), &hydrapb.PatchTreasuresRequest{
+		IslandID:         rig.islandID,
+		SwampName:        rig.swampName,
+		CreateIfNotExist: true,
+		Meta:             &hydrapb.PatchMeta{SetExpiredAt: timestamppb.New(requestExpire)},
+		Patches: []*hydrapb.TreasurePatch{
+			{Key: "k", Ops: []*hydrapb.PatchOp{{Op: hydrapb.PatchOp_SET, Path: "x", Value: encMsgpack(t, int8(1))}}},
+		},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, requestExpire.UnixNano(), readExpiration(t, rig, "k"))
+}
+
+// TestGatewayPatch_PerKeyMetaCondNotMetSkipsMeta verifies that when a
+// patch's Cond fails (CONDITION_NOT_MET), the per-key Meta does NOT
+// apply — meta application happens together with the ops, under the same
+// guard, after the cond passes.
+func TestGatewayPatch_PerKeyMetaCondNotMetSkipsMeta(t *testing.T) {
+	rig := patchExpiredAtRig(t, "gw-patch-perkey-cond", "meta", "cond-skip")
+
+	beforeExpire := readExpiration(t, rig, "k")
+
+	perKeyExpire := time.Now().Add(5 * time.Hour).UTC()
+	threshold := encMsgpack(t, int8(99))
+
+	resp, err := rig.gw.PatchTreasures(context.Background(), &hydrapb.PatchTreasuresRequest{
+		IslandID:  rig.islandID,
+		SwampName: rig.swampName,
+		Patches: []*hydrapb.TreasurePatch{
+			{
+				Key: "k",
+				Ops: []*hydrapb.PatchOp{{Op: hydrapb.PatchOp_SET, Path: "x", Value: encMsgpack(t, int8(2))}},
+				Condition: &hydrapb.PatchCondition{
+					Path:      "x",
+					Operator:  hydrapb.PatchCondition_EQUAL,
+					Threshold: threshold,
+				},
+				Meta: &hydrapb.PatchMeta{SetExpiredAt: timestamppb.New(perKeyExpire)},
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, resp.GetResults(), 1)
+	assert.Equal(t, hydrapb.PatchResult_CONDITION_NOT_MET, resp.GetResults()[0].GetStatus())
+
+	assert.Equal(t, beforeExpire, readExpiration(t, rig, "k"),
+		"CONDITION_NOT_MET must not apply per-key Meta")
+}

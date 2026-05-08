@@ -48,10 +48,11 @@ func (g Gateway) PatchTreasures(ctx context.Context, in *hydrapb.PatchTreasuresR
 	swampObj.BeginVigil()
 	defer swampObj.CeaseVigil()
 
-	opts := swamp.PatchFieldsOptions{
+	requestMeta := protoMetaToSwampMeta(in.GetMeta())
+	baseOpts := swamp.PatchFieldsOptions{
 		CreateIfNotExist:       in.GetCreateIfNotExist(),
 		InitialMsgpackOnCreate: in.GetInitialMsgpackOnCreate(),
-		Meta:                   protoMetaToSwampMeta(in.GetMeta()),
+		Meta:                   requestMeta,
 	}
 
 	results := make([]*hydrapb.PatchResult, 0, len(in.GetPatches()))
@@ -66,6 +67,14 @@ func (g Gateway) PatchTreasures(ctx context.Context, in *hydrapb.PatchTreasuresR
 			continue
 		}
 		cond := protoCondToMsgpackpatchCond(patch.GetCondition())
+
+		// Per-key Meta fully replaces the request-level Meta on this patch
+		// (no field-level merge). When the patch carries no Meta of its own,
+		// the request-level Meta applies.
+		opts := baseOpts
+		if patch.Meta != nil {
+			opts.Meta = protoMetaToSwampMeta(patch.GetMeta())
+		}
 
 		res, perr := swampObj.PatchFields(patch.GetKey(), ops, cond, opts)
 		if perr != nil {

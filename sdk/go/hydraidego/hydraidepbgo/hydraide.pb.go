@@ -10187,7 +10187,15 @@ type TreasurePatch struct {
 	// Condition is an optional pre-check evaluated against the existing
 	// msgpack blob before any Op runs. Failure short-circuits with
 	// CONDITION_NOT_MET and does not apply ops.
-	Condition     *PatchCondition `protobuf:"bytes,3,opt,name=Condition,proto3,oneof" json:"Condition,omitempty"`
+	Condition *PatchCondition `protobuf:"bytes,3,opt,name=Condition,proto3,oneof" json:"Condition,omitempty"`
+	// Meta sets timestamp/identity metadata on this single patched treasure.
+	// When non-nil, this Meta fully replaces the request-level
+	// PatchTreasuresRequest.Meta for THIS patch only — the request-level Meta
+	// is not merged. When nil, the request-level Meta (if any) applies.
+	// Use this for batches where each key needs different timestamps or a
+	// distinct ExpiredAt (e.g. per-domain ASN cooldowns slid forward by
+	// different amounts in a single round-trip).
+	Meta          *PatchMeta `protobuf:"bytes,4,opt,name=Meta,proto3,oneof" json:"Meta,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -10239,6 +10247,13 @@ func (x *TreasurePatch) GetOps() []*PatchOp {
 func (x *TreasurePatch) GetCondition() *PatchCondition {
 	if x != nil {
 		return x.Condition
+	}
+	return nil
+}
+
+func (x *TreasurePatch) GetMeta() *PatchMeta {
+	if x != nil {
+		return x.Meta
 	}
 	return nil
 }
@@ -11903,13 +11918,15 @@ const file_hydraide_proto_rawDesc = "" +
 	"\x16InitialMsgpackOnCreate\x18\x05 \x01(\fH\x00R\x16InitialMsgpackOnCreate\x88\x01\x01\x120\n" +
 	"\x04Meta\x18\x06 \x01(\v2\x17.hydraidepbgo.PatchMetaH\x01R\x04Meta\x88\x01\x01B\x19\n" +
 	"\x17_InitialMsgpackOnCreateB\a\n" +
-	"\x05_Meta\"\x99\x01\n" +
+	"\x05_Meta\"\xd4\x01\n" +
 	"\rTreasurePatch\x12\x10\n" +
 	"\x03Key\x18\x01 \x01(\tR\x03Key\x12'\n" +
 	"\x03Ops\x18\x02 \x03(\v2\x15.hydraidepbgo.PatchOpR\x03Ops\x12?\n" +
-	"\tCondition\x18\x03 \x01(\v2\x1c.hydraidepbgo.PatchConditionH\x00R\tCondition\x88\x01\x01B\f\n" +
+	"\tCondition\x18\x03 \x01(\v2\x1c.hydraidepbgo.PatchConditionH\x00R\tCondition\x88\x01\x01\x120\n" +
+	"\x04Meta\x18\x04 \x01(\v2\x17.hydraidepbgo.PatchMetaH\x01R\x04Meta\x88\x01\x01B\f\n" +
 	"\n" +
-	"_Condition\"\xd7\x01\n" +
+	"_ConditionB\a\n" +
+	"\x05_Meta\"\xd7\x01\n" +
 	"\aPatchOp\x12*\n" +
 	"\x02Op\x18\x01 \x01(\x0e2\x1a.hydraidepbgo.PatchOp.KindR\x02Op\x12\x12\n" +
 	"\x04Path\x18\x02 \x01(\tR\x04Path\x12\x19\n" +
@@ -12365,114 +12382,115 @@ var file_hydraide_proto_depIdxs = []int32{
 	146, // 138: hydraidepbgo.PatchTreasuresRequest.Meta:type_name -> hydraidepbgo.PatchMeta
 	144, // 139: hydraidepbgo.TreasurePatch.Ops:type_name -> hydraidepbgo.PatchOp
 	145, // 140: hydraidepbgo.TreasurePatch.Condition:type_name -> hydraidepbgo.PatchCondition
-	11,  // 141: hydraidepbgo.PatchOp.Op:type_name -> hydraidepbgo.PatchOp.Kind
-	12,  // 142: hydraidepbgo.PatchCondition.Operator:type_name -> hydraidepbgo.PatchCondition.Op
-	157, // 143: hydraidepbgo.PatchMeta.SetExpiredAt:type_name -> google.protobuf.Timestamp
-	148, // 144: hydraidepbgo.PatchTreasuresResponse.Results:type_name -> hydraidepbgo.PatchResult
-	13,  // 145: hydraidepbgo.PatchResult.Status:type_name -> hydraidepbgo.PatchResult.StatusCode
-	144, // 146: hydraidepbgo.PatchExpiredTreasuresRequest.Ops:type_name -> hydraidepbgo.PatchOp
-	146, // 147: hydraidepbgo.PatchExpiredTreasuresRequest.Meta:type_name -> hydraidepbgo.PatchMeta
-	145, // 148: hydraidepbgo.PatchExpiredTreasuresRequest.Condition:type_name -> hydraidepbgo.PatchCondition
-	151, // 149: hydraidepbgo.PatchExpiredTreasuresResponse.Patched:type_name -> hydraidepbgo.PatchedExpiredTreasure
-	13,  // 150: hydraidepbgo.PatchedExpiredTreasure.Status:type_name -> hydraidepbgo.PatchResult.StatusCode
-	157, // 151: hydraidepbgo.PatchedExpiredTreasure.ExpiredAt:type_name -> google.protobuf.Timestamp
-	5,   // 152: hydraidepbgo.DeleteResponse.SwampDeleteResponse.ErrorCode:type_name -> hydraidepbgo.DeleteResponse.SwampDeleteResponse.ErrorCodeEnum
-	39,  // 153: hydraidepbgo.DeleteResponse.SwampDeleteResponse.KeyStatuses:type_name -> hydraidepbgo.KeyStatusPair
-	14,  // 154: hydraidepbgo.HydraideService.Heartbeat:input_type -> hydraidepbgo.HeartbeatRequest
-	16,  // 155: hydraidepbgo.HydraideService.Lock:input_type -> hydraidepbgo.LockRequest
-	18,  // 156: hydraidepbgo.HydraideService.Unlock:input_type -> hydraidepbgo.UnlockRequest
-	30,  // 157: hydraidepbgo.HydraideService.RegisterSwamp:input_type -> hydraidepbgo.RegisterSwampRequest
-	32,  // 158: hydraidepbgo.HydraideService.DeRegisterSwamp:input_type -> hydraidepbgo.DeRegisterSwampRequest
-	34,  // 159: hydraidepbgo.HydraideService.Set:input_type -> hydraidepbgo.SetRequest
-	41,  // 160: hydraidepbgo.HydraideService.Get:input_type -> hydraidepbgo.GetRequest
-	45,  // 161: hydraidepbgo.HydraideService.GetAll:input_type -> hydraidepbgo.GetAllRequest
-	51,  // 162: hydraidepbgo.HydraideService.GetByIndex:input_type -> hydraidepbgo.GetByIndexRequest
-	55,  // 163: hydraidepbgo.HydraideService.GetByKeys:input_type -> hydraidepbgo.GetByKeysRequest
-	57,  // 164: hydraidepbgo.HydraideService.ShiftByKeys:input_type -> hydraidepbgo.ShiftByKeysRequest
-	47,  // 165: hydraidepbgo.HydraideService.ShiftExpiredTreasures:input_type -> hydraidepbgo.ShiftExpiredTreasuresRequest
-	20,  // 166: hydraidepbgo.HydraideService.Destroy:input_type -> hydraidepbgo.DestroyRequest
-	22,  // 167: hydraidepbgo.HydraideService.DestroyBulk:input_type -> hydraidepbgo.DestroyBulkRequest
-	59,  // 168: hydraidepbgo.HydraideService.Delete:input_type -> hydraidepbgo.DeleteRequest
-	61,  // 169: hydraidepbgo.HydraideService.Count:input_type -> hydraidepbgo.CountRequest
-	106, // 170: hydraidepbgo.HydraideService.IsSwampExist:input_type -> hydraidepbgo.IsSwampExistRequest
-	108, // 171: hydraidepbgo.HydraideService.IsKeyExist:input_type -> hydraidepbgo.IsKeyExistRequest
-	110, // 172: hydraidepbgo.HydraideService.AreKeysExist:input_type -> hydraidepbgo.AreKeysExistRequest
-	27,  // 173: hydraidepbgo.HydraideService.SubscribeToEvents:input_type -> hydraidepbgo.SubscribeToEventsRequest
-	25,  // 174: hydraidepbgo.HydraideService.SubscribeToInfo:input_type -> hydraidepbgo.SubscribeToInfoRequest
-	98,  // 175: hydraidepbgo.HydraideService.Uint32SlicePush:input_type -> hydraidepbgo.AddToUint32SlicePushRequest
-	100, // 176: hydraidepbgo.HydraideService.Uint32SliceDelete:input_type -> hydraidepbgo.Uint32SliceDeleteRequest
-	102, // 177: hydraidepbgo.HydraideService.Uint32SliceSize:input_type -> hydraidepbgo.Uint32SliceSizeRequest
-	104, // 178: hydraidepbgo.HydraideService.Uint32SliceIsValueExist:input_type -> hydraidepbgo.Uint32SliceIsValueExistRequest
-	66,  // 179: hydraidepbgo.HydraideService.IncrementInt8:input_type -> hydraidepbgo.IncrementInt8Request
-	69,  // 180: hydraidepbgo.HydraideService.IncrementInt16:input_type -> hydraidepbgo.IncrementInt16Request
-	72,  // 181: hydraidepbgo.HydraideService.IncrementInt32:input_type -> hydraidepbgo.IncrementInt32Request
-	75,  // 182: hydraidepbgo.HydraideService.IncrementInt64:input_type -> hydraidepbgo.IncrementInt64Request
-	78,  // 183: hydraidepbgo.HydraideService.IncrementUint8:input_type -> hydraidepbgo.IncrementUint8Request
-	81,  // 184: hydraidepbgo.HydraideService.IncrementUint16:input_type -> hydraidepbgo.IncrementUint16Request
-	84,  // 185: hydraidepbgo.HydraideService.IncrementUint32:input_type -> hydraidepbgo.IncrementUint32Request
-	87,  // 186: hydraidepbgo.HydraideService.IncrementUint64:input_type -> hydraidepbgo.IncrementUint64Request
-	91,  // 187: hydraidepbgo.HydraideService.IncrementFloat32:input_type -> hydraidepbgo.IncrementFloat32Request
-	94,  // 188: hydraidepbgo.HydraideService.IncrementFloat64:input_type -> hydraidepbgo.IncrementFloat64Request
-	142, // 189: hydraidepbgo.HydraideService.PatchTreasures:input_type -> hydraidepbgo.PatchTreasuresRequest
-	149, // 190: hydraidepbgo.HydraideService.PatchExpiredTreasures:input_type -> hydraidepbgo.PatchExpiredTreasuresRequest
-	112, // 191: hydraidepbgo.HydraideService.SubscribeToTelemetry:input_type -> hydraidepbgo.TelemetrySubscribeRequest
-	114, // 192: hydraidepbgo.HydraideService.GetTelemetryHistory:input_type -> hydraidepbgo.TelemetryHistoryRequest
-	116, // 193: hydraidepbgo.HydraideService.GetErrorDetails:input_type -> hydraidepbgo.ErrorDetailsRequest
-	118, // 194: hydraidepbgo.HydraideService.GetTelemetryStats:input_type -> hydraidepbgo.TelemetryStatsRequest
-	132, // 195: hydraidepbgo.HydraideService.GetByIndexStream:input_type -> hydraidepbgo.GetByIndexStreamRequest
-	135, // 196: hydraidepbgo.HydraideService.GetByIndexStreamFromMany:input_type -> hydraidepbgo.GetByIndexStreamFromManyRequest
-	140, // 197: hydraidepbgo.HydraideService.CompactSwamp:input_type -> hydraidepbgo.CompactSwampRequest
-	138, // 198: hydraidepbgo.HydraideService.GetStream:input_type -> hydraidepbgo.GetStreamRequest
-	15,  // 199: hydraidepbgo.HydraideService.Heartbeat:output_type -> hydraidepbgo.HeartbeatResponse
-	17,  // 200: hydraidepbgo.HydraideService.Lock:output_type -> hydraidepbgo.LockResponse
-	19,  // 201: hydraidepbgo.HydraideService.Unlock:output_type -> hydraidepbgo.UnlockResponse
-	31,  // 202: hydraidepbgo.HydraideService.RegisterSwamp:output_type -> hydraidepbgo.RegisterSwampResponse
-	33,  // 203: hydraidepbgo.HydraideService.DeRegisterSwamp:output_type -> hydraidepbgo.DeRegisterSwampResponse
-	37,  // 204: hydraidepbgo.HydraideService.Set:output_type -> hydraidepbgo.SetResponse
-	43,  // 205: hydraidepbgo.HydraideService.Get:output_type -> hydraidepbgo.GetResponse
-	46,  // 206: hydraidepbgo.HydraideService.GetAll:output_type -> hydraidepbgo.GetAllResponse
-	54,  // 207: hydraidepbgo.HydraideService.GetByIndex:output_type -> hydraidepbgo.GetByIndexResponse
-	56,  // 208: hydraidepbgo.HydraideService.GetByKeys:output_type -> hydraidepbgo.GetByKeysResponse
-	58,  // 209: hydraidepbgo.HydraideService.ShiftByKeys:output_type -> hydraidepbgo.ShiftByKeysResponse
-	48,  // 210: hydraidepbgo.HydraideService.ShiftExpiredTreasures:output_type -> hydraidepbgo.ShiftExpiredTreasuresResponse
-	21,  // 211: hydraidepbgo.HydraideService.Destroy:output_type -> hydraidepbgo.DestroyResponse
-	24,  // 212: hydraidepbgo.HydraideService.DestroyBulk:output_type -> hydraidepbgo.DestroyBulkResponse
-	60,  // 213: hydraidepbgo.HydraideService.Delete:output_type -> hydraidepbgo.DeleteResponse
-	62,  // 214: hydraidepbgo.HydraideService.Count:output_type -> hydraidepbgo.CountResponse
-	107, // 215: hydraidepbgo.HydraideService.IsSwampExist:output_type -> hydraidepbgo.IsSwampExistResponse
-	109, // 216: hydraidepbgo.HydraideService.IsKeyExist:output_type -> hydraidepbgo.IsKeyExistResponse
-	111, // 217: hydraidepbgo.HydraideService.AreKeysExist:output_type -> hydraidepbgo.AreKeysExistResponse
-	28,  // 218: hydraidepbgo.HydraideService.SubscribeToEvents:output_type -> hydraidepbgo.SubscribeToEventsResponse
-	26,  // 219: hydraidepbgo.HydraideService.SubscribeToInfo:output_type -> hydraidepbgo.SubscribeToInfoResponse
-	99,  // 220: hydraidepbgo.HydraideService.Uint32SlicePush:output_type -> hydraidepbgo.AddToUint32SlicePushResponse
-	101, // 221: hydraidepbgo.HydraideService.Uint32SliceDelete:output_type -> hydraidepbgo.Uint32SliceDeleteResponse
-	103, // 222: hydraidepbgo.HydraideService.Uint32SliceSize:output_type -> hydraidepbgo.Uint32SliceSizeResponse
-	105, // 223: hydraidepbgo.HydraideService.Uint32SliceIsValueExist:output_type -> hydraidepbgo.Uint32SliceIsValueExistResponse
-	68,  // 224: hydraidepbgo.HydraideService.IncrementInt8:output_type -> hydraidepbgo.IncrementInt8Response
-	71,  // 225: hydraidepbgo.HydraideService.IncrementInt16:output_type -> hydraidepbgo.IncrementInt16Response
-	74,  // 226: hydraidepbgo.HydraideService.IncrementInt32:output_type -> hydraidepbgo.IncrementInt32Response
-	77,  // 227: hydraidepbgo.HydraideService.IncrementInt64:output_type -> hydraidepbgo.IncrementInt64Response
-	80,  // 228: hydraidepbgo.HydraideService.IncrementUint8:output_type -> hydraidepbgo.IncrementUint8Response
-	83,  // 229: hydraidepbgo.HydraideService.IncrementUint16:output_type -> hydraidepbgo.IncrementUint16Response
-	86,  // 230: hydraidepbgo.HydraideService.IncrementUint32:output_type -> hydraidepbgo.IncrementUint32Response
-	89,  // 231: hydraidepbgo.HydraideService.IncrementUint64:output_type -> hydraidepbgo.IncrementUint64Response
-	93,  // 232: hydraidepbgo.HydraideService.IncrementFloat32:output_type -> hydraidepbgo.IncrementFloat32Response
-	96,  // 233: hydraidepbgo.HydraideService.IncrementFloat64:output_type -> hydraidepbgo.IncrementFloat64Response
-	147, // 234: hydraidepbgo.HydraideService.PatchTreasures:output_type -> hydraidepbgo.PatchTreasuresResponse
-	150, // 235: hydraidepbgo.HydraideService.PatchExpiredTreasures:output_type -> hydraidepbgo.PatchExpiredTreasuresResponse
-	113, // 236: hydraidepbgo.HydraideService.SubscribeToTelemetry:output_type -> hydraidepbgo.TelemetryEvent
-	115, // 237: hydraidepbgo.HydraideService.GetTelemetryHistory:output_type -> hydraidepbgo.TelemetryHistoryResponse
-	117, // 238: hydraidepbgo.HydraideService.GetErrorDetails:output_type -> hydraidepbgo.ErrorDetailsResponse
-	119, // 239: hydraidepbgo.HydraideService.GetTelemetryStats:output_type -> hydraidepbgo.TelemetryStatsResponse
-	133, // 240: hydraidepbgo.HydraideService.GetByIndexStream:output_type -> hydraidepbgo.GetByIndexStreamResponse
-	136, // 241: hydraidepbgo.HydraideService.GetByIndexStreamFromMany:output_type -> hydraidepbgo.GetByIndexStreamFromManyResponse
-	141, // 242: hydraidepbgo.HydraideService.CompactSwamp:output_type -> hydraidepbgo.CompactSwampResponse
-	139, // 243: hydraidepbgo.HydraideService.GetStream:output_type -> hydraidepbgo.GetStreamResponse
-	199, // [199:244] is the sub-list for method output_type
-	154, // [154:199] is the sub-list for method input_type
-	154, // [154:154] is the sub-list for extension type_name
-	154, // [154:154] is the sub-list for extension extendee
-	0,   // [0:154] is the sub-list for field type_name
+	146, // 141: hydraidepbgo.TreasurePatch.Meta:type_name -> hydraidepbgo.PatchMeta
+	11,  // 142: hydraidepbgo.PatchOp.Op:type_name -> hydraidepbgo.PatchOp.Kind
+	12,  // 143: hydraidepbgo.PatchCondition.Operator:type_name -> hydraidepbgo.PatchCondition.Op
+	157, // 144: hydraidepbgo.PatchMeta.SetExpiredAt:type_name -> google.protobuf.Timestamp
+	148, // 145: hydraidepbgo.PatchTreasuresResponse.Results:type_name -> hydraidepbgo.PatchResult
+	13,  // 146: hydraidepbgo.PatchResult.Status:type_name -> hydraidepbgo.PatchResult.StatusCode
+	144, // 147: hydraidepbgo.PatchExpiredTreasuresRequest.Ops:type_name -> hydraidepbgo.PatchOp
+	146, // 148: hydraidepbgo.PatchExpiredTreasuresRequest.Meta:type_name -> hydraidepbgo.PatchMeta
+	145, // 149: hydraidepbgo.PatchExpiredTreasuresRequest.Condition:type_name -> hydraidepbgo.PatchCondition
+	151, // 150: hydraidepbgo.PatchExpiredTreasuresResponse.Patched:type_name -> hydraidepbgo.PatchedExpiredTreasure
+	13,  // 151: hydraidepbgo.PatchedExpiredTreasure.Status:type_name -> hydraidepbgo.PatchResult.StatusCode
+	157, // 152: hydraidepbgo.PatchedExpiredTreasure.ExpiredAt:type_name -> google.protobuf.Timestamp
+	5,   // 153: hydraidepbgo.DeleteResponse.SwampDeleteResponse.ErrorCode:type_name -> hydraidepbgo.DeleteResponse.SwampDeleteResponse.ErrorCodeEnum
+	39,  // 154: hydraidepbgo.DeleteResponse.SwampDeleteResponse.KeyStatuses:type_name -> hydraidepbgo.KeyStatusPair
+	14,  // 155: hydraidepbgo.HydraideService.Heartbeat:input_type -> hydraidepbgo.HeartbeatRequest
+	16,  // 156: hydraidepbgo.HydraideService.Lock:input_type -> hydraidepbgo.LockRequest
+	18,  // 157: hydraidepbgo.HydraideService.Unlock:input_type -> hydraidepbgo.UnlockRequest
+	30,  // 158: hydraidepbgo.HydraideService.RegisterSwamp:input_type -> hydraidepbgo.RegisterSwampRequest
+	32,  // 159: hydraidepbgo.HydraideService.DeRegisterSwamp:input_type -> hydraidepbgo.DeRegisterSwampRequest
+	34,  // 160: hydraidepbgo.HydraideService.Set:input_type -> hydraidepbgo.SetRequest
+	41,  // 161: hydraidepbgo.HydraideService.Get:input_type -> hydraidepbgo.GetRequest
+	45,  // 162: hydraidepbgo.HydraideService.GetAll:input_type -> hydraidepbgo.GetAllRequest
+	51,  // 163: hydraidepbgo.HydraideService.GetByIndex:input_type -> hydraidepbgo.GetByIndexRequest
+	55,  // 164: hydraidepbgo.HydraideService.GetByKeys:input_type -> hydraidepbgo.GetByKeysRequest
+	57,  // 165: hydraidepbgo.HydraideService.ShiftByKeys:input_type -> hydraidepbgo.ShiftByKeysRequest
+	47,  // 166: hydraidepbgo.HydraideService.ShiftExpiredTreasures:input_type -> hydraidepbgo.ShiftExpiredTreasuresRequest
+	20,  // 167: hydraidepbgo.HydraideService.Destroy:input_type -> hydraidepbgo.DestroyRequest
+	22,  // 168: hydraidepbgo.HydraideService.DestroyBulk:input_type -> hydraidepbgo.DestroyBulkRequest
+	59,  // 169: hydraidepbgo.HydraideService.Delete:input_type -> hydraidepbgo.DeleteRequest
+	61,  // 170: hydraidepbgo.HydraideService.Count:input_type -> hydraidepbgo.CountRequest
+	106, // 171: hydraidepbgo.HydraideService.IsSwampExist:input_type -> hydraidepbgo.IsSwampExistRequest
+	108, // 172: hydraidepbgo.HydraideService.IsKeyExist:input_type -> hydraidepbgo.IsKeyExistRequest
+	110, // 173: hydraidepbgo.HydraideService.AreKeysExist:input_type -> hydraidepbgo.AreKeysExistRequest
+	27,  // 174: hydraidepbgo.HydraideService.SubscribeToEvents:input_type -> hydraidepbgo.SubscribeToEventsRequest
+	25,  // 175: hydraidepbgo.HydraideService.SubscribeToInfo:input_type -> hydraidepbgo.SubscribeToInfoRequest
+	98,  // 176: hydraidepbgo.HydraideService.Uint32SlicePush:input_type -> hydraidepbgo.AddToUint32SlicePushRequest
+	100, // 177: hydraidepbgo.HydraideService.Uint32SliceDelete:input_type -> hydraidepbgo.Uint32SliceDeleteRequest
+	102, // 178: hydraidepbgo.HydraideService.Uint32SliceSize:input_type -> hydraidepbgo.Uint32SliceSizeRequest
+	104, // 179: hydraidepbgo.HydraideService.Uint32SliceIsValueExist:input_type -> hydraidepbgo.Uint32SliceIsValueExistRequest
+	66,  // 180: hydraidepbgo.HydraideService.IncrementInt8:input_type -> hydraidepbgo.IncrementInt8Request
+	69,  // 181: hydraidepbgo.HydraideService.IncrementInt16:input_type -> hydraidepbgo.IncrementInt16Request
+	72,  // 182: hydraidepbgo.HydraideService.IncrementInt32:input_type -> hydraidepbgo.IncrementInt32Request
+	75,  // 183: hydraidepbgo.HydraideService.IncrementInt64:input_type -> hydraidepbgo.IncrementInt64Request
+	78,  // 184: hydraidepbgo.HydraideService.IncrementUint8:input_type -> hydraidepbgo.IncrementUint8Request
+	81,  // 185: hydraidepbgo.HydraideService.IncrementUint16:input_type -> hydraidepbgo.IncrementUint16Request
+	84,  // 186: hydraidepbgo.HydraideService.IncrementUint32:input_type -> hydraidepbgo.IncrementUint32Request
+	87,  // 187: hydraidepbgo.HydraideService.IncrementUint64:input_type -> hydraidepbgo.IncrementUint64Request
+	91,  // 188: hydraidepbgo.HydraideService.IncrementFloat32:input_type -> hydraidepbgo.IncrementFloat32Request
+	94,  // 189: hydraidepbgo.HydraideService.IncrementFloat64:input_type -> hydraidepbgo.IncrementFloat64Request
+	142, // 190: hydraidepbgo.HydraideService.PatchTreasures:input_type -> hydraidepbgo.PatchTreasuresRequest
+	149, // 191: hydraidepbgo.HydraideService.PatchExpiredTreasures:input_type -> hydraidepbgo.PatchExpiredTreasuresRequest
+	112, // 192: hydraidepbgo.HydraideService.SubscribeToTelemetry:input_type -> hydraidepbgo.TelemetrySubscribeRequest
+	114, // 193: hydraidepbgo.HydraideService.GetTelemetryHistory:input_type -> hydraidepbgo.TelemetryHistoryRequest
+	116, // 194: hydraidepbgo.HydraideService.GetErrorDetails:input_type -> hydraidepbgo.ErrorDetailsRequest
+	118, // 195: hydraidepbgo.HydraideService.GetTelemetryStats:input_type -> hydraidepbgo.TelemetryStatsRequest
+	132, // 196: hydraidepbgo.HydraideService.GetByIndexStream:input_type -> hydraidepbgo.GetByIndexStreamRequest
+	135, // 197: hydraidepbgo.HydraideService.GetByIndexStreamFromMany:input_type -> hydraidepbgo.GetByIndexStreamFromManyRequest
+	140, // 198: hydraidepbgo.HydraideService.CompactSwamp:input_type -> hydraidepbgo.CompactSwampRequest
+	138, // 199: hydraidepbgo.HydraideService.GetStream:input_type -> hydraidepbgo.GetStreamRequest
+	15,  // 200: hydraidepbgo.HydraideService.Heartbeat:output_type -> hydraidepbgo.HeartbeatResponse
+	17,  // 201: hydraidepbgo.HydraideService.Lock:output_type -> hydraidepbgo.LockResponse
+	19,  // 202: hydraidepbgo.HydraideService.Unlock:output_type -> hydraidepbgo.UnlockResponse
+	31,  // 203: hydraidepbgo.HydraideService.RegisterSwamp:output_type -> hydraidepbgo.RegisterSwampResponse
+	33,  // 204: hydraidepbgo.HydraideService.DeRegisterSwamp:output_type -> hydraidepbgo.DeRegisterSwampResponse
+	37,  // 205: hydraidepbgo.HydraideService.Set:output_type -> hydraidepbgo.SetResponse
+	43,  // 206: hydraidepbgo.HydraideService.Get:output_type -> hydraidepbgo.GetResponse
+	46,  // 207: hydraidepbgo.HydraideService.GetAll:output_type -> hydraidepbgo.GetAllResponse
+	54,  // 208: hydraidepbgo.HydraideService.GetByIndex:output_type -> hydraidepbgo.GetByIndexResponse
+	56,  // 209: hydraidepbgo.HydraideService.GetByKeys:output_type -> hydraidepbgo.GetByKeysResponse
+	58,  // 210: hydraidepbgo.HydraideService.ShiftByKeys:output_type -> hydraidepbgo.ShiftByKeysResponse
+	48,  // 211: hydraidepbgo.HydraideService.ShiftExpiredTreasures:output_type -> hydraidepbgo.ShiftExpiredTreasuresResponse
+	21,  // 212: hydraidepbgo.HydraideService.Destroy:output_type -> hydraidepbgo.DestroyResponse
+	24,  // 213: hydraidepbgo.HydraideService.DestroyBulk:output_type -> hydraidepbgo.DestroyBulkResponse
+	60,  // 214: hydraidepbgo.HydraideService.Delete:output_type -> hydraidepbgo.DeleteResponse
+	62,  // 215: hydraidepbgo.HydraideService.Count:output_type -> hydraidepbgo.CountResponse
+	107, // 216: hydraidepbgo.HydraideService.IsSwampExist:output_type -> hydraidepbgo.IsSwampExistResponse
+	109, // 217: hydraidepbgo.HydraideService.IsKeyExist:output_type -> hydraidepbgo.IsKeyExistResponse
+	111, // 218: hydraidepbgo.HydraideService.AreKeysExist:output_type -> hydraidepbgo.AreKeysExistResponse
+	28,  // 219: hydraidepbgo.HydraideService.SubscribeToEvents:output_type -> hydraidepbgo.SubscribeToEventsResponse
+	26,  // 220: hydraidepbgo.HydraideService.SubscribeToInfo:output_type -> hydraidepbgo.SubscribeToInfoResponse
+	99,  // 221: hydraidepbgo.HydraideService.Uint32SlicePush:output_type -> hydraidepbgo.AddToUint32SlicePushResponse
+	101, // 222: hydraidepbgo.HydraideService.Uint32SliceDelete:output_type -> hydraidepbgo.Uint32SliceDeleteResponse
+	103, // 223: hydraidepbgo.HydraideService.Uint32SliceSize:output_type -> hydraidepbgo.Uint32SliceSizeResponse
+	105, // 224: hydraidepbgo.HydraideService.Uint32SliceIsValueExist:output_type -> hydraidepbgo.Uint32SliceIsValueExistResponse
+	68,  // 225: hydraidepbgo.HydraideService.IncrementInt8:output_type -> hydraidepbgo.IncrementInt8Response
+	71,  // 226: hydraidepbgo.HydraideService.IncrementInt16:output_type -> hydraidepbgo.IncrementInt16Response
+	74,  // 227: hydraidepbgo.HydraideService.IncrementInt32:output_type -> hydraidepbgo.IncrementInt32Response
+	77,  // 228: hydraidepbgo.HydraideService.IncrementInt64:output_type -> hydraidepbgo.IncrementInt64Response
+	80,  // 229: hydraidepbgo.HydraideService.IncrementUint8:output_type -> hydraidepbgo.IncrementUint8Response
+	83,  // 230: hydraidepbgo.HydraideService.IncrementUint16:output_type -> hydraidepbgo.IncrementUint16Response
+	86,  // 231: hydraidepbgo.HydraideService.IncrementUint32:output_type -> hydraidepbgo.IncrementUint32Response
+	89,  // 232: hydraidepbgo.HydraideService.IncrementUint64:output_type -> hydraidepbgo.IncrementUint64Response
+	93,  // 233: hydraidepbgo.HydraideService.IncrementFloat32:output_type -> hydraidepbgo.IncrementFloat32Response
+	96,  // 234: hydraidepbgo.HydraideService.IncrementFloat64:output_type -> hydraidepbgo.IncrementFloat64Response
+	147, // 235: hydraidepbgo.HydraideService.PatchTreasures:output_type -> hydraidepbgo.PatchTreasuresResponse
+	150, // 236: hydraidepbgo.HydraideService.PatchExpiredTreasures:output_type -> hydraidepbgo.PatchExpiredTreasuresResponse
+	113, // 237: hydraidepbgo.HydraideService.SubscribeToTelemetry:output_type -> hydraidepbgo.TelemetryEvent
+	115, // 238: hydraidepbgo.HydraideService.GetTelemetryHistory:output_type -> hydraidepbgo.TelemetryHistoryResponse
+	117, // 239: hydraidepbgo.HydraideService.GetErrorDetails:output_type -> hydraidepbgo.ErrorDetailsResponse
+	119, // 240: hydraidepbgo.HydraideService.GetTelemetryStats:output_type -> hydraidepbgo.TelemetryStatsResponse
+	133, // 241: hydraidepbgo.HydraideService.GetByIndexStream:output_type -> hydraidepbgo.GetByIndexStreamResponse
+	136, // 242: hydraidepbgo.HydraideService.GetByIndexStreamFromMany:output_type -> hydraidepbgo.GetByIndexStreamFromManyResponse
+	141, // 243: hydraidepbgo.HydraideService.CompactSwamp:output_type -> hydraidepbgo.CompactSwampResponse
+	139, // 244: hydraidepbgo.HydraideService.GetStream:output_type -> hydraidepbgo.GetStreamResponse
+	200, // [200:245] is the sub-list for method output_type
+	155, // [155:200] is the sub-list for method input_type
+	155, // [155:155] is the sub-list for extension type_name
+	155, // [155:155] is the sub-list for extension extendee
+	0,   // [0:155] is the sub-list for field type_name
 }
 
 func init() { file_hydraide_proto_init() }

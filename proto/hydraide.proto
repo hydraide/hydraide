@@ -2807,6 +2807,15 @@ message TreasurePatch {
   // msgpack blob before any Op runs. Failure short-circuits with
   // CONDITION_NOT_MET and does not apply ops.
   optional PatchCondition Condition = 3;
+
+  // Meta sets timestamp/identity metadata on this single patched treasure.
+  // When non-nil, this Meta fully replaces the request-level
+  // PatchTreasuresRequest.Meta for THIS patch only — the request-level Meta
+  // is not merged. When nil, the request-level Meta (if any) applies.
+  // Use this for batches where each key needs different timestamps or a
+  // distinct ExpiredAt (e.g. per-domain ASN cooldowns slid forward by
+  // different amounts in a single round-trip).
+  optional PatchMeta Meta = 4;
 }
 
 // PatchOp describes one structural mutation. Path uses dot notation for
