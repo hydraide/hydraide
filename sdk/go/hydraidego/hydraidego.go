@@ -78,6 +78,7 @@ type Hydraidego interface {
 	CatalogSaveMany(ctx context.Context, swampName name.Name, models []any, iterator CatalogSaveManyIteratorFunc) error
 	CatalogSaveManyToMany(ctx context.Context, request []*CatalogManyToManyRequest, iterator CatalogSaveManyToManyIteratorFunc) error
 	CatalogShiftExpired(ctx context.Context, swampName name.Name, howMany int32, model any, iterator CatalogShiftExpiredIteratorFunc) error
+	CatalogShiftExpiredManyFromMany(ctx context.Context, requests []*ShiftExpiredManyFromManyRequest, model any, iterator CatalogShiftExpiredManyFromManyIteratorFunc) error
 	CatalogShiftBatch(ctx context.Context, swampName name.Name, keys []string, model any, iterator CatalogShiftBatchIteratorFunc) error
 	ProfileSave(ctx context.Context, swampName name.Name, model any) (err error)
 	ProfileSaveBatch(ctx context.Context, swampNames []name.Name, models []any, iterator ProfileSaveBatchIteratorFunc) error
@@ -113,8 +114,10 @@ type Hydraidego interface {
 	CatalogPatchField(ctx context.Context, swampName name.Name, key, fieldPath string, value any) (PatchStatus, error)
 	CatalogPatchFields(ctx context.Context, swampName name.Name, key string, fields map[string]any) (PatchStatus, error)
 	CatalogPatchFieldsMany(ctx context.Context, swampName name.Name, requests []*PatchManyRequest, iterator PatchManyIteratorFunc) error
+	CatalogPatchManyToMany(ctx context.Context, requests []*CatalogPatchManyToManyRequest, iterator CatalogPatchManyToManyIteratorFunc) error
 	CatalogPatch(ctx context.Context, swampName name.Name, key string) *PatchBuilder
 	CatalogPatchExpired(ctx context.Context, swampName name.Name, howMany int32, model any, iterator CatalogPatchExpiredIteratorFunc, builder *PatchExpiredOps) error
+	CatalogPatchExpiredManyFromMany(ctx context.Context, requests []*PatchExpiredManyFromManyRequest, model any, iterator CatalogPatchExpiredManyFromManyIteratorFunc) error
 }
 
 // Index defines the configuration for index-based queries in HydrAIDE.
@@ -7719,4 +7722,129 @@ func IsUnknown(err error) bool {
 
 func IsConditionNotMet(err error) bool {
 	return GetErrorCode(err) == ErrConditionNotMet
+}
+
+// ============================================================================
+// Multi-swamp Shift expired (R2-7)
+// ============================================================================
+
+// ShiftExpiredManyFromManyRequest is one entry in a multi-swamp expired-
+// shift batch issued via CatalogShiftExpiredManyFromMany. Each entry
+// targets one swamp; the dispatcher groups by destination server.
+type ShiftExpiredManyFromManyRequest struct {
+	// SwampName addresses one swamp.
+	SwampName name.Name
+
+	// HowMany caps the per-swamp result count. 0 means "all currently
+	// expired treasures" (matches CatalogShiftExpired semantics).
+	HowMany int32
+}
+
+// CatalogShiftExpiredManyFromManyIteratorFunc is invoked once per
+// shifted treasure across all swamps. The swampName argument identifies
+// which swamp produced the model. SwampErr is non-nil for swamp-level
+// failures (e.g. missing swamp), in which case the callback fires once
+// for that swamp with model == nil and no per-treasure callbacks
+// follow for it.
+type CatalogShiftExpiredManyFromManyIteratorFunc func(swampName name.Name, model any, swampErr error) error
+
+// CatalogShiftExpiredManyFromMany dispatches a multi-swamp expired-shift
+// batch. Each request shifts up to its HowMany expired treasures from
+// its swamp under the swamp's beacon mu and returns them as fully
+// unmarshalled models to the iterator.
+//
+// Behaviour:
+//   - Requests are grouped by destination server (consistent hashing on
+//     SwampName); one ShiftExpiredTreasuresMany RPC is sent per server.
+//   - Per-swamp failures (missing swamp, summon failure) are surfaced
+//     via the swampErr argument; the rest of the batch continues
+//     unaffected.
+//   - Empty requests slice is a valid no-op.
+//
+// Common use cases:
+//   - Cross-shard reconciliation flows that sweep stale lease records
+//     from several swamps in a single round-trip.
+//   - Periodic cleanup across TLD-sharded state swamps.
+func (h *hydraidego) CatalogShiftExpiredManyFromMany(
+	ctx context.Context,
+	requests []*ShiftExpiredManyFromManyRequest,
+	model any,
+	iterator CatalogShiftExpiredManyFromManyIteratorFunc,
+) error {
+	if len(requests) == 0 {
+		return nil
+	}
+
+	wireRequests := make([]*hydraidepbgo.ShiftExpiredTreasuresRequest, len(requests))
+	for i, req := range requests {
+		if req == nil {
+			return NewError(ErrCodeInvalidModel, fmt.Sprintf("request %d is nil", i))
+		}
+		wireRequests[i] = &hydraidepbgo.ShiftExpiredTreasuresRequest{
+			IslandID:  req.SwampName.GetIslandID(h.client.GetAllIslands()),
+			SwampName: req.SwampName.Get(),
+			HowMany:   req.HowMany,
+		}
+	}
+
+	type serverGroup struct {
+		client  hydraidepbgo.HydraideServiceClient
+		indices []int
+	}
+	groups := make(map[string]*serverGroup)
+	for i, req := range requests {
+		clientAndHost := h.client.GetServiceClientAndHost(req.SwampName)
+		g, ok := groups[clientAndHost.Host]
+		if !ok {
+			g = &serverGroup{client: clientAndHost.GrpcClient}
+			groups[clientAndHost.Host] = g
+		}
+		g.indices = append(g.indices, i)
+	}
+
+	for _, g := range groups {
+		batch := make([]*hydraidepbgo.ShiftExpiredTreasuresRequest, 0, len(g.indices))
+		for _, idx := range g.indices {
+			batch = append(batch, wireRequests[idx])
+		}
+		resp, err := g.client.ShiftExpiredTreasuresMany(ctx, &hydraidepbgo.ShiftExpiredTreasuresManyRequest{
+			Requests: batch,
+		})
+		if err != nil {
+			return errorHandler(err)
+		}
+
+		entries := resp.GetResponses()
+		if len(entries) != len(g.indices) {
+			return NewError(ErrCodeInternalDatabaseError, fmt.Sprintf("ShiftExpiredTreasuresMany: server returned %d entries for %d requests", len(entries), len(g.indices)))
+		}
+
+		if iterator == nil {
+			continue
+		}
+
+		for k, idx := range g.indices {
+			swampName := requests[idx].SwampName
+			entry := entries[k]
+			if errMsg := entry.GetError(); errMsg != "" {
+				if iterErr := iterator(swampName, nil, NewError(ErrCodeInternalDatabaseError, errMsg)); iterErr != nil {
+					return iterErr
+				}
+				continue
+			}
+			for _, treasure := range entry.GetTreasures() {
+				if !treasure.IsExist {
+					continue
+				}
+				modelValue := reflect.New(reflect.TypeOf(model)).Interface()
+				if convErr := convertProtoTreasureToCatalogModel(treasure, modelValue); convErr != nil {
+					return NewError(ErrCodeInvalidModel, convErr.Error())
+				}
+				if iterErr := iterator(swampName, modelValue, nil); iterErr != nil {
+					return iterErr
+				}
+			}
+		}
+	}
+	return nil
 }

@@ -568,3 +568,105 @@ func TestGatewayPatch_PerKeyMetaCondNotMetSkipsMeta(t *testing.T) {
 	assert.Equal(t, beforeExpire, readExpiration(t, rig, "k"),
 		"CONDITION_NOT_MET must not apply per-key Meta")
 }
+
+// ---------- PatchTreasuresMany (R2-4) ----------
+
+func TestGatewayPatchMany_HappyPathPerSwampSelection(t *testing.T) {
+	rig := newGatewayPatchTestRig(t, "gw-patch-many", "happy", "any")
+
+	swampA := "gw-patch-many/swamp/a"
+	swampB := "gw-patch-many/swamp/b"
+	swampC := "gw-patch-many/swamp/c"
+
+	resp, err := rig.gw.PatchTreasuresMany(context.Background(), &hydrapb.PatchTreasuresManyRequest{
+		Requests: []*hydrapb.PatchTreasuresRequest{
+			{
+				IslandID: rig.islandID, SwampName: swampA, CreateIfNotExist: true,
+				Patches: []*hydrapb.TreasurePatch{
+					{Key: "a1", Ops: []*hydrapb.PatchOp{{Op: hydrapb.PatchOp_SET, Path: "x", Value: encMsgpack(t, int8(1))}}},
+					{Key: "a2", Ops: []*hydrapb.PatchOp{{Op: hydrapb.PatchOp_SET, Path: "x", Value: encMsgpack(t, int8(2))}}},
+				},
+			},
+			{
+				IslandID: rig.islandID, SwampName: swampB, CreateIfNotExist: true,
+				Patches: []*hydrapb.TreasurePatch{
+					{Key: "b1", Ops: []*hydrapb.PatchOp{{Op: hydrapb.PatchOp_SET, Path: "y", Value: encMsgpack(t, int16(7))}}},
+				},
+			},
+			{
+				IslandID: rig.islandID, SwampName: swampC, CreateIfNotExist: true,
+				Patches: []*hydrapb.TreasurePatch{
+					{Key: "c1", Ops: []*hydrapb.PatchOp{{Op: hydrapb.PatchOp_SET, Path: "z", Value: encMsgpack(t, "hi")}}},
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, resp.GetResponses(), 3)
+	for i, want := range []int{2, 1, 1} {
+		entry := resp.GetResponses()[i]
+		assert.Empty(t, entry.GetError(), "entry %d swamp-level error", i)
+		assert.Len(t, entry.GetResults(), want, "entry %d results count", i)
+		for _, r := range entry.GetResults() {
+			assert.Equal(t, hydrapb.PatchResult_CREATED, r.GetStatus())
+		}
+	}
+}
+
+func TestGatewayPatchMany_PerSwampErrorIsolation(t *testing.T) {
+	rig := newGatewayPatchTestRig(t, "gw-patch-many-err", "isolation", "any")
+
+	good := "gw-patch-many-err/swamp/good"
+	resp, err := rig.gw.PatchTreasuresMany(context.Background(), &hydrapb.PatchTreasuresManyRequest{
+		Requests: []*hydrapb.PatchTreasuresRequest{
+			// Bad: empty SwampName.
+			{IslandID: rig.islandID, SwampName: "", CreateIfNotExist: true,
+				Patches: []*hydrapb.TreasurePatch{{Key: "k", Ops: []*hydrapb.PatchOp{{Op: hydrapb.PatchOp_SET, Path: "x", Value: encMsgpack(t, int8(1))}}}}},
+			// Good.
+			{IslandID: rig.islandID, SwampName: good, CreateIfNotExist: true,
+				Patches: []*hydrapb.TreasurePatch{{Key: "g", Ops: []*hydrapb.PatchOp{{Op: hydrapb.PatchOp_SET, Path: "x", Value: encMsgpack(t, int8(2))}}}}},
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, resp.GetResponses(), 2)
+	assert.NotEmpty(t, resp.GetResponses()[0].GetError())
+	assert.Empty(t, resp.GetResponses()[0].GetResults())
+	assert.Empty(t, resp.GetResponses()[1].GetError())
+	require.Len(t, resp.GetResponses()[1].GetResults(), 1)
+	assert.Equal(t, hydrapb.PatchResult_CREATED, resp.GetResponses()[1].GetResults()[0].GetStatus())
+}
+
+func TestGatewayPatchMany_EmptyRequestsIsNoop(t *testing.T) {
+	rig := newGatewayPatchTestRig(t, "gw-patch-many-empty", "empty", "any")
+	resp, err := rig.gw.PatchTreasuresMany(context.Background(), &hydrapb.PatchTreasuresManyRequest{})
+	require.NoError(t, err)
+	assert.Empty(t, resp.GetResponses())
+}
+
+func TestGatewayPatchMany_PerKeyMetaCarriesAcrossBatch(t *testing.T) {
+	rig := newGatewayPatchTestRig(t, "gw-patch-many-meta", "perkey", "any")
+
+	swamp := "gw-patch-many-meta/swamp/a"
+	expA := time.Now().Add(2 * time.Hour).UTC().Truncate(time.Microsecond)
+	expB := time.Now().Add(48 * time.Hour).UTC().Truncate(time.Microsecond)
+
+	resp, err := rig.gw.PatchTreasuresMany(context.Background(), &hydrapb.PatchTreasuresManyRequest{
+		Requests: []*hydrapb.PatchTreasuresRequest{
+			{IslandID: rig.islandID, SwampName: swamp, CreateIfNotExist: true,
+				Patches: []*hydrapb.TreasurePatch{
+					{Key: "a", Ops: []*hydrapb.PatchOp{{Op: hydrapb.PatchOp_SET, Path: "x", Value: encMsgpack(t, int8(1))}},
+						Meta: &hydrapb.PatchMeta{SetExpiredAt: timestamppb.New(expA)}},
+					{Key: "b", Ops: []*hydrapb.PatchOp{{Op: hydrapb.PatchOp_SET, Path: "x", Value: encMsgpack(t, int8(2))}},
+						Meta: &hydrapb.PatchMeta{SetExpiredAt: timestamppb.New(expB)}},
+				}},
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, resp.GetResponses(), 1)
+	require.Empty(t, resp.GetResponses()[0].GetError())
+
+	// Verify per-key ExpiredAt landed correctly through the Many path.
+	rig.swampName = swamp
+	assert.Equal(t, expA.UnixNano(), readExpiration(t, rig, "a"))
+	assert.Equal(t, expB.UnixNano(), readExpiration(t, rig, "b"))
+}

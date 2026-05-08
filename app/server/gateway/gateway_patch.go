@@ -24,13 +24,26 @@ func (g Gateway) PatchTreasures(ctx context.Context, in *hydrapb.PatchTreasuresR
 
 	defer handlePanic()
 
+	results, swampErr := patchTreasuresOneSwamp(ctx, g, in)
+	if swampErr != nil {
+		return nil, swampErr
+	}
+	return &hydrapb.PatchTreasuresResponse{Results: results}, nil
+}
+
+// patchTreasuresOneSwamp runs the per-swamp body of PatchTreasures and
+// is shared between the single-RPC handler and the Many-RPC handler.
+// Returns a typed gRPC error for swamp-level failures (the single-RPC
+// handler propagates it; the Many handler converts it to a per-entry
+// Error field).
+func patchTreasuresOneSwamp(ctx context.Context, g Gateway, in *hydrapb.PatchTreasuresRequest) ([]*hydrapb.PatchResult, error) {
 	if in.GetSwampName() == "" {
 		return nil, status.Error(codes.InvalidArgument, "SwampName cannot be empty")
 	}
 
 	if len(in.GetPatches()) == 0 {
 		// Empty batch is a valid no-op.
-		return &hydrapb.PatchTreasuresResponse{Results: nil}, nil
+		return nil, nil
 	}
 
 	// We do not require the swamp to pre-exist; SummonSwamp creates it.
@@ -100,7 +113,41 @@ func (g Gateway) PatchTreasures(ctx context.Context, in *hydrapb.PatchTreasuresR
 		results = append(results, out)
 	}
 
-	return &hydrapb.PatchTreasuresResponse{Results: results}, nil
+	return results, nil
+}
+
+// PatchTreasuresMany dispatches a batch of PatchTreasures requests
+// against multiple swamps on the same server in a single RPC. Each
+// entry runs independently; per-swamp failures populate the matching
+// response entry's Error field instead of aborting the batch.
+func (g Gateway) PatchTreasuresMany(ctx context.Context, in *hydrapb.PatchTreasuresManyRequest) (*hydrapb.PatchTreasuresManyResponse, error) {
+	g.ZeusInterface.GetSafeops().LockSystem()
+	defer g.ZeusInterface.GetSafeops().UnlockSystem()
+
+	defer handlePanic()
+
+	requests := in.GetRequests()
+	if len(requests) == 0 {
+		return &hydrapb.PatchTreasuresManyResponse{Responses: nil}, nil
+	}
+
+	responses := make([]*hydrapb.PatchTreasuresManyEntry, 0, len(requests))
+	for _, req := range requests {
+		entry := &hydrapb.PatchTreasuresManyEntry{}
+		if req == nil {
+			entry.Error = protoStr("nil request")
+			responses = append(responses, entry)
+			continue
+		}
+		results, swampErr := patchTreasuresOneSwamp(ctx, g, req)
+		if swampErr != nil {
+			entry.Error = protoStr(swampErr.Error())
+		} else {
+			entry.Results = results
+		}
+		responses = append(responses, entry)
+	}
+	return &hydrapb.PatchTreasuresManyResponse{Responses: responses}, nil
 }
 
 // protoOpsToMsgpackpatchOps converts the wire-level op list to the core

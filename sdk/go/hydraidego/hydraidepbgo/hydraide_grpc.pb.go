@@ -19,51 +19,54 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	HydraideService_Heartbeat_FullMethodName                = "/hydraidepbgo.HydraideService/Heartbeat"
-	HydraideService_Lock_FullMethodName                     = "/hydraidepbgo.HydraideService/Lock"
-	HydraideService_Unlock_FullMethodName                   = "/hydraidepbgo.HydraideService/Unlock"
-	HydraideService_RegisterSwamp_FullMethodName            = "/hydraidepbgo.HydraideService/RegisterSwamp"
-	HydraideService_DeRegisterSwamp_FullMethodName          = "/hydraidepbgo.HydraideService/DeRegisterSwamp"
-	HydraideService_Set_FullMethodName                      = "/hydraidepbgo.HydraideService/Set"
-	HydraideService_Get_FullMethodName                      = "/hydraidepbgo.HydraideService/Get"
-	HydraideService_GetAll_FullMethodName                   = "/hydraidepbgo.HydraideService/GetAll"
-	HydraideService_GetByIndex_FullMethodName               = "/hydraidepbgo.HydraideService/GetByIndex"
-	HydraideService_GetByKeys_FullMethodName                = "/hydraidepbgo.HydraideService/GetByKeys"
-	HydraideService_ShiftByKeys_FullMethodName              = "/hydraidepbgo.HydraideService/ShiftByKeys"
-	HydraideService_ShiftExpiredTreasures_FullMethodName    = "/hydraidepbgo.HydraideService/ShiftExpiredTreasures"
-	HydraideService_Destroy_FullMethodName                  = "/hydraidepbgo.HydraideService/Destroy"
-	HydraideService_DestroyBulk_FullMethodName              = "/hydraidepbgo.HydraideService/DestroyBulk"
-	HydraideService_Delete_FullMethodName                   = "/hydraidepbgo.HydraideService/Delete"
-	HydraideService_Count_FullMethodName                    = "/hydraidepbgo.HydraideService/Count"
-	HydraideService_IsSwampExist_FullMethodName             = "/hydraidepbgo.HydraideService/IsSwampExist"
-	HydraideService_IsKeyExist_FullMethodName               = "/hydraidepbgo.HydraideService/IsKeyExist"
-	HydraideService_AreKeysExist_FullMethodName             = "/hydraidepbgo.HydraideService/AreKeysExist"
-	HydraideService_SubscribeToEvents_FullMethodName        = "/hydraidepbgo.HydraideService/SubscribeToEvents"
-	HydraideService_SubscribeToInfo_FullMethodName          = "/hydraidepbgo.HydraideService/SubscribeToInfo"
-	HydraideService_Uint32SlicePush_FullMethodName          = "/hydraidepbgo.HydraideService/Uint32SlicePush"
-	HydraideService_Uint32SliceDelete_FullMethodName        = "/hydraidepbgo.HydraideService/Uint32SliceDelete"
-	HydraideService_Uint32SliceSize_FullMethodName          = "/hydraidepbgo.HydraideService/Uint32SliceSize"
-	HydraideService_Uint32SliceIsValueExist_FullMethodName  = "/hydraidepbgo.HydraideService/Uint32SliceIsValueExist"
-	HydraideService_IncrementInt8_FullMethodName            = "/hydraidepbgo.HydraideService/IncrementInt8"
-	HydraideService_IncrementInt16_FullMethodName           = "/hydraidepbgo.HydraideService/IncrementInt16"
-	HydraideService_IncrementInt32_FullMethodName           = "/hydraidepbgo.HydraideService/IncrementInt32"
-	HydraideService_IncrementInt64_FullMethodName           = "/hydraidepbgo.HydraideService/IncrementInt64"
-	HydraideService_IncrementUint8_FullMethodName           = "/hydraidepbgo.HydraideService/IncrementUint8"
-	HydraideService_IncrementUint16_FullMethodName          = "/hydraidepbgo.HydraideService/IncrementUint16"
-	HydraideService_IncrementUint32_FullMethodName          = "/hydraidepbgo.HydraideService/IncrementUint32"
-	HydraideService_IncrementUint64_FullMethodName          = "/hydraidepbgo.HydraideService/IncrementUint64"
-	HydraideService_IncrementFloat32_FullMethodName         = "/hydraidepbgo.HydraideService/IncrementFloat32"
-	HydraideService_IncrementFloat64_FullMethodName         = "/hydraidepbgo.HydraideService/IncrementFloat64"
-	HydraideService_PatchTreasures_FullMethodName           = "/hydraidepbgo.HydraideService/PatchTreasures"
-	HydraideService_PatchExpiredTreasures_FullMethodName    = "/hydraidepbgo.HydraideService/PatchExpiredTreasures"
-	HydraideService_SubscribeToTelemetry_FullMethodName     = "/hydraidepbgo.HydraideService/SubscribeToTelemetry"
-	HydraideService_GetTelemetryHistory_FullMethodName      = "/hydraidepbgo.HydraideService/GetTelemetryHistory"
-	HydraideService_GetErrorDetails_FullMethodName          = "/hydraidepbgo.HydraideService/GetErrorDetails"
-	HydraideService_GetTelemetryStats_FullMethodName        = "/hydraidepbgo.HydraideService/GetTelemetryStats"
-	HydraideService_GetByIndexStream_FullMethodName         = "/hydraidepbgo.HydraideService/GetByIndexStream"
-	HydraideService_GetByIndexStreamFromMany_FullMethodName = "/hydraidepbgo.HydraideService/GetByIndexStreamFromMany"
-	HydraideService_CompactSwamp_FullMethodName             = "/hydraidepbgo.HydraideService/CompactSwamp"
-	HydraideService_GetStream_FullMethodName                = "/hydraidepbgo.HydraideService/GetStream"
+	HydraideService_Heartbeat_FullMethodName                 = "/hydraidepbgo.HydraideService/Heartbeat"
+	HydraideService_Lock_FullMethodName                      = "/hydraidepbgo.HydraideService/Lock"
+	HydraideService_Unlock_FullMethodName                    = "/hydraidepbgo.HydraideService/Unlock"
+	HydraideService_RegisterSwamp_FullMethodName             = "/hydraidepbgo.HydraideService/RegisterSwamp"
+	HydraideService_DeRegisterSwamp_FullMethodName           = "/hydraidepbgo.HydraideService/DeRegisterSwamp"
+	HydraideService_Set_FullMethodName                       = "/hydraidepbgo.HydraideService/Set"
+	HydraideService_Get_FullMethodName                       = "/hydraidepbgo.HydraideService/Get"
+	HydraideService_GetAll_FullMethodName                    = "/hydraidepbgo.HydraideService/GetAll"
+	HydraideService_GetByIndex_FullMethodName                = "/hydraidepbgo.HydraideService/GetByIndex"
+	HydraideService_GetByKeys_FullMethodName                 = "/hydraidepbgo.HydraideService/GetByKeys"
+	HydraideService_ShiftByKeys_FullMethodName               = "/hydraidepbgo.HydraideService/ShiftByKeys"
+	HydraideService_ShiftExpiredTreasures_FullMethodName     = "/hydraidepbgo.HydraideService/ShiftExpiredTreasures"
+	HydraideService_ShiftExpiredTreasuresMany_FullMethodName = "/hydraidepbgo.HydraideService/ShiftExpiredTreasuresMany"
+	HydraideService_Destroy_FullMethodName                   = "/hydraidepbgo.HydraideService/Destroy"
+	HydraideService_DestroyBulk_FullMethodName               = "/hydraidepbgo.HydraideService/DestroyBulk"
+	HydraideService_Delete_FullMethodName                    = "/hydraidepbgo.HydraideService/Delete"
+	HydraideService_Count_FullMethodName                     = "/hydraidepbgo.HydraideService/Count"
+	HydraideService_IsSwampExist_FullMethodName              = "/hydraidepbgo.HydraideService/IsSwampExist"
+	HydraideService_IsKeyExist_FullMethodName                = "/hydraidepbgo.HydraideService/IsKeyExist"
+	HydraideService_AreKeysExist_FullMethodName              = "/hydraidepbgo.HydraideService/AreKeysExist"
+	HydraideService_SubscribeToEvents_FullMethodName         = "/hydraidepbgo.HydraideService/SubscribeToEvents"
+	HydraideService_SubscribeToInfo_FullMethodName           = "/hydraidepbgo.HydraideService/SubscribeToInfo"
+	HydraideService_Uint32SlicePush_FullMethodName           = "/hydraidepbgo.HydraideService/Uint32SlicePush"
+	HydraideService_Uint32SliceDelete_FullMethodName         = "/hydraidepbgo.HydraideService/Uint32SliceDelete"
+	HydraideService_Uint32SliceSize_FullMethodName           = "/hydraidepbgo.HydraideService/Uint32SliceSize"
+	HydraideService_Uint32SliceIsValueExist_FullMethodName   = "/hydraidepbgo.HydraideService/Uint32SliceIsValueExist"
+	HydraideService_IncrementInt8_FullMethodName             = "/hydraidepbgo.HydraideService/IncrementInt8"
+	HydraideService_IncrementInt16_FullMethodName            = "/hydraidepbgo.HydraideService/IncrementInt16"
+	HydraideService_IncrementInt32_FullMethodName            = "/hydraidepbgo.HydraideService/IncrementInt32"
+	HydraideService_IncrementInt64_FullMethodName            = "/hydraidepbgo.HydraideService/IncrementInt64"
+	HydraideService_IncrementUint8_FullMethodName            = "/hydraidepbgo.HydraideService/IncrementUint8"
+	HydraideService_IncrementUint16_FullMethodName           = "/hydraidepbgo.HydraideService/IncrementUint16"
+	HydraideService_IncrementUint32_FullMethodName           = "/hydraidepbgo.HydraideService/IncrementUint32"
+	HydraideService_IncrementUint64_FullMethodName           = "/hydraidepbgo.HydraideService/IncrementUint64"
+	HydraideService_IncrementFloat32_FullMethodName          = "/hydraidepbgo.HydraideService/IncrementFloat32"
+	HydraideService_IncrementFloat64_FullMethodName          = "/hydraidepbgo.HydraideService/IncrementFloat64"
+	HydraideService_PatchTreasures_FullMethodName            = "/hydraidepbgo.HydraideService/PatchTreasures"
+	HydraideService_PatchTreasuresMany_FullMethodName        = "/hydraidepbgo.HydraideService/PatchTreasuresMany"
+	HydraideService_PatchExpiredTreasures_FullMethodName     = "/hydraidepbgo.HydraideService/PatchExpiredTreasures"
+	HydraideService_PatchExpiredTreasuresMany_FullMethodName = "/hydraidepbgo.HydraideService/PatchExpiredTreasuresMany"
+	HydraideService_SubscribeToTelemetry_FullMethodName      = "/hydraidepbgo.HydraideService/SubscribeToTelemetry"
+	HydraideService_GetTelemetryHistory_FullMethodName       = "/hydraidepbgo.HydraideService/GetTelemetryHistory"
+	HydraideService_GetErrorDetails_FullMethodName           = "/hydraidepbgo.HydraideService/GetErrorDetails"
+	HydraideService_GetTelemetryStats_FullMethodName         = "/hydraidepbgo.HydraideService/GetTelemetryStats"
+	HydraideService_GetByIndexStream_FullMethodName          = "/hydraidepbgo.HydraideService/GetByIndexStream"
+	HydraideService_GetByIndexStreamFromMany_FullMethodName  = "/hydraidepbgo.HydraideService/GetByIndexStreamFromMany"
+	HydraideService_CompactSwamp_FullMethodName              = "/hydraidepbgo.HydraideService/CompactSwamp"
+	HydraideService_GetStream_FullMethodName                 = "/hydraidepbgo.HydraideService/GetStream"
 )
 
 // HydraideServiceClient is the client API for HydraideService service.
@@ -227,6 +230,17 @@ type HydraideServiceClient interface {
 	// - Expiring caches
 	// - Scheduled triggers (e.g. publish-after-expiry)
 	ShiftExpiredTreasures(ctx context.Context, in *ShiftExpiredTreasuresRequest, opts ...grpc.CallOption) (*ShiftExpiredTreasuresResponse, error)
+	// ShiftExpiredTreasuresMany batches several ShiftExpiredTreasures
+	// operations against multiple swamps on the same server in a single
+	// RPC. Each Requests entry is processed independently; the response
+	// carries one entry per request, in input order, with an optional
+	// swamp-level Error field for per-entry failures.
+	//
+	// The SDK groups multi-swamp batches by destination server (consistent
+	// hashing on Swamp name); this RPC is per-server. Use it for
+	// reconciliation flows that sweep stale lease records from several
+	// swamps in a single round-trip.
+	ShiftExpiredTreasuresMany(ctx context.Context, in *ShiftExpiredTreasuresManyRequest, opts ...grpc.CallOption) (*ShiftExpiredTreasuresManyResponse, error)
 	// Destroy permanently deletes the entire swamp and all its treasures.
 	//
 	// This removes all data associated with the given swamp, including metadata, indexes, and chunks.
@@ -458,6 +472,24 @@ type HydraideServiceClient interface {
 	// for fine-grained mutations. Per-key Conditions enable optimistic-style
 	// pre-checks; failed checks return CONDITION_NOT_MET without applying ops.
 	PatchTreasures(ctx context.Context, in *PatchTreasuresRequest, opts ...grpc.CallOption) (*PatchTreasuresResponse, error)
+	// PatchTreasuresMany batches several PatchTreasures operations against
+	// multiple swamps on the same server in a single RPC. Each Requests
+	// entry is dispatched independently under its own per-swamp guard;
+	// the response carries one PatchTreasuresResponse per request, in
+	// input order, paired with an optional swamp-level Error field.
+	//
+	// Per-swamp errors do not abort the batch (e.g. an invalid swamp name
+	// on one entry leaves the others to complete). Per-key statuses
+	// (KEY_NOT_FOUND, CONDITION_NOT_MET, TYPE_MISMATCH, etc.) continue to
+	// surface as PatchResult.StatusCode entries inside each per-swamp
+	// PatchTreasuresResponse.
+	//
+	// The SDK groups multi-swamp batches by destination server (consistent
+	// hashing on Swamp name); this RPC is per-server. Use it for return
+	// flows where a single worker writes patched results into several
+	// sharded swamps in one round-trip (e.g. crawler results that touch
+	// a TLD-sharded domain-state swamp).
+	PatchTreasuresMany(ctx context.Context, in *PatchTreasuresManyRequest, opts ...grpc.CallOption) (*PatchTreasuresManyResponse, error)
 	// PatchExpiredTreasures atomically selects up to HowMany expired treasures
 	// from a swamp and applies the same op-set + meta to each one in place.
 	//
@@ -487,6 +519,26 @@ type HydraideServiceClient interface {
 	// - Bulk TTL slides on expired entries (empty Ops + Meta only)
 	// - Periodic recheck scheduling driven by ExpiredAt
 	PatchExpiredTreasures(ctx context.Context, in *PatchExpiredTreasuresRequest, opts ...grpc.CallOption) (*PatchExpiredTreasuresResponse, error)
+	// PatchExpiredTreasuresMany batches several PatchExpiredTreasures
+	// operations against multiple swamps on the same server in a single
+	// RPC. Each Requests entry is dispatched independently under its own
+	// per-swamp guard; the response carries one PatchExpiredTreasuresResponse
+	// per request, in input order.
+	//
+	// Per-swamp errors do not abort the batch: a swamp that fails to summon
+	// or reports a missing Ops/Meta combination still produces a response
+	// entry (empty Patched + populated Error field on the per-treasure
+	// record where applicable), so callers can react to partial outcomes
+	// without re-issuing every other request.
+	//
+	// The SDK groups multi-swamp requests by the destination server first
+	// (consistent hashing on Swamp name), so this RPC is per-server. The
+	// client then merges per-server responses into a single iterator
+	// callback. Use this RPC for combined queue-claim flows where one
+	// worker pulls leases from several ready swamps in proportion (e.g. a
+	// crawler that takes 80% of its work from the direct queue and 20%
+	// from the proxy queue).
+	PatchExpiredTreasuresMany(ctx context.Context, in *PatchExpiredTreasuresManyRequest, opts ...grpc.CallOption) (*PatchExpiredTreasuresManyResponse, error)
 	// SubscribeToTelemetry opens a real-time stream of all gRPC calls and their results.
 	//
 	// Each event includes:
@@ -697,6 +749,16 @@ func (c *hydraideServiceClient) ShiftExpiredTreasures(ctx context.Context, in *S
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ShiftExpiredTreasuresResponse)
 	err := c.cc.Invoke(ctx, HydraideService_ShiftExpiredTreasures_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *hydraideServiceClient) ShiftExpiredTreasuresMany(ctx context.Context, in *ShiftExpiredTreasuresManyRequest, opts ...grpc.CallOption) (*ShiftExpiredTreasuresManyResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ShiftExpiredTreasuresManyResponse)
+	err := c.cc.Invoke(ctx, HydraideService_ShiftExpiredTreasuresMany_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -964,10 +1026,30 @@ func (c *hydraideServiceClient) PatchTreasures(ctx context.Context, in *PatchTre
 	return out, nil
 }
 
+func (c *hydraideServiceClient) PatchTreasuresMany(ctx context.Context, in *PatchTreasuresManyRequest, opts ...grpc.CallOption) (*PatchTreasuresManyResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PatchTreasuresManyResponse)
+	err := c.cc.Invoke(ctx, HydraideService_PatchTreasuresMany_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *hydraideServiceClient) PatchExpiredTreasures(ctx context.Context, in *PatchExpiredTreasuresRequest, opts ...grpc.CallOption) (*PatchExpiredTreasuresResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(PatchExpiredTreasuresResponse)
 	err := c.cc.Invoke(ctx, HydraideService_PatchExpiredTreasures_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *hydraideServiceClient) PatchExpiredTreasuresMany(ctx context.Context, in *PatchExpiredTreasuresManyRequest, opts ...grpc.CallOption) (*PatchExpiredTreasuresManyResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PatchExpiredTreasuresManyResponse)
+	err := c.cc.Invoke(ctx, HydraideService_PatchExpiredTreasuresMany_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1251,6 +1333,17 @@ type HydraideServiceServer interface {
 	// - Expiring caches
 	// - Scheduled triggers (e.g. publish-after-expiry)
 	ShiftExpiredTreasures(context.Context, *ShiftExpiredTreasuresRequest) (*ShiftExpiredTreasuresResponse, error)
+	// ShiftExpiredTreasuresMany batches several ShiftExpiredTreasures
+	// operations against multiple swamps on the same server in a single
+	// RPC. Each Requests entry is processed independently; the response
+	// carries one entry per request, in input order, with an optional
+	// swamp-level Error field for per-entry failures.
+	//
+	// The SDK groups multi-swamp batches by destination server (consistent
+	// hashing on Swamp name); this RPC is per-server. Use it for
+	// reconciliation flows that sweep stale lease records from several
+	// swamps in a single round-trip.
+	ShiftExpiredTreasuresMany(context.Context, *ShiftExpiredTreasuresManyRequest) (*ShiftExpiredTreasuresManyResponse, error)
 	// Destroy permanently deletes the entire swamp and all its treasures.
 	//
 	// This removes all data associated with the given swamp, including metadata, indexes, and chunks.
@@ -1482,6 +1575,24 @@ type HydraideServiceServer interface {
 	// for fine-grained mutations. Per-key Conditions enable optimistic-style
 	// pre-checks; failed checks return CONDITION_NOT_MET without applying ops.
 	PatchTreasures(context.Context, *PatchTreasuresRequest) (*PatchTreasuresResponse, error)
+	// PatchTreasuresMany batches several PatchTreasures operations against
+	// multiple swamps on the same server in a single RPC. Each Requests
+	// entry is dispatched independently under its own per-swamp guard;
+	// the response carries one PatchTreasuresResponse per request, in
+	// input order, paired with an optional swamp-level Error field.
+	//
+	// Per-swamp errors do not abort the batch (e.g. an invalid swamp name
+	// on one entry leaves the others to complete). Per-key statuses
+	// (KEY_NOT_FOUND, CONDITION_NOT_MET, TYPE_MISMATCH, etc.) continue to
+	// surface as PatchResult.StatusCode entries inside each per-swamp
+	// PatchTreasuresResponse.
+	//
+	// The SDK groups multi-swamp batches by destination server (consistent
+	// hashing on Swamp name); this RPC is per-server. Use it for return
+	// flows where a single worker writes patched results into several
+	// sharded swamps in one round-trip (e.g. crawler results that touch
+	// a TLD-sharded domain-state swamp).
+	PatchTreasuresMany(context.Context, *PatchTreasuresManyRequest) (*PatchTreasuresManyResponse, error)
 	// PatchExpiredTreasures atomically selects up to HowMany expired treasures
 	// from a swamp and applies the same op-set + meta to each one in place.
 	//
@@ -1511,6 +1622,26 @@ type HydraideServiceServer interface {
 	// - Bulk TTL slides on expired entries (empty Ops + Meta only)
 	// - Periodic recheck scheduling driven by ExpiredAt
 	PatchExpiredTreasures(context.Context, *PatchExpiredTreasuresRequest) (*PatchExpiredTreasuresResponse, error)
+	// PatchExpiredTreasuresMany batches several PatchExpiredTreasures
+	// operations against multiple swamps on the same server in a single
+	// RPC. Each Requests entry is dispatched independently under its own
+	// per-swamp guard; the response carries one PatchExpiredTreasuresResponse
+	// per request, in input order.
+	//
+	// Per-swamp errors do not abort the batch: a swamp that fails to summon
+	// or reports a missing Ops/Meta combination still produces a response
+	// entry (empty Patched + populated Error field on the per-treasure
+	// record where applicable), so callers can react to partial outcomes
+	// without re-issuing every other request.
+	//
+	// The SDK groups multi-swamp requests by the destination server first
+	// (consistent hashing on Swamp name), so this RPC is per-server. The
+	// client then merges per-server responses into a single iterator
+	// callback. Use this RPC for combined queue-claim flows where one
+	// worker pulls leases from several ready swamps in proportion (e.g. a
+	// crawler that takes 80% of its work from the direct queue and 20%
+	// from the proxy queue).
+	PatchExpiredTreasuresMany(context.Context, *PatchExpiredTreasuresManyRequest) (*PatchExpiredTreasuresManyResponse, error)
 	// SubscribeToTelemetry opens a real-time stream of all gRPC calls and their results.
 	//
 	// Each event includes:
@@ -1643,6 +1774,9 @@ func (UnimplementedHydraideServiceServer) ShiftByKeys(context.Context, *ShiftByK
 func (UnimplementedHydraideServiceServer) ShiftExpiredTreasures(context.Context, *ShiftExpiredTreasuresRequest) (*ShiftExpiredTreasuresResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ShiftExpiredTreasures not implemented")
 }
+func (UnimplementedHydraideServiceServer) ShiftExpiredTreasuresMany(context.Context, *ShiftExpiredTreasuresManyRequest) (*ShiftExpiredTreasuresManyResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ShiftExpiredTreasuresMany not implemented")
+}
 func (UnimplementedHydraideServiceServer) Destroy(context.Context, *DestroyRequest) (*DestroyResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Destroy not implemented")
 }
@@ -1715,8 +1849,14 @@ func (UnimplementedHydraideServiceServer) IncrementFloat64(context.Context, *Inc
 func (UnimplementedHydraideServiceServer) PatchTreasures(context.Context, *PatchTreasuresRequest) (*PatchTreasuresResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method PatchTreasures not implemented")
 }
+func (UnimplementedHydraideServiceServer) PatchTreasuresMany(context.Context, *PatchTreasuresManyRequest) (*PatchTreasuresManyResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method PatchTreasuresMany not implemented")
+}
 func (UnimplementedHydraideServiceServer) PatchExpiredTreasures(context.Context, *PatchExpiredTreasuresRequest) (*PatchExpiredTreasuresResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method PatchExpiredTreasures not implemented")
+}
+func (UnimplementedHydraideServiceServer) PatchExpiredTreasuresMany(context.Context, *PatchExpiredTreasuresManyRequest) (*PatchExpiredTreasuresManyResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method PatchExpiredTreasuresMany not implemented")
 }
 func (UnimplementedHydraideServiceServer) SubscribeToTelemetry(*TelemetrySubscribeRequest, grpc.ServerStreamingServer[TelemetryEvent]) error {
 	return status.Error(codes.Unimplemented, "method SubscribeToTelemetry not implemented")
@@ -1975,6 +2115,24 @@ func _HydraideService_ShiftExpiredTreasures_Handler(srv interface{}, ctx context
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(HydraideServiceServer).ShiftExpiredTreasures(ctx, req.(*ShiftExpiredTreasuresRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _HydraideService_ShiftExpiredTreasuresMany_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ShiftExpiredTreasuresManyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HydraideServiceServer).ShiftExpiredTreasuresMany(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HydraideService_ShiftExpiredTreasuresMany_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HydraideServiceServer).ShiftExpiredTreasuresMany(ctx, req.(*ShiftExpiredTreasuresManyRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -2386,6 +2544,24 @@ func _HydraideService_PatchTreasures_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _HydraideService_PatchTreasuresMany_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PatchTreasuresManyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HydraideServiceServer).PatchTreasuresMany(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HydraideService_PatchTreasuresMany_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HydraideServiceServer).PatchTreasuresMany(ctx, req.(*PatchTreasuresManyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _HydraideService_PatchExpiredTreasures_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(PatchExpiredTreasuresRequest)
 	if err := dec(in); err != nil {
@@ -2400,6 +2576,24 @@ func _HydraideService_PatchExpiredTreasures_Handler(srv interface{}, ctx context
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(HydraideServiceServer).PatchExpiredTreasures(ctx, req.(*PatchExpiredTreasuresRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _HydraideService_PatchExpiredTreasuresMany_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PatchExpiredTreasuresManyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HydraideServiceServer).PatchExpiredTreasuresMany(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HydraideService_PatchExpiredTreasuresMany_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HydraideServiceServer).PatchExpiredTreasuresMany(ctx, req.(*PatchExpiredTreasuresManyRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -2576,6 +2770,10 @@ var HydraideService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _HydraideService_ShiftExpiredTreasures_Handler,
 		},
 		{
+			MethodName: "ShiftExpiredTreasuresMany",
+			Handler:    _HydraideService_ShiftExpiredTreasuresMany_Handler,
+		},
+		{
 			MethodName: "Destroy",
 			Handler:    _HydraideService_Destroy_Handler,
 		},
@@ -2660,8 +2858,16 @@ var HydraideService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _HydraideService_PatchTreasures_Handler,
 		},
 		{
+			MethodName: "PatchTreasuresMany",
+			Handler:    _HydraideService_PatchTreasuresMany_Handler,
+		},
+		{
 			MethodName: "PatchExpiredTreasures",
 			Handler:    _HydraideService_PatchExpiredTreasures_Handler,
+		},
+		{
+			MethodName: "PatchExpiredTreasuresMany",
+			Handler:    _HydraideService_PatchExpiredTreasuresMany_Handler,
 		},
 		{
 			MethodName: "GetTelemetryHistory",

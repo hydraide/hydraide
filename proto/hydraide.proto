@@ -176,6 +176,18 @@ service HydraideService {
   // - Scheduled triggers (e.g. publish-after-expiry)
   rpc ShiftExpiredTreasures(ShiftExpiredTreasuresRequest) returns (ShiftExpiredTreasuresResponse) {}
 
+  // ShiftExpiredTreasuresMany batches several ShiftExpiredTreasures
+  // operations against multiple swamps on the same server in a single
+  // RPC. Each Requests entry is processed independently; the response
+  // carries one entry per request, in input order, with an optional
+  // swamp-level Error field for per-entry failures.
+  //
+  // The SDK groups multi-swamp batches by destination server (consistent
+  // hashing on Swamp name); this RPC is per-server. Use it for
+  // reconciliation flows that sweep stale lease records from several
+  // swamps in a single round-trip.
+  rpc ShiftExpiredTreasuresMany(ShiftExpiredTreasuresManyRequest) returns (ShiftExpiredTreasuresManyResponse) {}
+
   // Destroy permanently deletes the entire swamp and all its treasures.
   //
   // This removes all data associated with the given swamp, including metadata, indexes, and chunks.
@@ -423,6 +435,25 @@ service HydraideService {
   // pre-checks; failed checks return CONDITION_NOT_MET without applying ops.
   rpc PatchTreasures(PatchTreasuresRequest) returns (PatchTreasuresResponse) {}
 
+  // PatchTreasuresMany batches several PatchTreasures operations against
+  // multiple swamps on the same server in a single RPC. Each Requests
+  // entry is dispatched independently under its own per-swamp guard;
+  // the response carries one PatchTreasuresResponse per request, in
+  // input order, paired with an optional swamp-level Error field.
+  //
+  // Per-swamp errors do not abort the batch (e.g. an invalid swamp name
+  // on one entry leaves the others to complete). Per-key statuses
+  // (KEY_NOT_FOUND, CONDITION_NOT_MET, TYPE_MISMATCH, etc.) continue to
+  // surface as PatchResult.StatusCode entries inside each per-swamp
+  // PatchTreasuresResponse.
+  //
+  // The SDK groups multi-swamp batches by destination server (consistent
+  // hashing on Swamp name); this RPC is per-server. Use it for return
+  // flows where a single worker writes patched results into several
+  // sharded swamps in one round-trip (e.g. crawler results that touch
+  // a TLD-sharded domain-state swamp).
+  rpc PatchTreasuresMany(PatchTreasuresManyRequest) returns (PatchTreasuresManyResponse) {}
+
   // PatchExpiredTreasures atomically selects up to HowMany expired treasures
   // from a swamp and applies the same op-set + meta to each one in place.
   //
@@ -452,6 +483,27 @@ service HydraideService {
   // - Bulk TTL slides on expired entries (empty Ops + Meta only)
   // - Periodic recheck scheduling driven by ExpiredAt
   rpc PatchExpiredTreasures(PatchExpiredTreasuresRequest) returns (PatchExpiredTreasuresResponse) {}
+
+  // PatchExpiredTreasuresMany batches several PatchExpiredTreasures
+  // operations against multiple swamps on the same server in a single
+  // RPC. Each Requests entry is dispatched independently under its own
+  // per-swamp guard; the response carries one PatchExpiredTreasuresResponse
+  // per request, in input order.
+  //
+  // Per-swamp errors do not abort the batch: a swamp that fails to summon
+  // or reports a missing Ops/Meta combination still produces a response
+  // entry (empty Patched + populated Error field on the per-treasure
+  // record where applicable), so callers can react to partial outcomes
+  // without re-issuing every other request.
+  //
+  // The SDK groups multi-swamp requests by the destination server first
+  // (consistent hashing on Swamp name), so this RPC is per-server. The
+  // client then merges per-server responses into a single iterator
+  // callback. Use this RPC for combined queue-claim flows where one
+  // worker pulls leases from several ready swamps in proportion (e.g. a
+  // crawler that takes 80% of its work from the direct queue and 20%
+  // from the proxy queue).
+  rpc PatchExpiredTreasuresMany(PatchExpiredTreasuresManyRequest) returns (PatchExpiredTreasuresManyResponse) {}
 
   // ============ TELEMETRY ENDPOINTS ============
   //
@@ -3058,4 +3110,95 @@ message PatchedExpiredTreasure {
   // ExpiredAt is the treasure's expiration time after the patch (post
   // PatchMeta application). Unset when the treasure has no expiration.
   optional google.protobuf.Timestamp ExpiredAt = 5;
+}
+
+// PatchExpiredTreasuresManyRequest batches multiple PatchExpiredTreasures
+// calls in a single RPC. Each Requests entry targets one swamp on the
+// same server (the SDK groups by server before sending). Responses are
+// returned in the same order as Requests.
+message PatchExpiredTreasuresManyRequest {
+  repeated PatchExpiredTreasuresRequest Requests = 1;
+}
+
+// PatchExpiredTreasuresManyResponse pairs one PatchExpiredTreasuresResponse
+// with each Requests entry, in the same order. A swamp-level failure
+// (missing swamp, invalid Ops, summon failure) yields an empty Patched
+// list on that response and is also surfaced via the per-response
+// Error field; transport-level failures continue to surface as the
+// gRPC error return.
+message PatchExpiredTreasuresManyResponse {
+  repeated PatchExpiredTreasuresManyEntry Responses = 1;
+}
+
+// PatchExpiredTreasuresManyEntry is one per-swamp result inside a
+// PatchExpiredTreasuresManyResponse. It mirrors PatchExpiredTreasuresResponse
+// with an extra Error field for swamp-level failures (Patched stays
+// empty in that case).
+message PatchExpiredTreasuresManyEntry {
+  // Patched is populated when the per-swamp PatchExpired call ran; it
+  // mirrors PatchExpiredTreasuresResponse.Patched.
+  repeated PatchedExpiredTreasure Patched = 1;
+
+  // Error carries a swamp-level failure (e.g. "swamp summon failed",
+  // "Ops is empty"). Per-treasure failures stay inside the Patched
+  // entries' Status / Error fields.
+  optional string Error = 2;
+}
+
+// PatchTreasuresManyRequest batches multiple PatchTreasures calls in a
+// single RPC. Each Requests entry targets one swamp on the same server
+// (the SDK groups by server before sending). Responses are returned in
+// the same order as Requests.
+message PatchTreasuresManyRequest {
+  repeated PatchTreasuresRequest Requests = 1;
+}
+
+// PatchTreasuresManyResponse pairs one entry with each Requests entry,
+// in the same order. A swamp-level failure (missing swamp name, summon
+// failure) populates the per-entry Error field; per-key outcomes stay
+// inside the per-entry Results list.
+message PatchTreasuresManyResponse {
+  repeated PatchTreasuresManyEntry Responses = 1;
+}
+
+// PatchTreasuresManyEntry is one per-swamp result inside a
+// PatchTreasuresManyResponse. It mirrors PatchTreasuresResponse with
+// an extra Error field for swamp-level failures (Results stays empty
+// in that case).
+message PatchTreasuresManyEntry {
+  // Results carries the per-key outcomes when the per-swamp PatchTreasures
+  // call ran. Mirrors PatchTreasuresResponse.Results.
+  repeated PatchResult Results = 1;
+
+  // Error carries a swamp-level failure (e.g. "SwampName cannot be
+  // empty", "summon swamp: ..."). Per-key failures stay inside Results.
+  optional string Error = 2;
+}
+
+// ShiftExpiredTreasuresManyRequest batches multiple ShiftExpiredTreasures
+// calls in a single RPC. Each Requests entry targets one swamp on the
+// same server; responses are returned in the same order.
+message ShiftExpiredTreasuresManyRequest {
+  repeated ShiftExpiredTreasuresRequest Requests = 1;
+}
+
+// ShiftExpiredTreasuresManyResponse pairs one entry with each Requests
+// entry, in the same order.
+message ShiftExpiredTreasuresManyResponse {
+  repeated ShiftExpiredTreasuresManyEntry Responses = 1;
+}
+
+// ShiftExpiredTreasuresManyEntry is one per-swamp result inside a
+// ShiftExpiredTreasuresManyResponse. Mirrors ShiftExpiredTreasuresResponse
+// with an extra Error field for swamp-level failures.
+message ShiftExpiredTreasuresManyEntry {
+  // Treasures lists the expired entries that were retrieved and deleted
+  // from this swamp.
+  repeated Treasure Treasures = 1;
+
+  // Error carries a swamp-level failure (e.g. "SwampName cannot be
+  // empty"). Empty Treasures + non-empty Error means "this swamp's
+  // shift was rejected"; empty Treasures + empty Error means "this
+  // swamp was empty or did not exist".
+  optional string Error = 2;
 }

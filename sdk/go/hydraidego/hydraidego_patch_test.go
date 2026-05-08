@@ -6,6 +6,7 @@ import (
 	"time"
 
 	hydraidepbgo "github.com/hydraide/hydraide/sdk/go/hydraidego/v3/hydraidepbgo"
+	"github.com/hydraide/hydraide/sdk/go/hydraidego/v3/name"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/vmihailenco/msgpack/v5"
@@ -289,6 +290,126 @@ func TestNewPatchBuilder_OpsAndCondAndMetaCarried(t *testing.T) {
 	require.NotNil(t, b.meta)
 	assert.True(t, b.meta.GetSetUpdatedAt())
 	require.NotNil(t, b.meta.GetSetExpiredAt())
+}
+
+// ---------- CatalogShiftExpiredManyFromMany validation (R2-7) ----------
+
+func TestShiftExpiredManyFromMany_NilRequest(t *testing.T) {
+	h := &hydraidego{}
+	requests := []*ShiftExpiredManyFromManyRequest{nil}
+	err := h.CatalogShiftExpiredManyFromMany(context.Background(), requests, struct{}{}, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "is nil")
+}
+
+func TestShiftExpiredManyFromMany_EmptyRequestsIsNoop(t *testing.T) {
+	h := &hydraidego{}
+	err := h.CatalogShiftExpiredManyFromMany(context.Background(), nil, struct{}{}, nil)
+	require.NoError(t, err)
+}
+
+// ---------- CatalogPatchManyToMany validation (R2-4) ----------
+
+func TestPatchManyToMany_NilRequest(t *testing.T) {
+	h := &hydraidego{}
+	requests := []*CatalogPatchManyToManyRequest{nil}
+	err := h.CatalogPatchManyToMany(context.Background(), requests, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "is nil")
+}
+
+func TestPatchManyToMany_EmptyPatches(t *testing.T) {
+	h := &hydraidego{}
+	swamp := name.New().Sanctuary("s").Realm("r").Swamp("a")
+	requests := []*CatalogPatchManyToManyRequest{{SwampName: swamp}}
+	err := h.CatalogPatchManyToMany(context.Background(), requests, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Patches is empty")
+}
+
+func TestPatchManyToMany_NilBuilder(t *testing.T) {
+	h := &hydraidego{}
+	swamp := name.New().Sanctuary("s").Realm("r").Swamp("a")
+	requests := []*CatalogPatchManyToManyRequest{
+		{SwampName: swamp, Patches: []*PatchManyRequest{nil}},
+	}
+	err := h.CatalogPatchManyToMany(context.Background(), requests, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "nil Builder")
+}
+
+func TestPatchManyToMany_EmptyBuilderRejected(t *testing.T) {
+	h := &hydraidego{}
+	swamp := name.New().Sanctuary("s").Realm("r").Swamp("a")
+	requests := []*CatalogPatchManyToManyRequest{
+		{SwampName: swamp, Patches: []*PatchManyRequest{{Builder: NewPatchBuilder("k")}}},
+	}
+	err := h.CatalogPatchManyToMany(context.Background(), requests, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no ops and no meta")
+}
+
+func TestPatchManyToMany_MixedNoCreateRejected(t *testing.T) {
+	h := &hydraidego{}
+	swamp := name.New().Sanctuary("s").Realm("r").Swamp("a")
+	requests := []*CatalogPatchManyToManyRequest{
+		{SwampName: swamp, Patches: []*PatchManyRequest{
+			{Builder: NewPatchBuilder("a").Set("x", int8(1))},
+			{Builder: NewPatchBuilder("b").NoCreate().Set("x", int8(2))},
+		}},
+	}
+	err := h.CatalogPatchManyToMany(context.Background(), requests, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "NoCreate flag differs")
+}
+
+func TestPatchManyToMany_EmptyRequestsIsNoop(t *testing.T) {
+	h := &hydraidego{}
+	err := h.CatalogPatchManyToMany(context.Background(), nil, nil)
+	require.NoError(t, err)
+}
+
+// ---------- CatalogPatchExpiredManyFromMany validation (R2-3) ----------
+
+func TestPatchExpiredManyFromMany_NilRequest(t *testing.T) {
+	h := &hydraidego{}
+	requests := []*PatchExpiredManyFromManyRequest{nil}
+	err := h.CatalogPatchExpiredManyFromMany(context.Background(), requests, struct{}{}, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "is nil")
+}
+
+func TestPatchExpiredManyFromMany_NilBuilder(t *testing.T) {
+	h := &hydraidego{}
+	requests := []*PatchExpiredManyFromManyRequest{{HowMany: 1}}
+	err := h.CatalogPatchExpiredManyFromMany(context.Background(), requests, struct{}{}, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Builder is required")
+}
+
+func TestPatchExpiredManyFromMany_EmptyBuilder(t *testing.T) {
+	h := &hydraidego{}
+	requests := []*PatchExpiredManyFromManyRequest{{Builder: NewPatchExpiredOps()}}
+	err := h.CatalogPatchExpiredManyFromMany(context.Background(), requests, struct{}{}, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "at least one op or non-nil meta")
+}
+
+func TestPatchExpiredManyFromMany_EmptyRequestsIsNoop(t *testing.T) {
+	h := &hydraidego{}
+	err := h.CatalogPatchExpiredManyFromMany(context.Background(), nil, struct{}{}, nil)
+	require.NoError(t, err)
+}
+
+func TestPatchExpiredManyFromMany_BuilderEncodeError(t *testing.T) {
+	h := &hydraidego{}
+	// Triggering an encode error on the expired-ops builder requires
+	// passing a value that cannot be msgpack-encoded; use nil which the
+	// encoder rejects.
+	bad := NewPatchExpiredOps().Set("x", nil)
+	requests := []*PatchExpiredManyFromManyRequest{{Builder: bad}}
+	err := h.CatalogPatchExpiredManyFromMany(context.Background(), requests, struct{}{}, nil)
+	require.Error(t, err)
 }
 
 // ---------- PatchExpiredOps builder ----------

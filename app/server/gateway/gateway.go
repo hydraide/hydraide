@@ -1048,6 +1048,17 @@ func (g Gateway) ShiftExpiredTreasures(ctx context.Context, in *hydrapb.ShiftExp
 
 	defer handlePanic()
 
+	treasures, err := shiftExpiredOneSwamp(ctx, g, in)
+	if err != nil {
+		return nil, err
+	}
+	return &hydrapb.ShiftExpiredTreasuresResponse{Treasures: treasures}, nil
+}
+
+// shiftExpiredOneSwamp runs the per-swamp body of ShiftExpiredTreasures
+// and is shared between the single-RPC handler and the Many-RPC handler.
+// Returns a typed gRPC error for swamp-level failures.
+func shiftExpiredOneSwamp(ctx context.Context, g Gateway, in *hydrapb.ShiftExpiredTreasuresRequest) ([]*hydrapb.Treasure, error) {
 	swampName, err := checkSwampName(g.ZeusInterface, in.GetIslandID(), in.SwampName, true)
 	if err != nil {
 		return nil, err
@@ -1055,29 +1066,20 @@ func (g Gateway) ShiftExpiredTreasures(ctx context.Context, in *hydrapb.ShiftExp
 
 	hydraInterface := g.ZeusInterface.GetHydra()
 
-	// summon the swamp
 	swampInterface, err := hydraInterface.SummonSwamp(ctx, in.GetIslandID(), swampName)
 	if err != nil {
-		// return with grpc error message
 		return nil, status.Error(codes.Internal, fmt.Sprintf("internal server error in hydra: %s", err.Error()))
 	}
-
-	// begin the vigil, to prevent closing of the swamp
 	swampInterface.BeginVigil()
 	defer swampInterface.CeaseVigil()
 
 	howMany := in.GetHowMany()
 	if howMany == 0 {
-		// set the howMany to the default value because it is zero and if the value is zero, the user wants ALL the
-		// expired treasures
-		howMany = 1000000000 // 1 billion, this is a very large number, so it will return all the expired treasures
+		howMany = 1000000000
 	}
 
-	// clone and delete the expired treasures from the swamp
 	treasures, err := swampInterface.CloneAndDeleteExpiredTreasures(howMany)
-	// there was an error
 	if err != nil {
-		// return with grpc error message
 		return nil, status.Error(codes.Internal, fmt.Sprintf("hydra error: %s", err.Error()))
 	}
 
@@ -1086,20 +1088,49 @@ func (g Gateway) ShiftExpiredTreasures(ctx context.Context, in *hydrapb.ShiftExp
 		"shifted", len(treasures),
 		"isClosing", swampInterface.IsClosing())
 
-	// convert all treasures to the protobuf format
-	var response []*hydrapb.Treasure
+	response := make([]*hydrapb.Treasure, 0, len(treasures))
 	for _, treasureInterface := range treasures {
-		// convert the treasure to the protobuf format
 		t := &hydrapb.Treasure{}
 		treasureToKeyValuePair(treasureInterface, t)
 		response = append(response, t)
 	}
+	return response, nil
+}
 
-	// get the treasures by the index
-	return &hydrapb.ShiftExpiredTreasuresResponse{
-		Treasures: response,
-	}, nil
+// ShiftExpiredTreasuresMany dispatches a batch of ShiftExpiredTreasures
+// requests against multiple swamps on the same server. Each entry runs
+// independently; per-swamp failures populate the matching response
+// entry's Error field instead of aborting the batch.
+func (g Gateway) ShiftExpiredTreasuresMany(ctx context.Context, in *hydrapb.ShiftExpiredTreasuresManyRequest) (*hydrapb.ShiftExpiredTreasuresManyResponse, error) {
+	g.ZeusInterface.GetSafeops().LockSystem()
+	defer g.ZeusInterface.GetSafeops().UnlockSystem()
 
+	defer handlePanic()
+
+	requests := in.GetRequests()
+	if len(requests) == 0 {
+		return &hydrapb.ShiftExpiredTreasuresManyResponse{Responses: nil}, nil
+	}
+
+	responses := make([]*hydrapb.ShiftExpiredTreasuresManyEntry, 0, len(requests))
+	for _, req := range requests {
+		entry := &hydrapb.ShiftExpiredTreasuresManyEntry{}
+		if req == nil {
+			s := "nil request"
+			entry.Error = &s
+			responses = append(responses, entry)
+			continue
+		}
+		treasures, err := shiftExpiredOneSwamp(ctx, g, req)
+		if err != nil {
+			s := err.Error()
+			entry.Error = &s
+		} else {
+			entry.Treasures = treasures
+		}
+		responses = append(responses, entry)
+	}
+	return &hydrapb.ShiftExpiredTreasuresManyResponse{Responses: responses}, nil
 }
 
 func (g Gateway) Destroy(ctx context.Context, in *hydrapb.DestroyRequest) (*hydrapb.DestroyResponse, error) {

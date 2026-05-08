@@ -565,3 +565,161 @@ func (b *PatchBuilder) setCondition(opCode hydraidepbgo.PatchCondition_Op, path 
 	}
 	return b
 }
+
+// ============================================================================
+// Multi-swamp Patch (R2-4)
+// ============================================================================
+
+// CatalogPatchManyToManyRequest is one entry in a multi-swamp patch
+// batch issued via CatalogPatchManyToMany. Each entry carries the
+// per-swamp address and the list of per-key builders, with the same
+// shape as the single-swamp CatalogPatchFieldsMany.
+type CatalogPatchManyToManyRequest struct {
+	// SwampName addresses one swamp.
+	SwampName name.Name
+
+	// Patches lists the per-key builders dispatched against SwampName.
+	// Use NewPatchBuilder(key) to build each entry.
+	Patches []*PatchManyRequest
+}
+
+// CatalogPatchManyToManyIteratorFunc is invoked once per per-key result
+// across all swamps. The swampName argument identifies which swamp the
+// result belongs to. Returning a non-nil error stops iteration and
+// bubbles up.
+//
+// SwampErr is non-nil for swamp-level failures (e.g. missing swamp name
+// on this entry, summon failure). When SwampErr is non-nil the callback
+// fires once for that swamp with key == "" and status ==
+// PatchStatusInternalError, and no per-key callbacks follow for it.
+type CatalogPatchManyToManyIteratorFunc func(swampName name.Name, key string, status PatchStatus, errMsg string, swampErr error) error
+
+// CatalogPatchManyToMany dispatches a multi-swamp patch batch. Each
+// request carries a list of PatchBuilders; the dispatcher groups
+// requests by destination server (consistent hashing on SwampName) and
+// sends one PatchTreasuresMany RPC per server.
+//
+// Per-builder validation matches CatalogPatchFieldsMany: a non-nil
+// Builder is required, encode errors short-circuit the whole batch
+// before any RPC is sent, and a missing CreateIfNotExist flag mismatch
+// inside one swamp is rejected (the wire knob is request-level per
+// swamp, not per key).
+//
+// Per-swamp failures (missing swamp name, summon failure, etc.) reach
+// the iterator via the swampErr argument; per-key failures
+// (CONDITION_NOT_MET, KEY_NOT_FOUND, TYPE_MISMATCH, …) reach it via
+// the status argument.
+//
+// Common use cases:
+//   - Crawler return flow that writes patched results into a TLD-sharded
+//     domain-state swamp in a single round-trip.
+//   - Cross-shard counter farm sweeps.
+func (h *hydraidego) CatalogPatchManyToMany(ctx context.Context, requests []*CatalogPatchManyToManyRequest, iterator CatalogPatchManyToManyIteratorFunc) error {
+	if len(requests) == 0 {
+		return nil
+	}
+
+	// Validate every builder up-front and translate to wire requests so
+	// a single bad builder cannot silently corrupt a server-grouped
+	// batch. CreateIfNotExist must agree across all builders inside one
+	// swamp (matches the single-swamp CatalogPatchFieldsMany rule).
+	wireRequests := make([]*hydraidepbgo.PatchTreasuresRequest, len(requests))
+	for ri, req := range requests {
+		if req == nil {
+			return NewError(ErrCodeInvalidModel, fmt.Sprintf("request %d is nil", ri))
+		}
+		if len(req.Patches) == 0 {
+			return NewError(ErrCodeInvalidModel, fmt.Sprintf("request %d (%s): Patches is empty", ri, req.SwampName.Get()))
+		}
+		patches := make([]*hydraidepbgo.TreasurePatch, 0, len(req.Patches))
+		var swampCreate bool
+		for pi, p := range req.Patches {
+			if p == nil || p.Builder == nil {
+				return NewError(ErrCodeInvalidModel, fmt.Sprintf("request %d (%s), patch %d: nil request or nil Builder", ri, req.SwampName.Get(), pi))
+			}
+			b := p.Builder
+			if b.encodeError != nil {
+				return NewError(ErrCodeInvalidModel, fmt.Sprintf("request %d (%s), patch %d (%q): %v", ri, req.SwampName.Get(), pi, b.key, b.encodeError))
+			}
+			if b.key == "" {
+				return NewError(ErrCodeInvalidModel, fmt.Sprintf("request %d (%s), patch %d: builder has empty key", ri, req.SwampName.Get(), pi))
+			}
+			if len(b.ops) == 0 && b.meta == nil {
+				return NewError(ErrCodeInvalidModel, fmt.Sprintf("request %d (%s), patch %d (%q): builder has no ops and no meta", ri, req.SwampName.Get(), pi, b.key))
+			}
+			if pi == 0 {
+				swampCreate = b.create
+			} else if b.create != swampCreate {
+				return NewError(ErrCodeInvalidModel, fmt.Sprintf("request %d (%s), patch %d (%q): NoCreate flag differs from patch 0; split the batch", ri, req.SwampName.Get(), pi, b.key))
+			}
+			patches = append(patches, &hydraidepbgo.TreasurePatch{
+				Key:       b.key,
+				Ops:       b.ops,
+				Condition: b.cond,
+				Meta:      b.meta,
+			})
+		}
+		wireRequests[ri] = &hydraidepbgo.PatchTreasuresRequest{
+			IslandID:         req.SwampName.GetIslandID(h.client.GetAllIslands()),
+			SwampName:        req.SwampName.Get(),
+			Patches:          patches,
+			CreateIfNotExist: swampCreate,
+		}
+	}
+
+	// Group requests by destination server; one PatchTreasuresMany RPC
+	// per server.
+	type serverGroup struct {
+		client  hydraidepbgo.HydraideServiceClient
+		indices []int
+	}
+	groups := make(map[string]*serverGroup)
+	for i, req := range requests {
+		clientAndHost := h.client.GetServiceClientAndHost(req.SwampName)
+		g, ok := groups[clientAndHost.Host]
+		if !ok {
+			g = &serverGroup{client: clientAndHost.GrpcClient}
+			groups[clientAndHost.Host] = g
+		}
+		g.indices = append(g.indices, i)
+	}
+
+	for _, g := range groups {
+		batch := make([]*hydraidepbgo.PatchTreasuresRequest, 0, len(g.indices))
+		for _, idx := range g.indices {
+			batch = append(batch, wireRequests[idx])
+		}
+		resp, err := g.client.PatchTreasuresMany(ctx, &hydraidepbgo.PatchTreasuresManyRequest{
+			Requests: batch,
+		})
+		if err != nil {
+			return translatePatchGRPCError(err)
+		}
+
+		entries := resp.GetResponses()
+		if len(entries) != len(g.indices) {
+			return NewError(ErrCodeInternalDatabaseError, fmt.Sprintf("PatchTreasuresMany: server returned %d entries for %d requests", len(entries), len(g.indices)))
+		}
+
+		if iterator == nil {
+			continue
+		}
+
+		for k, idx := range g.indices {
+			swampName := requests[idx].SwampName
+			entry := entries[k]
+			if errMsg := entry.GetError(); errMsg != "" {
+				if iterErr := iterator(swampName, "", PatchStatusInternalError, errMsg, NewError(ErrCodeInternalDatabaseError, errMsg)); iterErr != nil {
+					return iterErr
+				}
+				continue
+			}
+			for _, r := range entry.GetResults() {
+				if iterErr := iterator(swampName, r.GetKey(), PatchStatus(r.GetStatus()), r.GetError(), nil); iterErr != nil {
+					return iterErr
+				}
+			}
+		}
+	}
+	return nil
+}

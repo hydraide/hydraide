@@ -232,3 +232,143 @@ func gatewayKey(i int) string         { return "k-" + intToFixed(i) }
 func gatewayWorkerID(i int) string    { return "worker-" + intToFixed(i) }
 func intToFixed(i int) string         { return string(rune('0' + (i / 100 % 10))) + string(rune('0' + (i / 10 % 10))) + string(rune('0' + (i % 10))) }
 func sumValues(m map[string]int) int  { s := 0; for _, v := range m { s += v }; return s }
+
+// ---------- PatchExpiredTreasuresMany (R2-3) ----------
+
+// seedExpiredOnSwamp is the multi-swamp variant of seedExpiredViaGateway.
+// It seeds a single key under an explicit swampName (instead of the rig's
+// default), so a single rig can drive a multi-swamp test.
+func seedExpiredOnSwamp(t *testing.T, rig *gatewayPatchTestRig, swampName, key string, fields map[string]any, expiredAgo time.Duration) {
+	t.Helper()
+	ops := make([]*hydrapb.PatchOp, 0, len(fields))
+	for k, v := range fields {
+		ops = append(ops, &hydrapb.PatchOp{
+			Op:    hydrapb.PatchOp_SET,
+			Path:  k,
+			Value: encMsgpack(t, v),
+		})
+	}
+	_, err := rig.gw.PatchTreasures(context.Background(), &hydrapb.PatchTreasuresRequest{
+		IslandID:         rig.islandID,
+		SwampName:        swampName,
+		CreateIfNotExist: true,
+		Patches:          []*hydrapb.TreasurePatch{{Key: key, Ops: ops}},
+		Meta: &hydrapb.PatchMeta{
+			SetExpiredAt: timestamppb.New(time.Now().UTC().Add(-expiredAgo)),
+		},
+	})
+	require.NoError(t, err)
+}
+
+// TestGatewayPatchExpiredMany_HappyPathPerSwampSelection verifies that
+// PatchExpiredTreasuresMany processes each swamp's request independently
+// and returns one PatchExpiredTreasuresManyEntry per request, in input
+// order, with the per-swamp Patched lists populated correctly.
+func TestGatewayPatchExpiredMany_HappyPathPerSwampSelection(t *testing.T) {
+	rig := newGatewayPatchTestRig(t, "gw-patch-many-exp", "happy", "any")
+
+	// Three swamps under the same sanctuary; each has 4 expired entries.
+	swampA := "gw-patch-many-exp/swamp/a"
+	swampB := "gw-patch-many-exp/swamp/b"
+	swampC := "gw-patch-many-exp/swamp/c"
+
+	for _, sn := range []string{swampA, swampB, swampC} {
+		for i := 0; i < 4; i++ {
+			seedExpiredOnSwamp(t, rig, sn, gatewayKey(i), map[string]any{"x": int8(0)}, time.Hour)
+		}
+	}
+
+	// Build a Many request: A wants 2, B wants 4 (but it has 4), C wants 1.
+	wantPerSwamp := map[string]int{swampA: 2, swampB: 4, swampC: 1}
+	build := func(sn string, howMany int32) *hydrapb.PatchExpiredTreasuresRequest {
+		return &hydrapb.PatchExpiredTreasuresRequest{
+			IslandID:  rig.islandID,
+			SwampName: sn,
+			HowMany:   howMany,
+			Ops: []*hydrapb.PatchOp{
+				{Op: hydrapb.PatchOp_SET, Path: "claimedBy", Value: encMsgpack(t, "worker-1")},
+			},
+			Meta: &hydrapb.PatchMeta{SetExpiredAt: timestamppb.New(time.Now().UTC().Add(time.Hour))},
+		}
+	}
+	resp, err := rig.gw.PatchExpiredTreasuresMany(context.Background(), &hydrapb.PatchExpiredTreasuresManyRequest{
+		Requests: []*hydrapb.PatchExpiredTreasuresRequest{
+			build(swampA, 2),
+			build(swampB, 4),
+			build(swampC, 1),
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, resp.GetResponses(), 3, "one response per request")
+
+	// Order must match the input order; no entry has a swamp-level error.
+	for i, sn := range []string{swampA, swampB, swampC} {
+		entry := resp.GetResponses()[i]
+		assert.Empty(t, entry.GetError(), "swamp %s must not surface an error", sn)
+		assert.Equal(t, wantPerSwamp[sn], len(entry.GetPatched()), "swamp %s wrong count", sn)
+		for _, p := range entry.GetPatched() {
+			assert.Equal(t, hydrapb.PatchResult_PATCHED, p.GetStatus())
+		}
+	}
+}
+
+// TestGatewayPatchExpiredMany_PerSwampErrorIsolation verifies that one
+// bad request (e.g. empty SwampName) does not abort the rest of the
+// batch — its Error field is populated and the other entries process
+// normally.
+func TestGatewayPatchExpiredMany_PerSwampErrorIsolation(t *testing.T) {
+	rig := newGatewayPatchTestRig(t, "gw-patch-many-exp-err", "isolation", "any")
+
+	good := "gw-patch-many-exp-err/swamp/good"
+	for i := 0; i < 3; i++ {
+		seedExpiredOnSwamp(t, rig, good, gatewayKey(i), map[string]any{"x": int8(0)}, time.Hour)
+	}
+
+	resp, err := rig.gw.PatchExpiredTreasuresMany(context.Background(), &hydrapb.PatchExpiredTreasuresManyRequest{
+		Requests: []*hydrapb.PatchExpiredTreasuresRequest{
+			// Bad: empty SwampName — must produce a per-swamp Error.
+			{IslandID: rig.islandID, SwampName: "", HowMany: 5,
+				Ops: []*hydrapb.PatchOp{{Op: hydrapb.PatchOp_SET, Path: "x", Value: encMsgpack(t, int8(1))}}},
+			// Good: 3 expired in one swamp, claim all.
+			{IslandID: rig.islandID, SwampName: good, HowMany: 5,
+				Ops: []*hydrapb.PatchOp{{Op: hydrapb.PatchOp_SET, Path: "claimedBy", Value: encMsgpack(t, "worker-2")}},
+				Meta: &hydrapb.PatchMeta{SetExpiredAt: timestamppb.New(time.Now().UTC().Add(time.Hour))}},
+		},
+	})
+	require.NoError(t, err, "per-swamp errors must not surface as gRPC error")
+	require.Len(t, resp.GetResponses(), 2)
+
+	assert.NotEmpty(t, resp.GetResponses()[0].GetError(), "first request must report a swamp-level error")
+	assert.Empty(t, resp.GetResponses()[0].GetPatched(), "first request must yield empty Patched")
+
+	assert.Empty(t, resp.GetResponses()[1].GetError())
+	assert.Len(t, resp.GetResponses()[1].GetPatched(), 3, "second request must process normally")
+}
+
+// TestGatewayPatchExpiredMany_EmptyRequestsIsNoop verifies that an empty
+// Requests list returns an empty Responses slice without error.
+func TestGatewayPatchExpiredMany_EmptyRequestsIsNoop(t *testing.T) {
+	rig := newGatewayPatchTestRig(t, "gw-patch-many-exp-empty", "empty", "any")
+	resp, err := rig.gw.PatchExpiredTreasuresMany(context.Background(), &hydrapb.PatchExpiredTreasuresManyRequest{})
+	require.NoError(t, err)
+	assert.Empty(t, resp.GetResponses())
+}
+
+// TestGatewayPatchExpiredMany_MissingSwampReturnsEmptyEntry verifies that
+// a request targeting a non-existent swamp produces an empty Patched
+// list without surfacing as an error — same behaviour as the single-RPC
+// PatchExpiredTreasures handler.
+func TestGatewayPatchExpiredMany_MissingSwampReturnsEmptyEntry(t *testing.T) {
+	rig := newGatewayPatchTestRig(t, "gw-patch-many-exp-missing", "missing", "any")
+
+	resp, err := rig.gw.PatchExpiredTreasuresMany(context.Background(), &hydrapb.PatchExpiredTreasuresManyRequest{
+		Requests: []*hydrapb.PatchExpiredTreasuresRequest{
+			{IslandID: rig.islandID, SwampName: "gw-patch-many-exp-missing/never/created", HowMany: 5,
+				Ops: []*hydrapb.PatchOp{{Op: hydrapb.PatchOp_SET, Path: "x", Value: encMsgpack(t, int8(1))}}},
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, resp.GetResponses(), 1)
+	assert.Empty(t, resp.GetResponses()[0].GetError(), "missing swamp must not appear as a swamp-level error")
+	assert.Empty(t, resp.GetResponses()[0].GetPatched())
+}

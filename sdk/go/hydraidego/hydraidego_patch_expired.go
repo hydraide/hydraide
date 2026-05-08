@@ -343,3 +343,155 @@ func populateCatalogModelFromPatchedExpired(entry *hydraidepbgo.PatchedExpiredTr
 	}
 	return nil
 }
+
+// PatchExpiredManyFromManyRequest is one entry in a multi-swamp expired-
+// patch batch issued via CatalogPatchExpiredManyFromMany. Each entry
+// targets one swamp; the batch dispatcher groups entries by destination
+// server and sends one PatchExpiredTreasuresMany RPC per server.
+type PatchExpiredManyFromManyRequest struct {
+	// SwampName addresses one swamp.
+	SwampName name.Name
+
+	// HowMany caps the per-swamp result count. 0 means "all currently
+	// expired treasures" (matches CatalogPatchExpired and
+	// ShiftExpiredTreasures).
+	HowMany int32
+
+	// Builder accumulates the ops + condition + meta applied to every
+	// selected expired treasure of THIS swamp under its per-key guard.
+	// Use NewPatchExpiredOps() and the same fluent API as the
+	// single-swamp CatalogPatchExpired.
+	Builder *PatchExpiredOps
+}
+
+// CatalogPatchExpiredManyFromManyIteratorFunc is invoked once per
+// patched (or attempted-patched) treasure across all swamps. The
+// swampName argument identifies which entry produced the model. Errors
+// returned from the callback stop iteration and bubble up as the result
+// of the call.
+//
+// SwampErr is non-nil for swamp-level failures (missing Ops, summon
+// failure). When SwampErr is non-nil the callback fires once for that
+// swamp with model == nil and status == PatchStatusInternalError, and
+// no per-treasure callbacks follow for it.
+type CatalogPatchExpiredManyFromManyIteratorFunc func(swampName name.Name, model any, status PatchStatus, swampErr error) error
+
+// CatalogPatchExpiredManyFromMany dispatches a multi-swamp expired-patch
+// batch. Each request claims up to its HowMany expired treasures from
+// its swamp under the swamp's beacon mu, applies the builder's ops +
+// condition + meta to each one under its per-key guard, and returns the
+// per-treasure outcomes to the iterator.
+//
+// Behaviour:
+//   - Requests are grouped by destination server (consistent hashing on
+//     SwampName); one PatchExpiredTreasuresMany RPC is sent per server.
+//   - Per-swamp failures (missing Ops/Meta, summon failure) are surfaced
+//     to the iterator via the swampErr argument; the rest of the batch
+//     continues unaffected.
+//   - Per-treasure failures (CONDITION_NOT_MET, TYPE_MISMATCH, etc.) are
+//     surfaced to the iterator via the status argument, same as the
+//     single-swamp CatalogPatchExpired.
+//   - Empty requests slice is a valid no-op.
+//
+// Common use cases:
+//   - Combined queue claim across multiple ready swamps in a single RPC
+//     (e.g. crawler that pulls 80% of work from a direct queue and 20%
+//     from a proxy queue).
+//   - Periodic recheck scheduling across TLD-sharded state swamps.
+func (h *hydraidego) CatalogPatchExpiredManyFromMany(
+	ctx context.Context,
+	requests []*PatchExpiredManyFromManyRequest,
+	model any,
+	iterator CatalogPatchExpiredManyFromManyIteratorFunc,
+) error {
+	if len(requests) == 0 {
+		return nil
+	}
+
+	// Validate every request up-front so a single bad builder cannot
+	// silently corrupt a server-grouped batch.
+	wireRequests := make([]*hydraidepbgo.PatchExpiredTreasuresRequest, len(requests))
+	for i, req := range requests {
+		if req == nil {
+			return NewError(ErrCodeInvalidModel, fmt.Sprintf("request %d is nil", i))
+		}
+		if req.Builder == nil {
+			return NewError(ErrCodeInvalidModel, fmt.Sprintf("request %d: Builder is required", i))
+		}
+		if req.Builder.encodeError != nil {
+			return NewError(ErrCodeInvalidModel, fmt.Sprintf("request %d: %v", i, req.Builder.encodeError))
+		}
+		if len(req.Builder.ops) == 0 && req.Builder.meta == nil {
+			return NewError(ErrCodeInvalidModel, fmt.Sprintf("request %d: builder needs at least one op or non-nil meta", i))
+		}
+		wireRequests[i] = &hydraidepbgo.PatchExpiredTreasuresRequest{
+			IslandID:  req.SwampName.GetIslandID(h.client.GetAllIslands()),
+			SwampName: req.SwampName.Get(),
+			HowMany:   req.HowMany,
+			Ops:       req.Builder.ops,
+			Meta:      req.Builder.meta,
+			Condition: req.Builder.cond,
+		}
+	}
+
+	// Group request indices by destination server so we can issue one
+	// PatchExpiredTreasuresMany RPC per server, then merge responses
+	// back to the input order.
+	type serverGroup struct {
+		client  hydraidepbgo.HydraideServiceClient
+		indices []int
+	}
+	groups := make(map[string]*serverGroup)
+	for i, req := range requests {
+		clientAndHost := h.client.GetServiceClientAndHost(req.SwampName)
+		g, ok := groups[clientAndHost.Host]
+		if !ok {
+			g = &serverGroup{client: clientAndHost.GrpcClient}
+			groups[clientAndHost.Host] = g
+		}
+		g.indices = append(g.indices, i)
+	}
+
+	for _, g := range groups {
+		batch := make([]*hydraidepbgo.PatchExpiredTreasuresRequest, 0, len(g.indices))
+		for _, idx := range g.indices {
+			batch = append(batch, wireRequests[idx])
+		}
+		resp, err := g.client.PatchExpiredTreasuresMany(ctx, &hydraidepbgo.PatchExpiredTreasuresManyRequest{
+			Requests: batch,
+		})
+		if err != nil {
+			return translatePatchGRPCError(err)
+		}
+
+		entries := resp.GetResponses()
+		if len(entries) != len(g.indices) {
+			return NewError(ErrCodeInternalDatabaseError, fmt.Sprintf("PatchExpiredTreasuresMany: server returned %d entries for %d requests", len(entries), len(g.indices)))
+		}
+
+		if iterator == nil {
+			continue
+		}
+
+		for k, idx := range g.indices {
+			swampName := requests[idx].SwampName
+			entry := entries[k]
+			if errMsg := entry.GetError(); errMsg != "" {
+				if iterErr := iterator(swampName, nil, PatchStatusInternalError, NewError(ErrCodeInternalDatabaseError, errMsg)); iterErr != nil {
+					return iterErr
+				}
+				continue
+			}
+			for _, treasure := range entry.GetPatched() {
+				modelValue := reflect.New(reflect.TypeOf(model)).Interface()
+				if convErr := populateCatalogModelFromPatchedExpired(treasure, modelValue); convErr != nil {
+					return NewError(ErrCodeInvalidModel, convErr.Error())
+				}
+				if iterErr := iterator(swampName, modelValue, PatchStatus(treasure.GetStatus()), nil); iterErr != nil {
+					return iterErr
+				}
+			}
+		}
+	}
+	return nil
+}
