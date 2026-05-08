@@ -1957,6 +1957,8 @@ err := h.CatalogPatchFieldsMany(ctx, swampName, requests, callback)
 
 CAS failures surface as `PatchStatusConditionNotMet` per request; the rest of the batch still applies. `CreateIfNotExist` is honored per builder via `NoCreate()`; the dispatcher requires every builder in one batch to agree, since the wire knob is request-level.
 
+**Duplicate keys in one batch run sequentially.** When the same key appears in multiple entries of one `CatalogPatchFieldsMany` call, each entry runs in declaration order under its own per-key guard. A later entry sees the freshly-mutated state from any earlier one, so partial-accept counters work cleanly off this. Five `Inc(+1)` entries on the same key gated by `IfFieldLessThan("ActiveCrawls", int32(3))` produce three `PatchStatusPatched` followed by two `PatchStatusConditionNotMet`, with the counter ending at exactly the cap. There is no wire-level rejection of duplicate keys.
+
 > **Migration note.** The pre-3.x `PatchManyRequest{Key, Fields, Cond}` shape and the `PatchCond` / `PatchCondOp` types were removed in v3 in favor of the builder reuse above. Migrate
 >
 > ```go

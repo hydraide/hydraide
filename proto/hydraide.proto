@@ -2827,6 +2827,12 @@ message PatchTreasuresRequest {
   string SwampName = 2;
 
   // Patches is the per-key batch. Order is preserved in the response.
+  // Duplicate Keys are allowed and run sequentially in declaration
+  // order, each under its own per-key guard. A subsequent patch
+  // observes the freshly-mutated state from any earlier patch on the
+  // same key, so per-key Cond gates can implement partial-accept
+  // counters (e.g. five Inc(+1) entries under "n < 3" cleanly stop at
+  // the cap with the rest reporting CONDITION_NOT_MET).
   repeated TreasurePatch Patches = 3;
 
   // CreateIfNotExist controls behavior when a target key is missing. When

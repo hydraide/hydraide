@@ -1183,6 +1183,8 @@ requests := []*hydraidego.PatchManyRequest{
 
 CAS failures surface as `PatchStatusConditionNotMet` per request — they don't short-circuit the rest of the batch. `CreateIfNotExist` is honored per builder via `NoCreate()`; the dispatcher requires every builder in one batch to agree, since the wire knob is request-level.
 
+**Duplicate keys in one batch run sequentially.** If the same key appears in multiple `PatchManyRequest` entries inside one `CatalogPatchFieldsMany` call, each entry runs in declaration order under its own per-key guard. A later entry sees the freshly-mutated state from any earlier one, so partial-accept counters work cleanly: five `Inc(+1)` entries under `IfFieldLessThan("n", int32(3))` stop at the cap with three `PatchStatusPatched` followed by two `PatchStatusConditionNotMet`. There is no wire-level rejection of duplicate keys.
+
 ### Builder API (ordered ops, conditions, metadata)
 
 `CatalogPatch` returns a `PatchBuilder`. Ops execute in declaration order; the patch is applied atomically per (Swamp, Key).

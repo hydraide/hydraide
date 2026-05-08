@@ -10086,6 +10086,12 @@ type PatchTreasuresRequest struct {
 	// SwampName addresses the swamp containing the patched treasures.
 	SwampName string `protobuf:"bytes,2,opt,name=SwampName,proto3" json:"SwampName,omitempty"`
 	// Patches is the per-key batch. Order is preserved in the response.
+	// Duplicate Keys are allowed and run sequentially in declaration
+	// order, each under its own per-key guard. A subsequent patch
+	// observes the freshly-mutated state from any earlier patch on the
+	// same key, so per-key Cond gates can implement partial-accept
+	// counters (e.g. five Inc(+1) entries under "n < 3" cleanly stop at
+	// the cap with the rest reporting CONDITION_NOT_MET).
 	Patches []*TreasurePatch `protobuf:"bytes,3,rep,name=Patches,proto3" json:"Patches,omitempty"`
 	// CreateIfNotExist controls behavior when a target key is missing. When
 	// false, missing keys yield KEY_NOT_FOUND. When true, an empty msgpack

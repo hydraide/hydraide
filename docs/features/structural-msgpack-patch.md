@@ -104,6 +104,8 @@ err := h.CatalogPatchFieldsMany(ctx, swamp, requests, callback)
 
 Each request reports its own `PatchStatus` — `PATCHED`, `CONDITION_NOT_MET`, `TYPE_MISMATCH`, etc. — exactly like the single-key builder, so per-key business outcomes never short-circuit the rest of the batch. Use this for batched optimistic-style claims, idempotent counter increments with monotonic guards, mixed ops + per-key TTL slides, and any flow where you'd otherwise issue many `Exec()` calls in sequence.
 
+**Duplicate keys in one batch run sequentially.** When the same key appears in multiple entries of one batch, each entry runs in declaration order under its own per-key guard, and a later entry observes the freshly-mutated state from any earlier one. Partial-accept counters work cleanly off this: five `Inc(+1)` entries gated on `IfFieldLessThan("n", 3)` produce three `PATCHED` followed by two `CONDITION_NOT_MET`, with the counter ending at exactly the cap. There is no wire-level rejection of duplicate keys.
+
 For TTL-driven claim flows (where the *selection* itself should be expiration-aware), reach for [`patch-expired-treasures.md`](patch-expired-treasures.md) — the per-treasure condition there fires after an atomic disjoint-subset selection, not as a per-request gate.
 
 ## Per-Key Metadata Across a Batch

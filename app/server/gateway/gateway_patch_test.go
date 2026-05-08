@@ -643,6 +643,92 @@ func TestGatewayPatchMany_EmptyRequestsIsNoop(t *testing.T) {
 	assert.Empty(t, resp.GetResponses())
 }
 
+// TestGatewayPatch_DuplicateKeysRunSequentially verifies that when the
+// same Key appears multiple times in one PatchTreasuresRequest.Patches
+// slice, every entry runs in declaration order under its own per-key
+// guard hold. Cond evaluates against the freshly-mutated state from the
+// previous entry, so partial-accept patterns (e.g. five Inc(+1)s under
+// an ASN cap of 3) cleanly stop at the cap with the rest reporting
+// CONDITION_NOT_MET. There is no wire-level rejection of duplicate Keys.
+func TestGatewayPatch_DuplicateKeysRunSequentially(t *testing.T) {
+	rig := newGatewayPatchTestRig(t, "gw-patch-dup", "duplicate", "keys")
+
+	// Seed Counter=0 so all five Inc(+1) attempts target the same key.
+	_, err := rig.gw.PatchTreasures(context.Background(), &hydrapb.PatchTreasuresRequest{
+		IslandID:         rig.islandID,
+		SwampName:        rig.swampName,
+		CreateIfNotExist: true,
+		Patches: []*hydrapb.TreasurePatch{
+			{Key: "asn-29208", Ops: []*hydrapb.PatchOp{
+				{Op: hydrapb.PatchOp_SET, Path: "ActiveCrawls", Value: encMsgpack(t, int32(0))},
+			}},
+		},
+	})
+	require.NoError(t, err)
+
+	// Five duplicate-key entries, each Inc(+1) under "ActiveCrawls < 3"
+	// gate. First three should succeed (0→1→2→3); the fourth and fifth
+	// should report CONDITION_NOT_MET because the gate fails at 3.
+	cap := encMsgpack(t, int32(3))
+	patches := make([]*hydrapb.TreasurePatch, 5)
+	for i := range patches {
+		patches[i] = &hydrapb.TreasurePatch{
+			Key: "asn-29208",
+			Ops: []*hydrapb.PatchOp{
+				{Op: hydrapb.PatchOp_INC, Path: "ActiveCrawls", Value: encMsgpack(t, int32(1))},
+			},
+			Condition: &hydrapb.PatchCondition{
+				Path:      "ActiveCrawls",
+				Operator:  hydrapb.PatchCondition_LESS_THAN,
+				Threshold: cap,
+			},
+		}
+	}
+
+	resp, err := rig.gw.PatchTreasures(context.Background(), &hydrapb.PatchTreasuresRequest{
+		IslandID:  rig.islandID,
+		SwampName: rig.swampName,
+		Patches:   patches,
+	})
+	require.NoError(t, err)
+	require.Len(t, resp.GetResults(), 5, "every duplicate-key entry yields its own result")
+
+	// Order matches input: three PATCHED, two CONDITION_NOT_MET.
+	wantStatuses := []hydrapb.PatchResult_StatusCode{
+		hydrapb.PatchResult_PATCHED,
+		hydrapb.PatchResult_PATCHED,
+		hydrapb.PatchResult_PATCHED,
+		hydrapb.PatchResult_CONDITION_NOT_MET,
+		hydrapb.PatchResult_CONDITION_NOT_MET,
+	}
+	for i, want := range wantStatuses {
+		assert.Equal(t, want, resp.GetResults()[i].GetStatus(),
+			"result %d (key %q)", i, resp.GetResults()[i].GetKey())
+	}
+
+	// Final Counter is exactly 3 — the cap, reached by the third Inc.
+	hydraInterface := rig.gw.ZeusInterface.GetHydra()
+	loaded := name.Load(rig.swampName)
+	swampObj, err := hydraInterface.SummonSwamp(context.Background(), rig.islandID, loaded)
+	require.NoError(t, err)
+	swampObj.BeginVigil()
+	defer swampObj.CeaseVigil()
+	tr, err := swampObj.GetTreasure("asn-29208")
+	require.NoError(t, err)
+
+	// Decode the body and read ActiveCrawls.
+	body, bodyErr := tr.GetContentByteArray()
+	require.NoError(t, bodyErr)
+	require.NotNil(t, body)
+	// Strip the 2-byte msgpack magic prefix HydrAIDE adds to msgpack bodies.
+	if len(body) > 2 {
+		body = body[2:]
+	}
+	var got map[string]any
+	require.NoError(t, msgpack.Unmarshal(body, &got))
+	assert.EqualValues(t, 3, got["ActiveCrawls"], "sequential Inc must reach the cap and stop")
+}
+
 func TestGatewayPatchMany_PerKeyMetaCarriesAcrossBatch(t *testing.T) {
 	rig := newGatewayPatchTestRig(t, "gw-patch-many-meta", "perkey", "any")
 
