@@ -22,7 +22,13 @@ import (
 // patchTestSwamp spins up an in-memory swamp wired to a real chronicler so
 // PatchFields tests can exercise the full Save → reload path.
 func patchTestSwamp(t *testing.T, realm, swampN string) Swamp {
-	t.Helper()
+	return patchTestSwampTB(t, realm, swampN)
+}
+
+// patchTestSwampTB is the testing.TB-shaped helper so benchmarks
+// (*testing.B) can share the same setup as tests (*testing.T).
+func patchTestSwampTB(tb testing.TB, realm, swampN string) Swamp {
+	tb.Helper()
 	fsInterface := filesystem.New()
 	settingsInterface := settings.New(testMaxDepth, testMaxFolderPerLevel)
 	fss := &settings.FileSystemSettings{WriteIntervalSec: 1, MaxFileSizeByte: 8192}
@@ -45,7 +51,7 @@ func patchTestSwamp(t *testing.T, realm, swampN string) Swamp {
 		metadataInterface,
 	)
 	s.BeginVigil()
-	t.Cleanup(func() {
+	tb.Cleanup(func() {
 		s.CeaseVigil()
 		s.Destroy()
 	})

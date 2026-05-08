@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/vmihailenco/msgpack/v5"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // These unit tests cover the SDK's local logic (encoding, builder
@@ -325,4 +326,149 @@ func TestPatchCondToWire_NonExistsRequiresValue(t *testing.T) {
 		_, err := patchCondToWire(&PatchCond{Op: op, Path: "X", Value: nil})
 		assert.Error(t, err, "operator %d must require Value", op)
 	}
+}
+
+// ---------- PatchExpiredOps builder ----------
+
+func TestPatchExpiredOps_AccumulatesOpsInOrder(t *testing.T) {
+	b := NewPatchExpiredOps().
+		Set("a", int8(1)).
+		Inc("b", int8(2)).
+		Append("c[]", "x").
+		Prepend("d[]", "y").
+		Delete("e").
+		RemoveAt("f[3]").
+		RemoveVal("g", "z").
+		Merge("h", map[string]any{"k": int8(1)})
+
+	require.Len(t, b.ops, 8)
+	wantKinds := []hydraidepbgo.PatchOp_Kind{
+		hydraidepbgo.PatchOp_SET,
+		hydraidepbgo.PatchOp_INC,
+		hydraidepbgo.PatchOp_APPEND,
+		hydraidepbgo.PatchOp_PREPEND,
+		hydraidepbgo.PatchOp_DELETE,
+		hydraidepbgo.PatchOp_REMOVE_AT,
+		hydraidepbgo.PatchOp_REMOVE_VAL,
+		hydraidepbgo.PatchOp_MERGE,
+	}
+	for i, want := range wantKinds {
+		assert.Equal(t, want, b.ops[i].GetOp(), "op %d", i)
+	}
+	// DELETE / REMOVE_AT must have no Value on the wire.
+	assert.Empty(t, b.ops[4].GetValue())
+	assert.Empty(t, b.ops[5].GetValue())
+}
+
+func TestPatchExpiredOps_ConditionRoundTrip(t *testing.T) {
+	b := NewPatchExpiredOps().
+		Set("x", int8(1)).
+		IfFieldLessThan("ExpireAt", time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+	require.NotNil(t, b.cond)
+	assert.Equal(t, hydraidepbgo.PatchCondition_LESS_THAN, b.cond.GetOperator())
+	assert.Equal(t, "ExpireAt", b.cond.GetPath())
+	assert.NotEmpty(t, b.cond.GetThreshold())
+}
+
+func TestPatchExpiredOps_ConditionExistsHasNoThreshold(t *testing.T) {
+	b := NewPatchExpiredOps().
+		Set("x", int8(1)).
+		IfFieldExists("ClaimedBy")
+	require.NotNil(t, b.cond)
+	assert.Equal(t, hydraidepbgo.PatchCondition_EXISTS, b.cond.GetOperator())
+	assert.Empty(t, b.cond.GetThreshold(), "EXISTS must not carry a threshold")
+}
+
+func TestPatchExpiredOps_WithExpiredAtSetsMeta(t *testing.T) {
+	want := time.Date(2026, 5, 8, 12, 0, 0, 0, time.UTC)
+	b := NewPatchExpiredOps().Set("x", int8(1)).WithExpiredAt(want)
+	require.NotNil(t, b.meta)
+	require.NotNil(t, b.meta.GetSetExpiredAt())
+	assert.Equal(t, want.UnixNano(), b.meta.GetSetExpiredAt().AsTime().UnixNano())
+	assert.False(t, b.meta.GetClearExpiredAt())
+}
+
+func TestPatchExpiredOps_WithExpiredAtZeroClears(t *testing.T) {
+	b := NewPatchExpiredOps().Set("x", int8(1)).WithExpiredAt(time.Time{})
+	require.NotNil(t, b.meta)
+	assert.Nil(t, b.meta.GetSetExpiredAt())
+	assert.True(t, b.meta.GetClearExpiredAt(), "zero time must clear")
+}
+
+func TestPatchExpiredOps_WithoutExpiredAtBeatsWith(t *testing.T) {
+	want := time.Date(2026, 5, 8, 12, 0, 0, 0, time.UTC)
+	b := NewPatchExpiredOps().
+		Set("x", int8(1)).
+		WithExpiredAt(want).
+		WithoutExpiredAt()
+	require.NotNil(t, b.meta)
+	assert.Nil(t, b.meta.GetSetExpiredAt())
+	assert.True(t, b.meta.GetClearExpiredAt())
+}
+
+func TestPatchExpiredOps_WithUpdatedAtAndBy(t *testing.T) {
+	b := NewPatchExpiredOps().Set("x", int8(1)).WithUpdatedAt().WithUpdatedBy("alice")
+	require.NotNil(t, b.meta)
+	assert.True(t, b.meta.GetSetUpdatedAt())
+	assert.Equal(t, "alice", b.meta.GetSetUpdatedBy())
+}
+
+func TestPatchExpiredOps_EncodeErrorShortCircuits(t *testing.T) {
+	b := NewPatchExpiredOps().Set("x", nil).Inc("y", int8(1))
+	require.NotNil(t, b.encodeError)
+	assert.Empty(t, b.ops, "ops must not append after encode error")
+}
+
+// ---------- populateCatalogModelFromPatchedExpired ----------
+
+type testCatalogModel struct {
+	Key       string    `hydraide:"key"`
+	ExpireAt  time.Time `hydraide:"expireAt"`
+	Counter   int8
+	ClaimedBy string
+}
+
+func TestPopulateCatalogModelFromPatchedExpired_Body(t *testing.T) {
+	body, err := msgpack.Marshal(map[string]any{
+		"Counter":   int8(7),
+		"ClaimedBy": "worker-A",
+	})
+	require.NoError(t, err)
+
+	exp := time.Date(2026, 5, 8, 12, 0, 0, 0, time.UTC)
+	entry := &hydraidepbgo.PatchedExpiredTreasure{
+		Key:        "k-1",
+		Status:     hydraidepbgo.PatchResult_PATCHED,
+		NewMsgpack: body,
+		ExpiredAt:  timestamppb.New(exp),
+	}
+
+	var m testCatalogModel
+	require.NoError(t, populateCatalogModelFromPatchedExpired(entry, &m))
+
+	assert.Equal(t, "k-1", m.Key)
+	assert.True(t, m.ExpireAt.Equal(exp), "got=%v want=%v", m.ExpireAt, exp)
+	assert.Equal(t, int8(7), m.Counter)
+	assert.Equal(t, "worker-A", m.ClaimedBy)
+}
+
+func TestPopulateCatalogModelFromPatchedExpired_NoBody(t *testing.T) {
+	exp := time.Date(2026, 5, 8, 12, 0, 0, 0, time.UTC)
+	entry := &hydraidepbgo.PatchedExpiredTreasure{
+		Key:       "k-2",
+		Status:    hydraidepbgo.PatchResult_CONDITION_NOT_MET,
+		ExpiredAt: timestamppb.New(exp),
+	}
+	var m testCatalogModel
+	require.NoError(t, populateCatalogModelFromPatchedExpired(entry, &m))
+	assert.Equal(t, "k-2", m.Key)
+	assert.True(t, m.ExpireAt.Equal(exp))
+	assert.Equal(t, int8(0), m.Counter, "no body → defaults")
+}
+
+func TestPopulateCatalogModelFromPatchedExpired_NonStructRejected(t *testing.T) {
+	entry := &hydraidepbgo.PatchedExpiredTreasure{Key: "x"}
+	var s string
+	err := populateCatalogModelFromPatchedExpired(entry, &s)
+	assert.Error(t, err)
 }

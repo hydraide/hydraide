@@ -458,6 +458,7 @@ err := h.CatalogReadManyFromMany(ctx, requests, OrderCatalog{},
 | Multi-Swamp delete | `CatalogDeleteManyFromMany(ctx, reqs, iter)` | Many from many |
 | Shift | `CatalogShiftBatch(ctx, name, keys, model, iter)` | Read + delete |
 | Shift expired | `CatalogShiftExpired(ctx, name, howMany, model, iter)` | TTL drain |
+| Patch expired | `CatalogPatchExpired(ctx, name, howMany, model, iter, builder)` | TTL claim in-place |
 | Count | `Count(ctx, name)` | Total entries |
 | Single existence | `IsKeyExists(ctx, name, key)` | Boolean |
 | Batch existence | `AreKeysExist(ctx, name, keys)` | `map[string]bool` |
@@ -1125,6 +1126,25 @@ err := h.CatalogPatchFieldsMany(ctx, swamp, requests,
     })
 ```
 
+`PatchManyRequest` carries an optional per-request `Cond *PatchCond` for batched CAS — same `IfField*` semantics as the single-key builder, expressed as a value:
+
+```go
+requests := []*hydraidego.PatchManyRequest{
+    {
+        Key:    "k1",
+        Fields: map[string]any{"ClaimedBy": "worker-A"},
+        Cond:   &hydraidego.PatchCond{Op: hydraidego.PatchCondEqual, Path: "ClaimedBy", Value: ""},
+    },
+    {
+        Key:    "k2",
+        Fields: map[string]any{"Counter": int32(1)},
+        Cond:   &hydraidego.PatchCond{Op: hydraidego.PatchCondLessThan, Path: "Counter", Value: int32(3)},
+    },
+}
+```
+
+CAS failures surface as `PatchStatusConditionNotMet` per request — they don't short-circuit the rest of the batch. For `Exists` / `NotExists`, leave `Value` nil; for any other op, `Value` is required.
+
 ### Builder API (ordered ops, conditions, metadata)
 
 `CatalogPatch` returns a `PatchBuilder`. Ops execute in declaration order; the patch is applied atomically per (Swamp, Key).
@@ -1203,6 +1223,42 @@ case status == hydraidego.PatchStatusPatched:
     // ok
 }
 ```
+
+### Patch expired treasures (in-place TTL-driven claim)
+
+`CatalogPatchExpired` is the in-place sibling of `CatalogShiftExpired`. It atomically selects up to `howMany` treasures whose `ExpireAt < server-now`, applies the same op-set + meta to each one under its per-key guard, re-indexes them with their new `ExpireAt`, and streams the post-patch state to the iterator. Concurrent callers receive **disjoint subsets** — same atomic-claim guarantee as `ShiftExpired`, but the data stays in the swamp.
+
+The classic use is a crash-safe queue claim with no separate fetch + lock RPCs:
+
+```go
+builder := hydraidego.NewPatchExpiredOps().
+    Set("ClaimedBy", workerID).
+    WithExpiredAt(time.Now().UTC().Add(24 * time.Hour)).  // lease deadline
+    IfFieldEquals("ClaimedBy", "")                        // optional CAS gate
+
+err := h.CatalogPatchExpired(ctx, swamp, 50, MyCatalog{},
+    func(model any, status hydraidego.PatchStatus) error {
+        m := model.(*MyCatalog)
+        // process the claimed entry; the new ExpireAt acts as the lease deadline
+        return nil
+    }, builder)
+```
+
+Crashed workers' claims expire on their own (the new `ExpireAt` was 24 h in the future, so 24 h after the crash the entry is expired again and the next call re-claims it). **The recovery mechanism is the primitive itself** — no separate cleanup job.
+
+Empty ops + non-nil meta is the "slide ExpireAt forward without changing the body" form (lease extension, recheck deferral). Both empty is rejected as `ErrCodeInvalidModel`.
+
+`PatchExpiredOps` mirrors `PatchBuilder` minus the per-key `Exec`:
+
+| Surface | Helpers |
+|---|---|
+| Ops | `Set`, `Inc`, `Append`, `Prepend`, `Delete`, `RemoveAt`, `RemoveVal`, `Merge` |
+| Conditions | every `IfField*` from `PatchBuilder`, single condition per builder |
+| Meta | `WithUpdatedAt`, `WithUpdatedBy`, `WithExpiredAt(t)`, `WithoutExpiredAt()` |
+
+Conditions failed treasures are reported with `PatchStatusConditionNotMet` and **stay in the expired index** with their unchanged `ExpireAt` — the next call retries them. This makes "claim only the entries where `ClaimedBy == ''`" a one-line builder addition rather than a per-call fetch + filter.
+
+For the conceptual model and atomicity contract, see [`docs/features/patch-expired-treasures.md`](../../../docs/features/patch-expired-treasures.md).
 
 ### When NOT to use Patch
 
