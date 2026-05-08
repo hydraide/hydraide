@@ -1590,7 +1590,8 @@ func ProcessJobBatch(r repo.Repo, jobIDs []string) error {
 |-----------------------|------------|--------------|----------|
 | `CatalogReadBatch`    | ✅ Yes     | ❌ No        | Fetch multiple records by keys |
 | `CatalogShiftBatch`   | ✅ Yes     | ✅ Yes       | Consume and remove records atomically |
-| `CatalogShiftExpired` | ✅ Yes     | ✅ Yes       | Process expired items by TTL |
+| `CatalogShiftExpired` | ✅ Yes     | ✅ Yes       | Process expired items by TTL — drains the queue |
+| `CatalogPatchExpired` | ✅ Yes     | ❌ No        | Atomic in-place patch of expired items — claim-and-keep |
 | `CatalogDeleteMany`   | ❌ No      | ✅ Yes       | Delete without reading data |
 
 **Performance benefits:**
@@ -1745,6 +1746,7 @@ Catalogs are not suitable when:
 | CatalogReadManyFromMany   | ✅ Ready | [example](examples/)            |
 | CompactSwamp              | ✅ Ready | Encoding migration helper — forces .hyd file rewrite              |
 | CatalogShiftExpired       | ✅ Ready | [example](examples/)              |
+| CatalogPatchExpired       | ✅ Ready | Atomic in-place patch of expired entries — see §Field-Level Patches |
 | CatalogShiftBatch         | ✅ Ready | [example](examples/)              |
 
 ---
@@ -1857,8 +1859,9 @@ Whether you want to:
 | -------------------------- | ------------------------------------------------------------------------ |
 | `CatalogPatchField`        | One key, one field — the simplest one-liner                              |
 | `CatalogPatchFields`       | One key, multiple fields — atomic under one guard hold                   |
-| `CatalogPatchFieldsMany`   | Multi-key batch with a per-key result iterator                           |
+| `CatalogPatchFieldsMany`   | Multi-key batch with a per-key result iterator (and an optional per-request `Cond`) |
 | `CatalogPatch`             | Fluent **builder** for advanced ops (Inc, Append, Merge, Conditions, Meta) |
+| `CatalogPatchExpired`      | Atomic in-place patch of expired treasures — disjoint subsets across concurrent callers, queue-claim primitive |
 
 > ⚠️ The patch primitive **requires MessagePack-encoded Catalog Treasures**. Register the swamp with `EncodingFormat: EncodingMsgPack`. GOB-encoded values return `ENCODING_NOT_SUPPORTED`. Profile Swamps are not patchable — there each struct field is its own Treasure key, so `ProfileSave` already gives you the same effect.
 
@@ -1902,6 +1905,25 @@ err := h.CatalogPatchFieldsMany(ctx, swampName, []*hydraidego.PatchManyRequest{
     return nil
 })
 ```
+
+Each `PatchManyRequest` can also carry an optional `Cond *PatchCond` for **batched optimistic CAS** in a single round-trip — the per-request equivalent of the builder's `IfField*` chain:
+
+```go
+requests := []*hydraidego.PatchManyRequest{
+    {
+        Key:    "d1.hu",
+        Fields: map[string]any{"ClaimedBy": "worker-A"},
+        Cond:   &hydraidego.PatchCond{Op: hydraidego.PatchCondEqual, Path: "ClaimedBy", Value: ""},
+    },
+    {
+        Key:    "d2.hu",
+        Fields: map[string]any{"Counter": int32(1)},
+        Cond:   &hydraidego.PatchCond{Op: hydraidego.PatchCondLessThan, Path: "Counter", Value: int32(3)},
+    },
+}
+```
+
+CAS failures surface as `PatchStatusConditionNotMet` per request; the rest of the batch still applies.
 
 ##### 4. Builder API — conditional, multi-op
 
@@ -1958,6 +1980,46 @@ status, err = h.
     WithoutExpiredAt().
     Exec()
 ```
+
+##### 7. Atomic claim of expired treasures (`CatalogPatchExpired`)
+
+The in-place sibling of `CatalogShiftExpired`. Selects up to `howMany` expired treasures under the swamp's beacon lock, applies a shared op-set + meta to each one under its per-key guard, and re-indexes them with their new `ExpireAt`. **Concurrent callers receive disjoint subsets** — same atomic-claim guarantee as `CatalogShiftExpired`, but the data stays in the swamp.
+
+The classic use is a crash-safe queue claim with a single round-trip (no separate fetch + lock):
+
+```go
+builder := hydraidego.NewPatchExpiredOps().
+    Set("ClaimedBy", workerID).
+    WithExpiredAt(time.Now().UTC().Add(24 * time.Hour)).  // lease deadline
+    IfFieldEquals("ClaimedBy", "")                        // optional CAS gate
+
+err := h.CatalogPatchExpired(ctx, swampName, 50, MyCatalog{},
+    func(model any, status hydraidego.PatchStatus) error {
+        m := model.(*MyCatalog)
+        // process the claimed entry; the new ExpireAt is the lease deadline
+        return nil
+    }, builder)
+```
+
+Recovery works without extra code: if the worker crashes, the lease (`ExpireAt = claim_time + 24h`) elapses and the next caller re-claims the entry. CONDITION_NOT_MET treasures stay in the expired index with their unchanged `ExpireAt` so the next call can retry them — useful for "claim only the entries where `ClaimedBy == ''`" without server-side state.
+
+Empty ops + non-nil meta is the **meta-only patch** form (slide `ExpireAt` forward without changing the body — typical for lease extensions and recheck deferrals):
+
+```go
+err := h.CatalogPatchExpired(ctx, swampName, 100, MyCatalog{},
+    func(model any, status hydraidego.PatchStatus) error { return nil },
+    hydraidego.NewPatchExpiredOps().WithExpiredAt(time.Now().UTC().Add(7 * 24 * time.Hour)))
+```
+
+`PatchExpiredOps` mirrors `PatchBuilder` minus the per-key `Exec`:
+
+| Surface     | Helpers                                                                       |
+| ----------- | ----------------------------------------------------------------------------- |
+| Ops         | `Set`, `Inc`, `Append`, `Prepend`, `Delete`, `RemoveAt`, `RemoveVal`, `Merge` |
+| Conditions  | every `IfField*` from `PatchBuilder`, single condition per builder            |
+| Meta        | `WithUpdatedAt`, `WithUpdatedBy`, `WithExpiredAt(t)`, `WithoutExpiredAt()`    |
+
+> Read the philosophy and atomicity contract here: [`docs/features/patch-expired-treasures.md`](../../features/patch-expired-treasures.md). Requires server v3.14.0 or newer.
 
 #### 📚 Op Reference
 
