@@ -2600,6 +2600,19 @@ func (s *swamp) fileWriterHandler(isCloseWrite bool) {
 	// külön szinkronizálni a két írási folyamatot
 	s.chroniclerInterface.Write(treasuresToWrite)
 
+	// Durability barrier. Write() only moves entries into the V2 writer's
+	// in-memory block buffer; for swamps whose dirty footprint is below the
+	// 16 KiB block threshold the bytes would otherwise sit in RAM forever
+	// (until the buffer fills or the swamp idle-evicts), and an ungraceful
+	// host stop would drop every successful Save in that window. Sync flushes
+	// the writer's pending block to the file AND fsyncs the descriptor, so
+	// each WriteInterval tick is the actual durability barrier the
+	// RegisterSwampRequest contract promises.
+	if err := s.chroniclerInterface.Sync(); err != nil {
+		slog.Error("chronicler sync failed after periodic write",
+			"swamp", s.name.Get(),
+			"error", err)
+	}
 }
 
 // Info returns detailed information about the swamp

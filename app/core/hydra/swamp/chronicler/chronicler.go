@@ -39,6 +39,15 @@ type Chronicler interface {
 	// For V1: no-op (writes are atomic)
 	// For V2: flushes buffer, syncs to disk, closes file handle, optionally runs compaction
 	Close() error
+	// Sync flushes any in-memory write buffer to the .hyd file and fsyncs the
+	// file descriptor so the bytes are durable across an ungraceful host stop
+	// (SIGKILL, power loss, kernel panic). Call this at the end of every
+	// periodic write tick — without it, small dirty payloads can sit in the
+	// V2 writer's block buffer indefinitely and vanish on a crash, even though
+	// the corresponding Save calls returned success to the client.
+	// For V1: no-op (each Write is an atomic open/write/close cycle).
+	// For V2: forces the buffered block to disk and calls file.Sync().
+	Sync() error
 	// ForceCompaction runs compaction regardless of fragmentation threshold.
 	// For V1: no-op (V1 doesn't use append-only format)
 	// For V2: rewrites the .hyd file, removing all dead entries
@@ -497,5 +506,12 @@ func calculateOverloadSize(maxFileSizeBytes int64) int {
 func (c *chronicler) Close() error {
 	// V1 chronicler writes are atomic - each Write() opens, writes, and closes the file.
 	// There are no persistent file handles to close.
+	return nil
+}
+
+// Sync is a no-op for V1: each Write opens, writes, and closes its own file,
+// so there is no long-lived buffer to flush. Durability for V1 is governed by
+// the OS page cache the same as before — V1 has never offered per-tick fsync.
+func (c *chronicler) Sync() error {
 	return nil
 }

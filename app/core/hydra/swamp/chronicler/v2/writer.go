@@ -311,6 +311,15 @@ func (fw *FileWriter) Close() error {
 		return err
 	}
 
+	// fsync before releasing the descriptor. Without this, even a clean
+	// idle-eviction Close leaves the just-flushed block in the OS page cache;
+	// a power loss within the page-cache window would still lose data the
+	// caller already saw a successful Save response for.
+	if err := fw.file.Sync(); err != nil {
+		fw.file.Close()
+		return err
+	}
+
 	fw.closed = true
 	return fw.file.Close()
 }
