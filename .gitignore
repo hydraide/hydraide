@@ -79,3 +79,13 @@ content/
 # Build artifacts
 /server
 .shutdown-smoke/
+/bounded-claim
+docs/tasks/round2/smoke/shiftmatching
+
+# Local-only WIP data-loss stress tests (kept on disk, never committed)
+app/core/hydra/hydra_dataloss_test.go
+app/core/hydra/swamp/swamp_dataloss_test.go
+app/core/hydra/swamp/chronicler/chronicler_v2_dataloss_test.go
+
+# Local-only bug investigation notes
+docs/tasks/2026-05-11-searchmeta-tag-validator-bug.md
