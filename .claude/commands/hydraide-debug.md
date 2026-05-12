@@ -63,6 +63,12 @@ Wait for answers before proceeding.
      - Subscriptions are FIFO event streams, not durable queues. No retries, no acks, no dead-letter.
      - For work distribution use NATS JetStream / Kafka alongside HydrAIDE.
 
+7. **Application-side claim counter drift** (cap looks full while no records match):
+   - Symptom: throughput drops gradually over hours, "cap full" log noise, but a Count(filter) over the cap-filter returns far below `MaxMatching`.
+   - Cause: the application maintains its own `Increment*` counter alongside a Cap-bearing claim path. Every code path that forgets to decrement (panic, shutdown mid-task, network timeout, alternative finalize) leaks +1. The drift is monotone — eventually the app-counter looks "full" while actual matching state is empty.
+   - Diagnostic: grep for `Increment` / `Decrement` alongside `WithCap` or `CatalogPatchExpired`. If both exist, the counter is redundant and lying.
+   - Fix: delete the app-side counter. Trust the server-side Cap. The reconciler that "smooths the drift" is treating a symptom — the counter never had to exist.
+
 ### Step 3: Check the logs
 
 If steps 1-2 didn't pinpoint the bug:

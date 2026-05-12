@@ -35,6 +35,8 @@ Conceptual questions sometimes blur into implementation. If the user asks "how d
 | Structural msgpack patch | Atomic field-level mutations on msgpack Treasures, conditions, ops, when not to use | [`docs/features/structural-msgpack-patch.md`](../../../docs/features/structural-msgpack-patch.md) |
 | Map-body Catalogs | Single-value vs map-body shape, wire format, Save/Read/Patch symmetry, version compatibility | [`docs/features/map-body-catalog.md`](../../../docs/features/map-body-catalog.md) |
 | Pure gRPC control | Why the proto is the contract, why there is no REST gateway or SDK-only API, polyglot story | [`docs/features/pure-grpc-control.md`](../../../docs/features/pure-grpc-control.md) |
+| Parametric atomic shift | How `CatalogShift` generalises `ShiftExpired` across any index + filter, atomicity model, when to use vs. `Patch` | [`docs/features/catalog-shift.md`](../../../docs/features/catalog-shift.md) |
+| Cap quota primitive | Why Cap exists, how it eliminates the count+claim race, the (pre, post) four-cell rule, when not to use Cap | [`docs/features/cap-quota.md`](../../../docs/features/cap-quota.md) |
 
 ## How to answer
 

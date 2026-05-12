@@ -273,6 +273,7 @@ Prefer `CatalogPatchFieldsMany` over read-modify-write. Patch is atomic per key,
 - **No idempotency check on re-run**: if the script crashes halfway through and is rerun, do not assume "starting fresh". Either skip already-migrated records (check existence in target first), or document explicitly that the script is one-shot only.
 - **Concurrent writers on the same key during migration**: if the long-lived application is still writing to the source while you migrate, use a `Lock`/`Unlock` per key, or quiesce the producer first.
 - **Filter syntax mistakes silently returning empty**: a `CatalogReadManyStream` with a typo'd filter field name returns zero rows without error. Always run dry-run first and verify the row count matches expectations.
+- **Bulk reclaim / status flip without `Cap`**: a reconciliation script that re-flips records into a quota-tracked state (e.g. "re-arm leases on all stuck rows") can drive the running system over its concurrency cap if it doesn't honour the server-side limit. Use `CatalogPatchFieldsManyWithCap` with the same `Cap.Filter` the live claim path uses; the data-ops script then respects the same budget as production traffic. The `Cap.MaxMatching` should be the production cap minus a safety margin so the live workers still have headroom.
 
 ## Output format
 

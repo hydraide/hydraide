@@ -1422,6 +1422,140 @@ In practice this means batch flows like "patch and then iterate the same swamp's
 
 ---
 
+## 14a. Parametric Shift (atomic claim by index + filter)
+
+`CatalogShift` is the parametric generalisation of `CatalogShiftExpired`: it atomically selects, removes, and returns up to `HowMany` Treasures from one swamp, ordered by any `IndexType` (key, value, createdAt, updatedAt, expiredAt), optionally narrowed by `Filters`, optionally bounded by `Cap`. Selection and deletion happen under one per-swamp guard, so concurrent callers receive disjoint subsets — no read-then-shift race.
+
+This is the right primitive for FIFO/LIFO scan-claim queues, priority-queue pop, TTL sweeps, and top-K consumers. `CatalogShiftExpired` stays in place for back-compat.
+
+```go
+// FIFO scan-claim: oldest 50 "pending" jobs with priority >= 5
+res, err := h.CatalogShift(ctx, queueSwamp, &hydraidego.ShiftRequest{
+    IndexType:  hydraidego.IndexCreationTime,
+    IndexOrder: hydraidego.IndexOrderAsc,
+    HowMany:    50,
+    MaxResults: 50, // hard cap defended at the engine
+    Filters: hydraidego.FilterAND(
+        hydraidego.FilterBytesFieldString(hydraidego.Equal, "Status", "pending"),
+        hydraidego.FilterBytesFieldUint32(hydraidego.GreaterThanOrEqual, "Priority", 5),
+    ),
+}, JobModel{}, func(model any) error {
+    job := model.(*JobModel)
+    return process(job)
+})
+// res.CapReached is false here (no Cap)
+```
+
+Other ready-to-use shapes:
+
+| Pattern | `IndexType` | `IndexOrder` |
+|---|---|---|
+| FIFO by creation | `IndexCreationTime` | `IndexOrderAsc` |
+| LIFO by creation | `IndexCreationTime` | `IndexOrderDesc` |
+| Top-K by score | `IndexValueInt32` etc. | `IndexOrderDesc` |
+| TTL sweep (legacy ShiftExpired) | `IndexExpirationTime` | `IndexOrderAsc` + `FilterExpiredAt(LessThan, ServerNow)` |
+| Alphabetical pop | `IndexKey` | `IndexOrderAsc` |
+
+Multi-swamp variant: `CatalogShiftManyFromMany(ctx, []*ShiftManyFromManyRequest, model, iter) ([]*ShiftManyFromManyResult, error)` — per-swamp results carry `CapReached` and `SwampErr` independently.
+
+---
+
+## 14b. Bounded atomic claim with `Cap`
+
+`Cap` is a server-enforced quota primitive: it bounds the **post-operation** count of records matching a filter in the affected swamp to ≤ `MaxMatching`. Used to replace fragile application-side counters and distributed locks in claim/quota patterns.
+
+The race-free guarantee: the count of matching records and the per-key (or selection-based) mutation run under the same per-swamp guard. Two concurrent callers cannot both observe `currentMatching=N` and each claim `MaxMatching - N` — the second waits, re-counts, and claims against the up-to-date state.
+
+### `Cap` is available on every state-mutating op
+
+| Surface | How to attach Cap | CapReached signal |
+|---|---|---|
+| `CatalogShift`, `CatalogShiftManyFromMany` | `ShiftRequest.Cap = &Cap{...}` | `*ShiftResult.CapReached` / per-swamp `*ShiftManyFromManyResult.CapReached` |
+| `CatalogPatchExpired` | `builder.WithCap(&Cap{...})` + `CatalogPatchExpiredWithResult` | `*PatchExpiredResult.CapReached` |
+| `CatalogPatchExpiredManyFromMany` | per-request `Builder.WithCap` + `CatalogPatchExpiredManyFromManyWithResults` | per-swamp `*PatchExpiredManyFromManyResult.CapReached` |
+| `CatalogPatch` builder | `builder.WithCap(&Cap{...})` + `ExecWithResult` | `*PatchResult.CapReached` |
+| `CatalogPatchFieldsMany` (one swamp) | `CatalogPatchFieldsManyWithCap(ctx, swamp, requests, cap, iter)` | `*PatchFieldsManyResult.CapReached` |
+| `CatalogPatchManyToMany` (multi-swamp) | per-entry `CatalogPatchManyToManyRequest.Cap` + `CatalogPatchManyToManyWithResults` | per-swamp `*PatchManyToManyResult.CapReached` |
+
+The legacy entry points (`CatalogPatchExpired`, `Exec()`, `CatalogPatchFieldsMany`, `CatalogPatchManyToMany`) stay in place and discard the CapReached signal — use the `…WithResult` / `…WithCap` variants when you need it.
+
+### Selection-based ops: budget = `MaxMatching - currentMatching`
+
+`Shift` and `PatchExpired` move records into the claim-filter set by definition (the selected records weren't "claimed" before, they are after). Cap bounds the result to `MaxMatching - currentMatching`. When the budget would have allowed more results, `CapReached = true`.
+
+```go
+// Rate-limited crawler claim per ASN.
+// Cap.Filter matches "claimed and still leased" records.
+// MaxParallelForASN is the hard cap per swamp.
+res, err := h.CatalogPatchExpiredWithResult(ctx, asnSwamp, 100, CrawlReady{}, iter,
+    hydraidego.NewPatchExpiredOps().
+        Set("ClaimedBy", workerID).
+        WithExpiredAt(time.Now().UTC().Add(24*time.Hour)). // lease
+        WithCap(&hydraidego.Cap{
+            Filter: hydraidego.FilterAND(
+                hydraidego.FilterBytesFieldString(hydraidego.NotEqual, "ClaimedBy", ""),
+                hydraidego.FilterBytesFieldTime(hydraidego.GreaterThan, "ExpireAt", time.Now()),
+            ),
+            MaxMatching: maxParallelForASN,
+        }),
+)
+if res.CapReached {
+    // cap is full, back off and retry later — do NOT raise the cap.
+}
+```
+
+### Explicit-key ops: 4-cell (pre, post) rule
+
+For `CatalogPatch` builder / `CatalogPatchFieldsMany` / `CatalogPatchManyToMany`, Cap evaluates the filter on both the pre and the post msgpack body for each key:
+
+| pre matches | post matches | Action |
+|---|---|---|
+| no | no | proceed (untouched) |
+| yes | yes | proceed (idempotent re-mutation, no count growth) |
+| yes | no | proceed (count shrinks) |
+| no | yes | proceed only if budget remains; otherwise `PatchStatusCapExceeded` |
+
+The (no → yes) transition is the only one that consumes budget. Concurrent Cap-bearing batches on the same swamp serialise on a swamp-level `capMu`, so the running budget is exact across batches.
+
+```go
+// Single-key claim with quota
+res, err := h.CatalogPatch(ctx, asnSwamp, "task-42").
+    Set("ClaimedBy", workerID).
+    WithExpiredAt(time.Now().UTC().Add(time.Hour)).
+    WithCap(&hydraidego.Cap{
+        Filter: hydraidego.FilterAND(
+            hydraidego.FilterBytesFieldString(hydraidego.NotEqual, "ClaimedBy", ""),
+        ),
+        MaxMatching: maxParallelForASN,
+    }).
+    ExecWithResult()
+if err != nil { return err }
+if res.Status == hydraidego.PatchStatusCapExceeded {
+    // budget full → no mutation happened, retry later
+} else if res.Status == hydraidego.PatchStatusPatched || res.Status == hydraidego.PatchStatusCreated {
+    // claimed successfully
+}
+```
+
+### Cap.Filter limitations on Patch surfaces
+
+Cap on `CatalogPatch*` (explicit-key) accepts **only `BytesField` filters** — i.e. filters that operate on a path inside the msgpack body (`Status`, `ClaimedBy`, nested struct fields, etc.). Metadata filters (`FilterCreatedAt`, `FilterExpiredAt`, value-typed filters) are rejected with `ErrCodeInvalidModel` because the engine cannot simulate post-mutation metadata for arbitrary patch op-sets.
+
+`CatalogShift` and `CatalogPatchExpired` have no such restriction — they evaluate the cap-filter on the live treasure under the beacon mu, so any filter is allowed.
+
+### Validation rules (rejected with `ErrCodeInvalidModel`)
+
+- `Cap.Filter == nil` when `Cap != nil` — Cap is opt-in, but if you opt in, the filter is required.
+- `Cap.MaxMatching <= 0` — express "never claim" by not calling the API.
+- On Patch surfaces: non-BytesField filters (see above).
+- Wire-level: new client + old server with a Cap-bearing request → explicit gRPC error, never silent ignore.
+
+### Common pitfall: don't keep an app-side claim counter
+
+When migrating from a counter-based claim pattern, **remove the counter**. The Cap-bearing Patch is the only source of truth. An app-side counter alongside Cap will drift (every code path that forgets to decrement leaks budget), and eventually the cap looks full while no records actually match. The reconciler hack is treating a symptom — delete the counter and trust the Cap.
+
+---
+
 ## 15. Critical rules and pitfalls
 
 ### `createdAt` must always be set

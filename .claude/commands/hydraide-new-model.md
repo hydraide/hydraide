@@ -74,6 +74,7 @@ Print:
 - Files created (clickable markdown links).
 - One TODO line: "Wire `RegisterPattern()` into your service startup, before the first read or write."
 - Any decision the user should revisit later (e.g. CloseAfterIdle value).
+- If the model represents a claim / queue / rate-limited resource: a one-line note that quota enforcement should use server-side `Cap` on the claim call (e.g. `builder.WithCap(&hydraidego.Cap{...})`), not an app-side counter. Link the §14b "Bounded atomic claim with Cap" section of the hydraidego skill.
 
 ## Constraints
 
