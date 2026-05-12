@@ -31,13 +31,23 @@ import (
 //     - Successful patches whose ExpiredAt was unchanged still need
 //     to be visible in the expiration index (e.g. ops-only patch
 //     where Meta did not touch ExpiredAt).
-func (s *swamp) PatchExpired(howMany int32, ops []msgpackpatch.Op, condition *msgpackpatch.Condition, meta *PatchFieldsMeta) ([]PatchExpiredEntry, error) {
+func (s *swamp) PatchExpired(howMany int32, ops []msgpackpatch.Op, condition *msgpackpatch.Condition, meta *PatchFieldsMeta, capPredicate func(treasure.Treasure) bool, capMax int32) ([]PatchExpiredEntry, bool, error) {
 
 	if howMany == 0 || (len(ops) == 0 && meta == nil) {
 		// Either nothing to select or nothing to apply. Treat as no-op.
 		// (The gateway is expected to validate inputs more strictly,
 		// but this guard keeps the engine layer safe to call directly.)
-		return nil, nil
+		return nil, false, nil
+	}
+
+	// Cap-bearing flow: serialise against other Cap-bearing flows on this
+	// swamp. Without this, two concurrent callers can each observe
+	// currentMatching=N under the beacon mu and both claim up to
+	// (MaxMatching - N), breaching the cap once their per-treasure
+	// mutations (which happen AFTER releasing beacon mu) complete.
+	if capPredicate != nil {
+		s.capMu.Lock()
+		defer s.capMu.Unlock()
 	}
 
 	atomic.StoreInt64(&s.lastInteractionTime, time.Now().UnixNano())
@@ -46,9 +56,9 @@ func (s *swamp) PatchExpired(howMany int32, ops []msgpackpatch.Op, condition *ms
 	// expiration-time indexes are built before we try to select.
 	s.buildBeacon(s.expirationTimeBeaconASC, s.expirationTimeBeaconDESC, BeaconTypeExpirationTime)
 
-	selected := s.expirationTimeBeaconASC.SelectExpiredForPatch(int(howMany))
+	selected, capReached := s.expirationTimeBeaconASC.SelectExpiredForPatchWithCap(int(howMany), capPredicate, int(capMax))
 	if len(selected) == 0 {
-		return nil, nil
+		return nil, capReached, nil
 	}
 
 	// Mirror the same removal on the DESC beacon to keep both indexes
@@ -89,7 +99,7 @@ func (s *swamp) PatchExpired(howMany int32, ops []msgpackpatch.Op, condition *ms
 		_ = s.expirationTimeBeaconDESC.SortByExpirationTimeDesc()
 	}
 
-	return results, nil
+	return results, capReached, nil
 }
 
 // applyPatchExpiredOne runs one per-treasure patch under the treasure's

@@ -79,6 +79,8 @@ type Hydraidego interface {
 	CatalogSaveManyToMany(ctx context.Context, request []*CatalogManyToManyRequest, iterator CatalogSaveManyToManyIteratorFunc) error
 	CatalogShiftExpired(ctx context.Context, swampName name.Name, howMany int32, model any, iterator CatalogShiftExpiredIteratorFunc) error
 	CatalogShiftExpiredManyFromMany(ctx context.Context, requests []*ShiftExpiredManyFromManyRequest, model any, iterator CatalogShiftExpiredManyFromManyIteratorFunc) error
+	CatalogShift(ctx context.Context, swampName name.Name, req *ShiftRequest, model any, iterator CatalogShiftIteratorFunc) (*ShiftResult, error)
+	CatalogShiftManyFromMany(ctx context.Context, requests []*ShiftManyFromManyRequest, model any, iterator CatalogShiftManyFromManyIteratorFunc) ([]*ShiftManyFromManyResult, error)
 	CatalogShiftBatch(ctx context.Context, swampName name.Name, keys []string, model any, iterator CatalogShiftBatchIteratorFunc) error
 	ProfileSave(ctx context.Context, swampName name.Name, model any) (err error)
 	ProfileSaveBatch(ctx context.Context, swampNames []name.Name, models []any, iterator ProfileSaveBatchIteratorFunc) error
@@ -118,6 +120,10 @@ type Hydraidego interface {
 	CatalogPatch(ctx context.Context, swampName name.Name, key string) *PatchBuilder
 	CatalogPatchExpired(ctx context.Context, swampName name.Name, howMany int32, model any, iterator CatalogPatchExpiredIteratorFunc, builder *PatchExpiredOps) error
 	CatalogPatchExpiredManyFromMany(ctx context.Context, requests []*PatchExpiredManyFromManyRequest, model any, iterator CatalogPatchExpiredManyFromManyIteratorFunc) error
+	CatalogPatchExpiredWithResult(ctx context.Context, swampName name.Name, howMany int32, model any, iterator CatalogPatchExpiredIteratorFunc, builder *PatchExpiredOps) (*PatchExpiredResult, error)
+	CatalogPatchExpiredManyFromManyWithResults(ctx context.Context, requests []*PatchExpiredManyFromManyRequest, model any, iterator CatalogPatchExpiredManyFromManyIteratorFunc) ([]*PatchExpiredManyFromManyResult, error)
+	CatalogPatchFieldsManyWithCap(ctx context.Context, swampName name.Name, requests []*PatchManyRequest, cap *Cap, iterator PatchManyIteratorFunc) (*PatchFieldsManyResult, error)
+	CatalogPatchManyToManyWithResults(ctx context.Context, requests []*CatalogPatchManyToManyRequest, iterator CatalogPatchManyToManyIteratorFunc) ([]*PatchManyToManyResult, error)
 }
 
 // Index defines the configuration for index-based queries in HydrAIDE.

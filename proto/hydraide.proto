@@ -188,6 +188,43 @@ service HydraideService {
   // swamps in a single round-trip.
   rpc ShiftExpiredTreasuresMany(ShiftExpiredTreasuresManyRequest) returns (ShiftExpiredTreasuresManyResponse) {}
 
+  // ShiftMatchingTreasures atomically selects, removes, and returns up to
+  // HowMany treasures from a single swamp, ordered by the requested
+  // IndexType + OrderType, optionally narrowed by a server-side FilterGroup.
+  // Selection and deletion happen under a single per-swamp guard, so two
+  // concurrent callers never observe overlapping treasure sets.
+  //
+  // This is the parametric generalisation of ShiftExpiredTreasures:
+  // ShiftExpiredTreasures is equivalent to ShiftMatchingTreasures with
+  // IndexType=EXPIRATION_TIME, OrderType=ASC, and an ExpiredAt<ServerNow
+  // filter. ShiftExpiredTreasures stays in place and delegates here.
+  //
+  // Use for:
+  //   - FIFO / LIFO scan-claim queues (IndexCreationTime + optional filter)
+  //   - Priority-queue pop (IndexValueIntX / IndexValueFloatX, DESC)
+  //   - TTL sweeps (IndexExpirationTime + ExpiredAt<now filter)
+  //   - Top-K consumer (IndexValueX DESC, HowMany=K)
+  //
+  // Cap (optional) enforces a post-operation upper bound on the number of
+  // records in the same swamp matching Cap.Filter. The server pre-counts
+  // matching records under the same guard, claims at most
+  // (Cap.MaxMatching - currentMatching) treasures regardless of HowMany,
+  // and sets CapReached=true on the response when the budget bound the
+  // result.
+  //
+  // 🔔 Realtime: deletions trigger SubscribeToEvents notifications.
+  rpc ShiftMatchingTreasures(ShiftMatchingTreasuresRequest) returns (ShiftMatchingTreasuresResponse) {}
+
+  // ShiftMatchingTreasuresMany batches several ShiftMatchingTreasures
+  // operations against multiple swamps on the same server in a single
+  // RPC. Each Requests entry is processed independently; the response
+  // carries one entry per request, in input order, with an optional
+  // swamp-level Error field for per-entry failures.
+  //
+  // The SDK groups multi-swamp batches by destination server (consistent
+  // hashing on Swamp name); this RPC is per-server.
+  rpc ShiftMatchingTreasuresMany(ShiftMatchingTreasuresManyRequest) returns (ShiftMatchingTreasuresManyResponse) {}
+
   // Destroy permanently deletes the entire swamp and all its treasures.
   //
   // This removes all data associated with the given swamp, including metadata, indexes, and chunks.
@@ -1093,6 +1130,135 @@ message ShiftExpiredTreasuresResponse {
   //
   // 🔔 Realtime: These deletions will also trigger `SubscribeToEvents` notifications.
   repeated Treasure Treasures = 1;
+}
+
+
+// Cap is a server-enforced quota check shared across every state-mutating
+// surface (Shift, PatchExpired, and — in Phase B — every explicit-key
+// Patch). Evaluated under the same per-swamp guard as the mutation, it
+// guarantees the post-operation count of records matching Cap.Filter in
+// the affected swamp stays ≤ Cap.MaxMatching, without a race window.
+//
+// Selection-based ops (Shift, PatchExpired) interpret Cap as
+// "budget = MaxMatching - currentMatching; claim at most budget". Explicit-
+// key ops (Phase B) interpret Cap per-record: a mutation that would push
+// the count from N to N+1 across Cap.Filter is rejected when N == MaxMatching;
+// idempotent re-mutations (pre matches, post matches) and shrinking
+// mutations (pre matches, post does not) always proceed.
+//
+// When the cap bounds the result, the response carries CapReached=true so
+// the caller can distinguish "quota exhausted, back off" from "nothing to
+// do".
+message Cap {
+  // Filter selects records that count toward the quota. Typically tracks
+  // "claimed and lease still valid" or similar in-flight status. Required
+  // when Cap is set; nil Filter on a non-nil Cap is rejected.
+  optional FilterGroup Filter = 1;
+
+  // MaxMatching is the post-operation upper bound on the number of
+  // records matching Filter in the affected swamp. Must be > 0.
+  // MaxMatching=0 is rejected (express "never claim" by not calling).
+  int32 MaxMatching = 2;
+}
+
+
+// ShiftMatchingTreasuresRequest is the parametric form of
+// ShiftExpiredTreasuresRequest. It atomically selects, removes, and
+// returns up to HowMany treasures from a single swamp, ordered by
+// IndexType + OrderType, optionally narrowed by Filters, optionally
+// bounded by Cap.
+//
+// ShiftExpiredTreasures is equivalent to this RPC with
+// IndexType=EXPIRATION_TIME, OrderType=ASC, FromTime=ToTime=unset,
+// Filters set to ExpiredAt<ServerNow.
+message ShiftMatchingTreasuresRequest {
+  // IslandID is the deterministic storage zone (or "island") where this Swamp lives.
+  uint64 IslandID = 1;
+
+  // SwampName is the name of the swamp to shift treasures from.
+  string SwampName = 2;
+
+  // IndexType selects the ordering / range axis: key, value (typed),
+  // createdAt, updatedAt, or expiredAt.
+  IndexType.Type IndexType = 3;
+
+  // OrderType selects ascending or descending walk over the chosen index.
+  OrderType.Type OrderType = 4;
+
+  // HowMany caps the result count. 0 means "all matching", but still
+  // bounded by MaxResults. Use a bounded value in production to keep RPC
+  // latency predictable.
+  int32 HowMany = 5;
+
+  // MaxResults is a hard cap defended at the engine, evaluated against
+  // selection before any filter post-processing. 0 means "fall back to
+  // HowMany". Use this to protect a swamp from accidental drain by a
+  // runaway caller.
+  int32 MaxResults = 6;
+
+  // Filters narrows selection inside the chosen IndexType. AND/OR
+  // FilterGroup tree, evaluated server-side under the same per-swamp
+  // guard as selection. nil = no filter.
+  optional FilterGroup Filters = 7;
+
+  // FromTime / ToTime are inclusive lower / exclusive upper bounds for
+  // time-based indices (createdAt, updatedAt, expiredAt). Unset on
+  // non-time indices.
+  optional google.protobuf.Timestamp FromTime = 8;
+  optional google.protobuf.Timestamp ToTime = 9;
+
+  // Cap is an optional server-enforced quota check; see the Cap message
+  // documentation for semantics. Pre-counts records matching Cap.Filter
+  // under the same per-swamp guard; selection is bounded by
+  // (Cap.MaxMatching - currentMatching) regardless of HowMany.
+  optional Cap Cap = 10;
+}
+
+// ShiftMatchingTreasuresResponse carries the atomically shifted (cloned
+// + deleted) treasures plus the CapReached signal.
+message ShiftMatchingTreasuresResponse {
+  // Treasures is the list of treasures that were retrieved and deleted
+  // from the swamp in this call. 🔔 Realtime: each deletion triggers a
+  // SubscribeToEvents notification.
+  repeated Treasure Treasures = 1;
+
+  // CapReached is true when the request carried a Cap and the
+  // (MaxMatching - currentMatching) budget bounded the result count
+  // (i.e. the call would have returned more treasures had the cap not
+  // been in force). Always false when Cap is not set.
+  bool CapReached = 2;
+}
+
+// ShiftMatchingTreasuresManyRequest batches several ShiftMatchingTreasures
+// operations against multiple swamps on the same server in a single RPC.
+// Each Requests entry is processed independently; the response carries
+// one entry per request, in input order.
+message ShiftMatchingTreasuresManyRequest {
+  repeated ShiftMatchingTreasuresRequest Requests = 1;
+}
+
+// ShiftMatchingTreasuresManyResponse pairs one entry with each Requests
+// entry, in the same order. A swamp-level failure populates the
+// per-entry Error; per-treasure deliveries stay inside Treasures.
+message ShiftMatchingTreasuresManyResponse {
+  repeated ShiftMatchingTreasuresManyEntry Responses = 1;
+}
+
+// ShiftMatchingTreasuresManyEntry is one per-swamp result inside a
+// ShiftMatchingTreasuresManyResponse.
+message ShiftMatchingTreasuresManyEntry {
+  // Treasures is populated when the per-swamp ShiftMatchingTreasures
+  // call ran successfully; empty on swamp-level failure.
+  repeated Treasure Treasures = 1;
+
+  // Error carries a swamp-level failure (e.g. "swamp summon failed",
+  // "invalid filter"). Empty when the call succeeded.
+  optional string Error = 2;
+
+  // CapReached mirrors ShiftMatchingTreasuresResponse.CapReached for
+  // this swamp's request. Always false when the per-swamp request did
+  // not carry a Cap.
+  bool CapReached = 3;
 }
 
 
@@ -2849,6 +3015,28 @@ message PatchTreasuresRequest {
   // request. Created* fields apply only to treasures that are created in
   // this call.
   optional PatchMeta Meta = 6;
+
+  // Cap is an optional server-enforced quota check. When set, the server
+  // counts records matching Cap.Filter under the same per-swamp guard
+  // as the batch, simulates the post-op state for each TreasurePatch,
+  // and skips per-key mutations that would push the matching count
+  // above Cap.MaxMatching.
+  //
+  // Per-record semantics (pre, post) → action:
+  //   - (no  matches, no  matches): proceed.
+  //   - (yes matches, yes matches): idempotent, proceed.
+  //   - (yes matches, no  matches): count shrinks, proceed.
+  //   - (no  matches, yes matches): count would grow by 1; proceed only
+  //     if currentMatching < MaxMatching. Else the per-key result is
+  //     PatchResult.CAP_EXCEEDED and no mutation happens.
+  //
+  // Cap counting is exact across the batch — every accepted (no, yes)
+  // mutation increments a local counter that subsequent per-key checks
+  // observe. The response carries CapReached=true when at least one
+  // per-key check rejected with CAP_EXCEEDED.
+  //
+  // ⚠️ Cap.Filter is required when Cap is set; Cap.MaxMatching must be > 0.
+  optional Cap Cap = 7;
 }
 
 // TreasurePatch is the unit of per-key atomicity. The Ops list is applied
@@ -2992,6 +3180,12 @@ message PatchMeta {
 // request's Patches field.
 message PatchTreasuresResponse {
   repeated PatchResult Results = 1;
+
+  // CapReached is true when the request carried a Cap and at least one
+  // per-key check rejected with CAP_EXCEEDED because the post-op state
+  // would have pushed the matching count above Cap.MaxMatching.
+  // Always false when Cap is not set.
+  bool CapReached = 2;
 }
 
 // PatchResult is the per-key outcome.
@@ -3032,6 +3226,12 @@ message PatchResult {
     // INTERNAL_ERROR is a catch-all for unexpected server failures. The
     // Error field carries a description.
     INTERNAL_ERROR = 8;
+
+    // CAP_EXCEEDED indicates the patch was rejected because applying it
+    // would have pushed the count of records matching Cap.Filter above
+    // Cap.MaxMatching in the affected swamp. No mutation happened; the
+    // request can be retried after the matching count drops.
+    CAP_EXCEEDED = 9;
   }
 
   // Key identifies which patch this result belongs to.
@@ -3085,6 +3285,22 @@ message PatchExpiredTreasuresRequest {
   // re-inserted into the expired index with their unchanged ExpiredAt
   // — the next call can retry them.
   optional PatchCondition Condition = 6;
+
+  // Cap is an optional server-enforced quota check evaluated under the
+  // same per-swamp guard as selection. When set, the server pre-counts
+  // treasures matching Cap.Filter and patches at most
+  // (Cap.MaxMatching - currentMatching) selected treasures, regardless
+  // of HowMany. The cap is pre-enforced (never post-rolled-back). When
+  // the budget bounds the result, the response carries CapReached=true.
+  //
+  // The natural use case is the claim-in-place pattern: Cap.Filter
+  // matches "currently claimed and still leased" records, MaxMatching
+  // is the concurrency cap (per ASN, per tenant, per resource).
+  //
+  // ⚠️ Cap.Filter is required when Cap is set; Cap.MaxMatching must be > 0.
+  // A new-client Cap-bearing request against an old server is rejected
+  // explicitly (silent ignore would be a correctness footgun).
+  optional Cap Cap = 7;
 }
 
 // PatchExpiredTreasuresResponse holds per-treasure outcomes for the
@@ -3092,6 +3308,13 @@ message PatchExpiredTreasuresRequest {
 // server-side selection (oldest expired first).
 message PatchExpiredTreasuresResponse {
   repeated PatchedExpiredTreasure Patched = 1;
+
+  // CapReached is true when the request carried a Cap and the
+  // per-swamp budget (Cap.MaxMatching - currentMatching) bounded the
+  // result count. Lets the caller distinguish "quota exhausted, back
+  // off" from "no expired records, nothing to do". Always false when
+  // Cap is not set.
+  bool CapReached = 2;
 }
 
 // PatchedExpiredTreasure carries the outcome and the post-patch state
@@ -3149,6 +3372,11 @@ message PatchExpiredTreasuresManyEntry {
   // "Ops is empty"). Per-treasure failures stay inside the Patched
   // entries' Status / Error fields.
   optional string Error = 2;
+
+  // CapReached mirrors PatchExpiredTreasuresResponse.CapReached for
+  // this swamp's request. Always false when the per-swamp request did
+  // not carry a Cap.
+  bool CapReached = 3;
 }
 
 // PatchTreasuresManyRequest batches multiple PatchTreasures calls in a
@@ -3179,6 +3407,11 @@ message PatchTreasuresManyEntry {
   // Error carries a swamp-level failure (e.g. "SwampName cannot be
   // empty", "summon swamp: ..."). Per-key failures stay inside Results.
   optional string Error = 2;
+
+  // CapReached mirrors PatchTreasuresResponse.CapReached for this
+  // swamp's request. Always false when the per-swamp request did not
+  // carry a Cap.
+  bool CapReached = 3;
 }
 
 // ShiftExpiredTreasuresManyRequest batches multiple ShiftExpiredTreasures

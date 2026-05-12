@@ -49,14 +49,14 @@ func TestSwampPatchExpired_SlidesExpiredAtAndPatchesBody(t *testing.T) {
 	}
 
 	newExp := time.Now().UTC().Add(24 * time.Hour)
-	entries, err := s.PatchExpired(10,
+	entries, _, err := s.PatchExpired(10,
 		[]msgpackpatch.Op{
 			{Kind: msgpackpatch.OpSet, Path: "claimedBy", Value: encMsgpack(t, "worker-A")},
 			{Kind: msgpackpatch.OpInc, Path: "counter", Value: encMsgpack(t, int8(1))},
 		},
 		nil,
 		&PatchFieldsMeta{SetExpiredAt: newExp, SetUpdatedAt: true},
-	)
+	nil, 0)
 	require.NoError(t, err)
 	assert.Equal(t, 5, len(entries))
 	for _, e := range entries {
@@ -79,9 +79,9 @@ func TestSwampPatchExpired_SlidesExpiredAtAndPatchesBody(t *testing.T) {
 
 	// A second PatchExpired call must return nothing — every treasure
 	// now has a future ExpiredAt.
-	again, err := s.PatchExpired(10, []msgpackpatch.Op{
+	again, _, err := s.PatchExpired(10, []msgpackpatch.Op{
 		{Kind: msgpackpatch.OpSet, Path: "marker", Value: encMsgpack(t, true)},
-	}, nil, nil)
+	}, nil, nil, nil, 0)
 	require.NoError(t, err)
 	assert.Empty(t, again, "no entries should be expired after the slide")
 }
@@ -95,20 +95,20 @@ func TestSwampPatchExpired_HowManyCapsCount(t *testing.T) {
 			map[string]any{"x": int8(0)}, time.Hour)
 	}
 
-	entries, err := s.PatchExpired(3,
+	entries, _, err := s.PatchExpired(3,
 		[]msgpackpatch.Op{{Kind: msgpackpatch.OpSet, Path: "x", Value: encMsgpack(t, int8(1))}},
 		nil,
 		&PatchFieldsMeta{SetExpiredAt: time.Now().UTC().Add(time.Hour)},
-	)
+	nil, 0)
 	require.NoError(t, err)
 	assert.Equal(t, 3, len(entries))
 
 	// 7 treasures must remain expired (untouched).
-	rest, err := s.PatchExpired(100,
+	rest, _, err := s.PatchExpired(100,
 		[]msgpackpatch.Op{{Kind: msgpackpatch.OpSet, Path: "x", Value: encMsgpack(t, int8(2))}},
 		nil,
 		&PatchFieldsMeta{SetExpiredAt: time.Now().UTC().Add(time.Hour)},
-	)
+	nil, 0)
 	require.NoError(t, err)
 	assert.Equal(t, 7, len(rest))
 }
@@ -126,11 +126,11 @@ func TestSwampPatchExpired_SkipsNonExpired(t *testing.T) {
 			map[string]any{"x": int8(0)}, time.Hour)
 	}
 
-	entries, err := s.PatchExpired(100,
+	entries, _, err := s.PatchExpired(100,
 		[]msgpackpatch.Op{{Kind: msgpackpatch.OpSet, Path: "x", Value: encMsgpack(t, int8(9))}},
 		nil,
 		&PatchFieldsMeta{SetExpiredAt: time.Now().UTC().Add(time.Hour)},
-	)
+	nil, 0)
 	require.NoError(t, err)
 	assert.Equal(t, 3, len(entries))
 	for _, e := range entries {
@@ -154,11 +154,11 @@ func TestSwampPatchExpired_MetaOnlySlide(t *testing.T) {
 	}
 
 	newExp := time.Now().UTC().Add(2 * time.Hour)
-	entries, err := s.PatchExpired(10,
+	entries, _, err := s.PatchExpired(10,
 		nil, // no ops
 		nil,
 		&PatchFieldsMeta{SetExpiredAt: newExp},
-	)
+	nil, 0)
 	require.NoError(t, err)
 	assert.Equal(t, 4, len(entries))
 
@@ -192,11 +192,11 @@ func TestSwampPatchExpired_ConditionGate(t *testing.T) {
 		Op:        msgpackpatch.CondEqual,
 		Threshold: encMsgpack(t, ""),
 	}
-	entries, err := s.PatchExpired(10,
+	entries, _, err := s.PatchExpired(10,
 		[]msgpackpatch.Op{{Kind: msgpackpatch.OpSet, Path: "claimedBy", Value: encMsgpack(t, "worker-A")}},
 		cond,
 		&PatchFieldsMeta{SetExpiredAt: time.Now().UTC().Add(time.Hour)},
-	)
+	nil, 0)
 	require.NoError(t, err)
 
 	patched := 0
@@ -214,11 +214,11 @@ func TestSwampPatchExpired_ConditionGate(t *testing.T) {
 
 	// CONDITION_NOT_MET treasures retain their original body and original
 	// ExpireAt — the next PatchExpired call must see them again.
-	again, err := s.PatchExpired(10,
+	again, _, err := s.PatchExpired(10,
 		[]msgpackpatch.Op{{Kind: msgpackpatch.OpSet, Path: "claimedBy", Value: encMsgpack(t, "worker-B")}},
 		nil, // no condition this time
 		&PatchFieldsMeta{SetExpiredAt: time.Now().UTC().Add(time.Hour)},
-	)
+	nil, 0)
 	require.NoError(t, err)
 	assert.Equal(t, 2, len(again), "the 2 condition-failed entries must still be expired-visible")
 	for _, e := range again {
@@ -248,14 +248,14 @@ func TestSwampPatchExpired_ConcurrentDisjointSubsets(t *testing.T) {
 		wg.Add(1)
 		go func(workerID int) {
 			defer wg.Done()
-			entries, err := s.PatchExpired(batch,
+			entries, _, err := s.PatchExpired(batch,
 				[]msgpackpatch.Op{
 					{Kind: msgpackpatch.OpSet, Path: "claimedBy",
 						Value: encMsgpack(t, fmt.Sprintf("worker-%d", workerID))},
 				},
 				nil,
 				&PatchFieldsMeta{SetExpiredAt: time.Now().UTC().Add(24 * time.Hour)},
-			)
+			nil, 0)
 			require.NoError(t, err)
 			mu.Lock()
 			defer mu.Unlock()
@@ -284,21 +284,21 @@ func TestSwampPatchExpired_RecoveryReclaimsAfterLease(t *testing.T) {
 
 	// First claim — short lease (already-elapsed) so the treasures
 	// remain "expired" right away.
-	entries, err := s.PatchExpired(10,
+	entries, _, err := s.PatchExpired(10,
 		[]msgpackpatch.Op{{Kind: msgpackpatch.OpSet, Path: "claimedBy", Value: encMsgpack(t, "worker-A")}},
 		nil,
 		// new ExpiredAt is 50ms in the past → the recovery path picks them up.
 		&PatchFieldsMeta{SetExpiredAt: time.Now().UTC().Add(-50 * time.Millisecond)},
-	)
+	nil, 0)
 	require.NoError(t, err)
 	require.Equal(t, 3, len(entries))
 
 	// Second claim — same swamp, different worker should re-claim.
-	entries2, err := s.PatchExpired(10,
+	entries2, _, err := s.PatchExpired(10,
 		[]msgpackpatch.Op{{Kind: msgpackpatch.OpSet, Path: "claimedBy", Value: encMsgpack(t, "worker-B")}},
 		nil,
 		&PatchFieldsMeta{SetExpiredAt: time.Now().UTC().Add(time.Hour)},
-	)
+	nil, 0)
 	require.NoError(t, err)
 	require.Equal(t, 3, len(entries2), "all 3 leases elapsed → all 3 must be re-claimable")
 	for _, e := range entries2 {
@@ -317,11 +317,11 @@ func TestSwampPatchExpired_HowManyZeroIsNoOp(t *testing.T) {
 	s := patchTestSwamp(t, "patch", "expired-zero")
 	seedExpiredMsgpack(t, s, "k", map[string]any{"x": int8(0)}, time.Hour)
 
-	entries, err := s.PatchExpired(0,
+	entries, _, err := s.PatchExpired(0,
 		[]msgpackpatch.Op{{Kind: msgpackpatch.OpSet, Path: "x", Value: encMsgpack(t, int8(9))}},
 		nil,
 		&PatchFieldsMeta{SetExpiredAt: time.Now().UTC().Add(time.Hour)},
-	)
+	nil, 0)
 	require.NoError(t, err)
 	assert.Empty(t, entries)
 
@@ -335,7 +335,7 @@ func TestSwampPatchExpired_EmptyOpsAndNilMetaIsNoOp(t *testing.T) {
 	s := patchTestSwamp(t, "patch", "expired-empty")
 	seedExpiredMsgpack(t, s, "k", map[string]any{"x": int8(0)}, time.Hour)
 
-	entries, err := s.PatchExpired(10, nil, nil, nil)
+	entries, _, err := s.PatchExpired(10, nil, nil, nil, nil, 0)
 	require.NoError(t, err)
 	assert.Empty(t, entries)
 }
@@ -344,11 +344,11 @@ func TestSwampPatchExpired_EmptyOpsAndNilMetaIsNoOp(t *testing.T) {
 
 func TestSwampPatchExpired_EmptySwamp(t *testing.T) {
 	s := patchTestSwamp(t, "patch", "expired-empty-swamp")
-	entries, err := s.PatchExpired(10,
+	entries, _, err := s.PatchExpired(10,
 		[]msgpackpatch.Op{{Kind: msgpackpatch.OpSet, Path: "x", Value: encMsgpack(t, int8(1))}},
 		nil,
 		&PatchFieldsMeta{SetExpiredAt: time.Now().UTC().Add(time.Hour)},
-	)
+	nil, 0)
 	require.NoError(t, err)
 	assert.Empty(t, entries)
 }
@@ -366,11 +366,11 @@ func TestSwampPatchExpired_NonMsgpackBodySurfacesEncoding(t *testing.T) {
 	tr.Save(gid)
 	tr.ReleaseTreasureGuard(gid)
 
-	entries, err := s.PatchExpired(10,
+	entries, _, err := s.PatchExpired(10,
 		[]msgpackpatch.Op{{Kind: msgpackpatch.OpSet, Path: "x", Value: encMsgpack(t, int8(1))}},
 		nil,
 		&PatchFieldsMeta{SetExpiredAt: time.Now().UTC().Add(time.Hour)},
-	)
+	nil, 0)
 	require.NoError(t, err)
 	require.Equal(t, 1, len(entries))
 	// String treasures hit the "not a ByteArray" branch first.
@@ -386,11 +386,11 @@ func TestSwampPatchExpired_ClearExpiredAtRemovesFromExpiredIndex(t *testing.T) {
 			map[string]any{"x": int8(0)}, time.Hour)
 	}
 
-	entries, err := s.PatchExpired(10,
+	entries, _, err := s.PatchExpired(10,
 		[]msgpackpatch.Op{{Kind: msgpackpatch.OpSet, Path: "x", Value: encMsgpack(t, int8(1))}},
 		nil,
 		&PatchFieldsMeta{ClearExpiredAt: true},
-	)
+	nil, 0)
 	require.NoError(t, err)
 	assert.Equal(t, 3, len(entries))
 	for _, e := range entries {
@@ -399,11 +399,11 @@ func TestSwampPatchExpired_ClearExpiredAtRemovesFromExpiredIndex(t *testing.T) {
 	}
 
 	// Subsequent call must find none — they no longer have ExpirationTime.
-	again, err := s.PatchExpired(10,
+	again, _, err := s.PatchExpired(10,
 		[]msgpackpatch.Op{{Kind: msgpackpatch.OpSet, Path: "x", Value: encMsgpack(t, int8(9))}},
 		nil,
 		&PatchFieldsMeta{SetExpiredAt: time.Now().UTC().Add(time.Hour)},
-	)
+	nil, 0)
 	require.NoError(t, err)
 	assert.Empty(t, again, "treasures with ExpiredAt cleared must not be re-claimable")
 }

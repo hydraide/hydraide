@@ -285,6 +285,38 @@ type Swamp interface {
 	// 2. Automating scheduled operations, such as sending emails or notifications, based on expiration times.
 	CloneAndDeleteExpiredTreasures(howMany int32) ([]treasure.Treasure, error)
 
+	// CloneAndDeleteMatchingTreasures is the parametric generalisation of
+	// CloneAndDeleteExpiredTreasures. It selects up to howMany treasures
+	// ordered by beaconType + order, narrowed by the predicate, atomically
+	// removes them from all indexes, and returns the clones. The selection
+	// pass runs under the chosen beacon's mu, so concurrent callers receive
+	// disjoint subsets — the same atomicity guarantee as ShiftExpired.
+	//
+	// Cap support: when capPredicate is non-nil, the beacon counts records
+	// matching capPredicate over its key map and bounds the effective
+	// howMany to (capMax - currentMatching) under the same Lock as
+	// selection. capReached is true when the budget — rather than the
+	// requested howMany — limited the result.
+	//
+	// Returns the cloned, deleted treasures; the auto-destroy behaviour
+	// (empty swamp drops itself) matches CloneAndDeleteExpiredTreasures.
+	CloneAndDeleteMatchingTreasures(beaconType BeaconType, order BeaconOrder, howMany int32, predicate func(treasure.Treasure) bool, capPredicate func(treasure.Treasure) bool, capMax int32) (shifted []treasure.Treasure, capReached bool, err error)
+
+	// CountMatchingTreasures counts treasures whose predicate returns true.
+	// Backed by the main key beacon under its read lock. Diagnostic use only;
+	// Cap enforcement is performed inline by ShiftMatching / PatchExpired
+	// under a single Lock to avoid the count + claim race.
+	CountMatchingTreasures(predicate func(treasure.Treasure) bool) int32
+
+	// LockCapMu / UnlockCapMu expose the swamp's Cap serialisation mutex
+	// to gateway-level batch flows. Explicit-key PatchTreasures with Cap
+	// holds capMu for the whole batch so concurrent Cap-bearing flows
+	// (PatchExpired+Cap, PatchTreasures+Cap, ShiftMatching+Cap on the
+	// same swamp) observe consistent budget arithmetic. Use exclusively
+	// in matched Lock/Unlock pairs at the gateway layer.
+	LockCapMu()
+	UnlockCapMu()
+
 	// CloneAndDeleteTreasuresByKeys retrieves and deletes multiple Treasures from the Swamp by their unique keys
 	// in a single atomic operation. This function combines read, clone, and delete operations efficiently.
 	//
@@ -782,7 +814,7 @@ type Swamp interface {
 	// typically for sliding ExpiredAt forward without changing the
 	// body); both empty is a programmer error and yields an empty
 	// result.
-	PatchExpired(howMany int32, ops []msgpackpatch.Op, condition *msgpackpatch.Condition, meta *PatchFieldsMeta) ([]PatchExpiredEntry, error)
+	PatchExpired(howMany int32, ops []msgpackpatch.Op, condition *msgpackpatch.Condition, meta *PatchFieldsMeta, capPredicate func(treasure.Treasure) bool, capMax int32) ([]PatchExpiredEntry, bool, error)
 }
 
 // PatchExpiredEntry carries the per-treasure outcome of a PatchExpired call.
@@ -920,6 +952,17 @@ type swamp struct {
 	closeWriteMutex sync.Mutex // mutex for the closeWrite function
 	closeMutex      sync.Mutex // mutex for the close function
 	createMu        sync.Mutex // serializes CreateTreasure to prevent dual-creation races
+
+	// capMu serialises Cap-bearing state-mutating operations
+	// (ShiftMatching with Cap, PatchExpired with Cap) on this swamp.
+	// Without it, two concurrent Cap-bearing callers can both observe
+	// the same currentMatching value under the beacon mu and each
+	// claim up to (MaxMatching - currentMatching) records, breaching
+	// the cap. The beacon mu alone is insufficient because Cap-bearing
+	// ops release it before applying per-treasure mutations that move
+	// records into the cap-filter set. Non-Cap ops do not acquire
+	// capMu, so existing throughput is unaffected.
+	capMu sync.Mutex
 
 	// creatingTreasures tracks treasures that have been created via CreateTreasure but not yet
 	// persisted (no Save call). Concurrent CreateTreasure calls for the same key must return the
@@ -2469,6 +2512,95 @@ func (s *swamp) CloneAndDeleteExpiredTreasures(howMany int32) ([]treasure.Treasu
 	// return with the shifted treasures
 	return shiftedTreasures, nil
 }
+
+// CloneAndDeleteMatchingTreasures is the parametric generalisation of
+// CloneAndDeleteExpiredTreasures. It builds the requested index beacon
+// (if not yet built), shifts up to howMany treasures from it that match
+// the predicate, drops them from all sibling indexes (permanent delete),
+// and auto-destroys the swamp if it becomes empty — identical lifecycle
+// semantics to CloneAndDeleteExpiredTreasures.
+//
+// The predicate is evaluated under the beacon mu (selection lock) and
+// the per-treasure guard, so two concurrent callers never observe the
+// same treasure as matching.
+func (s *swamp) CloneAndDeleteMatchingTreasures(beaconType BeaconType, order BeaconOrder, howMany int32, predicate func(treasure.Treasure) bool, capPredicate func(treasure.Treasure) bool, capMax int32) ([]treasure.Treasure, bool, error) {
+
+	// Cap-bearing flow: serialise against other Cap-bearing flows on this
+	// swamp — see swamp_patch_expired.go for the rationale. Shift-style
+	// flows remove records under beacon mu (no race window), but if Cap
+	// counts records that the shift itself does not move into the
+	// cap-filter (e.g. a sibling claim-in-place flow on the same swamp),
+	// concurrent callers must still serialise to avoid double-counting
+	// budgets.
+	if capPredicate != nil {
+		s.capMu.Lock()
+		defer s.capMu.Unlock()
+	}
+
+	atomic.StoreInt64(&s.lastInteractionTime, time.Now().UnixNano())
+
+	if howMany <= 0 || predicate == nil {
+		return nil, false, nil
+	}
+
+	// Ensure the chosen beacon is built before scanning it.
+	switch beaconType {
+	case BeaconTypeCreationTime:
+		s.buildBeacon(s.creationTimeBeaconASC, s.creationTimeBeaconDESC, BeaconTypeCreationTime)
+	case BeaconTypeExpirationTime:
+		s.buildBeacon(s.expirationTimeBeaconASC, s.expirationTimeBeaconDESC, BeaconTypeExpirationTime)
+	case BeaconTypeUpdateTime:
+		s.buildBeacon(s.updateTimeBeaconASC, s.updateTimeBeaconDESC, BeaconTypeUpdateTime)
+	case BeaconTypeKey:
+		s.buildBeacon(s.keyBeaconASC, s.keyBeaconDESC, BeaconTypeKey)
+	case BeaconTypeValueUint8, BeaconTypeValueUint16, BeaconTypeValueUint32, BeaconTypeValueUint64,
+		BeaconTypeValueInt8, BeaconTypeValueInt16, BeaconTypeValueInt32, BeaconTypeValueInt64,
+		BeaconTypeValueFloat32, BeaconTypeValueFloat64, BeaconTypeValueString:
+		s.buildBeacon(s.valueBeaconASC, s.valueBeaconDESC, beaconType)
+	default:
+		return nil, false, errors.New("unsupported beacon type for ShiftMatching")
+	}
+
+	bcn := s.GetBeacon(beaconType, order)
+	if bcn == nil {
+		return nil, false, errors.New("beacon not available for the requested type/order")
+	}
+
+	shiftedTreasures, capReached := bcn.ShiftMatching(int(howMany), predicate, capPredicate, int(capMax))
+
+	// Drop shifted treasures from every sibling index — same as
+	// CloneAndDeleteExpiredTreasures. Permanent delete (shadowDelete=false).
+	for _, d := range shiftedTreasures {
+		s.deleteHandler(d.GetKey(), false)
+	}
+
+	// Auto-destroy on empty, mirroring CloneAndDeleteExpiredTreasures.
+	if s.beaconKey.Count() == 0 {
+		s.CeaseVigil()
+		s.Destroy()
+	}
+
+	return shiftedTreasures, capReached, nil
+}
+
+// CountMatchingTreasures counts treasures matching the predicate on the
+// main key beacon. Used by Cap quota pre-check. Holds the beacon read
+// lock for the pass; concurrent Shift/Patch on the same swamp serialise
+// against this via the standard beacon mu pattern.
+func (s *swamp) CountMatchingTreasures(predicate func(treasure.Treasure) bool) int32 {
+	atomic.StoreInt64(&s.lastInteractionTime, time.Now().UnixNano())
+	if predicate == nil {
+		return 0
+	}
+	return int32(s.beaconKey.CountMatching(predicate))
+}
+
+// LockCapMu acquires the swamp's Cap serialisation mutex. See the swamp
+// interface for the lock-pair semantics.
+func (s *swamp) LockCapMu() { s.capMu.Lock() }
+
+// UnlockCapMu releases the swamp's Cap serialisation mutex.
+func (s *swamp) UnlockCapMu() { s.capMu.Unlock() }
 
 // CloneAndDeleteTreasuresByKeys retrieves and deletes multiple Treasures from the Swamp by their unique keys.
 // This is an atomic operation that clones each Treasure and then removes it from the Swamp.

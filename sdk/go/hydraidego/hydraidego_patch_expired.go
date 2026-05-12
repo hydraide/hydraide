@@ -38,7 +38,27 @@ type PatchExpiredOps struct {
 	ops         []*hydraidepbgo.PatchOp
 	cond        *hydraidepbgo.PatchCondition
 	meta        *hydraidepbgo.PatchMeta
+	cap         *Cap
 	encodeError error
+}
+
+// WithCap attaches a server-enforced quota check to this patch. The
+// server pre-counts records matching cap.Filter and patches at most
+// (cap.MaxMatching - currentMatching) selected treasures, regardless of
+// HowMany. cap == nil clears any previously set Cap.
+//
+// Cap is opt-in: a patch without WithCap has byte-identical behaviour to
+// previous releases.
+//
+// Validation (rejected with ErrCodeInvalidModel at the call site):
+//   - cap.MaxMatching must be > 0.
+//   - cap.Filter is required when cap is non-nil.
+func (b *PatchExpiredOps) WithCap(cap *Cap) *PatchExpiredOps {
+	if b.encodeError != nil {
+		return b
+	}
+	b.cap = cap
+	return b
 }
 
 // NewPatchExpiredOps returns an empty op accumulator.
@@ -220,14 +240,48 @@ func (h *hydraidego) CatalogPatchExpired(
 	iterator CatalogPatchExpiredIteratorFunc,
 	builder *PatchExpiredOps,
 ) error {
+	_, err := h.CatalogPatchExpiredWithResult(ctx, swampName, howMany, model, iterator, builder)
+	return err
+}
+
+// PatchExpiredResult carries the request-level outcome of a Cap-bearing
+// PatchExpired call. CapReached is true when the cap budget bounded the
+// result count; always false when builder.WithCap was not called.
+type PatchExpiredResult struct {
+	CapReached bool
+}
+
+// CatalogPatchExpiredWithResult is the Cap-aware variant of
+// CatalogPatchExpired. It returns the request-level *PatchExpiredResult
+// in addition to the per-treasure iterator stream, so callers can
+// distinguish "cap budget exhausted, back off" from "no expired records,
+// nothing to do" without inspecting the iterator.
+//
+// Identical semantics to CatalogPatchExpired otherwise. Build the
+// builder with .WithCap(*Cap) to attach a quota check; without it,
+// behaviour is byte-identical to CatalogPatchExpired and CapReached is
+// always false.
+func (h *hydraidego) CatalogPatchExpiredWithResult(
+	ctx context.Context,
+	swampName name.Name,
+	howMany int32,
+	model any,
+	iterator CatalogPatchExpiredIteratorFunc,
+	builder *PatchExpiredOps,
+) (*PatchExpiredResult, error) {
 	if builder == nil {
-		return NewError(ErrCodeInvalidModel, "PatchExpiredOps builder is required")
+		return nil, NewError(ErrCodeInvalidModel, "PatchExpiredOps builder is required")
 	}
 	if builder.encodeError != nil {
-		return NewError(ErrCodeInvalidModel, builder.encodeError.Error())
+		return nil, NewError(ErrCodeInvalidModel, builder.encodeError.Error())
 	}
 	if len(builder.ops) == 0 && builder.meta == nil {
-		return NewError(ErrCodeInvalidModel, "CatalogPatchExpired requires at least one op or a non-nil meta")
+		return nil, NewError(ErrCodeInvalidModel, "CatalogPatchExpired requires at least one op or a non-nil meta")
+	}
+
+	wireCap, capErr := buildWireCap(builder.cap)
+	if capErr != nil {
+		return nil, capErr
 	}
 
 	resp, err := h.client.GetServiceClient(swampName).PatchExpiredTreasures(ctx, &hydraidepbgo.PatchExpiredTreasuresRequest{
@@ -237,25 +291,24 @@ func (h *hydraidego) CatalogPatchExpired(
 		Ops:       builder.ops,
 		Meta:      builder.meta,
 		Condition: builder.cond,
+		Cap:       wireCap,
 	})
 	if err != nil {
-		return translatePatchGRPCError(err)
+		return nil, translatePatchGRPCError(err)
 	}
 
-	if iterator == nil {
-		return nil
-	}
-
-	for _, entry := range resp.GetPatched() {
-		modelValue := reflect.New(reflect.TypeOf(model)).Interface()
-		if convErr := populateCatalogModelFromPatchedExpired(entry, modelValue); convErr != nil {
-			return NewError(ErrCodeInvalidModel, convErr.Error())
-		}
-		if iterErr := iterator(modelValue, PatchStatus(entry.GetStatus())); iterErr != nil {
-			return iterErr
+	if iterator != nil {
+		for _, entry := range resp.GetPatched() {
+			modelValue := reflect.New(reflect.TypeOf(model)).Interface()
+			if convErr := populateCatalogModelFromPatchedExpired(entry, modelValue); convErr != nil {
+				return nil, NewError(ErrCodeInvalidModel, convErr.Error())
+			}
+			if iterErr := iterator(modelValue, PatchStatus(entry.GetStatus())); iterErr != nil {
+				return nil, iterErr
+			}
 		}
 	}
-	return nil
+	return &PatchExpiredResult{CapReached: resp.GetCapReached()}, nil
 }
 
 // appendOp encodes value to msgpack and appends a typed op.
@@ -414,25 +467,63 @@ func (h *hydraidego) CatalogPatchExpiredManyFromMany(
 	model any,
 	iterator CatalogPatchExpiredManyFromManyIteratorFunc,
 ) error {
+	_, err := h.CatalogPatchExpiredManyFromManyWithResults(ctx, requests, model, iterator)
+	return err
+}
+
+// PatchExpiredManyFromManyResult is the per-swamp outcome of a
+// CatalogPatchExpiredManyFromManyWithResults call. CapReached mirrors
+// the Cap-bearing single-RPC behaviour; SwampErr is non-nil for swamp-
+// level failures (already surfaced to the iterator via swampErr, repeated
+// here for callers that prefer the results-slice shape).
+type PatchExpiredManyFromManyResult struct {
+	SwampName  name.Name
+	CapReached bool
+	SwampErr   error
+}
+
+// CatalogPatchExpiredManyFromManyWithResults is the Cap-aware variant of
+// CatalogPatchExpiredManyFromMany. It returns one
+// PatchExpiredManyFromManyResult per input request (in input order)
+// alongside the per-treasure iterator stream, so callers can act on
+// per-swamp CapReached signals (e.g. back off on swamps with exhausted
+// budgets, continue claiming on others).
+//
+// builder.WithCap on individual requests enables per-swamp quota
+// enforcement; without it CapReached stays false and the behaviour is
+// byte-identical to CatalogPatchExpiredManyFromMany.
+func (h *hydraidego) CatalogPatchExpiredManyFromManyWithResults(
+	ctx context.Context,
+	requests []*PatchExpiredManyFromManyRequest,
+	model any,
+	iterator CatalogPatchExpiredManyFromManyIteratorFunc,
+) ([]*PatchExpiredManyFromManyResult, error) {
 	if len(requests) == 0 {
-		return nil
+		return nil, nil
 	}
 
+	results := make([]*PatchExpiredManyFromManyResult, len(requests))
 	// Validate every request up-front so a single bad builder cannot
 	// silently corrupt a server-grouped batch.
 	wireRequests := make([]*hydraidepbgo.PatchExpiredTreasuresRequest, len(requests))
 	for i, req := range requests {
+		results[i] = &PatchExpiredManyFromManyResult{}
 		if req == nil {
-			return NewError(ErrCodeInvalidModel, fmt.Sprintf("request %d is nil", i))
+			return nil, NewError(ErrCodeInvalidModel, fmt.Sprintf("request %d is nil", i))
 		}
+		results[i].SwampName = req.SwampName
 		if req.Builder == nil {
-			return NewError(ErrCodeInvalidModel, fmt.Sprintf("request %d: Builder is required", i))
+			return nil, NewError(ErrCodeInvalidModel, fmt.Sprintf("request %d: Builder is required", i))
 		}
 		if req.Builder.encodeError != nil {
-			return NewError(ErrCodeInvalidModel, fmt.Sprintf("request %d: %v", i, req.Builder.encodeError))
+			return nil, NewError(ErrCodeInvalidModel, fmt.Sprintf("request %d: %v", i, req.Builder.encodeError))
 		}
 		if len(req.Builder.ops) == 0 && req.Builder.meta == nil {
-			return NewError(ErrCodeInvalidModel, fmt.Sprintf("request %d: builder needs at least one op or non-nil meta", i))
+			return nil, NewError(ErrCodeInvalidModel, fmt.Sprintf("request %d: builder needs at least one op or non-nil meta", i))
+		}
+		wireCap, capErr := buildWireCap(req.Builder.cap)
+		if capErr != nil {
+			return nil, capErr
 		}
 		wireRequests[i] = &hydraidepbgo.PatchExpiredTreasuresRequest{
 			IslandID:  req.SwampName.GetIslandID(h.client.GetAllIslands()),
@@ -441,6 +532,7 @@ func (h *hydraidego) CatalogPatchExpiredManyFromMany(
 			Ops:       req.Builder.ops,
 			Meta:      req.Builder.meta,
 			Condition: req.Builder.cond,
+			Cap:       wireCap,
 		}
 	}
 
@@ -471,37 +563,40 @@ func (h *hydraidego) CatalogPatchExpiredManyFromMany(
 			Requests: batch,
 		})
 		if err != nil {
-			return translatePatchGRPCError(err)
+			return results, translatePatchGRPCError(err)
 		}
 
 		entries := resp.GetResponses()
 		if len(entries) != len(g.indices) {
-			return NewError(ErrCodeInternalDatabaseError, fmt.Sprintf("PatchExpiredTreasuresMany: server returned %d entries for %d requests", len(entries), len(g.indices)))
-		}
-
-		if iterator == nil {
-			continue
+			return results, NewError(ErrCodeInternalDatabaseError, fmt.Sprintf("PatchExpiredTreasuresMany: server returned %d entries for %d requests", len(entries), len(g.indices)))
 		}
 
 		for k, idx := range g.indices {
 			swampName := requests[idx].SwampName
 			entry := entries[k]
+			results[idx].CapReached = entry.GetCapReached()
 			if errMsg := entry.GetError(); errMsg != "" {
-				if iterErr := iterator(swampName, nil, PatchStatusInternalError, NewError(ErrCodeInternalDatabaseError, errMsg)); iterErr != nil {
-					return iterErr
+				results[idx].SwampErr = NewError(ErrCodeInternalDatabaseError, errMsg)
+				if iterator != nil {
+					if iterErr := iterator(swampName, nil, PatchStatusInternalError, results[idx].SwampErr); iterErr != nil {
+						return results, iterErr
+					}
 				}
+				continue
+			}
+			if iterator == nil {
 				continue
 			}
 			for _, treasure := range entry.GetPatched() {
 				modelValue := reflect.New(reflect.TypeOf(model)).Interface()
 				if convErr := populateCatalogModelFromPatchedExpired(treasure, modelValue); convErr != nil {
-					return NewError(ErrCodeInvalidModel, convErr.Error())
+					return results, NewError(ErrCodeInvalidModel, convErr.Error())
 				}
 				if iterErr := iterator(swampName, modelValue, PatchStatus(treasure.GetStatus()), nil); iterErr != nil {
-					return iterErr
+					return results, iterErr
 				}
 			}
 		}
 	}
-	return nil
+	return results, nil
 }

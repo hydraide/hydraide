@@ -334,6 +334,58 @@ type Beacon interface {
 	// dominating.
 	ReindexExpiration(treasures []treasure.Treasure)
 
+	// ShiftMatching is the parametric generalisation of ShiftExpired: it
+	// walks treasuresByOrder in the beacon's intrinsic order, applies the
+	// caller-supplied predicate to each treasure under its per-key guard,
+	// and atomically clones + removes up to howMany matching treasures
+	// from both treasuresByKeys and treasuresByOrder. Non-matching
+	// treasures and matches beyond the howMany budget are kept.
+	//
+	// The beacon mu is held for the entire pass, so two concurrent
+	// ShiftMatching callers (or a concurrent ShiftExpired / Add via Save)
+	// on the same beacon receive disjoint subsets — the same atomicity
+	// guarantee ShiftExpired already provides.
+	//
+	// Cap support (capPredicate != nil): under the same single Lock
+	// acquisition, the beacon first counts treasures matching capPredicate
+	// over treasuresByKeys, then bounds the effective howMany to
+	// max(0, capMax - currentMatching). This makes the count + select
+	// race-free against any other operation that goes through the same
+	// beacon's mu (notably Add via Save and other ShiftMatching /
+	// ShiftExpired callers). capReached is true when the cap budget
+	// (not the requested howMany) bounded the result.
+	//
+	// Parameters:
+	// - howMany int: budget cap; if <=0 the call selects nothing.
+	// - predicate func(treasure.Treasure) bool: server-side filter
+	//   evaluated under the per-treasure guard.
+	// - capPredicate func(treasure.Treasure) bool: optional Cap.Filter;
+	//   nil = no cap enforcement.
+	// - capMax int: post-op upper bound; ignored when capPredicate is nil.
+	//
+	// Returns the cloned, removed treasures in the beacon's intrinsic
+	// order, plus capReached. Caller drops the returned keys from sibling
+	// indexes.
+	ShiftMatching(howMany int, predicate func(treasure.Treasure) bool, capPredicate func(treasure.Treasure) bool, capMax int) (selected []treasure.Treasure, capReached bool)
+
+	// SelectExpiredForPatchWithCap is the Cap-aware variant of
+	// SelectExpiredForPatch. It runs count(capPredicate) + selection
+	// under one Lock acquisition, so concurrent Save / other PatchExpired
+	// callers cannot inflate the matching set between the two steps.
+	//
+	// When capPredicate is nil it behaves identically to
+	// SelectExpiredForPatch.
+	SelectExpiredForPatchWithCap(howMany int, capPredicate func(treasure.Treasure) bool, capMax int) (selected []treasure.Treasure, capReached bool)
+
+	// CountMatching counts treasures whose predicate returns true. Runs
+	// under the beacon's read lock — safe to call concurrently with
+	// other reads, but a writer (Add/Delete/Shift*) must wait. Useful
+	// for diagnostic and observability paths. Cap quota enforcement
+	// must NOT rely on this method on its own (the count + claim race);
+	// use ShiftMatching / SelectExpiredForPatchWithCap with capPredicate
+	// instead.
+	CountMatching(predicate func(treasure.Treasure) bool) int
+
 	// CloneOrderedTreasures clones and returns all treasure objects from the treasuresByOrder slice.
 	// Optionally, it also resets the internal state of the beacon based on the 'thenReset' flag.
 	// Thread safety is ensured via a write transaction.
@@ -730,11 +782,15 @@ func (b *beacon) SetInitialized(init bool) {
 	atomic.StoreInt32(&b.initialized, 0)
 }
 
-// IsInitialized returns the initialized flag
+// IsInitialized returns the initialized flag. Reads it lock-free via
+// atomic.LoadInt32 — the field is only mutated via atomic.StoreInt32
+// elsewhere, so a plain atomic load is correct and avoids creating a
+// t.mu.Lock → b.mu.RLock edge in the Save → SaveFunction →
+// deleteTreasureIfBeaconInitialized path. That edge, combined with the
+// b.mu.Lock → t.mu.RLock edge in beacon scan loops (SelectExpiredFor*),
+// could otherwise deadlock under concurrent PatchExpired.
 func (b *beacon) IsInitialized() bool {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-	return b.initialized == 1
+	return atomic.LoadInt32(&b.initialized) == 1
 }
 
 func (b *beacon) Reset() {
@@ -927,6 +983,184 @@ func (b *beacon) ShiftExpired(howMany int) []treasure.Treasure {
 	b.treasuresByOrder = remainingTreasures
 	return shiftedTreasures
 
+}
+
+// ShiftMatching is the parametric generalisation of ShiftExpired. The
+// optional capPredicate is counted over treasuresByKeys under the same
+// Lock as selection — race-free Cap enforcement.
+func (b *beacon) ShiftMatching(howMany int, predicate func(treasure.Treasure) bool, capPredicate func(treasure.Treasure) bool, capMax int) ([]treasure.Treasure, bool) {
+
+	atomic.StoreInt32(&b.initialized, 1)
+
+	if howMany <= 0 || predicate == nil {
+		return nil, false
+	}
+
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	// Cap pre-count under the same Lock: bound effective budget so that
+	// post-op count(capPredicate) ≤ capMax, even across concurrent
+	// Shift* / Save callers (they all serialise on b.mu).
+	effectiveHowMany := howMany
+	capActive := capPredicate != nil
+	capReached := false
+	if capActive {
+		currentMatching := 0
+		// Count without acquiring per-treasure guards: Treasure getter
+		// methods take their own internal RWMutex.RLock, so reads are
+		// thread-safe without an explicit guard. Acquiring StartTreasureGuard
+		// here would create a lock-order inversion against any caller that
+		// holds a per-treasure guard and then wants the beacon mu (e.g.
+		// PatchExpired's own per-treasure mutation step running concurrently
+		// from another goroutine).
+		for _, t := range b.treasuresByKeys {
+			if capPredicate(t) {
+				currentMatching++
+			}
+		}
+		budget := capMax - currentMatching
+		if budget <= 0 {
+			return nil, true
+		}
+		if budget < effectiveHowMany {
+			effectiveHowMany = budget
+			capReached = true
+		}
+	}
+
+	var shiftedTreasures []treasure.Treasure
+	var remainingTreasures []treasure.Treasure
+
+	counter := 0
+	matchesBeyondBudget := 0
+	for _, treasureObj := range b.treasuresByOrder {
+		lockerID := treasureObj.StartTreasureGuard(true)
+		matched := predicate(treasureObj)
+		if matched && counter < effectiveHowMany {
+			clonedTreasure := treasureObj.Clone(lockerID)
+			shiftedTreasures = append(shiftedTreasures, clonedTreasure)
+			delete(b.treasuresByKeys, treasureObj.GetKey())
+			counter++
+		} else {
+			if matched {
+				matchesBeyondBudget++
+			}
+			remainingTreasures = append(remainingTreasures, treasureObj)
+		}
+		treasureObj.ReleaseTreasureGuard(lockerID)
+	}
+	b.treasuresByOrder = remainingTreasures
+
+	// If Cap is not active and the requested howMany bound the result
+	// (there were more matches we could have shifted), do not signal
+	// capReached — that's caller's HowMany cap, not the quota.
+	// If Cap is active, capReached was set above when budget < howMany;
+	// also set it when matches beyond the effective budget existed and
+	// would have been claimed under a larger budget.
+	if capActive && matchesBeyondBudget > 0 {
+		capReached = true
+	}
+
+	return shiftedTreasures, capReached
+}
+
+// SelectExpiredForPatchWithCap is the Cap-aware variant of
+// SelectExpiredForPatch. Count + selection happen under one Lock, so
+// concurrent Save / other PatchExpired callers cannot inflate the
+// matching set between the two steps.
+func (b *beacon) SelectExpiredForPatchWithCap(howMany int, capPredicate func(treasure.Treasure) bool, capMax int) ([]treasure.Treasure, bool) {
+
+	atomic.StoreInt32(&b.initialized, 1)
+
+	if howMany <= 0 {
+		return nil, false
+	}
+
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	effectiveHowMany := howMany
+	capActive := capPredicate != nil
+	capReached := false
+	if capActive {
+		currentMatching := 0
+		// Count without acquiring per-treasure guards: Treasure getter
+		// methods take their own internal RWMutex.RLock, so reads are
+		// thread-safe without an explicit guard. Acquiring StartTreasureGuard
+		// here would create a lock-order inversion against any caller that
+		// holds a per-treasure guard and then wants the beacon mu (e.g.
+		// PatchExpired's own per-treasure mutation step running concurrently
+		// from another goroutine).
+		for _, t := range b.treasuresByKeys {
+			if capPredicate(t) {
+				currentMatching++
+			}
+		}
+		budget := capMax - currentMatching
+		if budget <= 0 {
+			return nil, true
+		}
+		if budget < effectiveHowMany {
+			effectiveHowMany = budget
+			capReached = true
+		}
+	}
+
+	var (
+		selected           []treasure.Treasure
+		remainingTreasures []treasure.Treasure
+	)
+
+	counter := 0
+	matchesBeyondBudget := 0
+	now := time.Now().UTC().UnixNano()
+	for _, treasureObj := range b.treasuresByOrder {
+		exp := treasureObj.GetExpirationTime()
+		isExpired := exp != 0 && exp < now
+		if isExpired && counter < effectiveHowMany {
+			selected = append(selected, treasureObj)
+			counter++
+		} else {
+			if isExpired {
+				matchesBeyondBudget++
+			}
+			remainingTreasures = append(remainingTreasures, treasureObj)
+		}
+	}
+	b.treasuresByOrder = remainingTreasures
+
+	if capActive && matchesBeyondBudget > 0 {
+		capReached = true
+	}
+
+	return selected, capReached
+}
+
+// CountMatching returns the number of treasures whose predicate returns
+// true. Runs under the read lock — concurrent reads are safe, writes
+// serialize.
+func (b *beacon) CountMatching(predicate func(treasure.Treasure) bool) int {
+
+	atomic.StoreInt32(&b.initialized, 1)
+
+	if predicate == nil {
+		return 0
+	}
+
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	count := 0
+	// Read via the Treasure interface's internal RWMutex.RLock (see
+	// ShiftMatching for the lock-order rationale). Do not call
+	// StartTreasureGuard here.
+	for _, treasureObj := range b.treasuresByKeys {
+		if predicate(treasureObj) {
+			count++
+		}
+	}
+	return count
 }
 
 // SelectExpiredForPatch removes up to howMany expired treasures from

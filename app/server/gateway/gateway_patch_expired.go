@@ -38,6 +38,14 @@ func (g Gateway) PatchExpiredTreasures(ctx context.Context, in *hydrapb.PatchExp
 		return nil, status.Error(codes.InvalidArgument, "PatchExpiredTreasures requires non-empty Ops or non-nil Meta")
 	}
 
+	// Validate Cap early so a malformed Cap on a missing swamp is still
+	// surfaced as InvalidArgument rather than silently treated as "no
+	// expired records" by the missing-swamp branch below.
+	capPred, capMax, capErr := buildCapPredicate(in.GetCap())
+	if capErr != nil {
+		return nil, status.Error(codes.InvalidArgument, capErr.Error())
+	}
+
 	// Missing swamp → empty result, not an error. Mirrors
 	// ShiftExpiredTreasures behaviour: callers commonly poll a swamp
 	// that may not exist yet, and a FailedPrecondition here would
@@ -65,7 +73,7 @@ func (g Gateway) PatchExpiredTreasures(ctx context.Context, in *hydrapb.PatchExp
 	cond := protoCondToMsgpackpatchCond(in.GetCondition())
 	meta := protoMetaToSwampMeta(in.GetMeta())
 
-	entries, perr := swampObj.PatchExpired(in.GetHowMany(), ops, cond, meta)
+	entries, capReached, perr := swampObj.PatchExpired(in.GetHowMany(), ops, cond, meta, capPred, capMax)
 	if perr != nil {
 		return nil, status.Error(codes.Internal, fmt.Sprintf("PatchExpired failed: %s", perr.Error()))
 	}
@@ -88,7 +96,7 @@ func (g Gateway) PatchExpiredTreasures(ctx context.Context, in *hydrapb.PatchExp
 		patched = append(patched, out)
 	}
 
-	return &hydrapb.PatchExpiredTreasuresResponse{Patched: patched}, nil
+	return &hydrapb.PatchExpiredTreasuresResponse{Patched: patched, CapReached: capReached}, nil
 }
 
 // PatchExpiredTreasuresMany dispatches a batch of PatchExpiredTreasures
@@ -141,6 +149,11 @@ func patchExpiredOneSwamp(ctx context.Context, g Gateway, in *hydrapb.PatchExpir
 		return &hydrapb.PatchExpiredTreasuresManyEntry{Error: protoStr("PatchExpiredTreasures requires non-empty Ops or non-nil Meta")}
 	}
 
+	capPred, capMax, capErr := buildCapPredicate(in.GetCap())
+	if capErr != nil {
+		return &hydrapb.PatchExpiredTreasuresManyEntry{Error: protoStr(capErr.Error())}
+	}
+
 	swampName, err := checkSwampName(g.ZeusInterface, in.GetIslandID(), in.GetSwampName(), true)
 	if err != nil {
 		if st, ok := status.FromError(err); ok && st.Code() == codes.FailedPrecondition {
@@ -167,7 +180,7 @@ func patchExpiredOneSwamp(ctx context.Context, g Gateway, in *hydrapb.PatchExpir
 	cond := protoCondToMsgpackpatchCond(in.GetCondition())
 	meta := protoMetaToSwampMeta(in.GetMeta())
 
-	entries, perr := swampObj.PatchExpired(in.GetHowMany(), ops, cond, meta)
+	entries, capReached, perr := swampObj.PatchExpired(in.GetHowMany(), ops, cond, meta, capPred, capMax)
 	if perr != nil {
 		return &hydrapb.PatchExpiredTreasuresManyEntry{Error: protoStr(fmt.Sprintf("PatchExpired failed: %s", perr.Error()))}
 	}
@@ -189,5 +202,5 @@ func patchExpiredOneSwamp(ctx context.Context, g Gateway, in *hydrapb.PatchExpir
 		}
 		patched = append(patched, out)
 	}
-	return &hydrapb.PatchExpiredTreasuresManyEntry{Patched: patched}
+	return &hydrapb.PatchExpiredTreasuresManyEntry{Patched: patched, CapReached: capReached}
 }

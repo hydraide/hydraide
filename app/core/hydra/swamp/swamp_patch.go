@@ -49,6 +49,13 @@ const (
 
 	// PatchStatusInternalError is a catch-all for unexpected failures.
 	PatchStatusInternalError
+
+	// PatchStatusCapExceeded indicates the patch was rejected because
+	// applying it would have pushed the count of records matching
+	// Cap.Filter above Cap.MaxMatching in the affected swamp. Ops were
+	// not applied; the request can be retried after the matching count
+	// drops below the budget.
+	PatchStatusCapExceeded
 )
 
 // PatchFieldsMeta selects which timestamp/identity fields the server should
@@ -95,6 +102,27 @@ type PatchFieldsOptions struct {
 
 	// Meta selects metadata fields to stamp on the patched treasure.
 	Meta *PatchFieldsMeta
+
+	// CapPredicate, when non-nil, enforces a Cap quota check on this
+	// per-key patch. The predicate receives a raw msgpack body (no magic
+	// prefix) and returns true when the body matches Cap.Filter.
+	// PatchFields invokes it on the pre body and the simulated post
+	// body to apply the (pre, post) four-cell rule (see Cap proto
+	// docs). The caller is responsible for tracking the running
+	// (no→yes) budget across a batch via CapBudgetLeft, and for
+	// decoding the body inside the predicate.
+	//
+	// The engine layer does not import msgpack — the predicate
+	// closure (built at the gateway from the Cap.Filter wire form)
+	// owns decoding.
+	CapPredicate func(rawMsgpackBody []byte) bool
+
+	// CapBudgetLeft is the remaining (no→yes) budget for this batch.
+	// PatchFields decrements *CapBudgetLeft when it accepts a (no, yes)
+	// transition. A (no, yes) transition with *CapBudgetLeft <= 0 is
+	// rejected as PatchStatusCapExceeded and *CapBudgetLeft is not
+	// modified. Ignored when CapPredicate is nil.
+	CapBudgetLeft *int32
 }
 
 // PatchFieldsResult carries the per-key outcome.
@@ -212,6 +240,26 @@ func (s *swamp) PatchFields(key string, ops []msgpackpatch.Op, condition *msgpac
 	if err != nil {
 		return PatchFieldsResult{Status: classifyPatchError(err), Error: err.Error()}, nil
 	}
+
+	// Cap pre/post check: only the (no, yes) transition consumes budget;
+	// all other transitions proceed unchanged (idempotent / shrinking /
+	// untouched). The caller (gateway) has already pre-counted matching
+	// records and holds capMu, so the running CapBudgetLeft observed by
+	// concurrent batches is consistent.
+	if opts.CapPredicate != nil {
+		preMatched := false
+		if !isCreate {
+			preMatched = opts.CapPredicate(inputBody)
+		}
+		postMatched := opts.CapPredicate(out)
+		if !preMatched && postMatched {
+			if opts.CapBudgetLeft == nil || *opts.CapBudgetLeft <= 0 {
+				return PatchFieldsResult{Status: PatchStatusCapExceeded}, nil
+			}
+			*opts.CapBudgetLeft--
+		}
+	}
+
 	treasureObj.SetContentByteArray(guardID, wrapMsgpackBody(out))
 	applyPatchMeta(treasureObj, guardID, opts.Meta, isCreate)
 	treasureObj.Save(guardID)

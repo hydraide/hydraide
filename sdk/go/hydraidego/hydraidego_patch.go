@@ -54,6 +54,12 @@ const (
 	// PatchStatusInternalError is a catch-all for unexpected server
 	// failures. The accompanying error string carries detail.
 	PatchStatusInternalError
+
+	// PatchStatusCapExceeded indicates the patch was rejected because
+	// applying it would have pushed the count of records matching
+	// Cap.Filter above Cap.MaxMatching in the affected swamp. Ops were
+	// not applied; the caller can retry after the matching count drops.
+	PatchStatusCapExceeded
 )
 
 // String implements the Stringer interface for human-readable status logs.
@@ -77,6 +83,8 @@ func (s PatchStatus) String() string {
 		return "ENCODING_NOT_SUPPORTED"
 	case PatchStatusInternalError:
 		return "INTERNAL_ERROR"
+	case PatchStatusCapExceeded:
+		return "CAP_EXCEEDED"
 	}
 	return fmt.Sprintf("PatchStatus(%d)", int(s))
 }
@@ -341,6 +349,7 @@ type PatchBuilder struct {
 	cond        *hydraidepbgo.PatchCondition
 	create      bool
 	meta        *hydraidepbgo.PatchMeta
+	cap         *Cap
 	encodeError error
 }
 
@@ -519,6 +528,9 @@ func (b *PatchBuilder) WithoutExpiredAt() *PatchBuilder {
 // builders returned by CatalogPatch (which bind a client, context, and
 // swamp). Builders created via NewPatchBuilder are data-only and must be
 // dispatched through a batch API instead.
+//
+// When the builder carries WithCap, Exec discards the request-level
+// CapReached signal — use ExecWithResult to receive it.
 func (b *PatchBuilder) Exec() (PatchStatus, error) {
 	if b.encodeError != nil {
 		return PatchStatusInternalError, NewError(ErrCodeInvalidModel, b.encodeError.Error())
@@ -526,7 +538,8 @@ func (b *PatchBuilder) Exec() (PatchStatus, error) {
 	if b.h == nil {
 		return PatchStatusInternalError, NewError(ErrCodeInvalidModel, "PatchBuilder is not bound to a client; use CatalogPatch(ctx, swamp, key) for single-key dispatch, or pass it via PatchManyRequest to a batch API")
 	}
-	return b.h.runPatch(b.ctx, b.swampName, b.key, b.ops, b.cond, b.create, b.meta)
+	st, _, err := b.h.runPatchWithCap(b.ctx, b.swampName, b.key, b.ops, b.cond, b.create, b.meta, b.cap)
+	return st, err
 }
 
 // appendOp encodes value to msgpack and appends a typed op.
@@ -585,6 +598,13 @@ type CatalogPatchManyToManyRequest struct {
 	// Patches lists the per-key builders dispatched against SwampName.
 	// Use NewPatchBuilder(key) to build each entry.
 	Patches []*PatchManyRequest
+
+	// Cap is an optional per-swamp Cap quota check. Applied to the
+	// per-swamp PatchTreasures request derived from this entry. nil =
+	// no Cap on this swamp. Used only by
+	// CatalogPatchManyToManyWithResults; the legacy
+	// CatalogPatchManyToMany discards Cap.
+	Cap *Cap
 }
 
 // CatalogPatchManyToManyIteratorFunc is invoked once per per-key result
