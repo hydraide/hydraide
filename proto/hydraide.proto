@@ -3262,9 +3262,10 @@ message PatchExpiredTreasuresRequest {
   // SwampName addresses the swamp containing the patched treasures.
   string SwampName = 2;
 
-  // HowMany caps the result count. 0 means "all currently-expired
-  // treasures" (matches ShiftExpiredTreasures behaviour). Use bounded
-  // batches in production to keep RPC latency predictable.
+  // HowMany caps the number of patched treasures returned. 0 means "all
+  // currently-expired treasures matching Filters" (matches
+  // ShiftExpiredTreasures behaviour). Use bounded batches in production
+  // to keep RPC latency predictable.
   int32 HowMany = 3;
 
   // Ops is the ordered list of mutations applied to every selected
@@ -3301,6 +3302,20 @@ message PatchExpiredTreasuresRequest {
   // A new-client Cap-bearing request against an old server is rejected
   // explicitly (silent ignore would be a correctness footgun).
   optional Cap Cap = 7;
+
+  // Filters narrows selection inside the expired-treasures set before
+  // HowMany / Cap budget arithmetic is applied. AND/OR FilterGroup tree
+  // evaluated server-side under the same per-swamp guard as selection.
+  //
+  // Use this to scope PatchExpired to a sub-population of the swamp
+  // (e.g. per-ASN, per-tenant, per-resource claim queues sharing a single
+  // expiration index). Without Filters, all expired treasures of the
+  // swamp are candidates and the per-treasure Condition is the only way
+  // to skip records — which is wasteful when the rejected records still
+  // count against HowMany / Cap.
+  //
+  // Symmetric to ShiftMatchingTreasures.Filters. nil = no filter.
+  optional FilterGroup Filters = 8;
 }
 
 // PatchExpiredTreasuresResponse holds per-treasure outcomes for the

@@ -1344,8 +1344,14 @@ The same meta-only form is also valid on the single-key `CatalogPatch(...).Exec(
 | Ops | `Set`, `Inc`, `Append`, `Prepend`, `Delete`, `RemoveAt`, `RemoveVal`, `Merge` |
 | Conditions | every `IfField*` from `PatchBuilder`, single condition per builder |
 | Meta | `WithUpdatedAt`, `WithUpdatedBy`, `WithExpiredAt(t)`, `WithoutExpiredAt()` |
+| Selection scope | `WithFilters(*FilterGroup)` — narrows candidates *before* `HowMany`/`Cap` arithmetic |
+| Quota | `WithCap(*Cap)` — see §14b |
+
+`howMany == 0` means "all currently-expired treasures matching `WithFilters`" (mirrors `ShiftExpired`). Use a bounded value in production for predictable RPC latency.
 
 Conditions failed treasures are reported with `PatchStatusConditionNotMet` and **stay in the expired index** with their unchanged `ExpireAt` — the next call retries them. This makes "claim only the entries where `ClaimedBy == ''`" a one-line builder addition rather than a per-call fetch + filter.
+
+`WithFilters` is the right knob when several logical queues share one swamp (per-ASN, per-tenant, per-resource claim flows). Records that fail the filter are skipped server-side and do **not** consume `HowMany` or `Cap` budget — symmetric to `CatalogShiftMatching.Filters`. The per-key `IfField*` condition is a per-treasure check **after** selection, so it still counts against the budget; reach for `WithFilters` when the filter narrows the candidate set rather than gating individual records.
 
 For the conceptual model and atomicity contract, see [`docs/features/patch-expired-treasures.md`](../../../docs/features/patch-expired-treasures.md).
 
@@ -1483,26 +1489,37 @@ The legacy entry points (`CatalogPatchExpired`, `Exec()`, `CatalogPatchFieldsMan
 
 `Shift` and `PatchExpired` move records into the claim-filter set by definition (the selected records weren't "claimed" before, they are after). Cap bounds the result to `MaxMatching - currentMatching`. When the budget would have allowed more results, `CapReached = true`.
 
+`Cap.Filter` *defines the match-set* — it counts what is currently claimed. For mixed-population swamps (e.g. many ASNs in one queue) you also want to **scope the selection** so out-of-scope records can't starve the budget; that's `WithFilters`. The two work in tandem:
+
+- `WithFilters` → "which records are candidates for selection in this call"
+- `Cap.Filter` → "what does claimed mean for the per-call budget"
+
 ```go
-// Rate-limited crawler claim per ASN.
-// Cap.Filter matches "claimed and still leased" records.
-// MaxParallelForASN is the hard cap per swamp.
-res, err := h.CatalogPatchExpiredWithResult(ctx, asnSwamp, 100, CrawlReady{}, iter,
+// Rate-limited per-ASN crawler claim on a shared multi-ASN swamp.
+// Filters scope the candidate set to ASN==X; Cap.Filter defines the
+// per-ASN match-set so MaxMatching is the parallel cap for THAT ASN.
+res, err := h.CatalogPatchExpiredWithResult(ctx, sharedReady, 100, CrawlReady{}, iter,
     hydraidego.NewPatchExpiredOps().
         Set("ClaimedBy", workerID).
-        WithExpiredAt(time.Now().UTC().Add(24*time.Hour)). // lease
+        WithExpiredAt(time.Now().UTC().Add(24*time.Hour)).
+        WithFilters(
+            hydraidego.FilterBytesFieldString(hydraidego.Equal, "ASN", asn),
+        ).
         WithCap(&hydraidego.Cap{
             Filter: hydraidego.FilterAND(
+                hydraidego.FilterBytesFieldString(hydraidego.Equal, "ASN", asn),
                 hydraidego.FilterBytesFieldString(hydraidego.NotEqual, "ClaimedBy", ""),
-                hydraidego.FilterBytesFieldTime(hydraidego.GreaterThan, "ExpireAt", time.Now()),
+                hydraidego.FilterExpiredAt(hydraidego.GreaterThan, time.Now()),
             ),
             MaxMatching: maxParallelForASN,
         }),
 )
 if res.CapReached {
-    // cap is full, back off and retry later — do NOT raise the cap.
+    // cap is full for this ASN, back off and retry later — do NOT raise the cap.
 }
 ```
+
+Without `WithFilters`, selection walks every expired record. The cap budget is consumed by whatever the selection picked first; on a mixed-ASN swamp the per-ASN budget can be locked up by out-of-scope records that the patch *did* mutate but that never entered `Cap.Filter` post-state. Always pair `Filters` and `Cap.Filter` when scoping selection-based claim flows.
 
 ### Explicit-key ops: 4-cell (pre, post) rule
 

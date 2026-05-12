@@ -814,7 +814,19 @@ type Swamp interface {
 	// typically for sliding ExpiredAt forward without changing the
 	// body); both empty is a programmer error and yields an empty
 	// result.
-	PatchExpired(howMany int32, ops []msgpackpatch.Op, condition *msgpackpatch.Condition, meta *PatchFieldsMeta, capPredicate func(treasure.Treasure) bool, capMax int32) ([]PatchExpiredEntry, bool, error)
+	//
+	// selectionPredicate narrows the candidate set before HowMany / Cap
+	// budget arithmetic is applied; a nil predicate means "every expired
+	// treasure is a candidate". Use this to scope PatchExpired to a
+	// sub-population sharing the same expiration index (e.g. per-ASN,
+	// per-tenant claim queues). Symmetric to
+	// CloneAndDeleteMatchingTreasures' predicate.
+	//
+	// howMany <= 0 means "no per-call limit" (still bounded by Cap when
+	// set). The gateway translates the wire-level "HowMany == 0 means
+	// all expired" into an explicit large sentinel before reaching this
+	// layer; calling the engine directly with howMany <= 0 is valid.
+	PatchExpired(howMany int32, ops []msgpackpatch.Op, condition *msgpackpatch.Condition, meta *PatchFieldsMeta, selectionPredicate func(treasure.Treasure) bool, capPredicate func(treasure.Treasure) bool, capMax int32) ([]PatchExpiredEntry, bool, error)
 }
 
 // PatchExpiredEntry carries the per-treasure outcome of a PatchExpired call.

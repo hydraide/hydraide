@@ -31,12 +31,12 @@ import (
 //     - Successful patches whose ExpiredAt was unchanged still need
 //     to be visible in the expiration index (e.g. ops-only patch
 //     where Meta did not touch ExpiredAt).
-func (s *swamp) PatchExpired(howMany int32, ops []msgpackpatch.Op, condition *msgpackpatch.Condition, meta *PatchFieldsMeta, capPredicate func(treasure.Treasure) bool, capMax int32) ([]PatchExpiredEntry, bool, error) {
+func (s *swamp) PatchExpired(howMany int32, ops []msgpackpatch.Op, condition *msgpackpatch.Condition, meta *PatchFieldsMeta, selectionPredicate func(treasure.Treasure) bool, capPredicate func(treasure.Treasure) bool, capMax int32) ([]PatchExpiredEntry, bool, error) {
 
-	if howMany == 0 || (len(ops) == 0 && meta == nil) {
-		// Either nothing to select or nothing to apply. Treat as no-op.
-		// (The gateway is expected to validate inputs more strictly,
-		// but this guard keeps the engine layer safe to call directly.)
+	if len(ops) == 0 && meta == nil {
+		// Nothing to apply. Treat as no-op. (The gateway is expected to
+		// validate inputs more strictly, but this guard keeps the engine
+		// layer safe to call directly.)
 		return nil, false, nil
 	}
 
@@ -56,7 +56,7 @@ func (s *swamp) PatchExpired(howMany int32, ops []msgpackpatch.Op, condition *ms
 	// expiration-time indexes are built before we try to select.
 	s.buildBeacon(s.expirationTimeBeaconASC, s.expirationTimeBeaconDESC, BeaconTypeExpirationTime)
 
-	selected, capReached := s.expirationTimeBeaconASC.SelectExpiredForPatchWithCap(int(howMany), capPredicate, int(capMax))
+	selected, capReached := s.expirationTimeBeaconASC.SelectExpiredForPatchWithCap(int(howMany), selectionPredicate, capPredicate, int(capMax))
 	if len(selected) == 0 {
 		return nil, capReached, nil
 	}

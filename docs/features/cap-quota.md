@@ -41,6 +41,33 @@ claim_count  = min(HowMany, budget)
 
 If `budget <= 0`, zero records are claimed and `CapReached = true`. If the budget shrinks the result below the requested `HowMany`, `CapReached = true` so the caller knows to back off rather than poll.
 
+`Cap.Filter` *defines the match-set*; it does **not** scope the selection. With the "all selected records enter `Cap.Filter`" assumption, the budget arithmetic above is exact — but the assumption breaks when `Cap.Filter` carries scope predicates (e.g. `ASN == "AS-X"`) that the patched record does not enter. Use **`Filters`** (a separate `FilterGroup` field on `CatalogShift` and `CatalogPatchExpired`) to narrow the candidate set *before* selection. The rule of thumb:
+
+- **Selection scope** (which records are candidates) → `Filters`.
+- **Match-set definition** (what counts as "claimed" for `MaxMatching`) → `Cap.Filter`.
+
+The two often overlap (e.g. both reference `ASN == "AS-X"` in a per-ASN claim queue). For per-key claim patterns sharing a single swamp across many tenants/ASNs, both fields are required:
+
+```go
+// Per-ASN bounded claim. The Filters narrows selection so ASN==Y records
+// are skipped entirely; Cap.Filter defines the per-ASN match-set so the
+// budget is computed against that subset.
+hydraidego.NewPatchExpiredOps().
+    Set("ClaimedBy", workerID).
+    WithExpiredAt(now.Add(24 * time.Hour)).
+    WithFilters(hydraidego.FilterBytesFieldString(hydraidego.Equal, "ASN", asn)).
+    WithCap(&hydraidego.Cap{
+        Filter: hydraidego.FilterAND(
+            hydraidego.FilterBytesFieldString(hydraidego.Equal, "ASN", asn),
+            hydraidego.FilterBytesFieldString(hydraidego.NotEqual, "ClaimedBy", ""),
+            hydraidego.FilterExpiredAt(hydraidego.GreaterThan, now),
+        ),
+        MaxMatching: asn.MaxParallel,
+    })
+```
+
+Without `Filters`, the selection walks every expired record in the swamp and the cap budget can be consumed by records that do not enter `Cap.Filter` post-patch — making per-scope claim flows unviable on mixed-population swamps.
+
 ### Explicit-key ops (`CatalogPatch`, `CatalogPatchFields`, `CatalogPatchFieldsMany`, `CatalogPatchManyToMany`)
 
 The mutation does not necessarily push a record into `Filter`'s match set. The server evaluates `Filter` on both the pre-mutation body and the simulated post-mutation body and applies the four-cell rule:

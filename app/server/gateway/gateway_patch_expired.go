@@ -5,11 +5,30 @@ import (
 	"fmt"
 
 	"github.com/hydraide/hydraide/app/core/hydra/swamp"
+	"github.com/hydraide/hydraide/app/core/hydra/swamp/treasure"
 	hydrapb "github.com/hydraide/hydraide/sdk/go/hydraidego/v3/hydraidepbgo"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+// patchExpiredHowManySentinel is the engine-side "no limit" value used
+// when the wire carries HowMany == 0 ("all currently-expired"). Mirrors
+// the ShiftMatching gateway's translation so the engine layer can keep
+// its howMany <= 0 == "no limit" contract.
+const patchExpiredHowManySentinel int32 = 1 << 30
+
+// buildPatchExpiredSelectionPredicate converts the optional Filters
+// FilterGroup into a per-treasure predicate. nil filters → nil predicate
+// (matches all expired records, legacy behaviour).
+func buildPatchExpiredSelectionPredicate(filters *hydrapb.FilterGroup) (func(treasure.Treasure) bool, error) {
+	if filters == nil {
+		return nil, nil
+	}
+	return func(t treasure.Treasure) bool {
+		return evaluateNativeFilterGroup(t, filters)
+	}, nil
+}
 
 // PatchExpiredTreasures handles the in-place patch-of-expired RPC. It
 // selects up to HowMany expired treasures from the named swamp under
@@ -73,7 +92,21 @@ func (g Gateway) PatchExpiredTreasures(ctx context.Context, in *hydrapb.PatchExp
 	cond := protoCondToMsgpackpatchCond(in.GetCondition())
 	meta := protoMetaToSwampMeta(in.GetMeta())
 
-	entries, capReached, perr := swampObj.PatchExpired(in.GetHowMany(), ops, cond, meta, capPred, capMax)
+	selectionPred, selErr := buildPatchExpiredSelectionPredicate(in.GetFilters())
+	if selErr != nil {
+		return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("invalid Filters: %s", selErr.Error()))
+	}
+
+	// HowMany == 0 → "all currently-expired matching Filters" (mirrors
+	// ShiftMatchingTreasures' wire-level convention and the ShiftExpired
+	// proto doc). Translate to the engine's "no limit" sentinel so the
+	// engine layer can keep its howMany <= 0 == "no limit" contract.
+	howMany := in.GetHowMany()
+	if howMany <= 0 {
+		howMany = patchExpiredHowManySentinel
+	}
+
+	entries, capReached, perr := swampObj.PatchExpired(howMany, ops, cond, meta, selectionPred, capPred, capMax)
 	if perr != nil {
 		return nil, status.Error(codes.Internal, fmt.Sprintf("PatchExpired failed: %s", perr.Error()))
 	}
@@ -180,7 +213,17 @@ func patchExpiredOneSwamp(ctx context.Context, g Gateway, in *hydrapb.PatchExpir
 	cond := protoCondToMsgpackpatchCond(in.GetCondition())
 	meta := protoMetaToSwampMeta(in.GetMeta())
 
-	entries, capReached, perr := swampObj.PatchExpired(in.GetHowMany(), ops, cond, meta, capPred, capMax)
+	selectionPred, selErr := buildPatchExpiredSelectionPredicate(in.GetFilters())
+	if selErr != nil {
+		return &hydrapb.PatchExpiredTreasuresManyEntry{Error: protoStr(fmt.Sprintf("invalid Filters: %s", selErr.Error()))}
+	}
+
+	howMany := in.GetHowMany()
+	if howMany <= 0 {
+		howMany = patchExpiredHowManySentinel
+	}
+
+	entries, capReached, perr := swampObj.PatchExpired(howMany, ops, cond, meta, selectionPred, capPred, capMax)
 	if perr != nil {
 		return &hydrapb.PatchExpiredTreasuresManyEntry{Error: protoStr(fmt.Sprintf("PatchExpired failed: %s", perr.Error()))}
 	}

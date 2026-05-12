@@ -373,9 +373,18 @@ type Beacon interface {
 	// under one Lock acquisition, so concurrent Save / other PatchExpired
 	// callers cannot inflate the matching set between the two steps.
 	//
-	// When capPredicate is nil it behaves identically to
-	// SelectExpiredForPatch.
-	SelectExpiredForPatchWithCap(howMany int, capPredicate func(treasure.Treasure) bool, capMax int) (selected []treasure.Treasure, capReached bool)
+	// selectionPredicate narrows the candidate set before HowMany / Cap
+	// budget arithmetic is applied; a nil selectionPredicate means
+	// "every expired treasure is a candidate" (legacy behaviour).
+	//
+	// When capPredicate is nil and selectionPredicate is nil it behaves
+	// identically to SelectExpiredForPatch.
+	//
+	// howMany <= 0 means "no per-call limit" — still bounded by Cap when
+	// set. Callers wanting "all expired matching the predicate" pass
+	// howMany == 0 (the gateway translates the wire-level "0 means all"
+	// to this).
+	SelectExpiredForPatchWithCap(howMany int, selectionPredicate func(treasure.Treasure) bool, capPredicate func(treasure.Treasure) bool, capMax int) (selected []treasure.Treasure, capReached bool)
 
 	// CountMatching counts treasures whose predicate returns true. Runs
 	// under the beacon's read lock — safe to call concurrently with
@@ -1069,18 +1078,29 @@ func (b *beacon) ShiftMatching(howMany int, predicate func(treasure.Treasure) bo
 // SelectExpiredForPatch. Count + selection happen under one Lock, so
 // concurrent Save / other PatchExpired callers cannot inflate the
 // matching set between the two steps.
-func (b *beacon) SelectExpiredForPatchWithCap(howMany int, capPredicate func(treasure.Treasure) bool, capMax int) ([]treasure.Treasure, bool) {
+//
+// selectionPredicate (when non-nil) narrows the candidate set before
+// HowMany / Cap budget arithmetic is applied. Records that fail the
+// predicate are left untouched in treasuresByOrder and do not count
+// toward howMany or capReached — symmetric to ShiftMatching's predicate.
+//
+// howMany <= 0 means "no per-call limit": all expired records matching
+// selectionPredicate are eligible, still bounded by Cap when set.
+func (b *beacon) SelectExpiredForPatchWithCap(howMany int, selectionPredicate func(treasure.Treasure) bool, capPredicate func(treasure.Treasure) bool, capMax int) ([]treasure.Treasure, bool) {
 
 	atomic.StoreInt32(&b.initialized, 1)
-
-	if howMany <= 0 {
-		return nil, false
-	}
 
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
+	// howMany <= 0 → no per-call limit. Use MaxInt as the effective limit
+	// so the cap-budget branch below can still tighten it; nothing else
+	// can grow past the actual number of expired records anyway.
 	effectiveHowMany := howMany
+	if effectiveHowMany <= 0 {
+		effectiveHowMany = int(^uint(0) >> 1)
+	}
+
 	capActive := capPredicate != nil
 	capReached := false
 	if capActive {
@@ -1118,11 +1138,12 @@ func (b *beacon) SelectExpiredForPatchWithCap(howMany int, capPredicate func(tre
 	for _, treasureObj := range b.treasuresByOrder {
 		exp := treasureObj.GetExpirationTime()
 		isExpired := exp != 0 && exp < now
-		if isExpired && counter < effectiveHowMany {
+		isCandidate := isExpired && (selectionPredicate == nil || selectionPredicate(treasureObj))
+		if isCandidate && counter < effectiveHowMany {
 			selected = append(selected, treasureObj)
 			counter++
 		} else {
-			if isExpired {
+			if isCandidate {
 				matchesBeyondBudget++
 			}
 			remainingTreasures = append(remainingTreasures, treasureObj)

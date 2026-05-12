@@ -372,3 +372,144 @@ func TestGatewayPatchExpiredMany_MissingSwampReturnsEmptyEntry(t *testing.T) {
 	assert.Empty(t, resp.GetResponses()[0].GetError(), "missing swamp must not appear as a swamp-level error")
 	assert.Empty(t, resp.GetResponses()[0].GetPatched())
 }
+
+// ---------- D.11 — HowMany == 0 means "all currently-expired" ----------
+
+// Bug 1 regression: the wire-level convention is HowMany == 0 means "all
+// currently-expired treasures matching Filters" (mirrors
+// ShiftExpiredTreasures' behaviour). Pre-fix, the engine treated 0 as a
+// no-op and patched nothing.
+func TestGatewayPatchExpired_HowManyZeroMeansAllExpired(t *testing.T) {
+	rig := newGatewayPatchTestRig(t, "gw-patch-exp-zero", "all", "expired")
+	for _, k := range []string{"a", "b", "c", "d", "e"} {
+		seedExpiredViaGateway(t, rig, k, map[string]any{"x": int8(0)}, time.Hour)
+	}
+
+	resp, err := rig.gw.PatchExpiredTreasures(context.Background(), &hydrapb.PatchExpiredTreasuresRequest{
+		IslandID:  rig.islandID,
+		SwampName: rig.swampName,
+		HowMany:   0, // → all expired
+		Ops: []*hydrapb.PatchOp{
+			{Op: hydrapb.PatchOp_SET, Path: "x", Value: encMsgpack(t, int8(1))},
+		},
+		Meta: &hydrapb.PatchMeta{
+			SetExpiredAt: timestamppb.New(time.Now().UTC().Add(time.Hour)),
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, resp.GetPatched(), 5, "HowMany=0 must patch every expired record")
+	for _, p := range resp.GetPatched() {
+		assert.Equal(t, hydrapb.PatchResult_PATCHED, p.GetStatus())
+	}
+}
+
+// ---------- D.12 — Filters scope selection BEFORE HowMany / Cap ----------
+
+// Bug 2 regression: Filters on PatchExpiredTreasuresRequest narrow the
+// candidate set before HowMany / Cap budget arithmetic. Records that
+// fail the filter are not patched and do not count toward HowMany.
+func TestGatewayPatchExpired_FiltersScopeSelection(t *testing.T) {
+	rig := newGatewayPatchTestRig(t, "gw-patch-exp-filt", "scope", "any")
+	// 3 X records + 2 Y records, all expired.
+	for _, k := range []string{"x-0", "x-1", "x-2"} {
+		seedExpiredViaGateway(t, rig, k, map[string]any{"asn": "AS-X", "claimedBy": ""}, time.Hour)
+	}
+	for _, k := range []string{"y-0", "y-1"} {
+		seedExpiredViaGateway(t, rig, k, map[string]any{"asn": "AS-Y", "claimedBy": ""}, time.Hour)
+	}
+
+	filters := &hydrapb.FilterGroup{
+		Logic: hydrapb.FilterLogic_AND,
+		Filters: []*hydrapb.TreasureFilter{
+			{
+				BytesFieldPath: protoStr("asn"),
+				Operator:       hydrapb.Relational_EQUAL,
+				CompareValue:   &hydrapb.TreasureFilter_StringVal{StringVal: "AS-X"},
+			},
+		},
+	}
+
+	resp, err := rig.gw.PatchExpiredTreasures(context.Background(), &hydrapb.PatchExpiredTreasuresRequest{
+		IslandID:  rig.islandID,
+		SwampName: rig.swampName,
+		HowMany:   0, // all matching Filters
+		Filters:   filters,
+		Ops: []*hydrapb.PatchOp{
+			{Op: hydrapb.PatchOp_SET, Path: "claimedBy", Value: encMsgpack(t, "w")},
+		},
+		Meta: &hydrapb.PatchMeta{
+			SetExpiredAt: timestamppb.New(time.Now().UTC().Add(time.Hour)),
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, resp.GetPatched(), 3, "only ASN==X expired records must be patched")
+	for _, p := range resp.GetPatched() {
+		assert.Equal(t, hydrapb.PatchResult_PATCHED, p.GetStatus())
+		assert.Contains(t, p.GetKey(), "x-", "only ASN==X keys must be reported")
+	}
+}
+
+// ---------- D.13 — Filters + Cap: per-scope budget is not starved by
+//                       out-of-scope records ----------
+
+// Bug 2 use case: Filters narrows to ASN==X, Cap.Filter is per-ASN; the
+// budget is consumed only by ASN==X records, ASN==Y rows are skipped
+// entirely (not patched, not counted).
+func TestGatewayPatchExpired_FiltersWithCapPerScopeBudget(t *testing.T) {
+	rig := newGatewayPatchTestRig(t, "gw-patch-exp-filt-cap", "perscope", "any")
+	for i := 0; i < 20; i++ {
+		seedExpiredViaGateway(t, rig, gatewayKey(i),
+			map[string]any{"asn": "AS-X", "claimedBy": ""}, time.Hour)
+	}
+	for i := 20; i < 40; i++ {
+		seedExpiredViaGateway(t, rig, gatewayKey(i),
+			map[string]any{"asn": "AS-Y", "claimedBy": ""}, time.Hour)
+	}
+
+	scopeFilter := &hydrapb.FilterGroup{
+		Logic: hydrapb.FilterLogic_AND,
+		Filters: []*hydrapb.TreasureFilter{
+			{
+				BytesFieldPath: protoStr("asn"),
+				Operator:       hydrapb.Relational_EQUAL,
+				CompareValue:   &hydrapb.TreasureFilter_StringVal{StringVal: "AS-X"},
+			},
+		},
+	}
+	capFilter := &hydrapb.FilterGroup{
+		Logic: hydrapb.FilterLogic_AND,
+		Filters: []*hydrapb.TreasureFilter{
+			{
+				BytesFieldPath: protoStr("asn"),
+				Operator:       hydrapb.Relational_EQUAL,
+				CompareValue:   &hydrapb.TreasureFilter_StringVal{StringVal: "AS-X"},
+			},
+			{
+				BytesFieldPath: protoStr("claimedBy"),
+				Operator:       hydrapb.Relational_NOT_EQUAL,
+				CompareValue:   &hydrapb.TreasureFilter_StringVal{StringVal: ""},
+			},
+		},
+	}
+
+	resp, err := rig.gw.PatchExpiredTreasures(context.Background(), &hydrapb.PatchExpiredTreasuresRequest{
+		IslandID:  rig.islandID,
+		SwampName: rig.swampName,
+		HowMany:   0,
+		Filters:   scopeFilter,
+		Cap:       &hydrapb.Cap{Filter: capFilter, MaxMatching: 5},
+		Ops: []*hydrapb.PatchOp{
+			{Op: hydrapb.PatchOp_SET, Path: "claimedBy", Value: encMsgpack(t, "w")},
+		},
+		Meta: &hydrapb.PatchMeta{
+			SetExpiredAt: timestamppb.New(time.Now().UTC().Add(time.Hour)),
+		},
+	})
+	require.NoError(t, err)
+	assert.True(t, resp.GetCapReached(), "20 ASN==X candidates > budget 5 → capReached=true")
+	require.Len(t, resp.GetPatched(), 5, "Cap.MaxMatching caps to 5")
+	for _, p := range resp.GetPatched() {
+		// Keys 0..19 are ASN==X (see seed loop).
+		assert.NotContains(t, p.GetKey(), "20", "ASN==Y rows must never appear")
+	}
+}

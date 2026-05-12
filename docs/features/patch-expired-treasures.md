@@ -15,10 +15,12 @@ The naive approach is a three-step dance: list the expired keys, mutate each one
 A client issues a `PatchExpiredTreasures` RPC carrying:
 
 * the **swamp** to operate on (one swamp per call, like `PatchTreasures`),
-* a **HowMany** cap on the result count (`0` means "all currently-expired"),
+* a **HowMany** cap on the result count (`0` means "all currently-expired matching Filters"),
+* an optional **Filters** `FilterGroup` that narrows the candidate set *before* HowMany / Cap budget arithmetic — symmetric to `CatalogShiftMatching.Filters`,
 * an ordered list of **typed ops** applied to every selected treasure (`SET`, `INC`, `APPEND`, `MERGE`, etc.) — see [structural-msgpack-patch.md](structural-msgpack-patch.md) for the op semantics,
 * an optional **PatchCondition** evaluated per-treasure under its guard,
-* an optional **PatchMeta** stamped on every patched treasure (typically `SetExpiredAt` to slide the TTL forward, the same field used by `PatchTreasures`).
+* an optional **PatchMeta** stamped on every patched treasure (typically `SetExpiredAt` to slide the TTL forward, the same field used by `PatchTreasures`),
+* an optional **Cap** quota (see [cap-quota.md](cap-quota.md)).
 
 The server walks the expiration-time index under the beacon lock, pulls up to `HowMany` treasures whose `ExpiredAt < now()` out of the ordered slice, and for each one runs the same per-key flow that powers `PatchTreasures`: take the per-treasure guard, evaluate the condition, splice the ops into the msgpack body, stamp the metadata, save. Then the patched treasures are re-inserted into the expiration index with their new `ExpiredAt` so a subsequent caller picks them up again on the next cycle.
 
@@ -36,6 +38,15 @@ NewPatchExpiredOps().
     WithExpiredAt(now.Add(24 * time.Hour)).
     IfFieldEquals("ClaimedBy", "")
 ```
+
+### Selection Scope vs Per-Key Condition
+
+`Filters` and `PatchCondition` look similar but solve different problems:
+
+* **`Filters`** narrows the candidate set *before* selection. Records that fail `Filters` are skipped server-side and do **not** consume `HowMany` or `Cap` budget. Use it when several logical queues share a single swamp (per-ASN, per-tenant, per-resource claim flows).
+* **`PatchCondition`** is a per-treasure check *after* selection, under the per-key guard. The record still consumes a `HowMany` slot, is reported as `CONDITION_NOT_MET`, and is re-inserted with its unchanged `ExpiredAt`. Use it as a CAS check on a record that has already passed the selection step.
+
+The two compose: `Filters: ASN == "AS-X"` (scope the queue) plus `IfFieldEquals("ClaimedBy", "")` (CAS gate on the unclaimed) is the typical per-ASN bounded-claim recipe. See [cap-quota.md](cap-quota.md#selection-based-ops-catalogshift-catalogpatchexpired) for the full per-ASN flow with `Cap`.
 
 ### Meta-Only Patches
 
@@ -89,6 +100,6 @@ Stick with `PatchTreasures` (per-key) when:
 
 * Wire-level: `rpc PatchExpiredTreasures(PatchExpiredTreasuresRequest) returns (PatchExpiredTreasuresResponse)` in [`proto/hydraide.proto`](../../proto/hydraide.proto).
 * Go SDK: `CatalogPatchExpired(ctx, swamp, howMany, model, iterator, builder)` — see [`sdk/go/hydraidego/hydraidego_patch_expired.go`](../../sdk/go/hydraidego/hydraidego_patch_expired.go).
-* Builder: `hydraidego.NewPatchExpiredOps()` — same fluent shape as `PatchBuilder` minus the per-key `Exec`. Includes `Set` / `Inc` / `Append` / `Prepend` / `Delete` / `RemoveAt` / `RemoveVal` / `Merge`, every `IfField*` condition, and `WithUpdatedAt` / `WithUpdatedBy` / `WithExpiredAt` / `WithoutExpiredAt`.
+* Builder: `hydraidego.NewPatchExpiredOps()` — same fluent shape as `PatchBuilder` minus the per-key `Exec`. Includes `Set` / `Inc` / `Append` / `Prepend` / `Delete` / `RemoveAt` / `RemoveVal` / `Merge`, every `IfField*` condition, `WithUpdatedAt` / `WithUpdatedBy` / `WithExpiredAt` / `WithoutExpiredAt`, plus `WithFilters(*FilterGroup)` for selection scoping and `WithCap(*Cap)` for the quota check.
 
 For the design rationale, atomicity proofs against the engine code, and the bench methodology, see [`docs/tasks/patch-expired-many/PLAN.md`](../tasks/patch-expired-many/PLAN.md).

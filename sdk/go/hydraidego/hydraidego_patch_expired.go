@@ -39,6 +39,7 @@ type PatchExpiredOps struct {
 	cond        *hydraidepbgo.PatchCondition
 	meta        *hydraidepbgo.PatchMeta
 	cap         *Cap
+	filters     *FilterGroup
 	encodeError error
 }
 
@@ -58,6 +59,22 @@ func (b *PatchExpiredOps) WithCap(cap *Cap) *PatchExpiredOps {
 		return b
 	}
 	b.cap = cap
+	return b
+}
+
+// WithFilters narrows the candidate set before HowMany / Cap budget
+// arithmetic is applied. Records that fail the predicate are not patched
+// and do not count toward HowMany or Cap. Use this to scope PatchExpired
+// to a sub-population sharing the same expiration index (e.g. per-ASN,
+// per-tenant claim queues).
+//
+// Symmetric to ShiftRequest.Filters. filters == nil clears any previously
+// set Filters and reverts to "every expired treasure is a candidate".
+func (b *PatchExpiredOps) WithFilters(filters *FilterGroup) *PatchExpiredOps {
+	if b.encodeError != nil {
+		return b
+	}
+	b.filters = filters
 	return b
 }
 
@@ -284,7 +301,7 @@ func (h *hydraidego) CatalogPatchExpiredWithResult(
 		return nil, capErr
 	}
 
-	resp, err := h.client.GetServiceClient(swampName).PatchExpiredTreasures(ctx, &hydraidepbgo.PatchExpiredTreasuresRequest{
+	wireReq := &hydraidepbgo.PatchExpiredTreasuresRequest{
 		IslandID:  swampName.GetIslandID(h.client.GetAllIslands()),
 		SwampName: swampName.Get(),
 		HowMany:   howMany,
@@ -292,7 +309,11 @@ func (h *hydraidego) CatalogPatchExpiredWithResult(
 		Meta:      builder.meta,
 		Condition: builder.cond,
 		Cap:       wireCap,
-	})
+	}
+	if builder.filters != nil {
+		wireReq.Filters = convertFilterGroupToProto(builder.filters)
+	}
+	resp, err := h.client.GetServiceClient(swampName).PatchExpiredTreasures(ctx, wireReq)
 	if err != nil {
 		return nil, translatePatchGRPCError(err)
 	}
@@ -533,6 +554,9 @@ func (h *hydraidego) CatalogPatchExpiredManyFromManyWithResults(
 			Meta:      req.Builder.meta,
 			Condition: req.Builder.cond,
 			Cap:       wireCap,
+		}
+		if req.Builder.filters != nil {
+			wireRequests[i].Filters = convertFilterGroupToProto(req.Builder.filters)
 		}
 	}
 

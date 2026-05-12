@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hydraide/hydraide/app/core/hydra/swamp/treasure"
 	"github.com/hydraide/hydraide/app/core/hydra/swamp/treasure/msgpackpatch"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -56,7 +57,7 @@ func TestSwampPatchExpired_SlidesExpiredAtAndPatchesBody(t *testing.T) {
 		},
 		nil,
 		&PatchFieldsMeta{SetExpiredAt: newExp, SetUpdatedAt: true},
-	nil, 0)
+	nil, nil, 0)
 	require.NoError(t, err)
 	assert.Equal(t, 5, len(entries))
 	for _, e := range entries {
@@ -81,7 +82,7 @@ func TestSwampPatchExpired_SlidesExpiredAtAndPatchesBody(t *testing.T) {
 	// now has a future ExpiredAt.
 	again, _, err := s.PatchExpired(10, []msgpackpatch.Op{
 		{Kind: msgpackpatch.OpSet, Path: "marker", Value: encMsgpack(t, true)},
-	}, nil, nil, nil, 0)
+	}, nil, nil, nil, nil, 0)
 	require.NoError(t, err)
 	assert.Empty(t, again, "no entries should be expired after the slide")
 }
@@ -99,7 +100,7 @@ func TestSwampPatchExpired_HowManyCapsCount(t *testing.T) {
 		[]msgpackpatch.Op{{Kind: msgpackpatch.OpSet, Path: "x", Value: encMsgpack(t, int8(1))}},
 		nil,
 		&PatchFieldsMeta{SetExpiredAt: time.Now().UTC().Add(time.Hour)},
-	nil, 0)
+	nil, nil, 0)
 	require.NoError(t, err)
 	assert.Equal(t, 3, len(entries))
 
@@ -108,7 +109,7 @@ func TestSwampPatchExpired_HowManyCapsCount(t *testing.T) {
 		[]msgpackpatch.Op{{Kind: msgpackpatch.OpSet, Path: "x", Value: encMsgpack(t, int8(2))}},
 		nil,
 		&PatchFieldsMeta{SetExpiredAt: time.Now().UTC().Add(time.Hour)},
-	nil, 0)
+	nil, nil, 0)
 	require.NoError(t, err)
 	assert.Equal(t, 7, len(rest))
 }
@@ -130,7 +131,7 @@ func TestSwampPatchExpired_SkipsNonExpired(t *testing.T) {
 		[]msgpackpatch.Op{{Kind: msgpackpatch.OpSet, Path: "x", Value: encMsgpack(t, int8(9))}},
 		nil,
 		&PatchFieldsMeta{SetExpiredAt: time.Now().UTC().Add(time.Hour)},
-	nil, 0)
+	nil, nil, 0)
 	require.NoError(t, err)
 	assert.Equal(t, 3, len(entries))
 	for _, e := range entries {
@@ -158,7 +159,7 @@ func TestSwampPatchExpired_MetaOnlySlide(t *testing.T) {
 		nil, // no ops
 		nil,
 		&PatchFieldsMeta{SetExpiredAt: newExp},
-	nil, 0)
+	nil, nil, 0)
 	require.NoError(t, err)
 	assert.Equal(t, 4, len(entries))
 
@@ -196,7 +197,7 @@ func TestSwampPatchExpired_ConditionGate(t *testing.T) {
 		[]msgpackpatch.Op{{Kind: msgpackpatch.OpSet, Path: "claimedBy", Value: encMsgpack(t, "worker-A")}},
 		cond,
 		&PatchFieldsMeta{SetExpiredAt: time.Now().UTC().Add(time.Hour)},
-	nil, 0)
+	nil, nil, 0)
 	require.NoError(t, err)
 
 	patched := 0
@@ -218,7 +219,7 @@ func TestSwampPatchExpired_ConditionGate(t *testing.T) {
 		[]msgpackpatch.Op{{Kind: msgpackpatch.OpSet, Path: "claimedBy", Value: encMsgpack(t, "worker-B")}},
 		nil, // no condition this time
 		&PatchFieldsMeta{SetExpiredAt: time.Now().UTC().Add(time.Hour)},
-	nil, 0)
+	nil, nil, 0)
 	require.NoError(t, err)
 	assert.Equal(t, 2, len(again), "the 2 condition-failed entries must still be expired-visible")
 	for _, e := range again {
@@ -255,7 +256,7 @@ func TestSwampPatchExpired_ConcurrentDisjointSubsets(t *testing.T) {
 				},
 				nil,
 				&PatchFieldsMeta{SetExpiredAt: time.Now().UTC().Add(24 * time.Hour)},
-			nil, 0)
+			nil, nil, 0)
 			require.NoError(t, err)
 			mu.Lock()
 			defer mu.Unlock()
@@ -289,7 +290,7 @@ func TestSwampPatchExpired_RecoveryReclaimsAfterLease(t *testing.T) {
 		nil,
 		// new ExpiredAt is 50ms in the past → the recovery path picks them up.
 		&PatchFieldsMeta{SetExpiredAt: time.Now().UTC().Add(-50 * time.Millisecond)},
-	nil, 0)
+	nil, nil, 0)
 	require.NoError(t, err)
 	require.Equal(t, 3, len(entries))
 
@@ -298,7 +299,7 @@ func TestSwampPatchExpired_RecoveryReclaimsAfterLease(t *testing.T) {
 		[]msgpackpatch.Op{{Kind: msgpackpatch.OpSet, Path: "claimedBy", Value: encMsgpack(t, "worker-B")}},
 		nil,
 		&PatchFieldsMeta{SetExpiredAt: time.Now().UTC().Add(time.Hour)},
-	nil, 0)
+	nil, nil, 0)
 	require.NoError(t, err)
 	require.Equal(t, 3, len(entries2), "all 3 leases elapsed → all 3 must be re-claimable")
 	for _, e := range entries2 {
@@ -311,22 +312,32 @@ func TestSwampPatchExpired_RecoveryReclaimsAfterLease(t *testing.T) {
 	}
 }
 
-// ---------- E.8 — howMany == 0 is no-op ----------
+// ---------- E.8 — howMany <= 0 means "no per-call limit" ----------
 
-func TestSwampPatchExpired_HowManyZeroIsNoOp(t *testing.T) {
+// At the engine level, howMany <= 0 means "no per-call limit" — every
+// expired record matching selectionPredicate is patched (still bounded
+// by Cap when set). The gateway translates the wire-level "HowMany == 0
+// means all expired" into the engine's "no limit" sentinel before
+// reaching this layer, so engine-level howMany == 0 carries the same
+// "no limit" semantics.
+func TestSwampPatchExpired_HowManyZeroMeansAllExpired(t *testing.T) {
 	s := patchTestSwamp(t, "patch", "expired-zero")
-	seedExpiredMsgpack(t, s, "k", map[string]any{"x": int8(0)}, time.Hour)
+	for i := 0; i < 5; i++ {
+		seedExpiredMsgpack(t, s, fmt.Sprintf("k-%d", i),
+			map[string]any{"x": int8(0)}, time.Hour)
+	}
 
 	entries, _, err := s.PatchExpired(0,
 		[]msgpackpatch.Op{{Kind: msgpackpatch.OpSet, Path: "x", Value: encMsgpack(t, int8(9))}},
 		nil,
 		&PatchFieldsMeta{SetExpiredAt: time.Now().UTC().Add(time.Hour)},
-	nil, 0)
+		nil, nil, 0)
 	require.NoError(t, err)
-	assert.Empty(t, entries)
-
-	body := readPatchedMap(t, s, "k")
-	assert.Equal(t, int8(0), body["x"], "howMany=0 must not touch any body")
+	require.Len(t, entries, 5, "howMany=0 must patch every expired record")
+	for i := 0; i < 5; i++ {
+		body := readPatchedMap(t, s, fmt.Sprintf("k-%d", i))
+		assert.Equal(t, int8(9), body["x"])
+	}
 }
 
 // ---------- E.9 — empty ops + nil meta is no-op ----------
@@ -335,7 +346,7 @@ func TestSwampPatchExpired_EmptyOpsAndNilMetaIsNoOp(t *testing.T) {
 	s := patchTestSwamp(t, "patch", "expired-empty")
 	seedExpiredMsgpack(t, s, "k", map[string]any{"x": int8(0)}, time.Hour)
 
-	entries, _, err := s.PatchExpired(10, nil, nil, nil, nil, 0)
+	entries, _, err := s.PatchExpired(10, nil, nil, nil, nil, nil, 0)
 	require.NoError(t, err)
 	assert.Empty(t, entries)
 }
@@ -348,7 +359,7 @@ func TestSwampPatchExpired_EmptySwamp(t *testing.T) {
 		[]msgpackpatch.Op{{Kind: msgpackpatch.OpSet, Path: "x", Value: encMsgpack(t, int8(1))}},
 		nil,
 		&PatchFieldsMeta{SetExpiredAt: time.Now().UTC().Add(time.Hour)},
-	nil, 0)
+	nil, nil, 0)
 	require.NoError(t, err)
 	assert.Empty(t, entries)
 }
@@ -370,7 +381,7 @@ func TestSwampPatchExpired_NonMsgpackBodySurfacesEncoding(t *testing.T) {
 		[]msgpackpatch.Op{{Kind: msgpackpatch.OpSet, Path: "x", Value: encMsgpack(t, int8(1))}},
 		nil,
 		&PatchFieldsMeta{SetExpiredAt: time.Now().UTC().Add(time.Hour)},
-	nil, 0)
+	nil, nil, 0)
 	require.NoError(t, err)
 	require.Equal(t, 1, len(entries))
 	// String treasures hit the "not a ByteArray" branch first.
@@ -390,7 +401,7 @@ func TestSwampPatchExpired_ClearExpiredAtRemovesFromExpiredIndex(t *testing.T) {
 		[]msgpackpatch.Op{{Kind: msgpackpatch.OpSet, Path: "x", Value: encMsgpack(t, int8(1))}},
 		nil,
 		&PatchFieldsMeta{ClearExpiredAt: true},
-	nil, 0)
+	nil, nil, 0)
 	require.NoError(t, err)
 	assert.Equal(t, 3, len(entries))
 	for _, e := range entries {
@@ -403,7 +414,108 @@ func TestSwampPatchExpired_ClearExpiredAtRemovesFromExpiredIndex(t *testing.T) {
 		[]msgpackpatch.Op{{Kind: msgpackpatch.OpSet, Path: "x", Value: encMsgpack(t, int8(9))}},
 		nil,
 		&PatchFieldsMeta{SetExpiredAt: time.Now().UTC().Add(time.Hour)},
-	nil, 0)
+	nil, nil, 0)
 	require.NoError(t, err)
 	assert.Empty(t, again, "treasures with ExpiredAt cleared must not be re-claimable")
+}
+
+// ---------- E.13 — selectionPredicate scopes the candidate set ----------
+
+// selectionPredicate must filter the expired set BEFORE howMany / Cap
+// budget arithmetic. Records that fail the predicate stay in the
+// expiration index untouched and do not count toward howMany.
+func TestSwampPatchExpired_SelectionPredicateScopes(t *testing.T) {
+	s := patchTestSwamp(t, "patch", "expired-scope")
+	for i := 0; i < 5; i++ {
+		seedExpiredMsgpack(t, s, fmt.Sprintf("x-%d", i),
+			map[string]any{"asn": "AS-X", "claimedBy": ""}, time.Hour)
+		seedExpiredMsgpack(t, s, fmt.Sprintf("y-%d", i),
+			map[string]any{"asn": "AS-Y", "claimedBy": ""}, time.Hour)
+	}
+
+	selectX := func(tr treasure.Treasure) bool {
+		raw, _ := tr.GetContentByteArray()
+		if len(raw) < 2 {
+			return false
+		}
+		body := readMsgpackMapInternal(raw[2:])
+		v, _ := body["asn"].(string)
+		return v == "AS-X"
+	}
+
+	// howMany=0 → all expired matching selectionPredicate.
+	entries, capReached, err := s.PatchExpired(0,
+		[]msgpackpatch.Op{{Kind: msgpackpatch.OpSet, Path: "claimedBy", Value: encMsgpack(t, "w")}},
+		nil,
+		&PatchFieldsMeta{SetExpiredAt: time.Now().UTC().Add(time.Hour)},
+		selectX, nil, 0)
+	require.NoError(t, err)
+	assert.False(t, capReached, "no Cap → capReached must be false")
+	require.Len(t, entries, 5, "exactly the 5 ASN==X records must be patched")
+	for _, e := range entries {
+		assert.Contains(t, e.Key, "x-", "only ASN==X records belong in the result")
+	}
+
+	// ASN==Y records must remain untouched and still be expired.
+	for i := 0; i < 5; i++ {
+		body := readPatchedMap(t, s, fmt.Sprintf("y-%d", i))
+		assert.Equal(t, "", body["claimedBy"], "ASN==Y must not be patched")
+	}
+}
+
+// ---------- E.14 — Filters + Cap: budget cap is consumed only by
+//                       selectionPredicate matches ----------
+
+// Crawler-style flow: Cap.Filter narrows by ASN, selectionPredicate
+// scopes the candidate set the same way. The budget is consumed by
+// records that pass the predicate AND enter Cap.Filter post-patch — so
+// records the predicate excludes (ASN==Y) cannot starve the budget.
+func TestSwampPatchExpired_SelectionPredicateWithCap(t *testing.T) {
+	s := patchTestSwamp(t, "patch", "expired-scope-cap")
+	for i := 0; i < 100; i++ {
+		seedExpiredMsgpack(t, s, fmt.Sprintf("x-%03d", i),
+			map[string]any{"asn": "AS-X", "claimedBy": ""}, time.Hour)
+		seedExpiredMsgpack(t, s, fmt.Sprintf("y-%03d", i),
+			map[string]any{"asn": "AS-Y", "claimedBy": ""}, time.Hour)
+	}
+
+	selectX := func(tr treasure.Treasure) bool {
+		raw, _ := tr.GetContentByteArray()
+		if len(raw) < 2 {
+			return false
+		}
+		body := readMsgpackMapInternal(raw[2:])
+		v, _ := body["asn"].(string)
+		return v == "AS-X"
+	}
+	// Cap.Filter mirrors selectionPredicate semantics; in real flow the
+	// post-patch state (claimedBy != "") moves the record into Cap.Filter.
+	capPredicate := func(tr treasure.Treasure) bool {
+		raw, _ := tr.GetContentByteArray()
+		if len(raw) < 2 {
+			return false
+		}
+		body := readMsgpackMapInternal(raw[2:])
+		asn, _ := body["asn"].(string)
+		cb, _ := body["claimedBy"].(string)
+		return asn == "AS-X" && cb != ""
+	}
+
+	entries, capReached, err := s.PatchExpired(200,
+		[]msgpackpatch.Op{{Kind: msgpackpatch.OpSet, Path: "claimedBy", Value: encMsgpack(t, "w")}},
+		nil,
+		&PatchFieldsMeta{SetExpiredAt: time.Now().UTC().Add(time.Hour)},
+		selectX, capPredicate, 10)
+	require.NoError(t, err)
+	assert.True(t, capReached, "100 ASN==X candidates > budget 10 → capReached=true")
+	require.Len(t, entries, 10, "Cap.MaxMatching caps the patched count to 10")
+	for _, e := range entries {
+		assert.Contains(t, e.Key, "x-", "only ASN==X records may be patched")
+	}
+
+	// ASN==Y records must be untouched.
+	for i := 0; i < 100; i++ {
+		body := readPatchedMap(t, s, fmt.Sprintf("y-%03d", i))
+		assert.Equal(t, "", body["claimedBy"], "ASN==Y rows must never be touched")
+	}
 }

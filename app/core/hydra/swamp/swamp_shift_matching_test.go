@@ -175,7 +175,7 @@ func TestSwamp_PatchExpired_CapExactBudget(t *testing.T) {
 		entries, _, err := s.PatchExpired(1,
 			[]msgpackpatch.Op{{Kind: msgpackpatch.OpSet, Path: "claimedBy", Value: encMsgpack(t, fmt.Sprintf("w-%d", i))}},
 			nil, &PatchFieldsMeta{SetExpiredAt: time.Now().UTC().Add(time.Hour)},
-			nil, 0,
+			nil, nil, 0,
 		)
 		require.NoError(t, err)
 		require.Len(t, entries, 1, "preclaim step %d", i)
@@ -197,7 +197,7 @@ func TestSwamp_PatchExpired_CapExactBudget(t *testing.T) {
 	entries, capReached, err := s.PatchExpired(100,
 		[]msgpackpatch.Op{{Kind: msgpackpatch.OpSet, Path: "claimedBy", Value: encMsgpack(t, "later")}},
 		nil, &PatchFieldsMeta{SetExpiredAt: time.Now().UTC().Add(time.Hour)},
-		capPredicate, 5,
+		nil, capPredicate, 5,
 	)
 	require.NoError(t, err)
 	assert.True(t, capReached, "budget 2 < remaining 7 expired matches → capReached=true")
@@ -227,7 +227,7 @@ func TestSwamp_PatchExpired_CapExhausted(t *testing.T) {
 	entries, capReached, err := s.PatchExpired(100,
 		[]msgpackpatch.Op{{Kind: msgpackpatch.OpSet, Path: "claimedBy", Value: encMsgpack(t, "new")}},
 		nil, &PatchFieldsMeta{SetExpiredAt: time.Now().UTC().Add(time.Hour)},
-		capPredicate, 3, // already over cap (5 > 3) ⇒ budget ≤ 0
+		nil, capPredicate, 3, // already over cap (5 > 3) ⇒ budget ≤ 0
 	)
 	require.NoError(t, err)
 	assert.True(t, capReached)
@@ -245,7 +245,7 @@ func TestSwamp_PatchExpired_NoCap_RegressionTwin(t *testing.T) {
 	entries, capReached, err := s.PatchExpired(100,
 		[]msgpackpatch.Op{{Kind: msgpackpatch.OpSet, Path: "x", Value: encMsgpack(t, int8(1))}},
 		nil, &PatchFieldsMeta{SetExpiredAt: time.Now().UTC().Add(time.Hour)},
-		nil, 0,
+		nil, nil, 0,
 	)
 	require.NoError(t, err)
 	assert.False(t, capReached, "nil Cap → capReached must be false")
@@ -285,7 +285,7 @@ func TestSwamp_PatchExpired_CapNeverExceededUnderConcurrency(t *testing.T) {
 				entries, _, err := s.PatchExpired(100,
 					[]msgpackpatch.Op{{Kind: msgpackpatch.OpSet, Path: "claimedBy", Value: encMsgpack(t, fmt.Sprintf("w-%d", gID))}},
 					nil, &PatchFieldsMeta{SetExpiredAt: time.Now().UTC().Add(time.Hour)},
-					capPredicate, maxMatching,
+					nil, capPredicate, maxMatching,
 				)
 				if err != nil {
 					t.Errorf("PatchExpired error: %v", err)

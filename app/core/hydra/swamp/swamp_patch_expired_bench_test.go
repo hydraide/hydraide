@@ -84,7 +84,7 @@ func BenchmarkPatchExpired_Throughput(b *testing.B) {
 			b.ResetTimer()
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
-				entries, _, err := s.PatchExpired(batch, ops, nil, meta, nil, 0)
+				entries, _, err := s.PatchExpired(batch, ops, nil, meta, nil, nil, 0)
 				if err != nil {
 					b.Fatalf("PatchExpired: %v", err)
 				}
@@ -114,7 +114,7 @@ func BenchmarkPatchExpired_Scale(b *testing.B) {
 			b.ResetTimer()
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
-				entries, _, err := s.PatchExpired(500, ops, nil, meta, nil, 0)
+				entries, _, err := s.PatchExpired(500, ops, nil, meta, nil, nil, 0)
 				if err != nil {
 					b.Fatalf("PatchExpired: %v", err)
 				}
@@ -148,7 +148,7 @@ func BenchmarkPatchExpired_OpsPerPatch(b *testing.B) {
 			b.ResetTimer()
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
-				entries, _, err := s.PatchExpired(500, ops, nil, meta, nil, 0)
+				entries, _, err := s.PatchExpired(500, ops, nil, meta, nil, nil, 0)
 				if err != nil {
 					b.Fatalf("PatchExpired: %v", err)
 				}
