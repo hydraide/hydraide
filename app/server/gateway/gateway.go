@@ -651,19 +651,39 @@ func (g Gateway) GetByIndexStream(in *hydrapb.GetByIndexStreamRequest, stream hy
 
 	fromTime, toTime := parseOptionalTimestamps(in.GetFromTime(), in.GetToTime())
 
-	treasures, err := swampInterface.GetTreasuresByBeacon(
-		inputIndexTypeToBeaconType(in.GetIndexType()),
-		inputOrderTypeToBeaconOrderType(in.GetOrderType()),
-		in.GetFrom(), in.GetLimit(), fromTime, toTime)
-	if err != nil {
-		return status.Error(codes.Internal, fmt.Sprintf("hydra error: %s", err.Error()))
-	}
+	beaconType := inputIndexTypeToBeaconType(in.GetIndexType())
+	order := inputOrderTypeToBeaconOrderType(in.GetOrderType())
 
 	filters := in.GetFilters()
+	plan := PlanFilter(filters)
+
+	var treasures []treasure.Treasure
+	var residualFilters *hydrapb.FilterGroup
+
+	if plan.Mode != PlanModeBypass && bucketExecPreconditions(beaconType) {
+		// Bucket-routed: pull candidates from the auto-built index,
+		// then apply time-range, sort, paging, residual predicate.
+		candidates := collectBucketCandidates(swampInterface, plan.Hints)
+		candidates = applyTimeRange(candidates, beaconType, fromTime, toTime)
+		sortCandidates(candidates, beaconType, order)
+		treasures = applyFromLimit(candidates, in.GetFrom(), in.GetLimit())
+		residualFilters = plan.Residual
+	} else {
+		// Bypass: legacy beacon walk, full per-row predicate.
+		var err error
+		treasures, err = swampInterface.GetTreasuresByBeacon(
+			beaconType, order,
+			in.GetFrom(), in.GetLimit(), fromTime, toTime)
+		if err != nil {
+			return status.Error(codes.Internal, fmt.Sprintf("hydra error: %s", err.Error()))
+		}
+		residualFilters = filters
+	}
+
 	maxResults := in.GetMaxResults()
 	includeMap := buildKeySet(in.IncludedKeys)
 	excludeMap := buildKeySet(in.ExcludeKeys)
-	needsMeta := hasAnyLabels(filters)
+	needsMeta := hasAnyLabels(residualFilters)
 	var matchCount int32
 
 	for _, treasureInterface := range treasures {
@@ -692,9 +712,9 @@ func (g Gateway) GetByIndexStream(in *hydrapb.GetByIndexStreamRequest, stream hy
 		var meta *filterMatchMeta
 
 		if needsMeta {
-			matched, meta = evaluateNativeFilterGroupWithMeta(treasureInterface, filters)
+			matched, meta = evaluateNativeFilterGroupWithMeta(treasureInterface, residualFilters)
 		} else {
-			matched = evaluateNativeFilterGroup(treasureInterface, filters)
+			matched = evaluateNativeFilterGroup(treasureInterface, residualFilters)
 		}
 
 		if !matched {
@@ -762,21 +782,37 @@ func (g Gateway) GetByIndexStreamFromMany(in *hydrapb.GetByIndexStreamFromManyRe
 
 		fromTime, toTime := parseOptionalTimestamps(query.GetFromTime(), query.GetToTime())
 
-		treasures, err := swampInterface.GetTreasuresByBeacon(
-			inputIndexTypeToBeaconType(query.GetIndexType()),
-			inputOrderTypeToBeaconOrderType(query.GetOrderType()),
-			query.GetFrom(), query.GetLimit(), fromTime, toTime)
-
-		if err != nil {
-			swampInterface.CeaseVigil()
-			return status.Error(codes.Internal, fmt.Sprintf("hydra error: %s", err.Error()))
-		}
+		beaconType := inputIndexTypeToBeaconType(query.GetIndexType())
+		order := inputOrderTypeToBeaconOrderType(query.GetOrderType())
 
 		filters := query.GetFilters()
+		plan := PlanFilter(filters)
+
+		var treasures []treasure.Treasure
+		var residualFilters *hydrapb.FilterGroup
+
+		if plan.Mode != PlanModeBypass && bucketExecPreconditions(beaconType) {
+			candidates := collectBucketCandidates(swampInterface, plan.Hints)
+			candidates = applyTimeRange(candidates, beaconType, fromTime, toTime)
+			sortCandidates(candidates, beaconType, order)
+			treasures = applyFromLimit(candidates, query.GetFrom(), query.GetLimit())
+			residualFilters = plan.Residual
+		} else {
+			var err error
+			treasures, err = swampInterface.GetTreasuresByBeacon(
+				beaconType, order,
+				query.GetFrom(), query.GetLimit(), fromTime, toTime)
+			if err != nil {
+				swampInterface.CeaseVigil()
+				return status.Error(codes.Internal, fmt.Sprintf("hydra error: %s", err.Error()))
+			}
+			residualFilters = filters
+		}
+
 		queryMax := query.GetMaxResults()
 		includeMap := buildKeySet(query.IncludedKeys)
 		excludeMap := buildKeySet(query.ExcludeKeys)
-		needsMeta := hasAnyLabels(filters)
+		needsMeta := hasAnyLabels(residualFilters)
 		var queryCount int32
 
 		for _, treasureInterface := range treasures {
@@ -805,9 +841,9 @@ func (g Gateway) GetByIndexStreamFromMany(in *hydrapb.GetByIndexStreamFromManyRe
 			var meta *filterMatchMeta
 
 			if needsMeta {
-				matched, meta = evaluateNativeFilterGroupWithMeta(treasureInterface, filters)
+				matched, meta = evaluateNativeFilterGroupWithMeta(treasureInterface, residualFilters)
 			} else {
-				matched = evaluateNativeFilterGroup(treasureInterface, filters)
+				matched = evaluateNativeFilterGroup(treasureInterface, residualFilters)
 			}
 
 			if !matched {
