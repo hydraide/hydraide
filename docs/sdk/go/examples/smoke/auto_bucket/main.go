@@ -414,6 +414,171 @@ func concurrentColdBuilds(ctx context.Context, h hydraidego.Hydraidego) {
 		fmt.Sprintf("%d parallel queries", len(queries)))
 }
 
+// mutationPropagation seeds a swamp, builds a bucket, then runs every
+// mutation kind (insert / update / delete) against an already-warm
+// bucket and verifies the lookup count changes match the expected
+// post-mutation state.
+func mutationPropagation(ctx context.Context, h hydraidego.Hydraidego) {
+	fmt.Println("=== Mutation propagation against a warm bucket ===")
+	sw := swampName("mutation", "main")
+	_ = h.Destroy(ctx, sw)
+	defer func() { _ = h.Destroy(ctx, sw) }()
+
+	// Seed: 100 records, asnCard=10. Each asn slot holds 10.
+	if err := seed(ctx, h, sw, 100, 10); err != nil {
+		log.Fatalf("seed: %v", err)
+	}
+	idx := &hydraidego.Index{IndexType: hydraidego.IndexKey, IndexOrder: hydraidego.IndexOrderAsc}
+
+	count := func(asn int64) int {
+		got := 0
+		filter := hydraidego.FilterAND(hydraidego.FilterBytesFieldInt64(hydraidego.Equal, "asn", asn))
+		_ = h.CatalogReadManyStream(ctx, sw, idx, filter, Item{}, func(_ any) error {
+			got++
+			return nil
+		})
+		return got
+	}
+
+	// Build the bucket via the first lookup.
+	base := count(3)
+	if base != 10 {
+		record("mutation/build", false, 0, fmt.Sprintf("initial asn=3 count=%d, want 10", base))
+		return
+	}
+	record("mutation/build", true, 0, fmt.Sprintf("initial asn=3 count=%d", base))
+
+	// Insert: add 5 new records with asn=3.
+	t0 := time.Now()
+	inserts := make([]any, 5)
+	for i := 0; i < 5; i++ {
+		inserts[i] = &Item{
+			Key:  fmt.Sprintf("new-%d", i),
+			Body: &Body{Asn: 3, Status: "ready", Category: "A", Score: 999},
+		}
+	}
+	_ = h.CatalogSaveMany(ctx, sw, inserts, nil)
+	after := count(3)
+	record("mutation/insert", after == 15, time.Since(t0),
+		fmt.Sprintf("post-insert count=%d, want 15", after))
+
+	// Update: move 2 records from asn=3 to asn=7. Use CatalogSave on
+	// existing keys (overwrite).
+	t0 = time.Now()
+	updates := []any{
+		&Item{Key: "new-0", Body: &Body{Asn: 7, Status: "ready", Category: "A", Score: 999}},
+		&Item{Key: "new-1", Body: &Body{Asn: 7, Status: "ready", Category: "A", Score: 999}},
+	}
+	_ = h.CatalogSaveMany(ctx, sw, updates, nil)
+	afterAsn3 := count(3)
+	afterAsn7 := count(7)
+	pass := afterAsn3 == 13 && afterAsn7 == 12
+	record("mutation/update", pass, time.Since(t0),
+		fmt.Sprintf("asn=3 count=%d (want 13), asn=7 count=%d (want 12)", afterAsn3, afterAsn7))
+
+	// Delete: remove 3 records from asn=3.
+	t0 = time.Now()
+	for i := 2; i < 5; i++ {
+		_ = h.CatalogDelete(ctx, sw, fmt.Sprintf("new-%d", i))
+	}
+	afterDel := count(3)
+	record("mutation/delete", afterDel == 10, time.Since(t0),
+		fmt.Sprintf("post-delete count=%d, want 10", afterDel))
+}
+
+// multiBucketSync builds two buckets on the same swamp, mutates a
+// record so both buckets must update, and verifies both reflect.
+func multiBucketSync(ctx context.Context, h hydraidego.Hydraidego) {
+	fmt.Println("=== Multi-bucket sync on single Save ===")
+	sw := swampName("multibucket", "main")
+	_ = h.Destroy(ctx, sw)
+	defer func() { _ = h.Destroy(ctx, sw) }()
+
+	// Seed deterministic: 50 records, asn ∈ [0,9], status cycles
+	// through 5 values.
+	statuses := []string{"ready", "pending", "running", "done", "failed"}
+	items := make([]any, 50)
+	for i := 0; i < 50; i++ {
+		items[i] = &Item{
+			Key:  fmt.Sprintf("k%02d", i),
+			Body: &Body{Asn: int64(i % 10), Status: statuses[i%5], Category: "X", Score: int64(i)},
+		}
+	}
+	if err := h.CatalogSaveMany(ctx, sw, items, nil); err != nil {
+		log.Fatalf("seed: %v", err)
+	}
+
+	idx := &hydraidego.Index{IndexType: hydraidego.IndexKey, IndexOrder: hydraidego.IndexOrderAsc}
+	count := func(filter *hydraidego.FilterGroup) int {
+		got := 0
+		_ = h.CatalogReadManyStream(ctx, sw, idx, filter, Item{}, func(_ any) error {
+			got++
+			return nil
+		})
+		return got
+	}
+
+	// Build asn bucket and status bucket via two lookups.
+	asnFilter := hydraidego.FilterAND(hydraidego.FilterBytesFieldInt64(hydraidego.Equal, "asn", 3))
+	statusFilter := hydraidego.FilterAND(hydraidego.FilterBytesFieldString(hydraidego.Equal, "status", "ready"))
+	cAsn := count(asnFilter)
+	cStatus := count(statusFilter)
+	record("multibucket/build", cAsn == 5 && cStatus == 10, 0,
+		fmt.Sprintf("asn=3 count=%d (want 5), status=ready count=%d (want 10)", cAsn, cStatus))
+
+	// Pick k03 (originally asn=3, status=done) and rewrite it as
+	// asn=7, status=ready. Both buckets must update: asn=3 -> 4,
+	// asn=7 -> 6; status=done -> 9, status=ready -> 11.
+	t0 := time.Now()
+	_ = h.CatalogSaveMany(ctx, sw, []any{
+		&Item{Key: "k03", Body: &Body{Asn: 7, Status: "ready", Category: "X", Score: 3}},
+	}, nil)
+	cAsn3 := count(asnFilter)
+	cAsn7 := count(hydraidego.FilterAND(hydraidego.FilterBytesFieldInt64(hydraidego.Equal, "asn", 7)))
+	cStatusReady := count(statusFilter)
+	cStatusDone := count(hydraidego.FilterAND(hydraidego.FilterBytesFieldString(hydraidego.Equal, "status", "done")))
+
+	pass := cAsn3 == 4 && cAsn7 == 6 && cStatusReady == 11 && cStatusDone == 9
+	record("multibucket/single-save-updates-both", pass, time.Since(t0),
+		fmt.Sprintf("asn=3:%d(want 4) asn=7:%d(want 6) status=ready:%d(want 11) status=done:%d(want 9)",
+			cAsn3, cAsn7, cStatusReady, cStatusDone))
+}
+
+// sequentialBuildsBothCorrect builds an `asn` bucket, then a `status`
+// bucket on the same swamp, and verifies both return correct counts
+// after the second build. Complements concurrentColdBuilds.
+func sequentialBuildsBothCorrect(ctx context.Context, h hydraidego.Hydraidego) {
+	fmt.Println("=== Sequential builds: two fields, both stay correct ===")
+	sw := swampName("sequential", "main")
+	_ = h.Destroy(ctx, sw)
+	defer func() { _ = h.Destroy(ctx, sw) }()
+
+	if err := seed(ctx, h, sw, 1000, 10); err != nil {
+		log.Fatalf("seed: %v", err)
+	}
+	idx := &hydraidego.Index{IndexType: hydraidego.IndexKey, IndexOrder: hydraidego.IndexOrderAsc}
+
+	count := func(filter *hydraidego.FilterGroup) int {
+		got := 0
+		_ = h.CatalogReadManyStream(ctx, sw, idx, filter, Item{}, func(_ any) error { got++; return nil })
+		return got
+	}
+
+	// First build: asn=4.
+	first := count(hydraidego.FilterAND(hydraidego.FilterBytesFieldInt64(hydraidego.Equal, "asn", 4)))
+	// Second build (different field): status=ready. 5 statuses cycling
+	// over 1000 rows → 200 of each.
+	second := count(hydraidego.FilterAND(hydraidego.FilterBytesFieldString(hydraidego.Equal, "status", "ready")))
+	// Re-query the first bucket to confirm it survived the second
+	// build (different field path, must not interfere).
+	firstAgain := count(hydraidego.FilterAND(hydraidego.FilterBytesFieldInt64(hydraidego.Equal, "asn", 4)))
+
+	pass := first == 100 && second == 200 && firstAgain == 100
+	record("sequential-builds", pass, 0,
+		fmt.Sprintf("asn=4 first=%d (want 100), status=ready=%d (want 200), asn=4 again=%d (want 100)",
+			first, second, firstAgain))
+}
+
 func benchMatrix(ctx context.Context, h hydraidego.Hydraidego) {
 	fmt.Println("=== Benchmark matrix (size × ASN cardinality) ===")
 	type cell struct {
@@ -466,13 +631,16 @@ func main() {
 	defer cleanup()
 	h := r.GetHydraidego()
 
-	for _, realm := range []string{"matrix", "cold-warm", "cycle50", "concurrent", "bench"} {
+	for _, realm := range []string{"matrix", "mutation", "multibucket", "sequential", "cold-warm", "cycle50", "concurrent", "bench"} {
 		if err := setup.Pattern(ctx, r, swampPattern(realm)); err != nil {
 			log.Fatalf("register realm %s: %v", realm, err)
 		}
 	}
 
 	matrixCorrectness(ctx, h)
+	mutationPropagation(ctx, h)
+	multiBucketSync(ctx, h)
+	sequentialBuildsBothCorrect(ctx, h)
 	coldVsWarm(ctx, h, "1K", 1000)
 	coldVsWarm(ctx, h, "10K", 10000)
 	coldVsWarm(ctx, h, "50K", 50000)

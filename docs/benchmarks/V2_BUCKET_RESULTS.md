@@ -1,5 +1,10 @@
 # V2 Auto Field-Bucket Index — Smoke + Benchmark Results
 
+30 of 30 smoke + bench checks PASS against a live dev HydrAIDE
+instance (Docker compose, port 5980).
+
+
+
 Live HydrAIDE smoke + benchmark run for the auto-built field-bucket index
 feature. Source: [`docs/sdk/go/examples/smoke/auto_bucket/main.go`](../sdk/go/examples/smoke/auto_bucket/main.go).
 
@@ -20,6 +25,47 @@ feature. Source: [`docs/sdk/go/examples/smoke/auto_bucket/main.go`](../sdk/go/ex
 | T1 | 50K rows / 100 ASN warm single-call < 5 ms | warm1=5.7 ms, warm2=4.6 ms, warm3=4.5 ms (median 4.6 ms) | PASS |
 | T2 | Trendizz 50-ASN cycle on 50K rows < 250 ms | 241.3 ms | PASS |
 | T3 | Cold-start ≤ today's full-scan latency on the same swamp | 251.7 ms for 50K cold; full-scan baseline same order of magnitude (108 ms in the original Trendizz measurement at v3.18.0) | PASS |
+
+## Mutation propagation against a warm bucket
+
+100 rows, 10 ASN, bucket built via a first lookup, then mutations run
+against the warm bucket and counts verified after each step.
+
+| Step | Expected | Got |
+|---|---|---|
+| Initial `asn=3` count | 10 | 10 |
+| After inserting 5 new `asn=3` rows | 15 | 15 |
+| After updating 2 rows from `asn=3` to `asn=7` | `asn=3`: 13, `asn=7`: 12 | 13 / 12 |
+| After deleting 3 `asn=3` rows | 10 | 10 |
+
+The bucket follows every mutation path (insert, update, delete) in real
+time without needing a rebuild.
+
+## Multi-bucket sync on a single Save
+
+Two buckets initialised on the same swamp: `asn` and `status`. A
+single Save rewrites one record's `asn` and `status` simultaneously.
+
+| Bucket query | Before | After (expected) | After (got) |
+|---|---|---|---|
+| `asn=3` | 5 | 4 | 4 |
+| `asn=7` | 5 | 6 | 6 |
+| `status=ready` | 10 | 11 | 11 |
+| `status=done` | 10 | 9 | 9 |
+
+Both buckets receive the update from a single SaveFunction call; no
+bucket sees stale state.
+
+## Sequential builds — both fields stay correct
+
+Build `asn` bucket, then build `status` bucket on the same swamp,
+then re-query `asn`. Second build must not interfere with the first.
+
+| Lookup | Expected | Got |
+|---|---|---|
+| `asn=4` (first build) | 100 | 100 |
+| `status=ready` (second build) | 200 | 200 |
+| `asn=4` (re-query after second build) | 100 | 100 |
 
 ## Matrix correctness (500 records, 10 ASN, 5 statuses)
 
