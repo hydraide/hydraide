@@ -208,13 +208,12 @@ func (b *bucket) CountForValue(value any) int {
 	return countMatchingLocked(b, want)
 }
 
-// OnInsert handles a new treasure. If a build is in flight, the op is
-// buffered; otherwise it goes straight into the equality maps. If the
-// bucket is not initialized and no build is in flight, the call is a
-// defensive no-op (the swamp must have called this in error).
+// OnInsert handles a new treasure. The decision of whether to buffer
+// (during build) or apply directly is made atomically under pendingMu
+// to close the race window between the build finishing its last drain
+// and clearing the buildInFlight flag.
 func (b *bucket) OnInsert(t treasure.Treasure) error {
-	if b.BuildInFlight() {
-		b.EnqueuePending(PendingOp{Kind: PendingInsert, T: t})
+	if b.tryEnqueue(PendingOp{Kind: PendingInsert, T: t}) {
 		return nil
 	}
 	if !b.EqualityInitialized() {
@@ -231,8 +230,7 @@ func (b *bucket) OnInsert(t treasure.Treasure) error {
 }
 
 func (b *bucket) OnUpdate(t treasure.Treasure) error {
-	if b.BuildInFlight() {
-		b.EnqueuePending(PendingOp{Kind: PendingUpdate, T: t})
+	if b.tryEnqueue(PendingOp{Kind: PendingUpdate, T: t}) {
 		return nil
 	}
 	if !b.EqualityInitialized() {
@@ -249,8 +247,7 @@ func (b *bucket) OnUpdate(t treasure.Treasure) error {
 }
 
 func (b *bucket) OnDelete(key string) {
-	if b.BuildInFlight() {
-		b.EnqueuePending(PendingOp{Kind: PendingDelete, Key: key})
+	if b.tryEnqueue(PendingOp{Kind: PendingDelete, Key: key}) {
 		return
 	}
 	if !b.EqualityInitialized() {
@@ -261,40 +258,67 @@ func (b *bucket) OnDelete(key string) {
 	deleteLocked(b, key)
 }
 
-// EnqueuePending appends an op to the pending buffer. The bucket's main
-// mutex is not held here, only the dedicated pendingMu.
+// tryEnqueue appends op to the pending buffer iff a build is still in
+// flight, atomically under pendingMu. Returns true if enqueued. The
+// caller falls through to the direct-apply path on false. This closes
+// the TOCTOU race between BuildInFlight() check and the drain loop's
+// atomic clearing of the flag.
+func (b *bucket) tryEnqueue(op PendingOp) bool {
+	b.pendingMu.Lock()
+	defer b.pendingMu.Unlock()
+	if b.buildInFlight.Load() != 1 {
+		return false
+	}
+	b.pending = append(b.pending, op)
+	return true
+}
+
+// EnqueuePending unconditionally appends an op. Reserved for tests; the
+// production Save path goes through OnInsert/OnUpdate/OnDelete which
+// route via tryEnqueue.
 func (b *bucket) EnqueuePending(op PendingOp) {
 	b.pendingMu.Lock()
 	b.pending = append(b.pending, op)
 	b.pendingMu.Unlock()
 }
 
-// DrainPending replays the buffered ops in FIFO order against the
-// equality maps. Called by the caller (swamp) after BuildEquality
-// returns and before clearing the build-in-flight flag.
+// DrainPending replays buffered ops in FIFO order against the equality
+// maps, then atomically clears the buildInFlight flag. The loop keeps
+// running until it observes an empty pending buffer with pendingMu
+// held; new tryEnqueue callers either land in this drain (still
+// buildInFlight=1) or fall through to the direct path (after the flip).
+//
+// Concurrency contract: the caller publishes the bucket into the
+// swamp map with buildInFlight already set to 1, runs BuildEquality
+// (which is sync.Once-protected), then calls DrainPending. After
+// DrainPending returns, BuildInFlight() is false.
 func (b *bucket) DrainPending() error {
-	b.pendingMu.Lock()
-	ops := b.pending
-	b.pending = nil
-	b.pendingMu.Unlock()
-	if len(ops) == 0 {
-		return nil
-	}
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	for _, op := range ops {
-		switch op.Kind {
-		case PendingInsert, PendingUpdate:
-			k, ok := extractKey(op.T, b.fieldPath)
-			if !ok {
-				k = valuecanon.NullKey
-			}
-			insertOrUpdateLocked(b, op.T.GetKey(), k, op.T)
-		case PendingDelete:
-			deleteLocked(b, op.Key)
+	for {
+		b.pendingMu.Lock()
+		if len(b.pending) == 0 {
+			b.buildInFlight.Store(0)
+			b.pendingMu.Unlock()
+			return nil
 		}
+		ops := b.pending
+		b.pending = nil
+		b.pendingMu.Unlock()
+
+		b.mu.Lock()
+		for _, op := range ops {
+			switch op.Kind {
+			case PendingInsert, PendingUpdate:
+				k, ok := extractKey(op.T, b.fieldPath)
+				if !ok {
+					k = valuecanon.NullKey
+				}
+				insertOrUpdateLocked(b, op.T.GetKey(), k, op.T)
+			case PendingDelete:
+				deleteLocked(b, op.Key)
+			}
+		}
+		b.mu.Unlock()
 	}
-	return nil
 }
 
 func (b *bucket) Count() int {

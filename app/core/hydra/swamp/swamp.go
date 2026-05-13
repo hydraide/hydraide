@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/hydraide/hydraide/app/core/hydra/swamp/beacon"
+	"github.com/hydraide/hydraide/app/core/hydra/swamp/bucket"
 	"github.com/hydraide/hydraide/app/core/hydra/swamp/chronicler"
 	"github.com/hydraide/hydraide/app/core/hydra/swamp/metadata"
 	"github.com/hydraide/hydraide/app/core/hydra/swamp/treasure"
@@ -827,6 +828,21 @@ type Swamp interface {
 	// all expired" into an explicit large sentinel before reaching this
 	// layer; calling the engine directly with howMany <= 0 is valid.
 	PatchExpired(howMany int32, ops []msgpackpatch.Op, condition *msgpackpatch.Condition, meta *PatchFieldsMeta, selectionPredicate func(treasure.Treasure) bool, capPredicate func(treasure.Treasure) bool, capMax int32) ([]PatchExpiredEntry, bool, error)
+
+	// LookupByBucketEqual returns every Treasure whose body field at
+	// fieldPath canonically equals value. The first call for a given
+	// fieldPath triggers an inline equality-view build (cost ∝ swamp
+	// size, one body pass). Subsequent calls are O(1) plus the result
+	// slice. The returned slice is a copy and safe to retain.
+	LookupByBucketEqual(fieldPath string, value any) []treasure.Treasure
+
+	// LookupByBucketIn returns the union of LookupByBucketEqual over
+	// values, deduplicated by treasure key. Empty values returns nil.
+	LookupByBucketIn(fieldPath string, values []any) []treasure.Treasure
+
+	// BucketCount returns the number of initialised buckets currently
+	// held by this swamp. Telemetry / soft-cap warnings only.
+	BucketCount() int
 }
 
 // PatchExpiredEntry carries the per-treasure outcome of a PatchExpired call.
@@ -1031,6 +1047,15 @@ type swamp struct {
 	inMemorySwamp int32 // if the swamp is an in-memory swamp we don't write it to the filesystem
 
 	metadataInterface metadata.Metadata // the metadata interface that the swamp is using
+
+	// Auto-built field-bucket indexes. The map is nil until the first
+	// LookupByBucket* call registers a bucket for some field path. Per
+	// bucket lifecycle: registered with buildInFlight=1 → snapshot →
+	// BuildEquality → DrainPending (which atomically clears the flag).
+	// Lock order: bucketsMu → bucket.mu → bucket.pendingMu. See the
+	// bucket package for the in-bucket lock contract.
+	buckets   map[string]bucket.Bucket
+	bucketsMu sync.RWMutex
 }
 
 type FilesystemSettings struct {
@@ -2118,6 +2143,9 @@ func (s *swamp) SaveFunction(t treasure.Treasure, guardID guard.ID) treasure.Tre
 
 		// add treasure to all other beacons if needed
 		s.addTreasureToBeacons(t)
+		// auto-built field-bucket indexes: must run AFTER beaconKey.Add
+		// so the snapshot-vs-pending invariant in pkg bucket holds.
+		s.notifyBucketsInsert(t)
 		s.sendEventToHydra(t, nil, treasure.StatusNew)
 		s.sendSwampInfo()
 
@@ -2168,6 +2196,16 @@ func (s *swamp) SaveFunction(t treasure.Treasure, guardID guard.ID) treasure.Tre
 
 		// the treasure is modified, we need to add it to the swamp and write it to the chroniclerInterface
 		s.treasuresWaitingForWriter.Add(t)
+
+		// Auto-built field-bucket indexes care about body field values.
+		// We notify on every modification path (content-type swap,
+		// expiration-only, content-only, meta-only) and let each bucket
+		// decide whether the indexed field actually moved — the cost is
+		// one body decode per initialised bucket per Save, and the
+		// alternative (gating here on IsContentChanged) would silently
+		// miss patches that re-encode an unchanged body, or msgpack
+		// edits that leave IsContentChanged false.
+		s.notifyBucketsUpdate(t)
 
 		// send the event to the hydra
 		s.sendEventToHydra(t, existedTreasureObj, treasure.StatusModified)
@@ -2247,6 +2285,10 @@ func (s *swamp) Close() {
 	// close internal routines because we are closing the swamp and we don't need to listen for new events or write ticker
 	s.goRoutineCancelFunction()
 
+	// drop auto-built bucket indexes; they are derived state and a
+	// re-summoned swamp rebuilds them on the first filter.
+	s.dropAllBuckets()
+
 	// send the closed event to the hydra
 	s.sendClosedEvent()
 
@@ -2291,6 +2333,9 @@ func (s *swamp) Destroy() {
 		s.chroniclerInterface.Destroy()
 		slog.Debug("Destroy: chronicler destroyed", "swamp", swampName)
 	}
+
+	// drop auto-built bucket indexes; they are derived state.
+	s.dropAllBuckets()
 
 	// send the closed event to the ManagerInterface that will delete the swamp from the map
 	s.sendClosedEvent()
@@ -2808,6 +2853,8 @@ func (s *swamp) deleteHandler(key string, shadowDelete bool) (deletedTreasure tr
 	s.beaconKey.Delete(key)
 	// delete the treasure from all active indexes
 	s.deleteTreasureFromBeacons(key)
+	// drop the key from every initialised auto-built bucket
+	s.notifyBucketsDelete(key)
 
 	// send the deleted event_channel_handler to the neen
 	s.sendDeletedEventToClient(clonedTreasure)
