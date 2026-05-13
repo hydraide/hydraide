@@ -444,6 +444,16 @@ func countMatchingLocked(b *bucket, want valuecanon.Key) int {
 	return n
 }
 
+// msgpack format detection constants — must match the gateway-side
+// constants in app/server/gateway/filter.go. Bodies written via
+// SetContentByteArray from the gateway (Patch / PatchExpired paths)
+// carry a 2-byte magic prefix that must be stripped before
+// msgpack.Unmarshal.
+const (
+	msgpackMagic0 byte = 0xC7
+	msgpackMagic1 byte = 0x00
+)
+
 // extractKey decodes the treasure body to a map and returns the canonical
 // key for the configured field path. Returns (NullKey, true) when the body
 // is decodable but the field is absent or nil. Returns (NullKey, false)
@@ -453,6 +463,12 @@ func extractKey(t treasure.Treasure, fieldPath string) (valuecanon.Key, bool) {
 	body, err := t.GetContentByteArray()
 	if err != nil || len(body) == 0 {
 		return valuecanon.NullKey, true
+	}
+	// Strip the gateway's msgpack magic prefix if present. Bodies
+	// written via direct SDK calls (no prefix) and via Patch* RPCs
+	// (prefixed) are both supported.
+	if len(body) >= 2 && body[0] == msgpackMagic0 && body[1] == msgpackMagic1 {
+		body = body[2:]
 	}
 	var m map[string]any
 	if err := msgpack.Unmarshal(body, &m); err != nil {

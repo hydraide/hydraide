@@ -124,7 +124,7 @@ func shiftMatchingOneSwamp(ctx context.Context, g Gateway, in *hydrapb.ShiftMatc
 	}
 
 	fromTime, toTime := parseOptionalTimestamps(in.GetFromTime(), in.GetToTime())
-	predicate, predErr := buildShiftMatchingPredicate(beaconType, in.GetFilters(), fromTime, toTime)
+	predicate, predErr := buildShiftMatchingPredicate(swampInterface, beaconType, in.GetFilters(), fromTime, toTime)
 	if predErr != nil {
 		return nil, false, status.Error(codes.InvalidArgument, predErr.Error())
 	}
@@ -149,32 +149,59 @@ func shiftMatchingOneSwamp(ctx context.Context, g Gateway, in *hydrapb.ShiftMatc
 // Time bounds (FromTime / ToTime) apply only on time-based indexes
 // (creation, update, expiration). On non-time indexes they are silently
 // ignored — the existing GetTreasuresByBeacon API does the same.
-func buildShiftMatchingPredicate(beaconType swamp.BeaconType, filters *hydrapb.FilterGroup, fromTime, toTime *time.Time) (func(treasure.Treasure) bool, error) {
+//
+// When filters resolve to a bucket-eligible plan, the residual is
+// composed with a candidate-key fast-reject. The engine still walks
+// the full beacon under its mu (preserving the disjoint-subset
+// guarantee across concurrent callers) but body-decode only fires
+// for the small candidate set.
+func buildShiftMatchingPredicate(sw swamp.Swamp, beaconType swamp.BeaconType, filters *hydrapb.FilterGroup, fromTime, toTime *time.Time) (func(treasure.Treasure) bool, error) {
 	getTs := timestampExtractorFor(beaconType)
 	hasTimeBounds := (fromTime != nil || toTime != nil) && getTs != nil
 	hasFilters := filters != nil
 
-	switch {
-	case !hasTimeBounds && !hasFilters:
-		return func(_ treasure.Treasure) bool { return true }, nil
-	case hasTimeBounds && !hasFilters:
+	if !hasFilters {
+		if !hasTimeBounds {
+			return func(_ treasure.Treasure) bool { return true }, nil
+		}
 		fromNano, toNano := timeBoundsNanos(fromTime, toTime)
 		return func(t treasure.Treasure) bool {
 			return inTimeRange(getTs(t), fromNano, toNano)
 		}, nil
-	case !hasTimeBounds && hasFilters:
+	}
+
+	// Filter present — plan it.
+	plan := PlanFilter(filters)
+	filterEval := filters
+	var keySet map[string]struct{}
+	if plan.Mode != PlanModeBypass {
+		candidates := collectBucketCandidates(sw, plan.Hints)
+		keySet = candidateKeySet(candidates)
+		filterEval = plan.Residual
+	}
+
+	if !hasTimeBounds {
 		return func(t treasure.Treasure) bool {
-			return evaluateNativeFilterGroup(t, filters)
-		}, nil
-	default:
-		fromNano, toNano := timeBoundsNanos(fromTime, toTime)
-		return func(t treasure.Treasure) bool {
-			if !inTimeRange(getTs(t), fromNano, toNano) {
-				return false
+			if keySet != nil {
+				if _, in := keySet[t.GetKey()]; !in {
+					return false
+				}
 			}
-			return evaluateNativeFilterGroup(t, filters)
+			return evaluateNativeFilterGroup(t, filterEval)
 		}, nil
 	}
+	fromNano, toNano := timeBoundsNanos(fromTime, toTime)
+	return func(t treasure.Treasure) bool {
+		if !inTimeRange(getTs(t), fromNano, toNano) {
+			return false
+		}
+		if keySet != nil {
+			if _, in := keySet[t.GetKey()]; !in {
+				return false
+			}
+		}
+		return evaluateNativeFilterGroup(t, filterEval)
+	}, nil
 }
 
 // timestampExtractorFor returns the treasure-timestamp getter that

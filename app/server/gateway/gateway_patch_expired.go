@@ -21,12 +21,33 @@ const patchExpiredHowManySentinel int32 = 1 << 30
 // buildPatchExpiredSelectionPredicate converts the optional Filters
 // FilterGroup into a per-treasure predicate. nil filters → nil predicate
 // (matches all expired records, legacy behaviour).
-func buildPatchExpiredSelectionPredicate(filters *hydrapb.FilterGroup) (func(treasure.Treasure) bool, error) {
+//
+// When the planner finds a bucket-eligible plan, the predicate is
+// wrapped with a candidate-key fast-reject: the engine still walks the
+// full expirationTimeBeacon (so atomic per-key selection under beacon
+// mu is preserved), but only the small candidate set ever reaches the
+// residual filter and its body-decode work. Trendizz-shaped workloads
+// (50K rows / 100 ASN) see ~99% of body decodes eliminated.
+func buildPatchExpiredSelectionPredicate(sw swamp.Swamp, filters *hydrapb.FilterGroup) (func(treasure.Treasure) bool, error) {
 	if filters == nil {
 		return nil, nil
 	}
+	plan := PlanFilter(filters)
+	if plan.Mode == PlanModeBypass {
+		return func(t treasure.Treasure) bool {
+			return evaluateNativeFilterGroup(t, filters)
+		}, nil
+	}
+
+	candidates := collectBucketCandidates(sw, plan.Hints)
+	set := candidateKeySet(candidates)
+	residual := plan.Residual
+
 	return func(t treasure.Treasure) bool {
-		return evaluateNativeFilterGroup(t, filters)
+		if _, in := set[t.GetKey()]; !in {
+			return false
+		}
+		return evaluateNativeFilterGroup(t, residual)
 	}, nil
 }
 
@@ -92,7 +113,7 @@ func (g Gateway) PatchExpiredTreasures(ctx context.Context, in *hydrapb.PatchExp
 	cond := protoCondToMsgpackpatchCond(in.GetCondition())
 	meta := protoMetaToSwampMeta(in.GetMeta())
 
-	selectionPred, selErr := buildPatchExpiredSelectionPredicate(in.GetFilters())
+	selectionPred, selErr := buildPatchExpiredSelectionPredicate(swampObj, in.GetFilters())
 	if selErr != nil {
 		return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("invalid Filters: %s", selErr.Error()))
 	}
@@ -213,7 +234,7 @@ func patchExpiredOneSwamp(ctx context.Context, g Gateway, in *hydrapb.PatchExpir
 	cond := protoCondToMsgpackpatchCond(in.GetCondition())
 	meta := protoMetaToSwampMeta(in.GetMeta())
 
-	selectionPred, selErr := buildPatchExpiredSelectionPredicate(in.GetFilters())
+	selectionPred, selErr := buildPatchExpiredSelectionPredicate(swampObj, in.GetFilters())
 	if selErr != nil {
 		return &hydrapb.PatchExpiredTreasuresManyEntry{Error: protoStr(fmt.Sprintf("invalid Filters: %s", selErr.Error()))}
 	}

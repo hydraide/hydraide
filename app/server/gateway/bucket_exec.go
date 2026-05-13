@@ -140,6 +140,21 @@ func sortCandidates(candidates []treasure.Treasure, beaconType hydra.BeaconType,
 	sort.SliceStable(candidates, less)
 }
 
+// candidateKeySet builds a lookup-friendly key set from a candidate
+// slice. Used by the cap-bearing flows (PatchExpired, ShiftMatching)
+// which keep the engine's beacon-walk-based atomicity primitive and
+// rely on a wrapped selectionPredicate to fast-reject non-candidates.
+func candidateKeySet(candidates []treasure.Treasure) map[string]struct{} {
+	if len(candidates) == 0 {
+		return nil
+	}
+	out := make(map[string]struct{}, len(candidates))
+	for _, t := range candidates {
+		out[t.GetKey()] = struct{}{}
+	}
+	return out
+}
+
 // applyFromLimit returns a sub-slice of candidates respecting the
 // from-offset and limit (limit <= 0 means "no upper bound").
 func applyFromLimit(candidates []treasure.Treasure, from int32, limit int32) []treasure.Treasure {
