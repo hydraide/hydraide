@@ -22,34 +22,34 @@ feature. Source: [`docs/sdk/go/examples/smoke/auto_bucket/main.go`](../sdk/go/ex
 |---|---|---|---|
 | F1 | Every matrix row M2-M22 routes to the planned mode | All bucket-eligible rows return correct counts | PASS |
 | F2 | Byte-identical results vs. full-scan reference | Every smoke run cross-checks expected vs. observed row count | PASS |
-| T1 | 50K rows / 100 ASN warm single-call < 5 ms | warm1=5.7 ms, warm2=4.6 ms, warm3=4.5 ms (median 4.6 ms) | PASS |
-| T2 | Trendizz 50-ASN cycle on 50K rows < 250 ms | 241.3 ms | PASS |
-| T3 | Cold-start ≤ today's full-scan latency on the same swamp | 251.7 ms for 50K cold; full-scan baseline same order of magnitude (108 ms in the original Trendizz measurement at v3.18.0) | PASS |
+| T1 | 50K rows / 100 tenants warm single-call < 5 ms | warm1=5.7 ms, warm2=4.6 ms, warm3=4.5 ms (median 4.6 ms) | PASS |
+| T2 | Filtered claim cycle (50 tenants × 50K rows) on 50K rows < 250 ms | 241.3 ms | PASS |
+| T3 | Cold-start ≤ today's full-scan latency on the same swamp | 251.7 ms for 50K cold; full-scan baseline same order of magnitude (108 ms baseline on v3.18.0 ) | PASS |
 
 ## Mutation propagation against a warm bucket
 
-100 rows, 10 ASN, bucket built via a first lookup, then mutations run
+100 rows, 10 tenants, bucket built via a first lookup, then mutations run
 against the warm bucket and counts verified after each step.
 
 | Step | Expected | Got |
 |---|---|---|
-| Initial `asn=3` count | 10 | 10 |
-| After inserting 5 new `asn=3` rows | 15 | 15 |
-| After updating 2 rows from `asn=3` to `asn=7` | `asn=3`: 13, `asn=7`: 12 | 13 / 12 |
-| After deleting 3 `asn=3` rows | 10 | 10 |
+| Initial `tenant=3` count | 10 | 10 |
+| After inserting 5 new `tenant=3` rows | 15 | 15 |
+| After updating 2 rows from `tenant=3` to `tenant=7` | `tenant=3`: 13, `tenant=7`: 12 | 13 / 12 |
+| After deleting 3 `tenant=3` rows | 10 | 10 |
 
 The bucket follows every mutation path (insert, update, delete) in real
 time without needing a rebuild.
 
 ## Multi-bucket sync on a single Save
 
-Two buckets initialised on the same swamp: `asn` and `status`. A
-single Save rewrites one record's `asn` and `status` simultaneously.
+Two buckets initialised on the same swamp: `tenant` and `status`. A
+single Save rewrites one record's `tenant` and `status` simultaneously.
 
 | Bucket query | Before | After (expected) | After (got) |
 |---|---|---|---|
-| `asn=3` | 5 | 4 | 4 |
-| `asn=7` | 5 | 6 | 6 |
+| `tenant=3` | 5 | 4 | 4 |
+| `tenant=7` | 5 | 6 | 6 |
 | `status=ready` | 10 | 11 | 11 |
 | `status=done` | 10 | 9 | 9 |
 
@@ -58,47 +58,47 @@ bucket sees stale state.
 
 ## Sequential builds — both fields stay correct
 
-Build `asn` bucket, then build `status` bucket on the same swamp,
-then re-query `asn`. Second build must not interfere with the first.
+Build `tenant` bucket, then build `status` bucket on the same swamp,
+then re-query `tenant`. Second build must not interfere with the first.
 
 | Lookup | Expected | Got |
 |---|---|---|
-| `asn=4` (first build) | 100 | 100 |
+| `tenant=4` (first build) | 100 | 100 |
 | `status=ready` (second build) | 200 | 200 |
-| `asn=4` (re-query after second build) | 100 | 100 |
+| `tenant=4` (re-query after second build) | 100 | 100 |
 
-## Matrix correctness (500 records, 10 ASN, 5 statuses)
+## Matrix correctness (500 records, 10 tenants, 5 statuses)
 
 Every supported matrix row evaluated against an in-memory reference
 count computed from the seed. All counts match.
 
 | Row | Filter | Mode | Latency | Rows |
 |---|---|---|---|---|
-| M2 | `asn=5` | AND, 1 hint | 8.0 ms (cold) | 50 |
-| M5 | `asn=5 AND status=ready` | AND, hint=asn, residual=status | 1.8 ms | 50 |
-| M6 | `asn=5 OR asn=6` | OR-union | 2.2 ms | 100 |
-| M7 | `asn=5 OR status=ready` | OR-union (mixed paths) | 3.7 ms | 100 |
-| M8 | `asn IN (1,2,3)` | AND, 1 IN hint | 2.1 ms | 150 |
-| M9 | `asn=5 AND score>100` | AND, hint=asn, range residual | 1.3 ms | 40 |
+| M2 | `tenant=5` | AND, 1 hint | 8.0 ms (cold) | 50 |
+| M5 | `tenant=5 AND status=ready` | AND, hint=tenant, residual=status | 1.8 ms | 50 |
+| M6 | `tenant=5 OR tenant=6` | OR-union | 2.2 ms | 100 |
+| M7 | `tenant=5 OR status=ready` | OR-union (mixed paths) | 3.7 ms | 100 |
+| M8 | `tenant IN (1,2,3)` | AND, 1 IN hint | 2.1 ms | 150 |
+| M9 | `tenant=5 AND score>100` | AND, hint=tenant, range residual | 1.3 ms | 40 |
 | M14 | `score>100 AND score<200` | Bypass (range only in v1) | 3.4 ms | 99 |
-| M22 | `asn=5 AND status!=ready` | AND, hint=asn, NOT residual | 1.1 ms | 0 |
+| M22 | `tenant=5 AND status!=ready` | AND, hint=tenant, NOT residual | 1.1 ms | 0 |
 | M19 | empty | Bypass | 3.6 ms | 500 |
 
 ## Cold vs. warm latency
 
 | Swamp size | Cold | Warm 1 | Warm 2 | Warm 3 | Speedup |
 |---|---|---|---|---|---|
-| 1K  / 100 ASN | 4.6 ms   | 1.2 ms | 1.6 ms | 1.1 ms | 3.8× |
-| 10K / 100 ASN | 35.8 ms  | 2.1 ms | 2.3 ms | 2.0 ms | 17.2× |
-| 50K / 100 ASN | 251.7 ms | 5.7 ms | 4.6 ms | 4.5 ms | 44.2× |
+| 1K  / 100 tenants | 4.6 ms   | 1.2 ms | 1.6 ms | 1.1 ms | 3.8× |
+| 10K / 100 tenants | 35.8 ms  | 2.1 ms | 2.3 ms | 2.0 ms | 17.2× |
+| 50K / 100 tenants | 251.7 ms | 5.7 ms | 4.6 ms | 4.5 ms | 44.2× |
 
 The cold call is dominated by the one-time body-pass building the
 equality view. The warm call is a single map lookup plus the sort.
 
-## Trendizz 50-ASN cycle
+## Filtered claim cycle (50 tenants × 50K rows)
 
-50 000 rows, 100 ASN, warm-up cold-call prepayed, then 50 consecutive
-`asn=k` queries for k=0..49.
+50 000 rows, 100 tenants, warm-up cold-call prepayed, then 50 consecutive
+`tenant=k` queries for k=0..49.
 
 | Total wall-clock | Per-call median |
 |---|---|
@@ -126,15 +126,15 @@ summoned beacon.
 ## Concurrent cold builds
 
 Three parallel goroutines each cold-build a different bucket
-(`asn`, `status`, `category`) on the same 5K-row swamp. All three
+(`tenant`, `status`, `category`) on the same 5K-row swamp. All three
 return correct counts, no deadlock, total wall-clock 49 ms.
 
-## Benchmark matrix (size × ASN cardinality)
+## Benchmark matrix (size × tenant cardinality)
 
 Cold = first filter call after seeding. Warm median = median of 5
-filter calls on different ASN values after the bucket is built.
+filter calls on different tenant values after the bucket is built.
 
-| Size | ASN card | Cold | Warm median | Speedup |
+| Size | tenant card | Cold | Warm median | Speedup |
 |---|---|---|---|---|
 | 1 000  | 10  | 6.8 ms   | 2.2 ms | 3.1× |
 | 10 000 | 50  | 35.5 ms  | 2.6 ms | 13.9× |
@@ -142,7 +142,7 @@ filter calls on different ASN values after the bucket is built.
 | 50 000 | 100 | 218.2 ms | 4.7 ms | 46.1× |
 | 50 000 | 500 | 216.5 ms | 2.6 ms | 84.8× |
 
-The speedup grows with both swamp size and ASN cardinality. Higher ASN
+The speedup grows with both swamp size and tenant cardinality. Higher tenant
 cardinality means each value-slot is smaller, so the warm-path post-
 lookup sort + residual evaluation cost shrinks proportionally.
 

@@ -1023,31 +1023,31 @@ Full concept doc: [`docs/features/auto-field-bucket-indexes.md`](../../../docs/f
 
 **Sharding vs. bucket: choose at modelling time.**
 
-- One filter axis, high cardinality (`ASN`, tenant, region) → **shard by that axis** (one swamp per value). Zero index overhead, idle eviction distributes memory, axis isolation comes for free.
-- Multiple filter fields combined in a single query (`asn` + `status` + `category`) → **single swamp + auto-bucket**. Sharding by N axes gives N×M×K swamps and pushes set logic to the client.
-- One axis but low cardinality (3 statuses, 5 tenants) → **auto-bucket**. Sharding into 3 huge swamps doesn't fix the per-shard size problem.
+- One filter axis, high cardinality (`tenant`, `region`, `customerID`) → **shard by that axis** (one swamp per value). Zero index overhead, idle eviction distributes memory, axis isolation comes for free.
+- Multiple filter fields combined in a single query (`tenant` + `status` + `category`) → **single swamp + auto-bucket**. Sharding by N axes gives N×M×K swamps and pushes set logic to the client.
+- One axis but low cardinality (3 statuses, 5 categories) → **auto-bucket**. Sharding into 3 huge swamps doesn't fix the per-shard size problem.
 
 **Filter shapes that build a bucket:**
 
 ```go
 // Equal on a body field: bucket-eligible
 hydraidego.FilterBytesFieldString(hydraidego.Equal, "Status", "ready")
-hydraidego.FilterBytesFieldInt64(hydraidego.Equal, "Asn", 42)
+hydraidego.FilterBytesFieldString(hydraidego.Equal, "Tenant", "acme")
 
 // IN operators on a body field: bucket-eligible
-hydraidego.FilterBytesFieldInt64In("Asn", 1, 2, 3)
+hydraidego.FilterBytesFieldStringIn("Tenant", "acme", "globex", "initech")
 hydraidego.FilterBytesFieldStringIn("Status", "ready", "pending")
 
 // AND of one indexable + non-indexable legs: bucket on the indexable, residual on the rest
 hydraidego.FilterAND(
-    hydraidego.FilterBytesFieldInt64(hydraidego.Equal, "Asn", 42),
+    hydraidego.FilterBytesFieldString(hydraidego.Equal, "Tenant", "acme"),
     hydraidego.FilterBytesFieldInt64(hydraidego.GreaterThan, "Score", 100),
 )
 
 // OR of all-indexable legs: bucket lookup per leg, deduplicated union
 hydraidego.FilterOR(
-    hydraidego.FilterBytesFieldInt64(hydraidego.Equal, "Asn", 1),
-    hydraidego.FilterBytesFieldInt64(hydraidego.Equal, "Asn", 2),
+    hydraidego.FilterBytesFieldString(hydraidego.Equal, "Tenant", "acme"),
+    hydraidego.FilterBytesFieldString(hydraidego.Equal, "Tenant", "globex"),
 )
 ```
 
@@ -1063,7 +1063,7 @@ hydraidego.FilterOR(
 
 1. **Body must be msgpack.** Set `EncodingFormat: hydraidego.EncodingMsgPack` on the swamp pattern. GOB bodies cannot be bucket-indexed.
 2. **Filter on body fields, not metadata.** `FilterCreatedAt`, `FilterUpdatedAt`, `FilterExpiredAt`, and Treasure-level value filters (without `BytesFieldPath`) never trigger a bucket build. They go through the time-axis or value-axis beacons.
-3. **Field path must match the msgpack key the server sees.** With no `msgpack` tag, the Go field name is the path (`Asn`, `Status`). With a tag like `msgpack:"asn"`, the path is the tag value. Two different paths on the same swamp produce two independent buckets, and the comparison is case-sensitive.
+3. **Field path must match the msgpack key the server sees.** With no `msgpack` tag, the Go field name is the path (`Tenant`, `Status`). With a tag like `msgpack:"tenant"`, the path is the tag value. Two different paths on the same swamp produce two independent buckets, and the comparison is case-sensitive.
 4. **Field values must be canonical scalars.** `bool`, the int8..int64 family, the uint8..uint64 family, `float32` / `float64`, `string`, or `nil`. Cross-kind equality works (int64=5 matches uint64=5 and float64=5.0 losslessly), but string vs. number never matches.
 5. **Field must exist in the body.** Rows that omit the field land in the null slot. A filter for a real value won't match them, which is what you want, but it means `IsEmpty` semantics still go through the bypass route.
 

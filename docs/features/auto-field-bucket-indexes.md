@@ -1,6 +1,6 @@
 ## Auto field-bucket indexes: zero-declaration server-side filter acceleration
 
-HydrAIDE evaluates `FilterGroup` filters server-side. A filter like `asn = 42` walks the swamp's primary beacon and msgpack-decodes every Treasure's body to check the field. On a 50 000-row swamp that means 50 000 body decodes per call. Fine once, expensive in a tight loop.
+HydrAIDE evaluates `FilterGroup` filters server-side. A filter like `tenant = "acme"` walks the swamp's primary beacon and msgpack-decodes every Treasure's body to check the field. On a 50 000-row swamp that means 50 000 body decodes per call. Fine once, expensive in a tight loop.
 
 The auto field-bucket index sits between the swamp and the filter evaluator. The first filter that picks a single body field with an equality or `IN` operator triggers an **in-memory map** keyed by that field's canonical value. Subsequent filters on the same field skip the body-decode pass entirely.
 
@@ -11,7 +11,7 @@ Two things make the feature easy to live with:
 
 ### What it does, in one paragraph
 
-When you query `asn = 42` for the first time, the swamp takes a snapshot of its in-memory key index, body-decodes every Treasure once, and stores a `map[canonicalValue]map[treasureKey]Treasure` in memory. That first call pays the full body-pass cost (the same cost a non-bucket filter would have paid). Every subsequent call for any value on the same field is then a map lookup plus a stable sort of the small result set. Mutations (`Save`, `Patch`, delete) refresh every initialised bucket through the same `SaveFunction` hook the existing beacons use, so the index stays consistent with the data without a rebuild.
+When you query `tenant = "acme"` for the first time, the swamp takes a snapshot of its in-memory key index, body-decodes every Treasure once, and stores a `map[canonicalValue]map[treasureKey]Treasure` in memory. That first call pays the full body-pass cost (the same cost a non-bucket filter would have paid). Every subsequent call for any value on the same field is then a map lookup plus a stable sort of the small result set. Mutations (`Save`, `Patch`, delete) refresh every initialised bucket through the same `SaveFunction` hook the existing beacons use, so the index stays consistent with the data without a rebuild.
 
 ### When the planner uses a bucket
 
@@ -22,7 +22,7 @@ The server-side planner inspects every `FilterGroup` before evaluation. It picks
 | Single `Equal` or `IN` on a body field | Bucket lookup, then optional residual filter |
 | AND of one indexable leg plus other legs | Bucket lookup on the indexable leg, residual is the rest |
 | OR where every leg is `Equal` or `IN` on a body field | Bucket lookup per leg, deduplicated union |
-| `(asn = 1 OR asn = 2) AND status = ready` | The inner OR becomes the candidate set, the AND's other legs become residual |
+| `(tenant = "acme" OR tenant = "globex") AND status = ready` | The inner OR becomes the candidate set, the AND's other legs become residual |
 | AND containing a range (`>`, `<`, BETWEEN) plus an indexable leg | Bucket on the indexable leg, range stays as residual |
 | Only range, `NOT_EQUAL`, `CONTAINS`, vector, geo, phrase, nested-slice | Bypass. The query falls back to the legacy beacon walk. |
 
@@ -36,8 +36,8 @@ The bucket index trades memory for lookup speed. Before reaching for it, ask whe
 
 | Situation | Use | Why |
 |---|---|---|
-| One main filter axis (`ASN`, `tenantID`, `region`), high cardinality | **Sharding** (`crawl-queue/<asn>/...`, one swamp per ASN) | Zero index work, `CloseAfterIdle` distributes memory across the live set, axis-level isolation |
-| Several filter fields mixed (`asn` + `status` + `category`), and filters combine them | **Auto-bucket** | Sharding by N axes gives N×M×K swamps and pushes set logic to the client |
+| One main filter axis (`tenant`, `region`, `customerID`), high cardinality | **Sharding** (`work-queue/<tenant>/...`, one swamp per tenant) | Zero index work, `CloseAfterIdle` distributes memory across the live set, axis-level isolation |
+| Several filter fields mixed (`tenant` + `status` + `category`), and filters combine them | **Auto-bucket** | Sharding by N axes gives N×M×K swamps and pushes set logic to the client |
 | One axis, low cardinality (3 statuses, 5 tenants) | **Auto-bucket** | Sharding into 3 huge swamps still has the per-shard size problem |
 | Many fields, but a query touches only one at a time | **Sharding** on the most common field, auto-bucket on the rest | Per-shard size stays small, auto-bucket handles the long tail cheaply on the smaller candidate set |
 | Hot multi-tenant data | **Sharding** by tenant plus auto-bucket inside each tenant swamp | Isolation and cache locality first, then index acceleration on the secondary fields |
@@ -52,9 +52,9 @@ For a bucket to build, the data and the filter both need to hold up their end.
 
 - **Body must be msgpack-encoded.** Buckets read the body via `msgpack.Unmarshal`. GOB-encoded bodies cannot be bucket-indexed. Always set `EncodingFormat: hydraidego.EncodingMsgPack` on the swamp pattern.
 - **Indexed field must live inside the body.** The `BytesFieldPath` in the filter points into the msgpack map. Treasure metadata (`CreatedAt`, `UpdatedAt`, `ExpiredAt`, the Treasure key itself) is never bucket-indexed. Those are sorted by their own beacons and the filter routes through the legacy beacon walk.
-- **Field path is case-sensitive.** `metadata.asn` and `metadata.ASN` are two separate buckets. Stay consistent between writers and readers.
+- **Field path is case-sensitive.** `metadata.tenant` and `metadata.Tenant` are two separate buckets. Stay consistent between writers and readers.
 - **Field values must be one of the supported canonical kinds:** `bool`, `int8..int64`, `uint8..uint64`, `float32` / `float64`, `string`, or `nil`. Anything else (slices, maps, `time.Time` embedded in a struct) collapses to the null bucket, and queries on real values return no rows.
-- **The field must actually exist in the body.** If half the rows omit the field, those rows go into the "null" slot. A filter like `asn = 42` matches the value slot, not the null slot (which is what you want), but a filter like `asn IS_EMPTY` is not bucket-indexed at all and stays on the bypass route.
+- **The field must actually exist in the body.** If half the rows omit the field, those rows go into the "null" slot. A filter like `tenant = "acme"` matches the value slot, not the null slot (which is what you want), but a filter like `tenant IS_EMPTY` is not bucket-indexed at all and stays on the bypass route.
 
 **The filter side: what triggers a build.**
 

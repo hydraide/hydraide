@@ -10,10 +10,10 @@
 //
 //   - matrix correctness: M2 / M5 / M6 / M7 / M8 / M9 / M14 / M19 / M22
 //   - cold-vs-warm latency on swamp sizes 1K / 10K / 50K
-//   - Trendizz-shaped 50-ASN cycle wall-clock
+//   - Generic 50-tenant claim cycle wall-clock
 //   - lifecycle: re-summon after CloseAfterIdle rebuilds the bucket
 //   - concurrency: parallel cold-builds on different fields
-//   - bench matrix: cold vs warm across (size × ASN cardinality)
+//   - bench matrix: cold vs warm across (size × tenant cardinality)
 //
 // Exit status: 0 on full PASS, 1 on any FAIL.
 package main
@@ -41,7 +41,7 @@ type Item struct {
 }
 
 type Body struct {
-	Asn      int64  `msgpack:"asn"`
+	Tenant   int64  `msgpack:"tenant"`
 	Status   string `msgpack:"status"`
 	Category string `msgpack:"category"`
 	Score    int64  `msgpack:"score"`
@@ -77,7 +77,7 @@ func record(name string, pass bool, latency time.Duration, note string) {
 	}
 }
 
-func seed(ctx context.Context, h hydraidego.Hydraidego, swamp name.Name, n, asnCard int) error {
+func seed(ctx context.Context, h hydraidego.Hydraidego, swamp name.Name, n, tenantCard int) error {
 	r := rand.New(rand.NewSource(42))
 	statuses := []string{"ready", "pending", "running", "done", "failed"}
 	categories := []string{"A", "B", "C", "D", "E"}
@@ -93,7 +93,7 @@ func seed(ctx context.Context, h hydraidego.Hydraidego, swamp name.Name, n, asnC
 			models = append(models, &Item{
 				Key: fmt.Sprintf("k%07d", i),
 				Body: &Body{
-					Asn:      int64(i % asnCard),
+					Tenant:   int64(i % tenantCard),
 					Status:   statuses[i%len(statuses)],
 					Category: categories[i%len(categories)],
 					Score:    int64(r.Intn(1000)),
@@ -114,21 +114,21 @@ func matrixCorrectness(ctx context.Context, h hydraidego.Hydraidego) {
 	defer func() { _ = h.Destroy(ctx, sw) }()
 
 	n := 500
-	asnCard := 10
+	tenantCard := 10
 	statuses := []string{"ready", "pending", "running", "done", "failed"}
 	categories := []string{"A", "B", "C", "D", "E"}
 	items := make([]any, 0, n)
-	byAsn := map[int64]int{}
+	byTenant := map[int64]int{}
 	byStatus := map[string]int{}
 	for i := 0; i < n; i++ {
 		body := &Body{
-			Asn:      int64(i % asnCard),
+			Tenant:   int64(i % tenantCard),
 			Status:   statuses[i%len(statuses)],
 			Category: categories[i%len(categories)],
 			Score:    int64(i),
 		}
 		items = append(items, &Item{Key: fmt.Sprintf("k%04d", i), Body: body})
-		byAsn[body.Asn]++
+		byTenant[body.Tenant]++
 		byStatus[body.Status]++
 	}
 	if err := h.CatalogSaveMany(ctx, sw, items, nil); err != nil {
@@ -156,59 +156,59 @@ func matrixCorrectness(ctx context.Context, h hydraidego.Hydraidego) {
 		record(label, true, latency, fmt.Sprintf("rows=%d", got))
 	}
 
-	run("M2 asn=5",
-		hydraidego.FilterAND(hydraidego.FilterBytesFieldInt64(hydraidego.Equal, "asn", 5)),
-		byAsn[5])
+	run("M2 tenant=5",
+		hydraidego.FilterAND(hydraidego.FilterBytesFieldInt64(hydraidego.Equal, "tenant", 5)),
+		byTenant[5])
 
 	exp5ready := 0
 	for _, it := range items {
 		x := it.(*Item)
-		if x.Body.Asn == 5 && x.Body.Status == "ready" {
+		if x.Body.Tenant == 5 && x.Body.Status == "ready" {
 			exp5ready++
 		}
 	}
-	run("M5 asn=5 AND status=ready",
+	run("M5 tenant=5 AND status=ready",
 		hydraidego.FilterAND(
-			hydraidego.FilterBytesFieldInt64(hydraidego.Equal, "asn", 5),
+			hydraidego.FilterBytesFieldInt64(hydraidego.Equal, "tenant", 5),
 			hydraidego.FilterBytesFieldString(hydraidego.Equal, "status", "ready"),
 		),
 		exp5ready)
 
-	run("M6 asn=5 OR asn=6",
+	run("M6 tenant=5 OR tenant=6",
 		hydraidego.FilterOR(
-			hydraidego.FilterBytesFieldInt64(hydraidego.Equal, "asn", 5),
-			hydraidego.FilterBytesFieldInt64(hydraidego.Equal, "asn", 6),
+			hydraidego.FilterBytesFieldInt64(hydraidego.Equal, "tenant", 5),
+			hydraidego.FilterBytesFieldInt64(hydraidego.Equal, "tenant", 6),
 		),
-		byAsn[5]+byAsn[6])
+		byTenant[5]+byTenant[6])
 
 	exp7 := 0
 	for _, it := range items {
 		x := it.(*Item)
-		if x.Body.Asn == 5 || x.Body.Status == "ready" {
+		if x.Body.Tenant == 5 || x.Body.Status == "ready" {
 			exp7++
 		}
 	}
-	run("M7 asn=5 OR status=ready",
+	run("M7 tenant=5 OR status=ready",
 		hydraidego.FilterOR(
-			hydraidego.FilterBytesFieldInt64(hydraidego.Equal, "asn", 5),
+			hydraidego.FilterBytesFieldInt64(hydraidego.Equal, "tenant", 5),
 			hydraidego.FilterBytesFieldString(hydraidego.Equal, "status", "ready"),
 		),
 		exp7)
 
-	run("M8 asn IN (1,2,3)",
-		hydraidego.FilterAND(hydraidego.FilterBytesFieldInt64In("asn", 1, 2, 3)),
-		byAsn[1]+byAsn[2]+byAsn[3])
+	run("M8 tenant IN (1,2,3)",
+		hydraidego.FilterAND(hydraidego.FilterBytesFieldInt64In("tenant", 1, 2, 3)),
+		byTenant[1]+byTenant[2]+byTenant[3])
 
 	exp9 := 0
 	for _, it := range items {
 		x := it.(*Item)
-		if x.Body.Asn == 5 && x.Body.Score > 100 {
+		if x.Body.Tenant == 5 && x.Body.Score > 100 {
 			exp9++
 		}
 	}
-	run("M9 asn=5 AND score>100 (range residual)",
+	run("M9 tenant=5 AND score>100 (range residual)",
 		hydraidego.FilterAND(
-			hydraidego.FilterBytesFieldInt64(hydraidego.Equal, "asn", 5),
+			hydraidego.FilterBytesFieldInt64(hydraidego.Equal, "tenant", 5),
 			hydraidego.FilterBytesFieldInt64(hydraidego.GreaterThan, "score", 100),
 		),
 		exp9)
@@ -230,13 +230,13 @@ func matrixCorrectness(ctx context.Context, h hydraidego.Hydraidego) {
 	exp22 := 0
 	for _, it := range items {
 		x := it.(*Item)
-		if x.Body.Asn == 5 && x.Body.Status != "ready" {
+		if x.Body.Tenant == 5 && x.Body.Status != "ready" {
 			exp22++
 		}
 	}
-	run("M22 asn=5 AND status!=ready",
+	run("M22 tenant=5 AND status!=ready",
 		hydraidego.FilterAND(
-			hydraidego.FilterBytesFieldInt64(hydraidego.Equal, "asn", 5),
+			hydraidego.FilterBytesFieldInt64(hydraidego.Equal, "tenant", 5),
 			hydraidego.FilterBytesFieldString(hydraidego.NotEqual, "status", "ready"),
 		),
 		exp22)
@@ -255,7 +255,7 @@ func coldVsWarm(ctx context.Context, h hydraidego.Hydraidego, sizeName string, n
 	}
 
 	idx := &hydraidego.Index{IndexType: hydraidego.IndexKey, IndexOrder: hydraidego.IndexOrderAsc}
-	filter := hydraidego.FilterAND(hydraidego.FilterBytesFieldInt64(hydraidego.Equal, "asn", 42))
+	filter := hydraidego.FilterAND(hydraidego.FilterBytesFieldInt64(hydraidego.Equal, "tenant", 42))
 
 	measure := func() (time.Duration, int) {
 		t0 := time.Now()
@@ -289,8 +289,8 @@ func coldVsWarm(ctx context.Context, h hydraidego.Hydraidego, sizeName string, n
 			speedup))
 }
 
-func cycle50ASN(ctx context.Context, h hydraidego.Hydraidego, n int) {
-	fmt.Printf("=== Trendizz-shaped 50-ASN cycle (n=%d, asnCard=100) ===\n", n)
+func cycle50Tenant(ctx context.Context, h hydraidego.Hydraidego, n int) {
+	fmt.Printf("=== Generic 50-tenant claim cycle (n=%d, tenantCard=100) ===\n", n)
 	sw := swampName("cycle50", "main")
 	_ = h.Destroy(ctx, sw)
 	defer func() { _ = h.Destroy(ctx, sw) }()
@@ -300,20 +300,20 @@ func cycle50ASN(ctx context.Context, h hydraidego.Hydraidego, n int) {
 	}
 	idx := &hydraidego.Index{IndexType: hydraidego.IndexKey, IndexOrder: hydraidego.IndexOrderAsc}
 
-	warmup := hydraidego.FilterAND(hydraidego.FilterBytesFieldInt64(hydraidego.Equal, "asn", 0))
+	warmup := hydraidego.FilterAND(hydraidego.FilterBytesFieldInt64(hydraidego.Equal, "tenant", 0))
 	_ = h.CatalogReadManyStream(ctx, sw, idx, warmup, Item{}, func(_ any) error { return nil })
 
 	t0 := time.Now()
 	total := 0
-	for asn := int64(0); asn < 50; asn++ {
-		filter := hydraidego.FilterAND(hydraidego.FilterBytesFieldInt64(hydraidego.Equal, "asn", asn))
+	for tenant := int64(0); tenant < 50; tenant++ {
+		filter := hydraidego.FilterAND(hydraidego.FilterBytesFieldInt64(hydraidego.Equal, "tenant", tenant))
 		_ = h.CatalogReadManyStream(ctx, sw, idx, filter, Item{}, func(_ any) error {
 			total++
 			return nil
 		})
 	}
 	elapsed := time.Since(t0)
-	record(fmt.Sprintf("50-asn-cycle/n=%d", n), true, elapsed,
+	record(fmt.Sprintf("50-tenant-cycle/n=%d", n), true, elapsed,
 		fmt.Sprintf("total=%d, per-call=%v", total, (elapsed/50).Round(time.Microsecond)))
 }
 
@@ -341,7 +341,7 @@ func lifecycleRebuild(ctx context.Context, r repo.Repo, h hydraidego.Hydraidego)
 		log.Fatalf("seed: %v", err)
 	}
 	idx := &hydraidego.Index{IndexType: hydraidego.IndexKey, IndexOrder: hydraidego.IndexOrderAsc}
-	filter := hydraidego.FilterAND(hydraidego.FilterBytesFieldInt64(hydraidego.Equal, "asn", 7))
+	filter := hydraidego.FilterAND(hydraidego.FilterBytesFieldInt64(hydraidego.Equal, "tenant", 7))
 
 	t0 := time.Now()
 	c1 := 0
@@ -378,7 +378,7 @@ func concurrentColdBuilds(ctx context.Context, h hydraidego.Hydraidego) {
 		want   int
 	}
 	queries := []query{
-		{"asn=10", hydraidego.FilterAND(hydraidego.FilterBytesFieldInt64(hydraidego.Equal, "asn", 10)), 5000 / 50},
+		{"tenant=10", hydraidego.FilterAND(hydraidego.FilterBytesFieldInt64(hydraidego.Equal, "tenant", 10)), 5000 / 50},
 		{"status=ready", hydraidego.FilterAND(hydraidego.FilterBytesFieldString(hydraidego.Equal, "status", "ready")), -1},
 		{"category=A", hydraidego.FilterAND(hydraidego.FilterBytesFieldString(hydraidego.Equal, "category", "A")), -1},
 	}
@@ -424,15 +424,15 @@ func mutationPropagation(ctx context.Context, h hydraidego.Hydraidego) {
 	_ = h.Destroy(ctx, sw)
 	defer func() { _ = h.Destroy(ctx, sw) }()
 
-	// Seed: 100 records, asnCard=10. Each asn slot holds 10.
+	// Seed: 100 records, tenantCard=10. Each tenant slot holds 10.
 	if err := seed(ctx, h, sw, 100, 10); err != nil {
 		log.Fatalf("seed: %v", err)
 	}
 	idx := &hydraidego.Index{IndexType: hydraidego.IndexKey, IndexOrder: hydraidego.IndexOrderAsc}
 
-	count := func(asn int64) int {
+	count := func(tenant int64) int {
 		got := 0
-		filter := hydraidego.FilterAND(hydraidego.FilterBytesFieldInt64(hydraidego.Equal, "asn", asn))
+		filter := hydraidego.FilterAND(hydraidego.FilterBytesFieldInt64(hydraidego.Equal, "tenant", tenant))
 		_ = h.CatalogReadManyStream(ctx, sw, idx, filter, Item{}, func(_ any) error {
 			got++
 			return nil
@@ -443,18 +443,18 @@ func mutationPropagation(ctx context.Context, h hydraidego.Hydraidego) {
 	// Build the bucket via the first lookup.
 	base := count(3)
 	if base != 10 {
-		record("mutation/build", false, 0, fmt.Sprintf("initial asn=3 count=%d, want 10", base))
+		record("mutation/build", false, 0, fmt.Sprintf("initial tenant=3 count=%d, want 10", base))
 		return
 	}
-	record("mutation/build", true, 0, fmt.Sprintf("initial asn=3 count=%d", base))
+	record("mutation/build", true, 0, fmt.Sprintf("initial tenant=3 count=%d", base))
 
-	// Insert: add 5 new records with asn=3.
+	// Insert: add 5 new records with tenant=3.
 	t0 := time.Now()
 	inserts := make([]any, 5)
 	for i := 0; i < 5; i++ {
 		inserts[i] = &Item{
 			Key:  fmt.Sprintf("new-%d", i),
-			Body: &Body{Asn: 3, Status: "ready", Category: "A", Score: 999},
+			Body: &Body{Tenant: 3, Status: "ready", Category: "A", Score: 999},
 		}
 	}
 	_ = h.CatalogSaveMany(ctx, sw, inserts, nil)
@@ -462,21 +462,21 @@ func mutationPropagation(ctx context.Context, h hydraidego.Hydraidego) {
 	record("mutation/insert", after == 15, time.Since(t0),
 		fmt.Sprintf("post-insert count=%d, want 15", after))
 
-	// Update: move 2 records from asn=3 to asn=7. Use CatalogSave on
+	// Update: move 2 records from tenant=3 to tenant=7. Use CatalogSave on
 	// existing keys (overwrite).
 	t0 = time.Now()
 	updates := []any{
-		&Item{Key: "new-0", Body: &Body{Asn: 7, Status: "ready", Category: "A", Score: 999}},
-		&Item{Key: "new-1", Body: &Body{Asn: 7, Status: "ready", Category: "A", Score: 999}},
+		&Item{Key: "new-0", Body: &Body{Tenant: 7, Status: "ready", Category: "A", Score: 999}},
+		&Item{Key: "new-1", Body: &Body{Tenant: 7, Status: "ready", Category: "A", Score: 999}},
 	}
 	_ = h.CatalogSaveMany(ctx, sw, updates, nil)
-	afterAsn3 := count(3)
-	afterAsn7 := count(7)
-	pass := afterAsn3 == 13 && afterAsn7 == 12
+	afterT3 := count(3)
+	afterT7 := count(7)
+	pass := afterT3 == 13 && afterT7 == 12
 	record("mutation/update", pass, time.Since(t0),
-		fmt.Sprintf("asn=3 count=%d (want 13), asn=7 count=%d (want 12)", afterAsn3, afterAsn7))
+		fmt.Sprintf("tenant=3 count=%d (want 13), tenant=7 count=%d (want 12)", afterT3, afterT7))
 
-	// Delete: remove 3 records from asn=3.
+	// Delete: remove 3 records from tenant=3.
 	t0 = time.Now()
 	for i := 2; i < 5; i++ {
 		_ = h.CatalogDelete(ctx, sw, fmt.Sprintf("new-%d", i))
@@ -494,14 +494,14 @@ func multiBucketSync(ctx context.Context, h hydraidego.Hydraidego) {
 	_ = h.Destroy(ctx, sw)
 	defer func() { _ = h.Destroy(ctx, sw) }()
 
-	// Seed deterministic: 50 records, asn ∈ [0,9], status cycles
+	// Seed deterministic: 50 records, tenant ∈ [0,9], status cycles
 	// through 5 values.
 	statuses := []string{"ready", "pending", "running", "done", "failed"}
 	items := make([]any, 50)
 	for i := 0; i < 50; i++ {
 		items[i] = &Item{
 			Key:  fmt.Sprintf("k%02d", i),
-			Body: &Body{Asn: int64(i % 10), Status: statuses[i%5], Category: "X", Score: int64(i)},
+			Body: &Body{Tenant: int64(i % 10), Status: statuses[i%5], Category: "X", Score: int64(i)},
 		}
 	}
 	if err := h.CatalogSaveMany(ctx, sw, items, nil); err != nil {
@@ -518,33 +518,33 @@ func multiBucketSync(ctx context.Context, h hydraidego.Hydraidego) {
 		return got
 	}
 
-	// Build asn bucket and status bucket via two lookups.
-	asnFilter := hydraidego.FilterAND(hydraidego.FilterBytesFieldInt64(hydraidego.Equal, "asn", 3))
+	// Build tenant bucket and status bucket via two lookups.
+	tenantFilter := hydraidego.FilterAND(hydraidego.FilterBytesFieldInt64(hydraidego.Equal, "tenant", 3))
 	statusFilter := hydraidego.FilterAND(hydraidego.FilterBytesFieldString(hydraidego.Equal, "status", "ready"))
-	cAsn := count(asnFilter)
+	cTenant := count(tenantFilter)
 	cStatus := count(statusFilter)
-	record("multibucket/build", cAsn == 5 && cStatus == 10, 0,
-		fmt.Sprintf("asn=3 count=%d (want 5), status=ready count=%d (want 10)", cAsn, cStatus))
+	record("multibucket/build", cTenant == 5 && cStatus == 10, 0,
+		fmt.Sprintf("tenant=3 count=%d (want 5), status=ready count=%d (want 10)", cTenant, cStatus))
 
-	// Pick k03 (originally asn=3, status=done) and rewrite it as
-	// asn=7, status=ready. Both buckets must update: asn=3 -> 4,
-	// asn=7 -> 6; status=done -> 9, status=ready -> 11.
+	// Pick k03 (originally tenant=3, status=done) and rewrite it as
+	// tenant=7, status=ready. Both buckets must update: tenant=3 -> 4,
+	// tenant=7 -> 6; status=done -> 9, status=ready -> 11.
 	t0 := time.Now()
 	_ = h.CatalogSaveMany(ctx, sw, []any{
-		&Item{Key: "k03", Body: &Body{Asn: 7, Status: "ready", Category: "X", Score: 3}},
+		&Item{Key: "k03", Body: &Body{Tenant: 7, Status: "ready", Category: "X", Score: 3}},
 	}, nil)
-	cAsn3 := count(asnFilter)
-	cAsn7 := count(hydraidego.FilterAND(hydraidego.FilterBytesFieldInt64(hydraidego.Equal, "asn", 7)))
+	cT3 := count(tenantFilter)
+	cT7 := count(hydraidego.FilterAND(hydraidego.FilterBytesFieldInt64(hydraidego.Equal, "tenant", 7)))
 	cStatusReady := count(statusFilter)
 	cStatusDone := count(hydraidego.FilterAND(hydraidego.FilterBytesFieldString(hydraidego.Equal, "status", "done")))
 
-	pass := cAsn3 == 4 && cAsn7 == 6 && cStatusReady == 11 && cStatusDone == 9
+	pass := cT3 == 4 && cT7 == 6 && cStatusReady == 11 && cStatusDone == 9
 	record("multibucket/single-save-updates-both", pass, time.Since(t0),
-		fmt.Sprintf("asn=3:%d(want 4) asn=7:%d(want 6) status=ready:%d(want 11) status=done:%d(want 9)",
-			cAsn3, cAsn7, cStatusReady, cStatusDone))
+		fmt.Sprintf("tenant=3:%d(want 4) tenant=7:%d(want 6) status=ready:%d(want 11) status=done:%d(want 9)",
+			cT3, cT7, cStatusReady, cStatusDone))
 }
 
-// sequentialBuildsBothCorrect builds an `asn` bucket, then a `status`
+// sequentialBuildsBothCorrect builds an `tenant` bucket, then a `status`
 // bucket on the same swamp, and verifies both return correct counts
 // after the second build. Complements concurrentColdBuilds.
 func sequentialBuildsBothCorrect(ctx context.Context, h hydraidego.Hydraidego) {
@@ -564,25 +564,25 @@ func sequentialBuildsBothCorrect(ctx context.Context, h hydraidego.Hydraidego) {
 		return got
 	}
 
-	// First build: asn=4.
-	first := count(hydraidego.FilterAND(hydraidego.FilterBytesFieldInt64(hydraidego.Equal, "asn", 4)))
+	// First build: tenant=4.
+	first := count(hydraidego.FilterAND(hydraidego.FilterBytesFieldInt64(hydraidego.Equal, "tenant", 4)))
 	// Second build (different field): status=ready. 5 statuses cycling
 	// over 1000 rows → 200 of each.
 	second := count(hydraidego.FilterAND(hydraidego.FilterBytesFieldString(hydraidego.Equal, "status", "ready")))
 	// Re-query the first bucket to confirm it survived the second
 	// build (different field path, must not interfere).
-	firstAgain := count(hydraidego.FilterAND(hydraidego.FilterBytesFieldInt64(hydraidego.Equal, "asn", 4)))
+	firstAgain := count(hydraidego.FilterAND(hydraidego.FilterBytesFieldInt64(hydraidego.Equal, "tenant", 4)))
 
 	pass := first == 100 && second == 200 && firstAgain == 100
 	record("sequential-builds", pass, 0,
-		fmt.Sprintf("asn=4 first=%d (want 100), status=ready=%d (want 200), asn=4 again=%d (want 100)",
+		fmt.Sprintf("tenant=4 first=%d (want 100), status=ready=%d (want 200), tenant=4 again=%d (want 100)",
 			first, second, firstAgain))
 }
 
 func benchMatrix(ctx context.Context, h hydraidego.Hydraidego) {
-	fmt.Println("=== Benchmark matrix (size × ASN cardinality) ===")
+	fmt.Println("=== Benchmark matrix (size × tenant cardinality) ===")
 	type cell struct {
-		size, asnCard int
+		size, tenantCard int
 	}
 	cells := []cell{
 		{1000, 10},
@@ -592,13 +592,13 @@ func benchMatrix(ctx context.Context, h hydraidego.Hydraidego) {
 		{50000, 500},
 	}
 	for _, c := range cells {
-		sw := swampName("bench", fmt.Sprintf("s%d-a%d", c.size, c.asnCard))
+		sw := swampName("bench", fmt.Sprintf("s%d-a%d", c.size, c.tenantCard))
 		_ = h.Destroy(ctx, sw)
-		if err := seed(ctx, h, sw, c.size, c.asnCard); err != nil {
+		if err := seed(ctx, h, sw, c.size, c.tenantCard); err != nil {
 			log.Fatalf("seed: %v", err)
 		}
 		idx := &hydraidego.Index{IndexType: hydraidego.IndexKey, IndexOrder: hydraidego.IndexOrderAsc}
-		filter := hydraidego.FilterAND(hydraidego.FilterBytesFieldInt64(hydraidego.Equal, "asn", 0))
+		filter := hydraidego.FilterAND(hydraidego.FilterBytesFieldInt64(hydraidego.Equal, "tenant", 0))
 
 		t0 := time.Now()
 		_ = h.CatalogReadManyStream(ctx, sw, idx, filter, Item{}, func(_ any) error { return nil })
@@ -606,7 +606,7 @@ func benchMatrix(ctx context.Context, h hydraidego.Hydraidego) {
 
 		samples := make([]time.Duration, 5)
 		for i := 0; i < 5; i++ {
-			f := hydraidego.FilterAND(hydraidego.FilterBytesFieldInt64(hydraidego.Equal, "asn", int64(i+1)))
+			f := hydraidego.FilterAND(hydraidego.FilterBytesFieldInt64(hydraidego.Equal, "tenant", int64(i+1)))
 			tx := time.Now()
 			_ = h.CatalogReadManyStream(ctx, sw, idx, f, Item{}, func(_ any) error { return nil })
 			samples[i] = time.Since(tx)
@@ -615,7 +615,7 @@ func benchMatrix(ctx context.Context, h hydraidego.Hydraidego) {
 		warmMed := samples[len(samples)/2]
 		speedup := float64(cold) / float64(warmMed)
 
-		record(fmt.Sprintf("bench size=%d asnCard=%d", c.size, c.asnCard), true, warmMed,
+		record(fmt.Sprintf("bench size=%d tenantCard=%d", c.size, c.tenantCard), true, warmMed,
 			fmt.Sprintf("cold=%v warmMed=%v speedup=%.1fx",
 				cold.Round(time.Microsecond), warmMed.Round(time.Microsecond), speedup))
 
@@ -644,7 +644,7 @@ func main() {
 	coldVsWarm(ctx, h, "1K", 1000)
 	coldVsWarm(ctx, h, "10K", 10000)
 	coldVsWarm(ctx, h, "50K", 50000)
-	cycle50ASN(ctx, h, 50000)
+	cycle50Tenant(ctx, h, 50000)
 	lifecycleRebuild(ctx, r, h)
 	concurrentColdBuilds(ctx, h)
 	benchMatrix(ctx, h)

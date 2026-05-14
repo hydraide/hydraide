@@ -64,13 +64,13 @@ Useful when you compose mixed filters and want to know which lane the record cam
 
 ### Auto-built field-bucket indexes (filter acceleration)
 
-The order indexes covered above (`KEY`, `EXPIRATION_TIME`, `CREATION_TIME`, `UPDATE_TIME`, `VALUE_*`) decide the *iteration order* of a streamed read. They do not accelerate the filter itself. Without further work, an `asn = 42` filter still walks the whole swamp and msgpack-decodes every body.
+The order indexes covered above (`KEY`, `EXPIRATION_TIME`, `CREATION_TIME`, `UPDATE_TIME`, `VALUE_*`) decide the *iteration order* of a streamed read. They do not accelerate the filter itself. Without further work, a `tenant = "acme"` filter still walks the whole swamp and msgpack-decodes every body.
 
 The auto field-bucket index closes that gap. The first filter that picks a body field with `EQUAL` or one of the `*_IN` operators triggers an in-memory map keyed by that field's canonical value. The bucket is built lazily, lives only while the swamp is summoned, and stays in sync with mutations through the same `SaveFunction` hook the order indexes use. Subsequent queries skip the body decode entirely.
 
 A planner inspects every `FilterGroup` and routes the query through the bucket when the filter shape allows it (`Equal`, `IN`, `AND` of indexable plus non-indexable legs, all-indexable `OR` unions). Anything else (range comparisons, `NOT_EQUAL`, vector / geo / phrase / nested-slice, NOT-wrapped groups) bypasses the bucket and uses the legacy beacon walk. The bucket route is byte-identical to the bypass route, so the feature is a pure optimisation.
 
-**Sharding vs. auto-bucket: which one fits.** If a single field drives most of the filter volume and its cardinality is high enough that per-shard size stays sane (think: ASN per crawler queue, tenant per multi-tenant store), shard by that field. One swamp per value, no index work, axis-level isolation, and `CloseAfterIdle` distributes memory across the live set. If queries are compositional (AND across multiple fields) or the cardinality is low (3 statuses, 5 categories), the bucket index is the simpler design: one swamp, one index per filtered field path, the planner picks one indexable leg as the candidate set and applies the rest as residual.
+**Sharding vs. auto-bucket: which one fits.** If a single field drives most of the filter volume and its cardinality is high enough that per-shard size stays sane (think: tenant per multi-tenant store, region per geographically partitioned dataset), shard by that field. One swamp per value, no index work, axis-level isolation, and `CloseAfterIdle` distributes memory across the live set. If queries are compositional (AND across multiple fields) or the cardinality is low (3 statuses, 5 categories), the bucket index is the simpler design: one swamp, one index per filtered field path, the planner picks one indexable leg as the candidate set and applies the rest as residual.
 
 For the full decision tree, what makes a bucket build, lifecycle, mutation cost, and the concurrency model, see [Auto field-bucket indexes](auto-field-bucket-indexes.md).
 
