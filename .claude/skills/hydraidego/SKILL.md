@@ -1015,13 +1015,13 @@ SliceContains, SliceNotContains
 StringIn, Int32In, Int64In
 ```
 
-### Auto field-bucket indexes — filter acceleration
+### Auto field-bucket indexes (filter acceleration)
 
-The server lazily builds an in-memory index for any body field path the first time you filter on it with `Equal` or `*_In`. Subsequent filters on the same field skip the per-row body decode entirely. There is no API to declare or trigger this — the index appears as a side effect of the first qualifying query.
+The server lazily builds an in-memory index for any body field path the first time you filter on it with `Equal` or `*_In`. Subsequent filters on the same field skip the per-row body decode entirely. There is no API to declare or trigger this; the index appears as a side effect of the first qualifying query.
 
 Full concept doc: [`docs/features/auto-field-bucket-indexes.md`](../../../docs/features/auto-field-bucket-indexes.md).
 
-**Sharding vs. bucket — choose at modelling time:**
+**Sharding vs. bucket: choose at modelling time.**
 
 - One filter axis, high cardinality (`ASN`, tenant, region) → **shard by that axis** (one swamp per value). Zero index overhead, idle eviction distributes memory, axis isolation comes for free.
 - Multiple filter fields combined in a single query (`asn` + `status` + `category`) → **single swamp + auto-bucket**. Sharding by N axes gives N×M×K swamps and pushes set logic to the client.
@@ -1030,21 +1030,21 @@ Full concept doc: [`docs/features/auto-field-bucket-indexes.md`](../../../docs/f
 **Filter shapes that build a bucket:**
 
 ```go
-// Equal on a body field — bucket-eligible
+// Equal on a body field: bucket-eligible
 hydraidego.FilterBytesFieldString(hydraidego.Equal, "Status", "ready")
 hydraidego.FilterBytesFieldInt64(hydraidego.Equal, "Asn", 42)
 
-// IN operators on a body field — bucket-eligible
+// IN operators on a body field: bucket-eligible
 hydraidego.FilterBytesFieldInt64In("Asn", 1, 2, 3)
 hydraidego.FilterBytesFieldStringIn("Status", "ready", "pending")
 
-// AND of one indexable + non-indexable legs — bucket on the indexable, residual on the rest
+// AND of one indexable + non-indexable legs: bucket on the indexable, residual on the rest
 hydraidego.FilterAND(
     hydraidego.FilterBytesFieldInt64(hydraidego.Equal, "Asn", 42),
     hydraidego.FilterBytesFieldInt64(hydraidego.GreaterThan, "Score", 100),
 )
 
-// OR of all-indexable legs — bucket lookup per leg, deduplicated union
+// OR of all-indexable legs: bucket lookup per leg, deduplicated union
 hydraidego.FilterOR(
     hydraidego.FilterBytesFieldInt64(hydraidego.Equal, "Asn", 1),
     hydraidego.FilterBytesFieldInt64(hydraidego.Equal, "Asn", 2),
@@ -1062,14 +1062,14 @@ hydraidego.FilterOR(
 **Data-design checklist for an index to actually build:**
 
 1. **Body must be msgpack.** Set `EncodingFormat: hydraidego.EncodingMsgPack` on the swamp pattern. GOB bodies cannot be bucket-indexed.
-2. **Filter on body fields, not metadata.** `FilterCreatedAt`, `FilterUpdatedAt`, `FilterExpiredAt`, and Treasure-level value filters (without `BytesFieldPath`) never trigger a bucket build — they go through the time-axis or value-axis beacons.
-3. **Field path must match the msgpack key the server sees.** With no `msgpack` tag, the Go field name is the path (`Asn`, `Status`). With a tag like `msgpack:"asn"`, the path is the tag value. Two different paths on the same swamp produce two independent buckets — case-sensitive.
-4. **Field values must be canonical scalars.** `bool`, the int8..int64 family, the uint8..uint64 family, `float32`/`float64`, `string`, or `nil`. Cross-kind equality works (int64=5 matches uint64=5 and float64=5.0 losslessly), but string-vs-number never matches.
-5. **Field must exist in the body.** Rows that omit the field land in the null slot. A filter for a real value won't match them — which is what you want, but it means `IS_EMPTY` semantics still go through the bypass route.
+2. **Filter on body fields, not metadata.** `FilterCreatedAt`, `FilterUpdatedAt`, `FilterExpiredAt`, and Treasure-level value filters (without `BytesFieldPath`) never trigger a bucket build. They go through the time-axis or value-axis beacons.
+3. **Field path must match the msgpack key the server sees.** With no `msgpack` tag, the Go field name is the path (`Asn`, `Status`). With a tag like `msgpack:"asn"`, the path is the tag value. Two different paths on the same swamp produce two independent buckets, and the comparison is case-sensitive.
+4. **Field values must be canonical scalars.** `bool`, the int8..int64 family, the uint8..uint64 family, `float32` / `float64`, `string`, or `nil`. Cross-kind equality works (int64=5 matches uint64=5 and float64=5.0 losslessly), but string vs. number never matches.
+5. **Field must exist in the body.** Rows that omit the field land in the null slot. A filter for a real value won't match them, which is what you want, but it means `IsEmpty` semantics still go through the bypass route.
 
 **Pitfalls and operational notes:**
 
-- **First call after a swamp summon is cold.** Cost is proportional to the swamp size — the same as today's full-scan filter. Don't benchmark off the first call; do a throw-away warm-up if you measure.
+- **First call after a swamp summon is cold.** Cost is proportional to the swamp size, the same as today's full-scan filter. Don't benchmark off the first call; do a throw-away warm-up if you measure.
 - **Mutation cost scales with the number of initialised buckets.** Every `Save` decodes the body once per bucket on the swamp. One or two buckets per swamp is fine; ten is starting to be expensive on write-heavy workloads.
 - **`CloseAfterIdle` drops every bucket on this swamp.** A re-summon rebuilds on the next qualifying filter. If a swamp pattern uses a very short `CloseAfterIdle` (seconds), filter latency may oscillate between cold and warm.
 - **No declaration, no API to introspect.** There is no `IndexedFields` setting, no "list my buckets" RPC. The index is purely a server-side optimisation. Verify by measuring latency.
@@ -1079,7 +1079,7 @@ hydraidego.FilterOR(
 ## 12. Indexing and pagination
 
 > The `Index` struct below controls **iteration order and pagination** for a streamed read. It does not accelerate the filter itself.
-> Filter acceleration is handled separately by the auto-built field-bucket indexes — see [section 11 "Auto field-bucket indexes — filter acceleration"](#auto-field-bucket-indexes--filter-acceleration) above and the concept doc at [`docs/features/auto-field-bucket-indexes.md`](../../../docs/features/auto-field-bucket-indexes.md).
+> Filter acceleration is handled separately by the auto-built field-bucket indexes. See [section 11 "Auto field-bucket indexes (filter acceleration)"](#auto-field-bucket-indexes-filter-acceleration) above and the concept doc at [`docs/features/auto-field-bucket-indexes.md`](../../../docs/features/auto-field-bucket-indexes.md).
 
 ```go
 index := &hydraidego.Index{
