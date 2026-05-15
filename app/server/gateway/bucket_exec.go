@@ -73,7 +73,10 @@ func collectBucketCandidates(sw hydra.Swamp, hints []BucketHint) []treasure.Trea
 }
 
 // applyTimeRange filters candidates by the beacon-type's time field
-// against [fromTime, toTime]. Either or both bounds may be nil.
+// against [fromTime, toTime). FromTime is an inclusive lower bound;
+// ToTime is an exclusive upper bound. This mirrors the beacon-walk
+// path in beacon.findTimeRangeBounds and the documented SDK semantics
+// on Index.FromTime / Index.ToTime. Either or both bounds may be nil.
 func applyTimeRange(candidates []treasure.Treasure, beaconType hydra.BeaconType, fromTime, toTime *time.Time) []treasure.Treasure {
 	if fromTime == nil && toTime == nil {
 		return candidates
@@ -91,7 +94,7 @@ func applyTimeRange(candidates []treasure.Treasure, beaconType hydra.BeaconType,
 		if fromTime != nil && ts < fromNs {
 			continue
 		}
-		if toTime != nil && ts > toNs {
+		if toTime != nil && ts >= toNs {
 			continue
 		}
 		out = append(out, t)
