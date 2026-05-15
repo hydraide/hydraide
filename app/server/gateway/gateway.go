@@ -778,113 +778,124 @@ func (g Gateway) GetByIndexStreamFromMany(in *hydrapb.GetByIndexStreamFromManyRe
 			return status.Error(codes.Internal, fmt.Sprintf("internal server error in hydra: %s", err.Error()))
 		}
 
-		swampInterface.BeginVigil()
+		// Per-query processing is wrapped in a closure so that CeaseVigil() is
+		// guaranteed by defer — including on panic. The previous code paired
+		// BeginVigil() with manual CeaseVigil() calls on every return branch;
+		// any missed branch (or a panic recovered by the function-level
+		// handlePanic) leaked the vigil permanently, which blocked the swamp's
+		// Destroy()/Close() at WaitForActiveVigilsClosed() forever.
+		stop, err := func() (stop bool, err error) {
+			swampInterface.BeginVigil()
+			defer swampInterface.CeaseVigil()
 
-		fromTime, toTime := parseOptionalTimestamps(query.GetFromTime(), query.GetToTime())
+			fromTime, toTime := parseOptionalTimestamps(query.GetFromTime(), query.GetToTime())
 
-		beaconType := inputIndexTypeToBeaconType(query.GetIndexType())
-		order := inputOrderTypeToBeaconOrderType(query.GetOrderType())
+			beaconType := inputIndexTypeToBeaconType(query.GetIndexType())
+			order := inputOrderTypeToBeaconOrderType(query.GetOrderType())
 
-		filters := query.GetFilters()
-		plan := PlanFilter(filters)
+			filters := query.GetFilters()
+			plan := PlanFilter(filters)
 
-		var treasures []treasure.Treasure
-		var residualFilters *hydrapb.FilterGroup
+			var treasures []treasure.Treasure
+			var residualFilters *hydrapb.FilterGroup
 
-		if plan.Mode != PlanModeBypass && bucketExecPreconditions(beaconType) {
-			candidates := collectBucketCandidates(swampInterface, plan.Hints)
-			candidates = applyTimeRange(candidates, beaconType, fromTime, toTime)
-			sortCandidates(candidates, beaconType, order)
-			treasures = applyFromLimit(candidates, query.GetFrom(), query.GetLimit())
-			residualFilters = plan.Residual
-		} else {
-			var err error
-			treasures, err = swampInterface.GetTreasuresByBeacon(
-				beaconType, order,
-				query.GetFrom(), query.GetLimit(), fromTime, toTime)
-			if err != nil {
-				swampInterface.CeaseVigil()
-				return status.Error(codes.Internal, fmt.Sprintf("hydra error: %s", err.Error()))
-			}
-			residualFilters = filters
-		}
-
-		queryMax := query.GetMaxResults()
-		includeMap := buildKeySet(query.IncludedKeys)
-		excludeMap := buildKeySet(query.ExcludeKeys)
-		needsMeta := hasAnyLabels(residualFilters)
-		var queryCount int32
-
-		for _, treasureInterface := range treasures {
-			if stream.Context().Err() != nil {
-				swampInterface.CeaseVigil()
-				return stream.Context().Err()
+			if plan.Mode != PlanModeBypass && bucketExecPreconditions(beaconType) {
+				candidates := collectBucketCandidates(swampInterface, plan.Hints)
+				candidates = applyTimeRange(candidates, beaconType, fromTime, toTime)
+				sortCandidates(candidates, beaconType, order)
+				treasures = applyFromLimit(candidates, query.GetFrom(), query.GetLimit())
+				residualFilters = plan.Residual
+			} else {
+				treasures, err = swampInterface.GetTreasuresByBeacon(
+					beaconType, order,
+					query.GetFrom(), query.GetLimit(), fromTime, toTime)
+				if err != nil {
+					return false, status.Error(codes.Internal, fmt.Sprintf("hydra error: %s", err.Error()))
+				}
+				residualFilters = filters
 			}
 
-			key := treasureInterface.GetKey()
+			queryMax := query.GetMaxResults()
+			includeMap := buildKeySet(query.IncludedKeys)
+			excludeMap := buildKeySet(query.ExcludeKeys)
+			needsMeta := hasAnyLabels(residualFilters)
+			var queryCount int32
 
-			// IncludedKeys: if set, key must be in the whitelist
-			if includeMap != nil {
-				if _, included := includeMap[key]; !included {
+			for _, treasureInterface := range treasures {
+				if stream.Context().Err() != nil {
+					return false, stream.Context().Err()
+				}
+
+				key := treasureInterface.GetKey()
+
+				// IncludedKeys: if set, key must be in the whitelist
+				if includeMap != nil {
+					if _, included := includeMap[key]; !included {
+						continue
+					}
+				}
+
+				// ExcludeKeys: skip before filter eval (cheapest rejection)
+				if excludeMap != nil {
+					if _, excluded := excludeMap[key]; excluded {
+						continue
+					}
+				}
+
+				var matched bool
+				var meta *filterMatchMeta
+
+				if needsMeta {
+					matched, meta = evaluateNativeFilterGroupWithMeta(treasureInterface, residualFilters)
+				} else {
+					matched = evaluateNativeFilterGroup(treasureInterface, residualFilters)
+				}
+
+				if !matched {
 					continue
 				}
-			}
 
-			// ExcludeKeys: skip before filter eval (cheapest rejection)
-			if excludeMap != nil {
-				if _, excluded := excludeMap[key]; excluded {
-					continue
+				resp := &hydrapb.GetByIndexStreamFromManyResponse{SwampName: query.SwampName}
+
+				if query.KeysOnly {
+					resp.Treasure = &hydrapb.Treasure{Key: treasureInterface.GetKey(), IsExist: true}
+				} else {
+					t := &hydrapb.Treasure{}
+					treasureToKeyValuePair(treasureInterface, t)
+					resp.Treasure = t
+				}
+
+				if meta != nil && (len(meta.vectorScores) > 0 || len(meta.matchedLabels) > 0) {
+					resp.Meta = &hydrapb.SearchResultMeta{
+						VectorScores:  meta.vectorScores,
+						MatchedLabels: meta.matchedLabels,
+					}
+				}
+
+				if err := stream.Send(resp); err != nil {
+					return false, err
+				}
+
+				queryCount++
+				globalCount++
+
+				if queryMax > 0 && queryCount >= queryMax {
+					break // move to next swamp
+				}
+				if globalMax > 0 && globalCount >= globalMax {
+					return true, nil // stream done
 				}
 			}
 
-			var matched bool
-			var meta *filterMatchMeta
+			return false, nil
+		}()
 
-			if needsMeta {
-				matched, meta = evaluateNativeFilterGroupWithMeta(treasureInterface, residualFilters)
-			} else {
-				matched = evaluateNativeFilterGroup(treasureInterface, residualFilters)
-			}
-
-			if !matched {
-				continue
-			}
-
-			resp := &hydrapb.GetByIndexStreamFromManyResponse{SwampName: query.SwampName}
-
-			if query.KeysOnly {
-				resp.Treasure = &hydrapb.Treasure{Key: treasureInterface.GetKey(), IsExist: true}
-			} else {
-				t := &hydrapb.Treasure{}
-				treasureToKeyValuePair(treasureInterface, t)
-				resp.Treasure = t
-			}
-
-			if meta != nil && (len(meta.vectorScores) > 0 || len(meta.matchedLabels) > 0) {
-				resp.Meta = &hydrapb.SearchResultMeta{
-					VectorScores:  meta.vectorScores,
-					MatchedLabels: meta.matchedLabels,
-				}
-			}
-
-			if err := stream.Send(resp); err != nil {
-				swampInterface.CeaseVigil()
-				return err
-			}
-
-			queryCount++
-			globalCount++
-
-			if queryMax > 0 && queryCount >= queryMax {
-				break // move to next swamp
-			}
-			if globalMax > 0 && globalCount >= globalMax {
-				swampInterface.CeaseVigil()
-				return nil // stream done
-			}
+		if err != nil {
+			return err
 		}
-
-		swampInterface.CeaseVigil()
+		if stop {
+			return nil
+		}
 
 		if globalMax > 0 && globalCount >= globalMax {
 			return nil
@@ -954,58 +965,71 @@ func (g Gateway) GetStream(in *hydrapb.GetStreamRequest, stream hydrapb.Hydraide
 			return status.Error(codes.Internal, fmt.Sprintf("internal server error in hydra: %s", err.Error()))
 		}
 
-		swampInterface.BeginVigil()
+		// Per-query processing is wrapped in a closure so that CeaseVigil() is
+		// guaranteed by defer — including on panic. Manual CeaseVigil() on every
+		// branch leaks the vigil if any branch is missed or a panic is recovered
+		// by the function-level handlePanic, which then blocks the swamp's
+		// Destroy()/Close() at WaitForActiveVigilsClosed() forever.
+		stop, err := func() (stop bool, err error) {
+			swampInterface.BeginVigil()
+			defer swampInterface.CeaseVigil()
 
-		swampExists := true
+			swampExists := true
 
-		// First pass: collect native treasures for filtering (no proto conversion)
-		nativeTreasures := make(map[string]treasure.Treasure, len(query.GetKeys()))
-		missingKeys := make(map[string]bool)
+			// First pass: collect native treasures for filtering (no proto conversion)
+			nativeTreasures := make(map[string]treasure.Treasure, len(query.GetKeys()))
+			missingKeys := make(map[string]bool)
 
-		for _, key := range query.GetKeys() {
-			treasureInterface, getErr := swampInterface.GetTreasure(key)
-			if getErr != nil {
-				missingKeys[key] = true
-			} else {
-				nativeTreasures[key] = treasureInterface
-			}
-		}
-
-		// Evaluate profile filters against native treasures (no proto overhead)
-		filters := query.GetFilters()
-		if evaluateNativeProfileFilterGroup(nativeTreasures, filters) {
-			// Filter passed — now convert to proto for the response
-			var treasureList []*hydrapb.Treasure
 			for _, key := range query.GetKeys() {
-				t := &hydrapb.Treasure{
-					Key:     key,
-					IsExist: true,
-				}
-				if missingKeys[key] {
-					t.IsExist = false
+				treasureInterface, getErr := swampInterface.GetTreasure(key)
+				if getErr != nil {
+					missingKeys[key] = true
 				} else {
-					treasureToKeyValuePair(nativeTreasures[key], t)
+					nativeTreasures[key] = treasureInterface
 				}
-				treasureList = append(treasureList, t)
 			}
 
-			if err := stream.Send(&hydrapb.GetStreamResponse{
-				SwampName: query.SwampName,
-				Treasures: treasureList,
-				IsExist:   swampExists,
-			}); err != nil {
-				swampInterface.CeaseVigil()
-				return err
+			// Evaluate profile filters against native treasures (no proto overhead)
+			filters := query.GetFilters()
+			if evaluateNativeProfileFilterGroup(nativeTreasures, filters) {
+				// Filter passed — now convert to proto for the response
+				var treasureList []*hydrapb.Treasure
+				for _, key := range query.GetKeys() {
+					t := &hydrapb.Treasure{
+						Key:     key,
+						IsExist: true,
+					}
+					if missingKeys[key] {
+						t.IsExist = false
+					} else {
+						treasureToKeyValuePair(nativeTreasures[key], t)
+					}
+					treasureList = append(treasureList, t)
+				}
+
+				if err := stream.Send(&hydrapb.GetStreamResponse{
+					SwampName: query.SwampName,
+					Treasures: treasureList,
+					IsExist:   swampExists,
+				}); err != nil {
+					return false, err
+				}
+
+				matchCount++
+				if maxResults > 0 && matchCount >= maxResults {
+					return true, nil
+				}
 			}
 
-			matchCount++
-			if maxResults > 0 && matchCount >= maxResults {
-				swampInterface.CeaseVigil()
-				return nil
-			}
+			return false, nil
+		}()
+
+		if err != nil {
+			return err
 		}
-
-		swampInterface.CeaseVigil()
+		if stop {
+			return nil
+		}
 	}
 
 	return nil
