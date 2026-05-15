@@ -979,6 +979,7 @@ type swamp struct {
 	writerLock      sync.Mutex // mutex for the writer
 	closeWriteMutex sync.Mutex // mutex for the closeWrite function
 	closeMutex      sync.Mutex // mutex for the close function
+	destroyed       bool       // guarded by closeMutex; true once Destroy() has begun teardown
 	createMu        sync.Mutex // serializes CreateTreasure to prevent dual-creation races
 
 	// capMu serialises Cap-bearing state-mutating operations
@@ -2310,19 +2311,57 @@ func (s *swamp) Destroy() {
 	swampName := s.name.Get()
 	slog.Info("Destroy: starting", "swamp", swampName)
 
+	// Set closing=1 before anything else. This is the documented mechanism
+	// that stops the inflow of new transactions: SummonSwamp() observes
+	// IsClosing() and routes callers to WaitForGracefulClose() instead of
+	// handing the swamp out, so no new vigils can be started for this swamp
+	// once this store is visible to summoners.
 	atomic.StoreInt32(&s.closing, 1)
+
+	// Idempotency guard for concurrent Destroy() (and Close()-then-Destroy())
+	// on the same swamp. Only the first caller performs the teardown; later
+	// callers return immediately. This is required because the vigil drain
+	// below now happens BEFORE s.mu.Lock() (see comment there), so concurrent
+	// Destroy() goroutines no longer serialize on s.mu.Lock() and would
+	// otherwise all run goRoutineCancelFunction()/chronicler.Destroy()/
+	// sendClosedEvent() multiple times. Callers that need to wait for the
+	// swamp to be gone block on goRoutineContext via WaitForGracefulClose(),
+	// not on this function returning, so an early return here is safe.
+	s.closeMutex.Lock()
+	if s.destroyed {
+		s.closeMutex.Unlock()
+		slog.Debug("Destroy: already destroyed by a concurrent caller", "swamp", swampName)
+		return
+	}
+	s.destroyed = true
+	s.closeMutex.Unlock()
+
+	// StopSendingInformation/StopSendingEvents are pure atomic stores; they
+	// do not touch the treasure map, so they are safe to call without s.mu.
+	s.StopSendingInformation()
+	s.StopSendingEvents()
+
+	// Wait for all active vigils to drain BEFORE acquiring s.mu.
+	//
+	// The write path holds a vigil across an s.mu.RLock():
+	//   BeginVigil() -> treasure.Save() -> swamp.SaveFunction() ->
+	//   s.mu.RLock() -> ... -> CeaseVigil()
+	//
+	// If we acquired s.mu.Lock() here and then waited for vigils to reach
+	// zero, an in-flight writer could never reach CeaseVigil (it would be
+	// blocked on s.mu.RLock() behind our write-lock) while we waited forever
+	// for the vigil count to drain: a classic AB/BA lock-order deadlock.
+	// Draining vigils first keeps s.mu free, so in-flight Saves complete and
+	// release their vigils, and (because closing=1 already gates SummonSwamp)
+	// no new vigils can be started in the meantime.
+	s.Vigil.WaitForActiveVigilsClosed()
+
+	slog.Debug("Destroy: vigils closed", "swamp", swampName)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	slog.Debug("Destroy: acquired mutex", "swamp", swampName)
-
-	s.StopSendingInformation()
-	s.StopSendingEvents()
-
-	s.Vigil.WaitForActiveVigilsClosed()
-
-	slog.Debug("Destroy: vigils closed", "swamp", swampName)
 
 	// stops all goroutines inside the swamp
 	s.goRoutineCancelFunction()
