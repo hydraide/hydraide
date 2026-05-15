@@ -82,6 +82,12 @@ content/
 /bounded-claim
 docs/tasks/round2/smoke/shiftmatching
 
+# Smoke example built binary (source main.go stays tracked)
+docs/sdk/go/examples/smoke/auto_bucket/auto_bucket
+
+# Gateway test runtime swamp data
+/app/server/gateway/data/
+
 # Local-only WIP data-loss stress tests (kept on disk, never committed)
 app/core/hydra/hydra_dataloss_test.go
 app/core/hydra/swamp/swamp_dataloss_test.go
