@@ -4,6 +4,7 @@
 **Reporter:** Peter Gebri (Trendizz)
 **Affected versions:** server `v3.19.0`, SDK `v3.6.0` (reproduced); likely older too
 **Severity:** Medium — silent off-by-one. Returns one extra record at the boundary; breaks cursor-style pagination by re-emitting the cursor record on the next page.
+**Status:** ✅ RESOLVED in server `v3.19.1` — commit `90a511c` *fix(gateway): apply Index.ToTime exclusively on bucket-routed path* (the one-line `ts > toNs` → `ts >= toNs` change proposed below). Verified on the v3.19.3 test DB: full Trendizz `email_service` suite green with the client-side `-1s` shim reverted (trendizz-monorepo `63ec288`).
 
 ---
 
