@@ -3080,16 +3080,55 @@ func (s *swamp) findInValueBeacon(order BeaconOrder, bc BeaconType, from int32, 
 
 // -- helper functions for beacons -----------------------------------------------------
 // ------------------------------------------------------------------------------------
+// treasuresForBeacon returns the set of treasures that belong in the given
+// beacon type for a cold (on-demand) build. Time-based indexes intentionally
+// exclude treasures whose corresponding timestamp is zero, mirroring the
+// incremental maintenance guards in addTreasureToBeacons. Without this filter
+// the cold build and the hot path would disagree on un-timestamped treasures
+// (e.g. a Set without CreatedAt would appear in a cold-built CREATION_TIME
+// index but never in an incrementally maintained one).
+func (s *swamp) treasuresForBeacon(bc BeaconType) map[string]treasure.Treasure {
+	all := s.beaconKey.GetAll()
+	switch bc {
+	case BeaconTypeCreationTime:
+		filtered := make(map[string]treasure.Treasure, len(all))
+		for k, t := range all {
+			if t.GetCreatedAt() != 0 {
+				filtered[k] = t
+			}
+		}
+		return filtered
+	case BeaconTypeUpdateTime:
+		filtered := make(map[string]treasure.Treasure, len(all))
+		for k, t := range all {
+			if t.GetModifiedAt() != 0 {
+				filtered[k] = t
+			}
+		}
+		return filtered
+	case BeaconTypeExpirationTime:
+		filtered := make(map[string]treasure.Treasure, len(all))
+		for k, t := range all {
+			if t.GetExpirationTime() != 0 {
+				filtered[k] = t
+			}
+		}
+		return filtered
+	default:
+		return all
+	}
+}
+
 func (s *swamp) buildBeacon(beaconASC beacon.Beacon, beaconDESC beacon.Beacon, bc BeaconType) {
 
 	// build the index only if it is not initialized
-	if beaconASC.IsInitialized() && beaconASC.IsInitialized() {
+	if beaconASC.IsInitialized() && beaconDESC.IsInitialized() {
 		return
 	}
 
 	if !beaconASC.IsInitialized() {
 		beaconASC.SetInitialized(true)
-		beaconASC.PushManyFromMap(s.beaconKey.GetAll())
+		beaconASC.PushManyFromMap(s.treasuresForBeacon(bc))
 		var err error
 		switch bc {
 		case BeaconTypeCreationTime:
@@ -3133,7 +3172,7 @@ func (s *swamp) buildBeacon(beaconASC beacon.Beacon, beaconDESC beacon.Beacon, b
 
 	if !beaconDESC.IsInitialized() {
 		beaconDESC.SetInitialized(true)
-		beaconDESC.PushManyFromMap(s.beaconKey.GetAll())
+		beaconDESC.PushManyFromMap(s.treasuresForBeacon(bc))
 		var err error
 		switch bc {
 		case BeaconTypeCreationTime:

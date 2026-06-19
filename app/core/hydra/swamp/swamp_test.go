@@ -935,6 +935,117 @@ func TestSwamp_GetTreasuresByBeacon(t *testing.T) {
 
 }
 
+// TestSwamp_CreationTimeBeacon_HotColdConsistency locks the design invariant that
+// time-based indexes only contain treasures that actually carry that timestamp,
+// and that the cold (on-demand) build and the hot (incremental) maintenance path
+// agree on which treasures are excluded.
+//
+// Before the fix the cold build ingested every treasure regardless of CreatedAt,
+// while the incremental path skipped CreatedAt == 0. A query whose result depended
+// on whether the beacon was already initialized when the un-timestamped writes
+// happened. This test exercises the hot path: initialize the beacon first, then
+// write more un-timestamped records, and assert the CREATION_TIME index stays
+// consistent with the documented design (un-timestamped records are absent, while
+// KEY returns everything).
+func TestSwamp_CreationTimeBeacon_HotColdConsistency(t *testing.T) {
+
+	fsInterface := filesystem.New()
+	settingsInterface := settings.New(testMaxDepth, testMaxFolderPerLevel)
+	fss := &settings.FileSystemSettings{
+		WriteIntervalSec: 1,
+		MaxFileSizeByte:  8192,
+	}
+	settingsInterface.RegisterPattern(name.New().Sanctuary(sanctuaryForQuickTest).Realm("*").Swamp("*"), false, 1, fss)
+	closeAfterIdle := 1 * time.Second
+	writeInterval := 1 * time.Second
+	maxFileSize := int64(8192)
+
+	newSwamp := func(swampName name.Name) Swamp {
+		hashPath := swampName.GetFullHashPath(settingsInterface.GetHydraAbsDataFolderPath(), testAllServers, testMaxDepth, testMaxFolderPerLevel)
+		chroniclerInterface := chronicler.New(hashPath, maxFileSize, testMaxDepth, fsInterface, metadata.New(hashPath))
+		chroniclerInterface.CreateDirectoryIfNotExists()
+		fssSwamp := &FilesystemSettings{
+			ChroniclerInterface: chroniclerInterface,
+			WriteInterval:       writeInterval,
+		}
+		metadataInterface := metadata.New(hashPath)
+		s := New(swampName, closeAfterIdle, fssSwamp, func(e *Event) {}, func(i *Info) {}, func(n name.Name) {}, metadataInterface)
+		s.BeginVigil()
+		return s
+	}
+
+	// write helper: optionally stamps CreatedAt
+	writeTreasure := func(s Swamp, key string, withCreatedAt bool) {
+		treasureInterface := s.CreateTreasure(key)
+		guardID := treasureInterface.StartTreasureGuard(true)
+		if withCreatedAt {
+			treasureInterface.SetCreatedAt(guardID, time.Now())
+		}
+		treasureInterface.SetContentString(guardID, "content-"+key)
+		treasureInterface.ReleaseTreasureGuard(guardID)
+		guardID = treasureInterface.StartTreasureGuard(true)
+		_ = treasureInterface.Save(guardID)
+		treasureInterface.ReleaseTreasureGuard(guardID)
+	}
+
+	t.Run("un-timestamped writes after the beacon is initialized stay consistent", func(t *testing.T) {
+
+		swampName := name.New().Sanctuary(sanctuaryForQuickTest).Realm("creation-time").Swamp("hot-path")
+		s := newSwamp(swampName)
+
+		// one timestamped seed record
+		writeTreasure(s, "seed", true)
+
+		// initialize the creation-time beacon (this is the "hot" precondition)
+		seedRes, err := s.GetTreasuresByBeacon(BeaconTypeCreationTime, IndexOrderAsc, 0, 1000, nil, nil)
+		assert.NoError(t, err)
+		assert.Equal(t, 1, len(seedRes), "only the seed carries CreatedAt")
+
+		// now write more records WITHOUT CreatedAt, beacon already initialized
+		for i := 0; i < 10; i++ {
+			writeTreasure(s, fmt.Sprintf("nots-%d", i), false)
+		}
+
+		// CREATION_TIME must, by design, still contain only the timestamped record
+		ctRes, err := s.GetTreasuresByBeacon(BeaconTypeCreationTime, IndexOrderAsc, 0, 1000, nil, nil)
+		assert.NoError(t, err)
+		assert.Equal(t, 1, len(ctRes), "un-timestamped records are absent from CREATION_TIME")
+
+		// KEY must contain everything: nothing was lost, only un-indexed by time
+		keyRes, err := s.GetTreasuresByBeacon(BeaconTypeKey, IndexOrderAsc, 0, 1000, nil, nil)
+		assert.NoError(t, err)
+		assert.Equal(t, 11, len(keyRes), "all records are present and readable by key")
+
+		s.CeaseVigil()
+		s.Destroy()
+	})
+
+	t.Run("cold build agrees with the hot path on un-timestamped records", func(t *testing.T) {
+
+		swampName := name.New().Sanctuary(sanctuaryForQuickTest).Realm("creation-time").Swamp("cold-path")
+		s := newSwamp(swampName)
+
+		// one timestamped, ten un-timestamped, beacon NOT touched yet
+		writeTreasure(s, "seed", true)
+		for i := 0; i < 10; i++ {
+			writeTreasure(s, fmt.Sprintf("nots-%d", i), false)
+		}
+
+		// first CREATION_TIME query triggers a cold build; it must exclude the
+		// un-timestamped records exactly like the hot path does
+		ctRes, err := s.GetTreasuresByBeacon(BeaconTypeCreationTime, IndexOrderAsc, 0, 1000, nil, nil)
+		assert.NoError(t, err)
+		assert.Equal(t, 1, len(ctRes), "cold build excludes un-timestamped records too")
+
+		keyRes, err := s.GetTreasuresByBeacon(BeaconTypeKey, IndexOrderAsc, 0, 1000, nil, nil)
+		assert.NoError(t, err)
+		assert.Equal(t, 11, len(keyRes), "all records present by key")
+
+		s.CeaseVigil()
+		s.Destroy()
+	})
+}
+
 func TestIncrementUint8_NewKey_NoMetadata(t *testing.T) {
 
 	s := newSwampForTest(t, "NewKey", "NoMetadata")

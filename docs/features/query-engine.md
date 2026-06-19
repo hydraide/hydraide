@@ -42,6 +42,21 @@ The streaming reads accept optional `FromTime` and `ToTime` arguments. When the 
 
 ---
 
+### Time-based indexes only contain records that carry that timestamp
+
+The three metadata timestamps (`CreatedAt`, `UpdatedAt`, `ExpiredAt`) are **optional** and the server **does not auto-stamp them**. A `Set` that does not supply a value leaves the corresponding field at zero. This is by design: lifecycle metadata is opt-in, so a record that has no creation time, no update time, or no expiry is a valid record.
+
+A consequence of this design: a time-based index only contains the records that actually carry that timestamp. A record with `CreatedAt == 0` is **not** part of the `CREATION_TIME` index (and likewise for `UPDATE_TIME` / `EXPIRATION_TIME`). It is still a normal, fully readable record — it is returned by a `KEY` scan, by a direct key read, and by any filter that does not order on the missing timestamp. It is simply absent from the time-ordered iteration, because there is no meaningful position for it in that order.
+
+If you need a record to appear in a `CREATION_TIME` scan, give it a creation timestamp:
+
+- send `CreatedAt` explicitly on the write, or
+- use the metadata save option that asks the server to stamp the current server time on creation.
+
+Preserve the original `CreatedAt` on overwrite; only `UpdatedAt` should move when a record changes.
+
+---
+
 ### Match metadata
 
 `SearchResultMeta` is returned per match and carries:
