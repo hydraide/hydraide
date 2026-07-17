@@ -979,6 +979,7 @@ type swamp struct {
 	writerLock      sync.Mutex // mutex for the writer
 	closeWriteMutex sync.Mutex // mutex for the closeWrite function
 	closeMutex      sync.Mutex // mutex for the close function
+	beaconBuildMu   sync.Mutex // serializes lazy read-beacon builds (buildBeacon)
 	destroyed       bool       // guarded by closeMutex; true once Destroy() has begun teardown
 	createMu        sync.Mutex // serializes CreateTreasure to prevent dual-creation races
 
@@ -2926,6 +2927,19 @@ func (s *swamp) sendDeletedEventToClient(d treasure.Treasure) {
 // addTreasureToBeacons - add treasures to all the indexes
 func (s *swamp) addTreasureToBeacons(d treasure.Treasure) {
 
+	// Serialize incremental beacon maintenance against lazy beacon builds on the
+	// SAME mutex buildBeacon uses. Otherwise a writer's addTo*Beacon can land in
+	// the middle of a build: beacon.Add() flips the beacon's initialized flag
+	// (StoreInt32(1)) as a side effect, so an Add into a not-yet-populated beacon
+	// (e.g. the DESC half while buildBeacon has only published the ASC half)
+	// marks it "initialized" with just 1-2 rows. buildBeacon then skips it and a
+	// reader sees a near-empty beacon while the swamp holds N — the residual
+	// "phantom empty / partial" read. Lock order is always beaconBuildMu -> the
+	// per-beacon mu (same as buildBeacon), so no deadlock. beaconKey.Add already
+	// ran (and released its own lock) in SaveFunction before this call.
+	s.beaconBuildMu.Lock()
+	defer s.beaconBuildMu.Unlock()
+
 	// try to add the treasure to the keyBeacon
 	s.addToKeyBeacon(d)
 	if d.GetCreatedAt() != 0 {
@@ -3121,13 +3135,24 @@ func (s *swamp) treasuresForBeacon(bc BeaconType) map[string]treasure.Treasure {
 
 func (s *swamp) buildBeacon(beaconASC beacon.Beacon, beaconDESC beacon.Beacon, bc BeaconType) {
 
-	// build the index only if it is not initialized
+	// Fast path: both already built. Safe without the lock because a beacon is
+	// published as initialized ONLY after it is fully populated+sorted below,
+	// so an observed initialized==1 always implies a populated beacon.
 	if beaconASC.IsInitialized() && beaconDESC.IsInitialized() {
 		return
 	}
 
+	// Serialize the whole check → populate → publish. Two concurrent builders
+	// would otherwise each PushManyFromMap into the same beacon, and
+	// PushManyFromMap APPENDS to treasuresByOrder — the ordered slice would be
+	// duplicated. The lock also closes the "phantom empty" window: we call
+	// SetInitialized(true) only AFTER populate+sort succeed, so a concurrent
+	// reader never sees an initialized-but-empty beacon and read 0 rows while
+	// the swamp still holds N treasures.
+	s.beaconBuildMu.Lock()
+	defer s.beaconBuildMu.Unlock()
+
 	if !beaconASC.IsInitialized() {
-		beaconASC.SetInitialized(true)
 		beaconASC.PushManyFromMap(s.treasuresForBeacon(bc))
 		var err error
 		switch bc {
@@ -3165,13 +3190,15 @@ func (s *swamp) buildBeacon(beaconASC beacon.Beacon, beaconDESC beacon.Beacon, b
 			err = beaconASC.SortByKeyAsc()
 		}
 		if err != nil {
-			beaconASC.SetInitialized(false)
+			// Leave it unpublished (initialized stays false) so a later build
+			// retries; do NOT publish a half-built beacon.
 			slog.Error("failed to sort keyBeaconASC", "error", err)
+		} else {
+			beaconASC.SetInitialized(true)
 		}
 	}
 
 	if !beaconDESC.IsInitialized() {
-		beaconDESC.SetInitialized(true)
 		beaconDESC.PushManyFromMap(s.treasuresForBeacon(bc))
 		var err error
 		switch bc {
@@ -3209,8 +3236,11 @@ func (s *swamp) buildBeacon(beaconASC beacon.Beacon, beaconDESC beacon.Beacon, b
 			err = beaconDESC.SortByKeyDesc()
 		}
 		if err != nil {
-			beaconDESC.SetInitialized(false)
+			// Leave it unpublished (initialized stays false) so a later build
+			// retries; do NOT publish a half-built beacon.
 			slog.Error("failed to sort keyBeaconDESC", "error", err)
+		} else {
+			beaconDESC.SetInitialized(true)
 		}
 	}
 

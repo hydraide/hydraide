@@ -691,11 +691,23 @@ func New() Beacon {
 	}
 }
 
-// GetAll returns all the treasures in the beacon
+// GetAll returns a snapshot of all the treasures in the beacon.
+//
+// The returned map is a shallow clone taken under the read lock, NOT the live
+// internal map. Returning the live reference would let a caller iterate it
+// (e.g. cold beacon build in swamp.treasuresForBeacon / buildBeacon) while a
+// concurrent writer mutates it via Add() under the write lock — a
+// "concurrent map iteration and map write" fatal in the best case, and a
+// silently partial/empty copy in the worst (the Go runtime does not always
+// detect it). That silent-partial path is exactly the observed "phantom
+// empty" beacon read: the swamp still holds N treasures, but a concurrently
+// built beacon sees fewer or none. The clone is O(n) shallow (keys + treasure
+// interface pointers), taken atomically under the lock, so every caller gets a
+// consistent point-in-time view.
 func (b *beacon) GetAll() map[string]treasure.Treasure {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
-	return b.treasuresByKeys
+	return maps.Clone(b.treasuresByKeys)
 }
 
 type IterationType int
