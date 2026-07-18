@@ -2249,16 +2249,43 @@ func (s *swamp) ForceCompaction() error {
 // The manager uses this function to close the swamp only if there is a gracefulStop signal
 // DO NOT ADD TRANSACTION IF YOU CALL THIS FUNCTION, because the swamp can not be closed until the last transaction is released
 func (s *swamp) Close() {
+	if !s.markClosing() {
+		// somebody else already owns the teardown
+		return
+	}
+	s.finishClose()
+}
 
+// markClosing flips the swamp into the closing state and reports whether THIS
+// caller won the transition. Only the winner may run finishClose().
+//
+// The flip is the point of no return: from here on SummonSwamp hands nobody a
+// usable reference to this instance. It therefore has to be mutually exclusive
+// with IsClosing(), which is the summon side's "is this swamp still healthy?"
+// question — see the comment on IsClosing for why that matters.
+func (s *swamp) markClosing() bool {
 	s.closeMutex.Lock()
+	defer s.closeMutex.Unlock()
+	return s.markClosingLocked()
+}
+
+// markClosingLocked is markClosing for callers that already hold closeMutex.
+func (s *swamp) markClosingLocked() bool {
 	if atomic.LoadInt32(&s.closing) == 1 {
 		// the swamp is already closing
-		s.closeMutex.Unlock()
-		return
+		return false
 	}
 	// set closing to 1 immediately to prevent other transactions to be created on the swamp
 	atomic.StoreInt32(&s.closing, 1)
-	s.closeMutex.Unlock()
+	return true
+}
+
+// finishClose performs the actual teardown. It must only be called by the
+// caller that won markClosing(), and it must NOT hold closeMutex: the flush
+// below can take a while, and blocking every incoming summon on it would be a
+// needless latency cliff. Holding the flag is enough — the swamp is already
+// unreachable for new callers at this point.
+func (s *swamp) finishClose() {
 
 	// write all treasures to the chroniclerInterface that are waiting for the writer and don't send events to the hydra
 	// because we are closing the swamp and ask the chroniclerInterface to not send file pointers for new files, because,
@@ -2392,6 +2419,15 @@ func (s *swamp) Destroy() {
 // azonnal, így biztonsággal kiadható még a BeginVigil() utasítás is, valamint a swampot lekérdező funkciók is
 // biztonsággal használhatóak
 func (s *swamp) IsClosing() bool {
+	// The bump and the closing read happen under closeMutex, the same lock the
+	// idle evictor takes to decide. Without that mutual exclusion the evictor
+	// could sample the idle clock, this bump could land, and the evictor could
+	// then close the swamp anyway using its pre-bump sample — handing the
+	// caller a swamp that reports closing==0 and dies a moment later. The
+	// caller's subsequent write would land in an orphaned instance and be lost
+	// silently. See TestLostWriteOnCloseListenerRace.
+	s.closeMutex.Lock()
+	defer s.closeMutex.Unlock()
 	// set the last interaction time to the current time
 	atomic.StoreInt64(&s.lastInteractionTime, time.Now().UnixNano())
 	return atomic.LoadInt32(&s.closing) == 1
@@ -3400,6 +3436,16 @@ func (s *swamp) startWriteListener() {
 
 }
 
+// closeListenerTestHook is a test-only injection point. It fires inside the
+// close-listener tick AFTER the idle clock has been sampled but BEFORE the
+// close decision is taken. That gap is precisely the window in which a
+// concurrent SummonSwamp -> IsClosing() interaction bump must not be lost:
+// a caller that observes closing==0 there is handed a healthy swamp and is
+// still on its way to BeginVigil(). It receives the idle span as this tick
+// sampled it, so a test can fire only on the tick that is about to evict.
+// Production always leaves this unset; the tick then pays one atomic load.
+var closeListenerTestHook atomic.Pointer[func(sampledIdle time.Duration)]
+
 func (s *swamp) startCloseListener() {
 
 	closeGapDuration := 1 * time.Second
@@ -3421,6 +3467,10 @@ func (s *swamp) startCloseListener() {
 			currentTime := time.Now()
 			lastInteractionTime := time.Unix(0, atomic.LoadInt64(&s.lastInteractionTime))
 
+			if hook := closeListenerTestHook.Load(); hook != nil {
+				(*hook)(currentTime.Sub(lastInteractionTime))
+			}
+
 			func() {
 
 				// lockolunk, hogy az ellenőrzés ideje alatt ne tudjon leállítani senki és írni se tudjon senki, de a fiepointer eventek se kerüljenek be,
@@ -3428,20 +3478,50 @@ func (s *swamp) startCloseListener() {
 				s.closeWriteMutex.Lock()
 				defer s.closeWriteMutex.Unlock()
 
-				// Ha ez egy in-memory swamp, akkor nem kell vizsgálni a lezárásnál, hogy a isFilesystemWritingActive 1-e, mert nincs
-				// filerednszer szintű írás, csak a memóriában tároljuk a treasureket és csak azt kell ellenőrizni, hogy nincs-e aktív tranzakció
-				// és nincs-e aktív vigília és az utolsó interakció óta eltelt idő nagyobb-e mint a closeAfterIdle
-				// és ezt kjövetően már be is lehet zárni a swampot
-				if atomic.LoadInt32(&s.inMemorySwamp) == 1 {
-					if !s.Vigil.HasActiveVigils() && atomic.LoadInt32(&s.closing) == 0 && currentTime.After(lastInteractionTime.Add(s.closeAfterIdle+closeGapDuration)) {
-						s.Close()
+				// The decision and the closing flip happen together under
+				// closeMutex, and the idle clock is re-read INSIDE that lock.
+				//
+				// The sample taken above is only good enough for the test hook:
+				// deciding on it would mean deciding on stale data, because a
+				// concurrent SummonSwamp -> IsClosing() bump can land between
+				// the sample and this point. That bump exists precisely to say
+				// "somebody is picking this swamp up right now, do not close
+				// it", and judging by the pre-bump copy threw it away — the
+				// caller then wrote into an evicted instance and lost the data
+				// without any error. See TestLostWriteOnCloseListenerRace.
+				shouldFinishClose := func() bool {
+
+					s.closeMutex.Lock()
+					defer s.closeMutex.Unlock()
+
+					// fresh read: IsClosing() bumps this under the very same mutex
+					idleSince := time.Unix(0, atomic.LoadInt64(&s.lastInteractionTime))
+					if !time.Now().After(idleSince.Add(s.closeAfterIdle + closeGapDuration)) {
+						return false
 					}
-				} else {
-					if atomic.LoadInt32(&s.isFilesystemWritingActive) == 0 && !s.Vigil.HasActiveVigils() && atomic.LoadInt32(&s.closing) == 0 && currentTime.After(lastInteractionTime.Add(s.closeAfterIdle+closeGapDuration)) {
-						// a swampot éppp nem írja senki, nincs aktív tranzakció, nem zárjuk éppen le és megfelelünk annak a követelménynek is, hogy
-						// az utoljára történt interakció óta eltelt idő nagyobb legyen mint a closeAfterIdle, így a swamp leállítható biztonságosan
-						s.Close()
+
+					if s.Vigil.HasActiveVigils() {
+						return false
 					}
+
+					// Ha ez egy in-memory swamp, akkor nem kell vizsgálni a lezárásnál, hogy a isFilesystemWritingActive 1-e, mert nincs
+					// filerednszer szintű írás, csak a memóriában tároljuk a treasureket és csak azt kell ellenőrizni, hogy nincs-e aktív tranzakció
+					// és nincs-e aktív vigília és az utolsó interakció óta eltelt idő nagyobb-e mint a closeAfterIdle
+					// és ezt kjövetően már be is lehet zárni a swampot
+					if atomic.LoadInt32(&s.inMemorySwamp) == 0 && atomic.LoadInt32(&s.isFilesystemWritingActive) != 0 {
+						return false
+					}
+
+					// a swampot éppp nem írja senki, nincs aktív tranzakció, nem zárjuk éppen le és megfelelünk annak a követelménynek is, hogy
+					// az utoljára történt interakció óta eltelt idő nagyobb legyen mint a closeAfterIdle, így a swamp leállítható biztonságosan
+					return s.markClosingLocked()
+
+				}()
+
+				// The teardown itself runs outside closeMutex so a long flush
+				// never blocks the summon path.
+				if shouldFinishClose {
+					s.finishClose()
 				}
 
 			}()

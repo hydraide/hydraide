@@ -99,12 +99,13 @@ func (g Gateway) PatchExpiredTreasures(ctx context.Context, in *hydrapb.PatchExp
 	}
 
 	hydraInterface := g.ZeusInterface.GetHydra()
-	swampObj, err := hydraInterface.SummonSwamp(ctx, in.GetIslandID(), swampName)
+	// mutating path: the vigil is taken inside, so this patch cannot land in a
+	// swamp instance that is already being torn down
+	swampObj, releaseVigil, err := summonSwampForWrite(ctx, hydraInterface, in.GetIslandID(), swampName)
 	if err != nil {
-		return nil, status.Error(codes.Internal, fmt.Sprintf("internal server error in hydra: %s", err.Error()))
+		return nil, err
 	}
-	swampObj.BeginVigil()
-	defer swampObj.CeaseVigil()
+	defer releaseVigil()
 
 	ops, opsErr := protoOpsToMsgpackpatchOps(in.GetOps())
 	if opsErr != nil {
@@ -220,12 +221,13 @@ func patchExpiredOneSwamp(ctx context.Context, g Gateway, in *hydrapb.PatchExpir
 	}
 
 	hydraInterface := g.ZeusInterface.GetHydra()
-	swampObj, err := hydraInterface.SummonSwamp(ctx, in.GetIslandID(), swampName)
+	// mutating path: the vigil is taken inside, so this patch cannot land in a
+	// swamp instance that is already being torn down
+	swampObj, releaseVigil, err := summonSwampForWrite(ctx, hydraInterface, in.GetIslandID(), swampName)
 	if err != nil {
 		return &hydrapb.PatchExpiredTreasuresManyEntry{Error: protoStr(fmt.Sprintf("summon swamp: %s", err.Error()))}
 	}
-	swampObj.BeginVigil()
-	defer swampObj.CeaseVigil()
+	defer releaseVigil()
 
 	ops, opsErr := protoOpsToMsgpackpatchOps(in.GetOps())
 	if opsErr != nil {

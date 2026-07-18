@@ -102,12 +102,13 @@ func shiftMatchingOneSwamp(ctx context.Context, g Gateway, in *hydrapb.ShiftMatc
 
 	hydraInterface := g.ZeusInterface.GetHydra()
 
-	swampInterface, err := hydraInterface.SummonSwamp(ctx, in.GetIslandID(), swampName)
+	// mutating path: the vigil is taken inside, so this shift cannot land in a
+	// swamp instance that is already being torn down
+	swampInterface, releaseVigil, err := summonSwampForWrite(ctx, hydraInterface, in.GetIslandID(), swampName)
 	if err != nil {
-		return nil, false, status.Error(codes.Internal, fmt.Sprintf("internal server error in hydra: %s", err.Error()))
+		return nil, false, err
 	}
-	swampInterface.BeginVigil()
-	defer swampInterface.CeaseVigil()
+	defer releaseVigil()
 
 	beaconType := inputIndexTypeToBeaconType(in.GetIndexType())
 	order := inputOrderTypeToBeaconOrderType(in.GetOrderType())

@@ -252,16 +252,15 @@ func (g Gateway) Set(ctx context.Context, in *hydrapb.SetRequest) (*hydrapb.SetR
 				}
 			}
 
-			swampInterface, err := hydraInterface.SummonSwamp(ctx, swampRequest.GetIslandID(), swampName)
+			// mutating path: summon with the vigil already held, so the write
+			// cannot land in an instance that is being torn down
+			swampInterface, releaseVigil, err := summonSwampForWrite(ctx, hydraInterface, swampRequest.GetIslandID(), swampName)
 			if err != nil {
 				// return with grpc error message
 				internalError = err
 				return
 			}
-
-			// begin the vigil, to prevent the close of the swamp
-			swampInterface.BeginVigil()
-			defer swampInterface.CeaseVigil()
+			defer releaseVigil()
 
 			response := make([]*hydrapb.KeyStatusPair, 0)
 
@@ -1068,15 +1067,13 @@ func (g Gateway) ShiftByKeys(ctx context.Context, in *hydrapb.ShiftByKeysRequest
 	}
 
 	// Summon the swamp
-	swampInterface, err := hydraInterface.SummonSwamp(ctx, in.GetIslandID(), swampName)
+	// mutating path: the vigil is taken inside, so this write cannot
+	// land in a swamp instance that is already being torn down
+	swampInterface, releaseVigil, err := summonSwampForWrite(ctx, hydraInterface, in.GetIslandID(), swampName)
 	if err != nil {
-		// Return with grpc error message
-		return nil, status.Error(codes.Internal, fmt.Sprintf("internal server error in hydra: %s", err.Error()))
+		return nil, err
 	}
-
-	// Begin the vigil, to prevent closing of the swamp
-	swampInterface.BeginVigil()
-	defer swampInterface.CeaseVigil()
+	defer releaseVigil()
 
 	// Use the CloneAndDeleteTreasuresByKeys method for batch shift operation
 	treasures, err := swampInterface.CloneAndDeleteTreasuresByKeys(in.GetKeys())
@@ -1126,12 +1123,13 @@ func shiftExpiredOneSwamp(ctx context.Context, g Gateway, in *hydrapb.ShiftExpir
 
 	hydraInterface := g.ZeusInterface.GetHydra()
 
-	swampInterface, err := hydraInterface.SummonSwamp(ctx, in.GetIslandID(), swampName)
+	// mutating path: the vigil is taken inside, so this write cannot
+	// land in a swamp instance that is already being torn down
+	swampInterface, releaseVigil, err := summonSwampForWrite(ctx, hydraInterface, in.GetIslandID(), swampName)
 	if err != nil {
-		return nil, status.Error(codes.Internal, fmt.Sprintf("internal server error in hydra: %s", err.Error()))
+		return nil, err
 	}
-	swampInterface.BeginVigil()
-	defer swampInterface.CeaseVigil()
+	defer releaseVigil()
 
 	howMany := in.GetHowMany()
 	if howMany == 0 {
@@ -1348,18 +1346,19 @@ func (g Gateway) Delete(ctx context.Context, in *hydrapb.DeleteRequest) (*hydrap
 
 		hydraInterface := g.ZeusInterface.GetHydra()
 
-		// summon the swamp
-		swampInterface, err := hydraInterface.SummonSwamp(ctx, swampRequest.GetIslandID(), swampNameObj)
+		// mutating path: the vigil is taken inside, so this delete cannot land
+		// in a swamp instance that is already being torn down
+		swampInterface, releaseVigil, err := summonSwampForWrite(ctx, hydraInterface, swampRequest.GetIslandID(), swampNameObj)
 		if err != nil {
 			// return with grpc error message
-			return nil, status.Error(codes.Internal, fmt.Sprintf("internal server error in hydra: %s", err.Error()))
+			return nil, err
 		}
 
 		func() {
 
-			// begin the vigil, to prevent closing of the swamp
-			swampInterface.BeginVigil()
-			defer swampInterface.CeaseVigil()
+			// release the vigil held since the summon; the closure keeps the
+			// release panic-safe and scoped to this loop iteration
+			defer releaseVigil()
 
 			sr := &hydrapb.DeleteResponse_SwampDeleteResponse{
 				SwampName: swampRequest.SwampName,
@@ -1822,15 +1821,13 @@ func (g Gateway) Uint32SlicePush(ctx context.Context, in *hydrapb.AddToUint32Sli
 	hydraInterface := g.ZeusInterface.GetHydra()
 
 	// summon the swamp
-	swampObj, err := hydraInterface.SummonSwamp(ctx, in.GetIslandID(), swampName)
+	// mutating path: the vigil is taken inside, so this write cannot
+	// land in a swamp instance that is already being torn down
+	swampObj, releaseVigil, err := summonSwampForWrite(ctx, hydraInterface, in.GetIslandID(), swampName)
 	if err != nil {
-		// return with grpc error message
-		return nil, status.Error(codes.Internal, fmt.Sprintf("internal server error in hydra: %s", err.Error()))
+		return nil, err
 	}
-
-	// begin the vigil, to prevent closing of the swamp
-	swampObj.BeginVigil()
-	defer swampObj.CeaseVigil()
+	defer releaseVigil()
 
 	var errorsWhilePush []string
 
@@ -1882,15 +1879,13 @@ func (g Gateway) Uint32SliceDelete(ctx context.Context, in *hydrapb.Uint32SliceD
 	hydraInterface := g.ZeusInterface.GetHydra()
 
 	// summon the swamp
-	swampObj, err := hydraInterface.SummonSwamp(ctx, in.GetIslandID(), swampName)
+	// mutating path: the vigil is taken inside, so this write cannot
+	// land in a swamp instance that is already being torn down
+	swampObj, releaseVigil, err := summonSwampForWrite(ctx, hydraInterface, in.GetIslandID(), swampName)
 	if err != nil {
-		// return with grpc error message
-		return nil, status.Error(codes.Internal, fmt.Sprintf("internal server error in hydra: %s", err.Error()))
+		return nil, err
 	}
-
-	// begin the vigil, to prevent closing of the swamp
-	swampObj.BeginVigil()
-	defer swampObj.CeaseVigil()
+	defer releaseVigil()
 
 	var errorsWhileDelete []string
 
@@ -2053,15 +2048,13 @@ func (g Gateway) IncrementInt8(ctx context.Context, in *hydrapb.IncrementInt8Req
 	hydraInterface := g.ZeusInterface.GetHydra()
 
 	// summon the swamp
-	swampObj, err := hydraInterface.SummonSwamp(ctx, in.GetIslandID(), swampName)
+	// mutating path: the vigil is taken inside, so this write cannot
+	// land in a swamp instance that is already being torn down
+	swampObj, releaseVigil, err := summonSwampForWrite(ctx, hydraInterface, in.GetIslandID(), swampName)
 	if err != nil {
-		// return with grpc error message
-		return nil, status.Error(codes.Internal, fmt.Sprintf("internal server error in hydra: %s", err.Error()))
+		return nil, err
 	}
-
-	// begin the vigil, to prevent closing of the swamp
-	swampObj.BeginVigil()
-	defer swampObj.CeaseVigil()
+	defer releaseVigil()
 
 	// create the condition if it is not nil
 	var condition *swamp.IncrementInt8Condition
@@ -2116,15 +2109,13 @@ func (g Gateway) IncrementInt16(ctx context.Context, in *hydrapb.IncrementInt16R
 	hydraInterface := g.ZeusInterface.GetHydra()
 
 	// summon the swamp
-	swampObj, err := hydraInterface.SummonSwamp(ctx, in.GetIslandID(), swampName)
+	// mutating path: the vigil is taken inside, so this write cannot
+	// land in a swamp instance that is already being torn down
+	swampObj, releaseVigil, err := summonSwampForWrite(ctx, hydraInterface, in.GetIslandID(), swampName)
 	if err != nil {
-		// return with grpc error message
-		return nil, status.Error(codes.Internal, fmt.Sprintf("internal server error in hydra: %s", err.Error()))
+		return nil, err
 	}
-
-	// begin the vigil, to prevent closing of the swamp
-	swampObj.BeginVigil()
-	defer swampObj.CeaseVigil()
+	defer releaseVigil()
 
 	// create the condition if it is not nil
 	var condition *swamp.IncrementInt16Condition
@@ -2178,15 +2169,13 @@ func (g Gateway) IncrementInt32(ctx context.Context, in *hydrapb.IncrementInt32R
 	hydraInterface := g.ZeusInterface.GetHydra()
 
 	// summon the swamp
-	swampObj, err := hydraInterface.SummonSwamp(ctx, in.GetIslandID(), swampName)
+	// mutating path: the vigil is taken inside, so this write cannot
+	// land in a swamp instance that is already being torn down
+	swampObj, releaseVigil, err := summonSwampForWrite(ctx, hydraInterface, in.GetIslandID(), swampName)
 	if err != nil {
-		// return with grpc error message
-		return nil, status.Error(codes.Internal, fmt.Sprintf("internal server error in hydra: %s", err.Error()))
+		return nil, err
 	}
-
-	// begin the vigil, to prevent closing of the swamp
-	swampObj.BeginVigil()
-	defer swampObj.CeaseVigil()
+	defer releaseVigil()
 
 	// create the condition if it is not nil
 	var condition *swamp.IncrementInt32Condition
@@ -2240,15 +2229,13 @@ func (g Gateway) IncrementInt64(ctx context.Context, in *hydrapb.IncrementInt64R
 	hydraInterface := g.ZeusInterface.GetHydra()
 
 	// summon the swamp
-	swampObj, err := hydraInterface.SummonSwamp(ctx, in.GetIslandID(), swampName)
+	// mutating path: the vigil is taken inside, so this write cannot
+	// land in a swamp instance that is already being torn down
+	swampObj, releaseVigil, err := summonSwampForWrite(ctx, hydraInterface, in.GetIslandID(), swampName)
 	if err != nil {
-		// return with grpc error message
-		return nil, status.Error(codes.Internal, fmt.Sprintf("internal server error in hydra: %s", err.Error()))
+		return nil, err
 	}
-
-	// begin the vigil, to prevent closing of the swamp
-	swampObj.BeginVigil()
-	defer swampObj.CeaseVigil()
+	defer releaseVigil()
 
 	// create the condition if it is not nil
 	var condition *swamp.IncrementInt64Condition
@@ -2302,15 +2289,13 @@ func (g Gateway) IncrementUint8(ctx context.Context, in *hydrapb.IncrementUint8R
 	hydraInterface := g.ZeusInterface.GetHydra()
 
 	// summon the swamp
-	swampObj, err := hydraInterface.SummonSwamp(ctx, in.GetIslandID(), swampName)
+	// mutating path: the vigil is taken inside, so this write cannot
+	// land in a swamp instance that is already being torn down
+	swampObj, releaseVigil, err := summonSwampForWrite(ctx, hydraInterface, in.GetIslandID(), swampName)
 	if err != nil {
-		// return with grpc error message
-		return nil, status.Error(codes.Internal, fmt.Sprintf("internal server error in hydra: %s", err.Error()))
+		return nil, err
 	}
-
-	// begin the vigil, to prevent closing of the swamp
-	swampObj.BeginVigil()
-	defer swampObj.CeaseVigil()
+	defer releaseVigil()
 
 	// create the condition if it is not nil
 	var condition *swamp.IncrementUInt8Condition
@@ -2364,15 +2349,13 @@ func (g Gateway) IncrementUint16(ctx context.Context, in *hydrapb.IncrementUint1
 	hydraInterface := g.ZeusInterface.GetHydra()
 
 	// summon the swamp
-	swampObj, err := hydraInterface.SummonSwamp(ctx, in.GetIslandID(), swampName)
+	// mutating path: the vigil is taken inside, so this write cannot
+	// land in a swamp instance that is already being torn down
+	swampObj, releaseVigil, err := summonSwampForWrite(ctx, hydraInterface, in.GetIslandID(), swampName)
 	if err != nil {
-		// return with grpc error message
-		return nil, status.Error(codes.Internal, fmt.Sprintf("internal server error in hydra: %s", err.Error()))
+		return nil, err
 	}
-
-	// begin the vigil, to prevent closing of the swamp
-	swampObj.BeginVigil()
-	defer swampObj.CeaseVigil()
+	defer releaseVigil()
 
 	// create the condition if it is not nil
 	var condition *swamp.IncrementUInt16Condition
@@ -2426,15 +2409,13 @@ func (g Gateway) IncrementUint32(ctx context.Context, in *hydrapb.IncrementUint3
 	hydraInterface := g.ZeusInterface.GetHydra()
 
 	// summon the swamp
-	swampObj, err := hydraInterface.SummonSwamp(ctx, in.GetIslandID(), swampName)
+	// mutating path: the vigil is taken inside, so this write cannot
+	// land in a swamp instance that is already being torn down
+	swampObj, releaseVigil, err := summonSwampForWrite(ctx, hydraInterface, in.GetIslandID(), swampName)
 	if err != nil {
-		// return with grpc error message
-		return nil, status.Error(codes.Internal, fmt.Sprintf("internal server error in hydra: %s", err.Error()))
+		return nil, err
 	}
-
-	// begin the vigil, to prevent closing of the swamp
-	swampObj.BeginVigil()
-	defer swampObj.CeaseVigil()
+	defer releaseVigil()
 
 	// create the condition if it is not nil
 	var condition *swamp.IncrementUInt32Condition
@@ -2488,15 +2469,13 @@ func (g Gateway) IncrementUint64(ctx context.Context, in *hydrapb.IncrementUint6
 	hydraInterface := g.ZeusInterface.GetHydra()
 
 	// summon the swamp
-	swampObj, err := hydraInterface.SummonSwamp(ctx, in.GetIslandID(), swampName)
+	// mutating path: the vigil is taken inside, so this write cannot
+	// land in a swamp instance that is already being torn down
+	swampObj, releaseVigil, err := summonSwampForWrite(ctx, hydraInterface, in.GetIslandID(), swampName)
 	if err != nil {
-		// return with grpc error message
-		return nil, status.Error(codes.Internal, fmt.Sprintf("internal server error in hydra: %s", err.Error()))
+		return nil, err
 	}
-
-	// begin the vigil, to prevent closing of the swamp
-	swampObj.BeginVigil()
-	defer swampObj.CeaseVigil()
+	defer releaseVigil()
 
 	// create the condition if it is not nil
 	var condition *swamp.IncrementUInt64Condition
@@ -2550,15 +2529,13 @@ func (g Gateway) IncrementFloat32(ctx context.Context, in *hydrapb.IncrementFloa
 	hydraInterface := g.ZeusInterface.GetHydra()
 
 	// summon the swamp
-	swampObj, err := hydraInterface.SummonSwamp(ctx, in.GetIslandID(), swampName)
+	// mutating path: the vigil is taken inside, so this write cannot
+	// land in a swamp instance that is already being torn down
+	swampObj, releaseVigil, err := summonSwampForWrite(ctx, hydraInterface, in.GetIslandID(), swampName)
 	if err != nil {
-		// return with grpc error message
-		return nil, status.Error(codes.Internal, fmt.Sprintf("internal server error in hydra: %s", err.Error()))
+		return nil, err
 	}
-
-	// begin the vigil, to prevent closing of the swamp
-	swampObj.BeginVigil()
-	defer swampObj.CeaseVigil()
+	defer releaseVigil()
 
 	// create the condition if it is not nil
 	var condition *swamp.IncrementFloat32Condition
@@ -2613,15 +2590,13 @@ func (g Gateway) IncrementFloat64(ctx context.Context, in *hydrapb.IncrementFloa
 	hydraInterface := g.ZeusInterface.GetHydra()
 
 	// summon the swamp
-	swampObj, err := hydraInterface.SummonSwamp(ctx, in.GetIslandID(), swampName)
+	// mutating path: the vigil is taken inside, so this write cannot
+	// land in a swamp instance that is already being torn down
+	swampObj, releaseVigil, err := summonSwampForWrite(ctx, hydraInterface, in.GetIslandID(), swampName)
 	if err != nil {
-		// return with grpc error message
-		return nil, status.Error(codes.Internal, fmt.Sprintf("internal server error in hydra: %s", err.Error()))
+		return nil, err
 	}
-
-	// begin the vigil, to prevent closing of the swamp
-	swampObj.BeginVigil()
-	defer swampObj.CeaseVigil()
+	defer releaseVigil()
 
 	// create the condition if it is not nil
 	var condition *swamp.IncrementFloat64Condition

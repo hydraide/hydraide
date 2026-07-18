@@ -62,12 +62,13 @@ func patchTreasuresOneSwamp(ctx context.Context, g Gateway, in *hydrapb.PatchTre
 	}
 
 	hydraInterface := g.ZeusInterface.GetHydra()
-	swampObj, err := hydraInterface.SummonSwamp(ctx, in.GetIslandID(), swampName)
+	// mutating path: the vigil is taken inside, so this patch cannot land in a
+	// swamp instance that is already being torn down
+	swampObj, releaseVigil, err := summonSwampForWrite(ctx, hydraInterface, in.GetIslandID(), swampName)
 	if err != nil {
-		return nil, false, status.Error(codes.Internal, fmt.Sprintf("internal server error in hydra: %s", err.Error()))
+		return nil, false, err
 	}
-	swampObj.BeginVigil()
-	defer swampObj.CeaseVigil()
+	defer releaseVigil()
 
 	// Cap path: count currently-matching records ONCE under capMu (via
 	// CountMatchingTreasures, which itself takes the beacon RLock).
