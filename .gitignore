@@ -90,7 +90,6 @@ docs/sdk/go/examples/smoke/auto_bucket/auto_bucket
 
 # Local-only WIP data-loss stress tests (kept on disk, never committed)
 app/core/hydra/hydra_dataloss_test.go
-app/core/hydra/swamp/swamp_dataloss_test.go
 app/core/hydra/swamp/chronicler/chronicler_v2_dataloss_test.go
 
 # Local-only bug investigation notes
