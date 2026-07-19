@@ -28,6 +28,11 @@ func newStreamVigilRig(t *testing.T, sanctuary, realm, swampN string) *streamVig
 		maxDepth        = 3
 		maxFolderPerLvl = 2000
 	)
+	// Isolate this run's swamps in a temp root; see the same call in
+	// newGatewayPatchTestRig for why a shared on-disk root makes the suite
+	// fail on a second local run.
+	t.Setenv("HYDRAIDE_ROOT_PATH", t.TempDir())
+
 	settingsInterface := settings.New(maxDepth, maxFolderPerLvl)
 	settingsInterface.RegisterPattern(
 		name.New().Sanctuary(sanctuary).Realm("*").Swamp("*"),

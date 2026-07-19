@@ -39,6 +39,16 @@ func newGatewayPatchTestRig(t *testing.T, sanctuary, realm, swampN string) *gate
 		maxDepth        = 3
 		maxFolderPerLvl = 2000
 	)
+	// settings.New resolves its data and settings folders from
+	// HYDRAIDE_ROOT_PATH at call time, and with the variable unset that
+	// resolves to ./data and ./settings inside the package directory. Every
+	// run would then reuse the previous run's swamps: a test asserting
+	// PatchResult_CREATED sees PATCHED instead, and the suite goes red on a
+	// second local run while staying green in CI, where the checkout is
+	// always fresh. Pointing the root at a per-test temp dir makes the run
+	// self-contained and lets the framework clean up after it.
+	t.Setenv("HYDRAIDE_ROOT_PATH", t.TempDir())
+
 	settingsInterface := settings.New(maxDepth, maxFolderPerLvl)
 	settingsInterface.RegisterPattern(
 		name.New().Sanctuary(sanctuary).Realm("*").Swamp("*"),

@@ -27,6 +27,11 @@ import (
 func TestGateway_FromOffset_WithFilter(t *testing.T) {
 	const total = 100
 
+	// Isolate this run's swamps in a temp root; see the same call in
+	// newGatewayPatchTestRig for why a shared on-disk root makes the suite
+	// fail on a second local run.
+	t.Setenv("HYDRAIDE_ROOT_PATH", t.TempDir())
+
 	fsInterface := filesystem.New()
 	settingsInterface := settings.New(3, 2000)
 	settingsInterface.RegisterPattern(
