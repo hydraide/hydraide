@@ -306,6 +306,16 @@ type Hydra interface {
 
 const (
 	ErrorHydraIsShuttingDown = "hydra is shutting down"
+
+	// swampGracefulCloseTimeout bounds how long a summon waits for a swamp
+	// that is already closing. See the call site in SummonSwamp for the
+	// measurements behind the value.
+	swampGracefulCloseTimeout = 90 * time.Second
+
+	// swampSlowCloseWarnAfter is the point where a successful but slow close
+	// is worth a log line, so the timeout above can be tuned from production
+	// evidence rather than from a failed request.
+	swampSlowCloseWarnAfter = 10 * time.Second
 )
 
 type hydra struct {
@@ -463,19 +473,44 @@ func (h *hydra) SummonSwamp(ctx context.Context, islandID uint64, swampName name
 
 					func() {
 
-						// For safety reasons, we only wait a maximum of 30 seconds for the swamp to close.
-						// If it doesn't close within this time, the swamp must be discarded, as it can't be safely shut down.
-						waitingCtx, cancelFunc := context.WithTimeout(context.Background(), 30*time.Second)
+						// This budget has to cover Close()'s flush of the pending write
+						// buffer plus the chronicler close, because WaitForGracefulClose
+						// returns only once goRoutineContext is cancelled at the end of
+						// that teardown.
+						//
+						// Measured on a single host, no race detector, one treasure per
+						// key: a settled 1M-treasure swamp (65 MB) closes in ~6.7s, and
+						// the pathological case where the whole backlog is still pending
+						// takes ~14.2s. The previous 30s budget therefore left only ~2x
+						// headroom at 1M and would have been exhausted somewhere around
+						// 2M treasures — on production storage under concurrent load,
+						// sooner than that.
+						//
+						// It stays bounded on purpose. This is also the circuit breaker
+						// for a genuinely stuck close: without a ceiling, every summon of
+						// that swamp would block indefinitely.
+						waitingCtx, cancelFunc := context.WithTimeout(context.Background(), swampGracefulCloseTimeout)
 						defer cancelFunc()
 
 						// There are two cases where an error may occur:
-						// 1. If the waitingCtx is done, which would indicate the swamp couldn't close within 30 seconds.
+						// 1. If the waitingCtx is done, which would indicate the swamp couldn't close in time.
 						// 2. If the swamp is not closing at all, for some reason.
 						// In both cases, the swamp must be discarded, as it cannot be closed and the code cannot proceed.
+						waitStarted := time.Now()
 						if closeErr := swampObject.WaitForGracefulClose(waitingCtx); closeErr != nil {
-							slog.Error("the swamp can not be closed in 30 seconds, so we need to drop it", "swampName", swampName, "closeError", closeErr)
+							slog.Error("the swamp could not be closed within the graceful close timeout, so we need to drop it",
+								"swampName", swampName, "timeout", swampGracefulCloseTimeout, "closeError", closeErr)
 							swampCloseError = closeErr
 							return
+						}
+
+						// A close that succeeds but takes a long time is the early warning
+						// that the budget above is becoming too tight for this dataset.
+						// Without this line the only signal is a request that already
+						// failed, which is far too late to tune anything.
+						if waited := time.Since(waitStarted); waited > swampSlowCloseWarnAfter {
+							slog.Warn("waiting for a swamp to close took unusually long",
+								"swampName", swampName, "waited", waited, "timeout", swampGracefulCloseTimeout)
 						}
 
 					}()
