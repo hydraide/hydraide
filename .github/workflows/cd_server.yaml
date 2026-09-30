@@ -241,8 +241,12 @@ jobs:
         uses: docker/login-action@v3.7.0
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ secrets.HYDRAIDE_DOCKER_USERNAME }}
-          password: ${{ secrets.HYDRAIDE_DOCKER_TOKEN }}
+          # The job's GITHUB_TOKEN (packages: write above) instead of a
+          # personal access token, so the login does not break when a PAT
+          # expires. Requires the hydraide/hydraide repository to have Write
+          # access in the ghcr.io package's "Manage Actions access" settings.
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Extract Docker metadata
         id: meta
