@@ -23,12 +23,12 @@ jobs:
       contents: read
     steps:
       - name: Checkout HydrAIDE monorepo
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           path: hydraide
 
       - name: Checkout hydraide/claude plugin repo
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           repository: hydraide/claude
           path: claude
