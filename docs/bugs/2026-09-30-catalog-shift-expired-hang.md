@@ -300,20 +300,39 @@ hung swamp's write buffer, because the write listener is blocked.
 
 ## Status
 
-Fixed in `server/v3.19.7` with fix direction 2 (try-lock inside the scan).
-`beacon.ShiftExpired` and `beacon.ShiftMatching` acquire the per-treasure
-guard with `StartTreasureGuard(false)` while holding `b.mu`. A row whose guard
-is busy stays in the beacon and is shifted by a later call, so `HowMany` can be
-under-filled while writes are in flight. `beacon.CloneUnorderedTreasures` now
-snapshots the rows under `b.mu` and clones them after releasing it, which
-removes the same inversion on `beaconKey`. `ShiftMany` still takes guards
-under `b.mu`, but it has no callers.
+Fixed in `server/v3.19.7`, together with the related issues found while
+fixing it.
 
-The four tests in `app/core/hydra/swamp/swamp_shift_guard_deadlock_test.go`
-pass with their watchdogs unchanged.
+- **Deadlock (this report).** `beacon.ShiftExpired` and `beacon.ShiftMatching`
+  acquire the per-treasure guard with `StartTreasureGuard(false)` while holding
+  `b.mu`. A row whose guard is busy stays in the beacon and is shifted by a
+  later call, so `HowMany` can be under-filled while writes are in flight.
+  `CloneUnorderedTreasures` and `CloneOrderedTreasures` snapshot the rows under
+  `b.mu` and clone them after releasing it, which removes the same inversion on
+  `beaconKey`. The unused `ShiftMany` is removed.
+- **Lost upsert between shift and delete.** The shift used to release the
+  guard after cloning, and `deleteHandler` took it again. A `Save` in between
+  (an upsert moving `ExpiredAt` into the future) was deleted with the row while
+  the shift returned the old value. The beacon now returns the rows with their
+  guards held (`beacon.HeldTreasure`), and the swamp clones and deletes them
+  under that guard. `CloneAndDeleteTreasuresByKeys` had the same gap and is
+  fixed the same way.
+- **Stale delete removing a re-created key.** `deleteHandler` resolved the
+  treasure, waited for its guard, and deleted by key without checking that the
+  key still mapped to that object. It now re-checks after acquiring the guard.
+- **Re-created key persisted as a delete.** A writer that got the live object
+  from `CreateTreasure` before a delete saved an object that still carried
+  `DeletedAt`. The swamp accepted it as a new key, but the V2 writer persisted
+  it as `OpDelete`, so the value was gone after the next load. `SaveFunction`
+  now clears the delete marker (`BodyClearDeletion`) on that path.
+- **Data race on treasure fields.** The setters wrote the model without
+  `t.mu` while guard-free readers (beacon sorts, Cap pre-counts,
+  `CountMatching`, predicates) read under `t.mu.RLock`. Every write now takes
+  `t.mu.Lock`.
+- `SetExpirationTime` only flags a change when the value moves (fix direction 4).
 
-A guard-free pre-check (fix direction 3) was not applied. The treasure
-setters (`SetExpirationTime`, `BodySetForDeletion`, ...) do not take the
-treasure's `t.mu`, so a read without the guard is a data race. The same race
-already exists in `SortByExpirationTimeAsc` / `SortByExpirationTimeDesc` and
-the Cap pre-counts; `go test -race` on `ProductionPattern` reports it there.
+Regression gate: `app/core/hydra/swamp/swamp_shift_guard_deadlock_test.go`
+(the four original tests unchanged, plus lost-write, stale-delete, clone and
+delete-marker tests) and `TestConcurrentGuardedWritesAndUnguardedReads` /
+`TestSetExpirationTimeChangeFlag` in the treasure package. All pass, also
+under `go test -race`.
