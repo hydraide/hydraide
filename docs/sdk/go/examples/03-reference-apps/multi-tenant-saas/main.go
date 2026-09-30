@@ -35,10 +35,13 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
-// User is the Catalog model.
+// User is the Catalog model. CreatedAt is the treasure-level creation time:
+// the CREATION_TIME index (used by listUsers) only contains treasures that set
+// it, so a timestamp that lives only inside Body is not enough.
 type User struct {
-	ID   string    `hydraide:"key"`
-	Body *UserBody `hydraide:"value"`
+	ID        string    `hydraide:"key"`
+	Body      *UserBody `hydraide:"value"`
+	CreatedAt time.Time `hydraide:"createdAt"`
 }
 
 type UserBody struct {
@@ -140,14 +143,16 @@ func (s *Server) createUser(ctx *fasthttp.RequestCtx) {
 		writeErr(ctx, fasthttp.StatusBadRequest, "email is required")
 		return
 	}
+	now := time.Now().UTC()
 	user := &User{
 		ID: uuid.New().String(),
 		Body: &UserBody{
 			Email:     req.Email,
 			Name:      req.Name,
 			IsActive:  true,
-			CreatedAt: time.Now().UTC(),
+			CreatedAt: now,
 		},
+		CreatedAt: now,
 	}
 	dbCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
