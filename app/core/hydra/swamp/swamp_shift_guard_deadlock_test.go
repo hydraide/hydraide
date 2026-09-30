@@ -336,3 +336,316 @@ func TestSwamp_ShiftExpired_ConcurrentDelete_NoDeadlock(t *testing.T) {
 		t.Fatalf("DEADLOCK: workers did not stop.\nRelevant goroutines:\n%s", relevantStacks())
 	}
 }
+
+// runShiftVsUpsertNoLostWrite checks that a shift never loses a concurrent
+// upsert. Each writer owns its keys and remembers the last payload it saved
+// per key; the shifter records every (key, payload) it shifted. After the run
+// the last saved payload of every key must be either the current value in the
+// swamp or one the shifter returned. Before the shift kept the guard from
+// selection to delete, a Save could land in between and be deleted without
+// being returned.
+func runShiftVsUpsertNoLostWrite(t *testing.T, realm string, shift func(s Swamp) []treasure.Treasure) {
+	var deadlocked atomic.Bool
+	s := deadlockTestSwamp(t, realm, "queue", &deadlocked)
+
+	tr := s.CreateTreasure("anchor")
+	gid := tr.StartTreasureGuard(true)
+	tr.SetContentString(gid, "v")
+	tr.SetExpirationTime(gid, time.Now().UTC().Add(24*time.Hour))
+	tr.Save(gid)
+	tr.ReleaseTreasureGuard(gid)
+
+	const (
+		writers       = 4
+		keysPerWriter = 8
+		runFor        = 2 * time.Second
+	)
+	var (
+		stop     atomic.Bool
+		progress atomic.Int64
+		wg       sync.WaitGroup
+		shiftMu  sync.Mutex
+		shifted  = map[string]map[string]bool{}
+	)
+	lastSaved := make([]map[string]string, writers)
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for !stop.Load() {
+			for _, st := range shift(s) {
+				v, err := st.GetContentString()
+				if err != nil {
+					continue
+				}
+				shiftMu.Lock()
+				if shifted[st.GetKey()] == nil {
+					shifted[st.GetKey()] = map[string]bool{}
+				}
+				shifted[st.GetKey()][v] = true
+				shiftMu.Unlock()
+			}
+			progress.Add(1)
+		}
+	}()
+	for w := 0; w < writers; w++ {
+		lastSaved[w] = map[string]string{}
+		wg.Add(1)
+		go func(w int) {
+			defer wg.Done()
+			for i := 0; !stop.Load(); i++ {
+				key := fmt.Sprintf("w%d-k%d", w, i%keysPerWriter)
+				payload := fmt.Sprintf("w%d-i%d", w, i)
+				tr := s.CreateTreasure(key)
+				gid := tr.StartTreasureGuard(true)
+				tr.SetContentString(gid, payload)
+				// alternate due and not-due rows so both the shift and the
+				// "moved into the future" re-index path are exercised
+				due := time.Now().UTC().Add(-time.Minute)
+				if i%2 == 1 {
+					due = time.Now().UTC().Add(time.Hour)
+				}
+				tr.SetExpirationTime(gid, due)
+				tr.Save(gid)
+				tr.ReleaseTreasureGuard(gid)
+				lastSaved[w][key] = payload
+				progress.Add(1)
+			}
+		}(w)
+	}
+
+	allDone := make(chan struct{})
+	go func() { wg.Wait(); close(allDone) }()
+	deadline := time.Now().Add(runFor)
+	last := progress.Load()
+	for time.Now().Before(deadline) {
+		time.Sleep(500 * time.Millisecond)
+		cur := progress.Load()
+		if cur == last {
+			deadlocked.Store(true)
+			stop.Store(true)
+			t.Fatalf("DEADLOCK: no progress after %d operations.\nRelevant goroutines:\n%s", cur, relevantStacks())
+		}
+		last = cur
+	}
+	stop.Store(true)
+	select {
+	case <-allDone:
+	case <-time.After(5 * time.Second):
+		deadlocked.Store(true)
+		t.Fatalf("DEADLOCK: workers did not stop.\nRelevant goroutines:\n%s", relevantStacks())
+	}
+
+	lost := 0
+	for w := 0; w < writers; w++ {
+		for key, payload := range lastSaved[w] {
+			if cur, err := s.GetTreasure(key); err == nil {
+				if v, _ := cur.GetContentString(); v == payload {
+					continue
+				}
+			}
+			if shifted[key][payload] {
+				continue
+			}
+			lost++
+			t.Errorf("lost write: key %s, last saved payload %s is neither in the swamp nor shifted", key, payload)
+		}
+	}
+	require.Zero(t, lost)
+}
+
+func TestSwamp_ShiftExpired_ConcurrentUpsert_NoLostWrite(t *testing.T) {
+	runShiftVsUpsertNoLostWrite(t, "shift-lost-write-expired", func(s Swamp) []treasure.Treasure {
+		shifted, _ := s.CloneAndDeleteExpiredTreasures(10)
+		return shifted
+	})
+}
+
+func TestSwamp_ShiftMatching_ConcurrentUpsert_NoLostWrite(t *testing.T) {
+	runShiftVsUpsertNoLostWrite(t, "shift-lost-write-matching", func(s Swamp) []treasure.Treasure {
+		now := time.Now().UTC().UnixNano()
+		expired := func(tr treasure.Treasure) bool {
+			exp := tr.GetExpirationTime()
+			return exp != 0 && exp < now
+		}
+		shifted, _, _ := s.CloneAndDeleteMatchingTreasures(BeaconTypeExpirationTime, IndexOrderAsc, 10, expired, nil, 0)
+		return shifted
+	})
+}
+
+func TestSwamp_CloneAndDeleteByKeys_ConcurrentUpsert_NoLostWrite(t *testing.T) {
+	runShiftVsUpsertNoLostWrite(t, "shift-lost-write-bykeys", func(s Swamp) []treasure.Treasure {
+		keys := make([]string, 0, 32)
+		for w := 0; w < 4; w++ {
+			for k := 0; k < 8; k++ {
+				keys = append(keys, fmt.Sprintf("w%d-k%d", w, k))
+			}
+		}
+		shifted, _ := s.CloneAndDeleteTreasuresByKeys(keys)
+		return shifted
+	})
+}
+
+// countGoroutinesBlockedIn returns how many goroutines have every given frame
+// substring in their stack.
+func countGoroutinesBlockedIn(frames ...string) int {
+	n := 0
+	for _, g := range strings.Split(allStacks(), "\n\n") {
+		ok := true
+		for _, f := range frames {
+			if !strings.Contains(g, f) {
+				ok = false
+				break
+			}
+		}
+		if ok {
+			n++
+		}
+	}
+	return n
+}
+
+func waitForGoroutineCount(t *testing.T, want int, frames ...string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if countGoroutinesBlockedIn(frames...) >= want {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("expected %d goroutines blocked in %v.\nRelevant goroutines:\n%s", want, frames, relevantStacks())
+}
+
+// TestSwamp_DeleteTreasure_StaleWaiterKeepsRecreatedKey: two DeleteTreasure
+// calls for the same key queue on its guard. The first deletes the key; the
+// key is then re-created with a new treasure object before the second one
+// gets the guard. The second delete must not remove the re-created key: it
+// resolved the old object before waiting and that object is no longer the
+// one the key maps to.
+func TestSwamp_DeleteTreasure_StaleWaiterKeepsRecreatedKey(t *testing.T) {
+	var deadlocked atomic.Bool
+	s := deadlockTestSwamp(t, "stale-delete-waiter", "queue", &deadlocked)
+
+	for _, k := range []string{"anchor", "k"} {
+		tr := s.CreateTreasure(k)
+		gid := tr.StartTreasureGuard(true)
+		tr.SetContentString(gid, "old")
+		require.Equal(t, treasure.StatusNew, tr.Save(gid))
+		tr.ReleaseTreasureGuard(gid)
+	}
+
+	old := s.CreateTreasure("k")
+	holder := old.StartTreasureGuard(true)
+
+	deleteFrames := []string{"(*swamp).deleteHandler", "guard.(*guard).StartTreasureGuard"}
+	d1 := make(chan struct{})
+	go func() { defer close(d1); _ = s.DeleteTreasure("k", false) }()
+	waitForGoroutineCount(t, 1, deleteFrames...)
+
+	// queue the re-creator behind the first delete and ahead of the second
+	recreated := make(chan struct{})
+	go func() {
+		defer close(recreated)
+		gid := old.StartTreasureGuard(true)
+		defer old.ReleaseTreasureGuard(gid)
+		nt := s.CreateTreasure("k")
+		ngid := nt.StartTreasureGuard(true)
+		nt.SetContentString(ngid, "new")
+		nt.Save(ngid)
+		nt.ReleaseTreasureGuard(ngid)
+	}()
+	waitForGoroutineCount(t, 1, "StaleWaiterKeepsRecreatedKey.func", "guard.(*guard).StartTreasureGuard")
+
+	d2 := make(chan struct{})
+	go func() { defer close(d2); _ = s.DeleteTreasure("k", false) }()
+	waitForGoroutineCount(t, 2, deleteFrames...)
+
+	old.ReleaseTreasureGuard(holder)
+	for _, c := range []chan struct{}{d1, recreated, d2} {
+		select {
+		case <-c:
+		case <-time.After(5 * time.Second):
+			deadlocked.Store(true)
+			t.Fatalf("DEADLOCK.\nRelevant goroutines:\n%s", relevantStacks())
+		}
+	}
+
+	cur, err := s.GetTreasure("k")
+	require.NoError(t, err, "the re-created key was deleted by a stale delete")
+	v, _ := cur.GetContentString()
+	require.Equal(t, "new", v)
+}
+
+// TestSwamp_CloneTreasures_ConcurrentOverwriteSave_NoDeadlock: a full clone
+// (CloneTreasures, also used by the field-bucket build) must not wait for a
+// treasure guard while holding beaconKey's lock, because an overwrite-Save
+// holds the guard and then reads beaconKey.
+func TestSwamp_CloneTreasures_ConcurrentOverwriteSave_NoDeadlock(t *testing.T) {
+	var deadlocked atomic.Bool
+	s := deadlockTestSwamp(t, "clone-vs-overwrite", "queue", &deadlocked)
+
+	for i := 0; i < 32; i++ {
+		tr := s.CreateTreasure(fmt.Sprintf("k%d", i))
+		gid := tr.StartTreasureGuard(true)
+		tr.SetContentString(gid, "v")
+		tr.Save(gid)
+		tr.ReleaseTreasureGuard(gid)
+	}
+
+	var (
+		stop     atomic.Bool
+		progress atomic.Int64
+		wg       sync.WaitGroup
+	)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for !stop.Load() {
+			_ = s.CloneTreasures()
+			progress.Add(1)
+		}
+	}()
+	// new keys take beaconKey's write lock, which is what turns a reader
+	// waiting behind the clone into a deadlock
+	for w := 0; w < 4; w++ {
+		wg.Add(1)
+		go func(w int) {
+			defer wg.Done()
+			for i := 0; !stop.Load(); i++ {
+				key := fmt.Sprintf("k%d", i%32)
+				if i%4 == 0 {
+					key = fmt.Sprintf("new-w%d-%d", w, i)
+				}
+				tr := s.CreateTreasure(key)
+				gid := tr.StartTreasureGuard(true)
+				tr.SetContentString(gid, fmt.Sprintf("v%d", i))
+				tr.Save(gid)
+				tr.ReleaseTreasureGuard(gid)
+				progress.Add(1)
+			}
+		}(w)
+	}
+
+	allDone := make(chan struct{})
+	go func() { wg.Wait(); close(allDone) }()
+	deadline := time.Now().Add(2 * time.Second)
+	last := progress.Load()
+	for time.Now().Before(deadline) {
+		time.Sleep(500 * time.Millisecond)
+		cur := progress.Load()
+		if cur == last {
+			deadlocked.Store(true)
+			stop.Store(true)
+			t.Fatalf("DEADLOCK: no progress after %d operations.\nRelevant goroutines:\n%s", cur, relevantStacks())
+		}
+		last = cur
+	}
+	stop.Store(true)
+	select {
+	case <-allDone:
+	case <-time.After(5 * time.Second):
+		deadlocked.Store(true)
+		t.Fatalf("DEADLOCK: workers did not stop.\nRelevant goroutines:\n%s", relevantStacks())
+	}
+}

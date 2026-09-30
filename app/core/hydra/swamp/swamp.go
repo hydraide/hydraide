@@ -2619,15 +2619,9 @@ func (s *swamp) CloneAndDeleteExpiredTreasures(howMany int32) ([]treasure.Treasu
 	// build the expirationTimeIndex if it is not built yet
 	s.buildBeacon(s.expirationTimeBeaconASC, s.expirationTimeBeaconDESC, BeaconTypeExpirationTime)
 
-	// shift the expired treasures from the swamp
-	shiftedTreasures := s.expirationTimeBeaconASC.ShiftExpired(int(howMany))
-
-	// delete the shifted treasures from the other indexes
-	for _, d := range shiftedTreasures {
-		// delete the treasure from the beaconKey
-		// A lejárt treasureok esetében mindig valódi törlést végzünk és nem csak "törölt" flaggel jelöljük meg a treasuret
-		s.deleteHandler(d.GetKey(), false)
-	}
+	// shift the expired treasures from the swamp, then delete them from every
+	// other index under the guards the shift selected them with
+	shiftedTreasures := s.deleteShiftedTreasures(s.expirationTimeBeaconASC.ShiftExpired(int(howMany)))
 
 	// destroy the swamp if there is no treasure in it
 	remainingCount := s.beaconKey.Count()
@@ -2699,13 +2693,11 @@ func (s *swamp) CloneAndDeleteMatchingTreasures(beaconType BeaconType, order Bea
 		return nil, false, errors.New("beacon not available for the requested type/order")
 	}
 
-	shiftedTreasures, capReached := bcn.ShiftMatching(int(howMany), predicate, capPredicate, int(capMax))
+	held, capReached := bcn.ShiftMatching(int(howMany), predicate, capPredicate, int(capMax))
 
 	// Drop shifted treasures from every sibling index — same as
 	// CloneAndDeleteExpiredTreasures. Permanent delete (shadowDelete=false).
-	for _, d := range shiftedTreasures {
-		s.deleteHandler(d.GetKey(), false)
-	}
+	shiftedTreasures := s.deleteShiftedTreasures(held)
 
 	// Auto-destroy on empty, mirroring CloneAndDeleteExpiredTreasures.
 	if s.beaconKey.Count() == 0 {
@@ -2755,21 +2747,17 @@ func (s *swamp) CloneAndDeleteTreasuresByKeys(keys []string) ([]treasure.Treasur
 	for _, key := range keys {
 		// Check if the treasure exists
 		if treasureObj := s.beaconKey.Get(key); treasureObj != nil {
-			// Start treasure guard with write lock (true = write lock)
-			lockerID := treasureObj.StartTreasureGuard(true)
-
-			// Clone the treasure before deletion
-			clonedTreasure := treasureObj.Clone(lockerID)
-
-			// Release the treasure guard
+			// Clone and delete under one guard, so a concurrent Save cannot
+			// land between the two and be deleted without being returned.
+			// Permanent deletion, not shadow delete, like
+			// CloneAndDeleteExpiredTreasures.
+			lockerID := treasureObj.StartTreasureGuard(true, guard.BodyAuthID)
+			clonedTreasure := s.deleteGuardedTreasure(treasureObj, lockerID, false)
 			treasureObj.ReleaseTreasureGuard(lockerID)
 
-			// Add cloned treasure to result
-			result = append(result, clonedTreasure)
-
-			// Delete the treasure from the swamp (permanent deletion, not shadow delete)
-			// This is similar to CloneAndDeleteExpiredTreasures where we always do real deletion
-			s.deleteHandler(key, false)
+			if clonedTreasure != nil {
+				result = append(result, clonedTreasure)
+			}
 		}
 		// Missing keys are silently ignored (as per specification)
 	}
@@ -2907,6 +2895,40 @@ func (s *swamp) deleteHandler(key string, shadowDelete bool) (deletedTreasure tr
 	guardID := treasureObj.StartTreasureGuard(true, guard.BodyAuthID)
 	defer treasureObj.ReleaseTreasureGuard(guardID)
 
+	if s.deleteGuardedTreasure(treasureObj, guardID, shadowDelete) == nil {
+		return nil
+	}
+	return treasureObj
+
+}
+
+// deleteShiftedTreasures finishes a beacon shift: every held row is cloned
+// and deleted from the swamp under the guard the shift selected it with, and
+// the guard is released afterwards. Returns the clones of the deleted rows.
+func (s *swamp) deleteShiftedTreasures(held []beacon.HeldTreasure) []treasure.Treasure {
+	var shiftedTreasures []treasure.Treasure
+	for _, h := range held {
+		// A lejárt treasureok esetében mindig valódi törlést végzünk és nem csak "törölt" flaggel jelöljük meg a treasuret
+		if clonedTreasure := s.deleteGuardedTreasure(h.Treasure, h.GuardID, false); clonedTreasure != nil {
+			shiftedTreasures = append(shiftedTreasures, clonedTreasure)
+		}
+		h.Treasure.ReleaseTreasureGuard(h.GuardID)
+	}
+	return shiftedTreasures
+}
+
+// deleteGuardedTreasure deletes treasureObj from the swamp. The caller holds
+// its guard (guardID, acquired with guard.BodyAuthID) and releases it
+// afterwards. Returns a clone of the treasure taken before the delete, or nil
+// when the key no longer maps to treasureObj: another goroutine deleted it
+// (and maybe re-created the key) while the caller waited for the guard.
+func (s *swamp) deleteGuardedTreasure(treasureObj treasure.Treasure, guardID guard.ID, shadowDelete bool) treasure.Treasure {
+
+	key := treasureObj.GetKey()
+	if s.beaconKey.Get(key) != treasureObj {
+		return nil
+	}
+
 	// Még változtatás előtt lemásoljuk a Treasure-t, hogy egy clone-t készíthessünk róla, hogy a törölt treasure-t minden
 	// adatával együtt vissza tudjuk adni.
 	clonedTreasure := treasureObj.Clone(guardID)
@@ -2936,7 +2958,7 @@ func (s *swamp) deleteHandler(key string, shadowDelete bool) (deletedTreasure tr
 	s.sendDeletedEventToClient(clonedTreasure)
 	s.sendSwampInfo()
 
-	return treasureObj
+	return clonedTreasure
 
 }
 

@@ -998,10 +998,7 @@ func TestBeacon(t *testing.T) {
 
 		assert.Nil(t, shiftedTreasureObject, "shifted treasure object should be nil")
 
-		shiftedTreasures := b.ShiftMany(10)
-
-		assert.Equal(t, 9, len(shiftedTreasures), "shifted treasures count should be equal to 9")
-		assert.Equal(t, 0, b.Count(), "all treasures count should be equal to 0")
+		assert.Equal(t, 9, b.Count(), "all treasures count should be equal to 9")
 
 	})
 

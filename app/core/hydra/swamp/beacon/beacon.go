@@ -13,7 +13,19 @@ import (
 	"time"
 
 	"github.com/hydraide/hydraide/app/core/hydra/swamp/treasure"
+	"github.com/hydraide/hydraide/app/core/hydra/swamp/treasure/guard"
 )
+
+// HeldTreasure is a live treasure that a shift removed from the beacon,
+// returned with its per-treasure guard still held (GuardID). The caller
+// finishes the shift under that guard (clone + delete from the swamp) and
+// must release it with ReleaseTreasureGuard(GuardID). Holding the guard from
+// selection to delete keeps a concurrent Save from writing a new value into
+// the row between the two steps and having it deleted with the shifted row.
+type HeldTreasure struct {
+	treasure.Treasure
+	GuardID guard.ID
+}
 
 type Beacon interface {
 
@@ -259,28 +271,6 @@ type Beacon interface {
 	// 5. In caching scenarios where you need to evict certain items and move them to a different data structure or storage.
 	ShiftOne(key string) (d treasure.Treasure)
 
-	// ShiftMany removes a specified number of treasure objects from the treasuresByOrder slice
-	// and the corresponding entries from the treasuresByKeys map. It returns the removed treasures
-	// as a slice. Thread-safety is ensured via a write transaction.
-	//
-	// Parameters:
-	// - howMany int: The number of treasures to remove and return.
-	//
-	// Returns:
-	// - []treasure.Treasure: A slice of removed treasure objects.
-	//
-	// Side Effects:
-	// - Modifies treasuresByKeys by removing keys corresponding to shifted treasures.
-	// - Modifies treasuresByOrder by removing the shifted treasures.
-	//
-	// When to Use This Function:
-	// 1. When you need to bulk-remove and retrieve a specific number of treasures.
-	// 2. In queue-like scenarios, where the first 'howMany' elements should be processed and removed.
-	// 3. When you need to move a set number of elements from one data structure to another.
-	// 4. For implementing rate-limiting mechanisms or load balancers that distribute a certain number of tasks/items.
-	// 5. For evicting a set number of items in a cache as part of a cache eviction strategy.
-	ShiftMany(howMany int) []treasure.Treasure
-
 	// ShiftExpired removes and returns a specified number of expired treasure objects
 	// from the treasuresByOrder slice and the corresponding entries from the treasuresByKeys map.
 	// Expired treasures are identified based on their expiration time. Thread safety is ensured via a write transaction.
@@ -289,7 +279,11 @@ type Beacon interface {
 	// - howMany int: The maximum number of expired treasures to remove and return.
 	//
 	// Returns:
-	// - []treasure.Treasure: A slice of removed, expired treasure objects.
+	// - []HeldTreasure: the removed, expired treasures with their guards
+	//   still held. The caller must release every guard.
+	//
+	// A row whose guard is busy (being written right now) is skipped and
+	// left for a later call, so fewer than howMany rows can come back.
 	//
 	// Side Effects:
 	// - Modifies treasuresByKeys by removing keys corresponding to shifted expired treasures.
@@ -301,7 +295,7 @@ type Beacon interface {
 	// 3. To free up resources or decrease memory footprint by removing expired data.
 	// 4. For data archival or backup processes that operate on expired data before removal.
 	// 5. When implementing rate-limiting or leasing systems where expired items should be processed separately.
-	ShiftExpired(howMany int) []treasure.Treasure
+	ShiftExpired(howMany int) []HeldTreasure
 
 	// SelectExpiredForPatch removes up to howMany expired treasures from
 	// the ordered slice (treasuresByOrder) and returns the live pointers.
@@ -337,9 +331,10 @@ type Beacon interface {
 	// ShiftMatching is the parametric generalisation of ShiftExpired: it
 	// walks treasuresByOrder in the beacon's intrinsic order, applies the
 	// caller-supplied predicate to each treasure under its per-key guard,
-	// and atomically clones + removes up to howMany matching treasures
-	// from both treasuresByKeys and treasuresByOrder. Non-matching
-	// treasures and matches beyond the howMany budget are kept.
+	// and atomically removes up to howMany matching treasures from both
+	// treasuresByKeys and treasuresByOrder. Non-matching treasures,
+	// matches beyond the howMany budget, and rows whose guard is busy
+	// are kept.
 	//
 	// The beacon mu is held for the entire pass, so two concurrent
 	// ShiftMatching callers (or a concurrent ShiftExpired / Add via Save)
@@ -363,10 +358,10 @@ type Beacon interface {
 	//   nil = no cap enforcement.
 	// - capMax int: post-op upper bound; ignored when capPredicate is nil.
 	//
-	// Returns the cloned, removed treasures in the beacon's intrinsic
-	// order, plus capReached. Caller drops the returned keys from sibling
-	// indexes.
-	ShiftMatching(howMany int, predicate func(treasure.Treasure) bool, capPredicate func(treasure.Treasure) bool, capMax int) (selected []treasure.Treasure, capReached bool)
+	// Returns the removed treasures in the beacon's intrinsic order with
+	// their guards still held (see HeldTreasure), plus capReached. The
+	// caller deletes them from the swamp and releases every guard.
+	ShiftMatching(howMany int, predicate func(treasure.Treasure) bool, capPredicate func(treasure.Treasure) bool, capMax int) (selected []HeldTreasure, capReached bool)
 
 	// SelectExpiredForPatchWithCap is the Cap-aware variant of
 	// SelectExpiredForPatch. It runs count(capPredicate) + selection
@@ -945,42 +940,14 @@ func (b *beacon) ShiftOne(key string) (d treasure.Treasure) {
 	return
 }
 
-// ShiftMany removes the element with the given numbers and returns them
-func (b *beacon) ShiftMany(howMany int) []treasure.Treasure {
+func (b *beacon) ShiftExpired(howMany int) []HeldTreasure {
 
 	atomic.StoreInt32(&b.initialized, 1)
 
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	var shiftedTreasures []treasure.Treasure
-	var remainingTreasures []treasure.Treasure
-	counter := 0
-	for _, treasureObj := range b.treasuresByOrder {
-		if counter < howMany {
-			lockID := treasureObj.StartTreasureGuard(true)
-			clonedTreasure := treasureObj.Clone(lockID)
-			treasureObj.ReleaseTreasureGuard(lockID)
-			shiftedTreasures = append(shiftedTreasures, clonedTreasure)
-			delete(b.treasuresByKeys, treasureObj.GetKey())
-			counter++
-		} else {
-			remainingTreasures = append(remainingTreasures, treasureObj)
-		}
-	}
-	b.treasuresByOrder = remainingTreasures
-	return shiftedTreasures
-
-}
-
-func (b *beacon) ShiftExpired(howMany int) []treasure.Treasure {
-
-	atomic.StoreInt32(&b.initialized, 1)
-
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	var shiftedTreasures []treasure.Treasure
+	var shiftedTreasures []HeldTreasure
 	var remainingTreasures []treasure.Treasure
 
 	counter := 0
@@ -994,7 +961,7 @@ func (b *beacon) ShiftExpired(howMany int) []treasure.Treasure {
 		// deleteHandler hold the guard and then want this mu, so a blocking
 		// acquire here deadlocks (docs/bugs/2026-09-30-catalog-shift-expired-hang.md).
 		// A busy row is being written right now; leave it for a later call.
-		lockerID := treasureObj.StartTreasureGuard(false)
+		lockerID := treasureObj.StartTreasureGuard(false, guard.BodyAuthID)
 		if lockerID == 0 {
 			remainingTreasures = append(remainingTreasures, treasureObj)
 			continue
@@ -1004,14 +971,14 @@ func (b *beacon) ShiftExpired(howMany int) []treasure.Treasure {
 		// were originally indexed.
 		exp := treasureObj.GetExpirationTime()
 		if exp != 0 && exp < now {
-			clonedTreasure := treasureObj.Clone(lockerID)
-			shiftedTreasures = append(shiftedTreasures, clonedTreasure)
+			// keep the guard: the caller deletes the row under it
+			shiftedTreasures = append(shiftedTreasures, HeldTreasure{Treasure: treasureObj, GuardID: lockerID})
 			delete(b.treasuresByKeys, treasureObj.GetKey())
 			counter++
-		} else {
-			remainingTreasures = append(remainingTreasures, treasureObj)
+			continue
 		}
 		treasureObj.ReleaseTreasureGuard(lockerID)
+		remainingTreasures = append(remainingTreasures, treasureObj)
 	}
 	b.treasuresByOrder = remainingTreasures
 	return shiftedTreasures
@@ -1021,7 +988,7 @@ func (b *beacon) ShiftExpired(howMany int) []treasure.Treasure {
 // ShiftMatching is the parametric generalisation of ShiftExpired. The
 // optional capPredicate is counted over treasuresByKeys under the same
 // Lock as selection — race-free Cap enforcement.
-func (b *beacon) ShiftMatching(howMany int, predicate func(treasure.Treasure) bool, capPredicate func(treasure.Treasure) bool, capMax int) ([]treasure.Treasure, bool) {
+func (b *beacon) ShiftMatching(howMany int, predicate func(treasure.Treasure) bool, capPredicate func(treasure.Treasure) bool, capMax int) ([]HeldTreasure, bool) {
 
 	atomic.StoreInt32(&b.initialized, 1)
 
@@ -1062,7 +1029,7 @@ func (b *beacon) ShiftMatching(howMany int, predicate func(treasure.Treasure) bo
 		}
 	}
 
-	var shiftedTreasures []treasure.Treasure
+	var shiftedTreasures []HeldTreasure
 	var remainingTreasures []treasure.Treasure
 
 	counter := 0
@@ -1071,24 +1038,24 @@ func (b *beacon) ShiftMatching(howMany int, predicate func(treasure.Treasure) bo
 		// Non-blocking acquire, same reason as in ShiftExpired: waiting for
 		// a guard under b.mu inverts the guard -> beacon mu order of Save
 		// and deleteHandler. A busy row stays for a later call.
-		lockerID := treasureObj.StartTreasureGuard(false)
+		lockerID := treasureObj.StartTreasureGuard(false, guard.BodyAuthID)
 		if lockerID == 0 {
 			remainingTreasures = append(remainingTreasures, treasureObj)
 			continue
 		}
 		matched := predicate(treasureObj)
 		if matched && counter < effectiveHowMany {
-			clonedTreasure := treasureObj.Clone(lockerID)
-			shiftedTreasures = append(shiftedTreasures, clonedTreasure)
+			// keep the guard: the caller deletes the row under it
+			shiftedTreasures = append(shiftedTreasures, HeldTreasure{Treasure: treasureObj, GuardID: lockerID})
 			delete(b.treasuresByKeys, treasureObj.GetKey())
 			counter++
-		} else {
-			if matched {
-				matchesBeyondBudget++
-			}
-			remainingTreasures = append(remainingTreasures, treasureObj)
+			continue
+		}
+		if matched {
+			matchesBeyondBudget++
 		}
 		treasureObj.ReleaseTreasureGuard(lockerID)
+		remainingTreasures = append(remainingTreasures, treasureObj)
 	}
 	b.treasuresByOrder = remainingTreasures
 
@@ -1317,20 +1284,22 @@ func (b *beacon) CloneOrderedTreasures(thenReset bool) []treasure.Treasure {
 
 	atomic.StoreInt32(&b.initialized, 1)
 
+	// Snapshot under b.mu, clone after releasing it (see
+	// CloneUnorderedTreasures for the lock-order reason).
 	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	// clone the slice because we don't want to expose the internal slice
-	clone := make([]treasure.Treasure, len(b.treasuresByOrder))
-	for index, treasureObj := range b.treasuresByOrder {
-		lockerID := treasureObj.StartTreasureGuard(true)
-		clone[index] = treasureObj.Clone(lockerID)
-		treasureObj.ReleaseTreasureGuard(lockerID)
-	}
-
+	snapshot := make([]treasure.Treasure, len(b.treasuresByOrder))
+	copy(snapshot, b.treasuresByOrder)
 	if thenReset {
 		b.treasuresByOrder = nil
 		b.treasuresByKeys = make(map[string]treasure.Treasure)
+	}
+	b.mu.Unlock()
+
+	clone := make([]treasure.Treasure, len(snapshot))
+	for index, treasureObj := range snapshot {
+		lockerID := treasureObj.StartTreasureGuard(true)
+		clone[index] = treasureObj.Clone(lockerID)
+		treasureObj.ReleaseTreasureGuard(lockerID)
 	}
 
 	return clone
