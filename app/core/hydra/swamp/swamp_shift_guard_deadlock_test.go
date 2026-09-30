@@ -649,3 +649,45 @@ func TestSwamp_CloneTreasures_ConcurrentOverwriteSave_NoDeadlock(t *testing.T) {
 		t.Fatalf("DEADLOCK: workers did not stop.\nRelevant goroutines:\n%s", relevantStacks())
 	}
 }
+
+// TestSwamp_SaveAfterConcurrentDelete_ClearsDeleteMarker: gateway.Set gets the
+// live treasure from CreateTreasure and then waits for its guard. If a delete
+// (DeleteTreasure or a shift) wins that race, the writer saves an object that
+// carries the delete marker. The swamp takes it as a new key, but the writer
+// would persist it as a delete entry, losing the value on the next load. The
+// save must clear the marker.
+func TestSwamp_SaveAfterConcurrentDelete_ClearsDeleteMarker(t *testing.T) {
+	var deadlocked atomic.Bool
+	s := deadlockTestSwamp(t, "save-after-delete", "queue", &deadlocked)
+
+	for _, k := range []string{"anchor", "k"} {
+		tr := s.CreateTreasure(k)
+		gid := tr.StartTreasureGuard(true)
+		tr.SetContentString(gid, "old")
+		require.Equal(t, treasure.StatusNew, tr.Save(gid))
+		tr.ReleaseTreasureGuard(gid)
+	}
+
+	// flush, so the delete marks the object instead of just dropping it from
+	// the write buffer
+	s.(*swamp).fileWriterHandler(false)
+	require.NotNil(t, s.CreateTreasure("k").GetFileName(), "precondition: k is on disk")
+
+	// the writer resolved the live object before the delete ran
+	tr := s.CreateTreasure("k")
+	require.NoError(t, s.DeleteTreasure("k", false))
+	require.NotZero(t, tr.GetDeletedAt(), "precondition: the object carries the delete marker")
+
+	gid := tr.StartTreasureGuard(true)
+	tr.SetContentString(gid, "new")
+	require.Equal(t, treasure.StatusNew, tr.Save(gid))
+	tr.ReleaseTreasureGuard(gid)
+
+	cur, err := s.GetTreasure("k")
+	require.NoError(t, err)
+	v, _ := cur.GetContentString()
+	require.Equal(t, "new", v)
+	require.Zero(t, cur.GetDeletedAt(), "a re-created key must not carry the delete marker")
+	require.Empty(t, cur.GetDeletedBy())
+	require.False(t, cur.GetShadowDelete())
+}

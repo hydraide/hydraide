@@ -834,6 +834,13 @@ type Treasure interface {
 	// 3. To perform a "soft delete" operation with `shadowDelete` for future restoration or auditing purposes.
 	BodySetForDeletion(guardID guard.ID, byUserID string, shadowDelete bool)
 
+	// BodyClearDeletion removes the delete marker set by BodySetForDeletion
+	// (DeletedAt, DeletedBy, shadow flag). The swamp calls it when a treasure
+	// object that was deleted while a writer waited for its guard is saved
+	// again: the save re-creates the key, and without clearing the marker the
+	// chronicler would persist the new value as a delete entry.
+	BodyClearDeletion(guardID guard.ID)
+
 	// BodySetKey sets the key of the treasure when it is created.
 	// This function is critical as it establishes the unique identifier for the treasure. It is called only once,
 	// at the moment of the treasure's creation within the system. Once the key is set, it cannot be changed.
@@ -1477,6 +1484,21 @@ func (t *treasure) BodySetFileName(guardID guard.ID, fileName string) {
 	defer t.mu.Unlock()
 	// does not increase the version because the fileName is not part of the content
 	t.treasure.FileName = &fileName
+}
+
+func (t *treasure) BodyClearDeletion(guardID guard.ID) {
+	if canExecuteErr := t.Guard.CanExecute(guardID); canExecuteErr != nil {
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.treasure.DeletedAt != 0 || t.treasure.DeletedBy != "" {
+		t.deletedAtChanged = true
+		t.deletedByChanged = true
+	}
+	t.treasure.DeletedAt = 0
+	t.treasure.DeletedBy = ""
+	t.shadowDeleted = false
 }
 
 func (t *treasure) BodySetForDeletion(guardID guard.ID, byUserID string, shadowDelete bool) {

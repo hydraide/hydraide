@@ -2128,6 +2128,14 @@ func (s *swamp) SaveFunction(t treasure.Treasure, guardID guard.ID) treasure.Tre
 	// and the treasure is totally new
 	if existedTreasureObj == nil {
 
+		// The caller got this object from CreateTreasure while it was live, and
+		// a delete (DeleteTreasure or a shift) ran before the caller got the
+		// guard. Saving it re-creates the key, so drop the delete marker, or the
+		// writer would persist the new value as a delete entry.
+		if t.GetDeletedAt() != 0 {
+			t.BodyClearDeletion(guardID)
+		}
+
 		// If this key was recently deleted (e.g. via ShiftExpired), the old delete-marked
 		// treasure may still be sitting in the write buffer. We must remove it first,
 		// otherwise beacon.Add silently drops the new treasure (key already exists)
