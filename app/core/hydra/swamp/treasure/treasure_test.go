@@ -780,3 +780,47 @@ func TestSetExpirationTimeChangeFlag(t *testing.T) {
 		assert.True(t, tr.IsExpirationTimeChanged())
 	})
 }
+
+func TestIsDifferentFrom(t *testing.T) {
+	newTreasure := func(set func(tr Treasure, g guard.ID)) Treasure {
+		tr := New(func(t Treasure, guardID guard.ID) TreasureStatus { return StatusNew })
+		g := tr.StartTreasureGuard(true, guard.BodyAuthID)
+		tr.BodySetKey(g, "k")
+		set(tr, g)
+		tr.ReleaseTreasureGuard(g)
+		return tr
+	}
+	compare := func(a, b Treasure) bool {
+		g := a.StartTreasureGuard(true)
+		defer a.ReleaseTreasureGuard(g)
+		return a.IsDifferentFrom(g, b)
+	}
+
+	str := func(v string) func(Treasure, guard.ID) {
+		return func(tr Treasure, g guard.ID) { tr.SetContentString(g, v) }
+	}
+	num := func(v int64) func(Treasure, guard.ID) {
+		return func(tr Treasure, g guard.ID) { tr.SetContentInt64(g, v) }
+	}
+	void := func(tr Treasure, g guard.ID) { tr.SetContentVoid(g) }
+
+	t.Run("different content types are different and do not panic", func(t *testing.T) {
+		assert.NotPanics(t, func() {
+			assert.True(t, compare(newTreasure(num(1)), newTreasure(str("1"))))
+			assert.True(t, compare(newTreasure(str("1")), newTreasure(num(1))))
+			assert.True(t, compare(newTreasure(void), newTreasure(str("x"))))
+			assert.True(t, compare(newTreasure(str("x")), newTreasure(void)))
+		})
+	})
+	t.Run("both void are equal", func(t *testing.T) {
+		assert.False(t, compare(newTreasure(void), newTreasure(void)))
+	})
+	t.Run("same value is equal", func(t *testing.T) {
+		assert.False(t, compare(newTreasure(str("x")), newTreasure(str("x"))))
+		assert.False(t, compare(newTreasure(num(7)), newTreasure(num(7))))
+	})
+	t.Run("different value is different", func(t *testing.T) {
+		assert.True(t, compare(newTreasure(str("x")), newTreasure(str("y"))))
+		assert.True(t, compare(newTreasure(num(7)), newTreasure(num(8))))
+	})
+}

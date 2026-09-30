@@ -2091,11 +2091,17 @@ func (t *treasure) IsDifferentFrom(guardID guard.ID, otherTreasure Treasure) boo
 		return true
 	}
 
-	switch otherTreasure.GetContentType() {
+	// Compare the content types first. The per-type branches below read our
+	// field of the other treasure's type, which is nil (and used to panic)
+	// when the two types differ.
+	otherContentType := otherTreasure.GetContentType()
+	if (&treasure{treasure: self}).getContentTypeLocked() != otherContentType {
+		return true
+	}
+
+	switch otherContentType {
 	case ContentTypeVoid:
-		if self.Content == nil || (self.Content != nil && self.Content.Void) {
-			return true
-		}
+		// both void: nothing more to compare
 	case ContentTypeString:
 		if self.Content == nil {
 			return true
