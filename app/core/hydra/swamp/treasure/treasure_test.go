@@ -1,6 +1,8 @@
 package treasure
 
 import (
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -588,4 +590,193 @@ func TestCreatedAndModifiedFields(t *testing.T) {
 
 	treasureInterface.ReleaseTreasureGuard(guardID)
 
+}
+
+// TestConcurrentGuardedWritesAndUnguardedReads exercises the pattern the
+// engine relies on: one goroutine mutates a treasure while holding its guard,
+// while other goroutines (beacon sorts, Cap counters, filter predicates) read
+// the same treasure through getters without the guard. Must be clean under
+// `go test -race` and must not deadlock.
+func TestConcurrentGuardedWritesAndUnguardedReads(t *testing.T) {
+	// The save callback calls back into getters, like swamp.SaveFunction does.
+	saveMethod := func(tr Treasure, _ guard.ID) TreasureStatus {
+		_ = tr.GetKey()
+		_ = tr.IsExpirationTimeChanged()
+		_ = tr.GetContentType()
+		return StatusModified
+	}
+
+	a := New(saveMethod)
+	b := New(saveMethod)
+	for _, tr := range []Treasure{a, b} {
+		g := tr.StartTreasureGuard(true, guard.BodyAuthID)
+		tr.BodySetKey(g, "key")
+		tr.SetContentString(g, "init")
+		tr.ReleaseTreasureGuard(g)
+	}
+
+	const iterations = 300
+	var wg sync.WaitGroup
+	stop := make(chan struct{})
+
+	var writers sync.WaitGroup
+
+	// guarded writer on a
+	writers.Add(1)
+	go func() {
+		defer writers.Done()
+		for i := 0; i < iterations; i++ {
+			g := a.StartTreasureGuard(true)
+			a.SetExpirationTime(g, time.Now().Add(time.Duration(i)*time.Second))
+			a.SetContentString(g, fmt.Sprintf("value-%d", i))
+			a.SetModifiedAt(g, time.Now())
+			a.SetModifiedBy(g, "writer")
+			a.SetCreatedAt(g, time.Now())
+			a.SetCreatedBy(g, "writer")
+			a.BodySetFileName(g, "file")
+			if i%10 == 0 {
+				a.ResetContentString(g)
+				a.SetContent(g, Content{Int64: new(int64)})
+				a.ResetContentInt64(g)
+				_ = a.Uint32SlicePush([]uint32{1, 2, 3})
+				_ = a.Uint32SliceDelete([]uint32{2})
+				a.ResetContentUint32Slice(g)
+				a.SetContentString(g, "reset")
+			}
+			_ = a.Clone(g)
+			_ = a.CloneContent(g)
+			_, _ = a.ConvertToByte(g)
+			// comparing a treasure with itself must not self-deadlock
+			_ = a.IsDifferentFrom(g, a)
+			_ = a.Save(g)
+			a.ReleaseTreasureGuard(g)
+		}
+	}()
+
+	// guarded writer on b, including deletion
+	writers.Add(1)
+	go func() {
+		defer writers.Done()
+		for i := 0; i < iterations; i++ {
+			g := b.StartTreasureGuard(true)
+			b.SetExpirationTime(g, time.Now().Add(time.Hour))
+			b.SetContentInt64(g, int64(i))
+			b.BodySetForDeletion(g, "deleter", i%2 == 0)
+			_ = b.IsDifferentFrom(g, b)
+			clone := b.Clone(g)
+			b.LoadFromClone(g, clone)
+			b.ReleaseTreasureGuard(g)
+		}
+	}()
+
+	// unguarded readers on both
+	reader := func(tr Treasure) {
+		defer wg.Done()
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			_ = tr.GetKey()
+			_ = tr.GetExpirationTime()
+			_ = tr.IsExpired()
+			_ = tr.GetContentType()
+			_, _ = tr.GetContentString()
+			_, _ = tr.GetContentInt64()
+			_, _ = tr.Uint32SliceGetAll()
+			_ = tr.GetCreatedAt()
+			_ = tr.GetCreatedBy()
+			_ = tr.GetModifiedAt()
+			_ = tr.GetModifiedBy()
+			_ = tr.GetDeletedAt()
+			_ = tr.GetDeletedBy()
+			_ = tr.GetShadowDelete()
+			_ = tr.GetFileName()
+			_ = tr.IsContentChanged()
+			_ = tr.IsContentTypeChanged()
+			_ = tr.IsExpirationTimeChanged()
+			_ = tr.IsDeletedAtChanged()
+			s := "x"
+			_ = tr.CheckIfContentChanged(&Content{String: &s})
+		}
+	}
+	for i := 0; i < 4; i++ {
+		wg.Add(2)
+		go reader(a)
+		go reader(b)
+	}
+
+	done := make(chan struct{})
+	go func() {
+		writers.Wait()
+		close(stop)
+		wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(60 * time.Second):
+		t.Fatal("deadlock: goroutines did not finish")
+	}
+}
+
+func TestSetExpirationTimeChangeFlag(t *testing.T) {
+	ts := time.Date(2030, 1, 2, 3, 4, 5, 0, time.UTC)
+
+	t.Run("same value does not set the flag", func(t *testing.T) {
+		tr := New(MySaveMethod).(*treasure)
+		tr.treasure.ExpirationTime = ts.UnixNano()
+		g := tr.StartTreasureGuard(true)
+		tr.SetExpirationTime(g, ts)
+		tr.ReleaseTreasureGuard(g)
+		assert.False(t, tr.IsExpirationTimeChanged())
+		assert.Equal(t, ts.UnixNano(), tr.GetExpirationTime())
+	})
+
+	t.Run("same instant in another location does not set the flag", func(t *testing.T) {
+		tr := New(MySaveMethod).(*treasure)
+		tr.treasure.ExpirationTime = ts.UnixNano()
+		g := tr.StartTreasureGuard(true)
+		tr.SetExpirationTime(g, ts.In(time.FixedZone("X", 3600)))
+		tr.ReleaseTreasureGuard(g)
+		assert.False(t, tr.IsExpirationTimeChanged())
+	})
+
+	t.Run("different value sets the flag", func(t *testing.T) {
+		tr := New(MySaveMethod)
+		g := tr.StartTreasureGuard(true)
+		tr.SetExpirationTime(g, ts)
+		tr.ReleaseTreasureGuard(g)
+		assert.True(t, tr.IsExpirationTimeChanged())
+		assert.Equal(t, ts.UnixNano(), tr.GetExpirationTime())
+	})
+
+	t.Run("zero time when already 0 does not set the flag", func(t *testing.T) {
+		tr := New(MySaveMethod)
+		g := tr.StartTreasureGuard(true)
+		tr.SetExpirationTime(g, time.Time{})
+		tr.ReleaseTreasureGuard(g)
+		assert.False(t, tr.IsExpirationTimeChanged())
+		assert.Equal(t, int64(0), tr.GetExpirationTime())
+	})
+
+	t.Run("zero time clears a set value and sets the flag", func(t *testing.T) {
+		tr := New(MySaveMethod).(*treasure)
+		tr.treasure.ExpirationTime = ts.UnixNano()
+		g := tr.StartTreasureGuard(true)
+		tr.SetExpirationTime(g, time.Time{})
+		tr.ReleaseTreasureGuard(g)
+		assert.True(t, tr.IsExpirationTimeChanged())
+		assert.Equal(t, int64(0), tr.GetExpirationTime())
+	})
+
+	t.Run("different then same keeps the flag", func(t *testing.T) {
+		tr := New(MySaveMethod)
+		g := tr.StartTreasureGuard(true)
+		tr.SetExpirationTime(g, ts)
+		tr.SetExpirationTime(g, ts)
+		tr.ReleaseTreasureGuard(g)
+		assert.True(t, tr.IsExpirationTimeChanged())
+	})
 }

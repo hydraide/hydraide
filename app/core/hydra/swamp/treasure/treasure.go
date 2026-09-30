@@ -1034,15 +1034,28 @@ func New(saveMethod func(t Treasure, guardID guard.ID) TreasureStatus) Treasure 
 // LoadFromClone loads the treasure from a clone
 func (t *treasure) LoadFromClone(guardID guard.ID, clone Treasure) {
 	_ = t.Guard.CanExecute(guardID)
-	t.treasure = clone.(*treasure).treasure
+	// Snapshot the clone's model under its own lock first, then assign under
+	// ours. The two locks are never held at the same time, so there is no
+	// lock-order risk between two treasures (or with clone == t).
+	src := clone.(*treasure)
+	src.mu.RLock()
+	model := src.treasure
+	src.mu.RUnlock()
+	t.mu.Lock()
+	t.treasure = model
+	t.mu.Unlock()
 }
 
 // GetContentType returns the content type of the treasure
 func (t *treasure) GetContentType() ContentType {
-
 	t.mu.RLock()
 	defer t.mu.RUnlock()
+	return t.getContentTypeLocked()
+}
 
+// getContentTypeLocked is the lock-free body of GetContentType.
+// The caller must hold t.mu (read or write).
+func (t *treasure) getContentTypeLocked() ContentType {
 	if t.treasure.Content == nil || t.treasure.Content.Void {
 		return ContentTypeVoid
 	}
@@ -1093,6 +1106,8 @@ func (t *treasure) GetContentType() ContentType {
 
 func (t *treasure) ResetContentByteArray(guardID guard.ID) {
 	_ = t.Guard.CanExecute(guardID)
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	if t.treasure.Content != nil && t.treasure.Content.ByteArray != nil {
 		t.contentChanged = true
 		t.contentTypeChanged = true
@@ -1101,6 +1116,8 @@ func (t *treasure) ResetContentByteArray(guardID guard.ID) {
 }
 func (t *treasure) ResetContentBool(guardID guard.ID) {
 	_ = t.Guard.CanExecute(guardID)
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	if t.treasure.Content != nil && t.treasure.Content.Boolean != nil {
 		t.contentChanged = true
 		t.contentTypeChanged = true
@@ -1109,6 +1126,8 @@ func (t *treasure) ResetContentBool(guardID guard.ID) {
 }
 func (t *treasure) ResetContentFloat32(guardID guard.ID) {
 	_ = t.Guard.CanExecute(guardID)
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	if t.treasure.Content != nil && t.treasure.Content.Float32 != nil {
 		t.contentChanged = true
 		t.contentTypeChanged = true
@@ -1117,6 +1136,8 @@ func (t *treasure) ResetContentFloat32(guardID guard.ID) {
 }
 func (t *treasure) ResetContentFloat64(guardID guard.ID) {
 	_ = t.Guard.CanExecute(guardID)
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	if t.treasure.Content != nil && t.treasure.Content.Float64 != nil {
 		t.contentChanged = true
 		t.contentTypeChanged = true
@@ -1125,6 +1146,8 @@ func (t *treasure) ResetContentFloat64(guardID guard.ID) {
 }
 func (t *treasure) ResetContentUint8(guardID guard.ID) {
 	_ = t.Guard.CanExecute(guardID)
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	if t.treasure.Content != nil && t.treasure.Content.Uint8 != nil {
 		t.contentChanged = true
 		t.contentTypeChanged = true
@@ -1133,6 +1156,8 @@ func (t *treasure) ResetContentUint8(guardID guard.ID) {
 }
 func (t *treasure) ResetContentUint16(guardID guard.ID) {
 	_ = t.Guard.CanExecute(guardID)
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	if t.treasure.Content != nil && t.treasure.Content.Uint16 != nil {
 		t.contentChanged = true
 		t.contentTypeChanged = true
@@ -1141,6 +1166,8 @@ func (t *treasure) ResetContentUint16(guardID guard.ID) {
 }
 func (t *treasure) ResetContentUint32(guardID guard.ID) {
 	_ = t.Guard.CanExecute(guardID)
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	if t.treasure.Content != nil && t.treasure.Content.Uint32 != nil {
 		t.contentChanged = true
 		t.contentTypeChanged = true
@@ -1149,6 +1176,8 @@ func (t *treasure) ResetContentUint32(guardID guard.ID) {
 }
 func (t *treasure) ResetContentUint64(guardID guard.ID) {
 	_ = t.Guard.CanExecute(guardID)
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	if t.treasure.Content != nil && t.treasure.Content.Uint64 != nil {
 		t.contentChanged = true
 		t.contentTypeChanged = true
@@ -1157,6 +1186,8 @@ func (t *treasure) ResetContentUint64(guardID guard.ID) {
 }
 func (t *treasure) ResetContentInt8(guardID guard.ID) {
 	_ = t.Guard.CanExecute(guardID)
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	if t.treasure.Content != nil && t.treasure.Content.Int8 != nil {
 		t.contentChanged = true
 		t.contentTypeChanged = true
@@ -1165,6 +1196,8 @@ func (t *treasure) ResetContentInt8(guardID guard.ID) {
 }
 func (t *treasure) ResetContentInt16(guardID guard.ID) {
 	_ = t.Guard.CanExecute(guardID)
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	if t.treasure.Content != nil && t.treasure.Content.Int16 != nil {
 		t.contentChanged = true
 		t.contentTypeChanged = true
@@ -1173,6 +1206,8 @@ func (t *treasure) ResetContentInt16(guardID guard.ID) {
 }
 func (t *treasure) ResetContentInt32(guardID guard.ID) {
 	_ = t.Guard.CanExecute(guardID)
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	if t.treasure.Content != nil && t.treasure.Content.Int32 != nil {
 		t.contentChanged = true
 		t.contentTypeChanged = true
@@ -1181,6 +1216,8 @@ func (t *treasure) ResetContentInt32(guardID guard.ID) {
 }
 func (t *treasure) ResetContentInt64(guardID guard.ID) {
 	_ = t.Guard.CanExecute(guardID)
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	if t.treasure.Content != nil && t.treasure.Content.Int64 != nil {
 		t.contentChanged = true
 		t.contentTypeChanged = true
@@ -1189,6 +1226,8 @@ func (t *treasure) ResetContentInt64(guardID guard.ID) {
 }
 func (t *treasure) ResetContentUint32Slice(guardID guard.ID) {
 	_ = t.Guard.CanExecute(guardID)
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	if t.treasure.Content != nil && t.treasure.Content.Uint32Slice != nil {
 		t.contentChanged = true
 		t.contentTypeChanged = true
@@ -1198,6 +1237,8 @@ func (t *treasure) ResetContentUint32Slice(guardID guard.ID) {
 
 func (t *treasure) ResetContentString(guardID guard.ID) {
 	_ = t.Guard.CanExecute(guardID)
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	if t.treasure.Content != nil && t.treasure.Content.String != nil {
 		t.contentChanged = true
 		t.contentTypeChanged = true
@@ -1206,6 +1247,8 @@ func (t *treasure) ResetContentString(guardID guard.ID) {
 }
 func (t *treasure) ResetContentVoid(guardID guard.ID) {
 	_ = t.Guard.CanExecute(guardID)
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	if t.treasure.Content != nil && t.treasure.Content.Void {
 		t.contentTypeChanged = true
 		t.contentChanged = true
@@ -1215,11 +1258,15 @@ func (t *treasure) ResetContentVoid(guardID guard.ID) {
 
 func (t *treasure) SetCreatedBy(guardID guard.ID, createdBy string) {
 	_ = t.Guard.CanExecute(guardID)
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	t.createdByChanged = true
 	t.treasure.CreatedBy = createdBy
 }
 func (t *treasure) SetModifiedBy(guardID guard.ID, modifiedBy string) {
 	_ = t.Guard.CanExecute(guardID)
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	t.modifiedByChanged = true
 	t.treasure.ModifiedBy = modifiedBy
 }
@@ -1227,6 +1274,8 @@ func (t *treasure) SetModifiedBy(guardID guard.ID, modifiedBy string) {
 func (t *treasure) Clone(guardID guard.ID) Treasure {
 
 	_ = t.Guard.CanExecute(guardID)
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 
 	newObj := &treasure{
 		treasure: Model{
@@ -1261,9 +1310,12 @@ func (t *treasure) Clone(guardID guard.ID) Treasure {
 
 func (t *treasure) CloneContent(guardID guard.ID) Content {
 	_ = t.Guard.CanExecute(guardID)
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 	return t.cloneContent()
 }
 
+// cloneContent deep-copies the content. The caller must hold t.mu (read or write).
 func (t *treasure) cloneContent() Content {
 	newContent := Content{}
 	if t.treasure.Content != nil {
@@ -1322,8 +1374,12 @@ func (t *treasure) SetContent(guardID guard.ID, content Content) {
 
 	_ = t.Guard.CanExecute(guardID)
 
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
 	t.contentChanged = false
-	if t.IsContentTypeChanged() {
+	// read the flag directly: IsContentTypeChanged would re-acquire t.mu
+	if t.contentTypeChanged {
 		t.contentChanged = true
 	}
 
@@ -1333,13 +1389,16 @@ func (t *treasure) SetContent(guardID guard.ID, content Content) {
 
 func (t *treasure) CheckIfContentChanged(newContent *Content) bool {
 
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
 	// ha még nincs benne tartalom, de most bekerülne akkor biztos új tartalom lesz
 	if t.treasure.Content == nil && newContent != nil {
 		return true
 	}
 
 	// lekédezzük a treasure jelenlegi content típusát
-	ct := t.GetContentType()
+	ct := t.getContentTypeLocked()
 
 	switch ct {
 	case ContentTypeVoid:
@@ -1414,6 +1473,8 @@ func (t *treasure) BodySetFileName(guardID guard.ID, fileName string) {
 	if canExecuteErr := t.Guard.CanExecute(guardID); canExecuteErr != nil {
 		return
 	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	// does not increase the version because the fileName is not part of the content
 	t.treasure.FileName = &fileName
 }
@@ -1422,6 +1483,8 @@ func (t *treasure) BodySetForDeletion(guardID guard.ID, byUserID string, shadowD
 	if canExecuteErr := t.Guard.CanExecute(guardID); canExecuteErr != nil {
 		return
 	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	timeNow := time.Now().UTC().UnixNano()
 
 	t.deletedAtChanged = true
@@ -1451,16 +1514,22 @@ func (t *treasure) GetKey() string {
 
 func (t *treasure) SetExpirationTime(guardID guard.ID, expirationTime time.Time) {
 	_ = t.Guard.CanExecute(guardID)
-	t.expirationTimeChanged = true
 	// A zero time.Time means "no expiration" (matches the ExpirationTime == 0
 	// convention used by IsExpired and the EXPIRATION_TIME index). UnixNano
 	// on a zero time would otherwise produce -6795364578871345152, which the
 	// engine would treat as a valid (already-expired) timestamp.
-	if expirationTime.IsZero() {
-		t.treasure.ExpirationTime = 0
-		return
+	var newValue int64
+	if !expirationTime.IsZero() {
+		newValue = expirationTime.UTC().UnixNano()
 	}
-	t.treasure.ExpirationTime = expirationTime.UTC().UnixNano()
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	// Only flag a change when the stored value actually moves. A flag that is
+	// already true (from an earlier change) is never reset here.
+	if t.treasure.ExpirationTime != newValue {
+		t.expirationTimeChanged = true
+		t.treasure.ExpirationTime = newValue
+	}
 }
 
 func (t *treasure) GetExpirationTime() int64 {
@@ -1501,6 +1570,8 @@ func (t *treasure) GetShadowDelete() bool {
 
 func (t *treasure) SetModifiedAt(guardID guard.ID, modifiedAt time.Time) {
 	_ = t.Guard.CanExecute(guardID)
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	t.modifiedAtChanged = true
 	t.treasure.ModifiedAt = modifiedAt.UTC().UnixNano()
 }
@@ -1528,6 +1599,8 @@ func (t *treasure) BodySetKey(guardID guard.ID, key string) {
 	if canExecuteErr := t.Guard.CanExecute(guardID); canExecuteErr != nil {
 		return // do nothing
 	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	t.treasure.DeletedBy = ""
 	t.treasure.DeletedAt = 0
 	t.treasure.Key = key
@@ -1538,6 +1611,8 @@ func (t *treasure) ConvertToByte(guardID guard.ID) ([]byte, error) {
 	if canExecuteErr := t.Guard.CanExecute(guardID); canExecuteErr != nil {
 		return nil, canExecuteErr
 	}
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 
 	// copy the treasure to a new variable
 	// and set the filePointer to empty one, because we don't want to save the filePointer to the Chronicler
@@ -1576,6 +1651,8 @@ func (t *treasure) LoadFromByte(guardID guard.ID, b []byte, fileName string) err
 	if canExecuteErr := t.Guard.CanExecute(guardID); canExecuteErr != nil {
 		return canExecuteErr
 	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
 
 	// bináris adat betöltése
 	buf := bytes.NewReader(b)
@@ -1593,6 +1670,8 @@ func (t *treasure) LoadFromByte(guardID guard.ID, b []byte, fileName string) err
 
 func (t *treasure) SetContentVoid(guardID guard.ID) {
 	_ = t.Guard.CanExecute(guardID)
+	t.mu.Lock()
+	defer t.mu.Unlock()
 
 	// if the content is not changed, do nothing
 	if t.treasure.Content != nil && t.treasure.Content.Void {
@@ -1614,6 +1693,8 @@ func (t *treasure) SetContentVoid(guardID guard.ID) {
 
 func (t *treasure) SetContentString(guardID guard.ID, content string) {
 	_ = t.Guard.CanExecute(guardID)
+	t.mu.Lock()
+	defer t.mu.Unlock()
 
 	// if the content is not changed, do nothing
 	if t.treasure.Content != nil && t.treasure.Content.String != nil && *t.treasure.Content.String == content {
@@ -1628,6 +1709,8 @@ func (t *treasure) SetContentString(guardID guard.ID, content string) {
 
 func (t *treasure) SetContentUint8(guardID guard.ID, content uint8) {
 	_ = t.Guard.CanExecute(guardID)
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	// if the content is not changed, do nothing
 	if t.treasure.Content != nil && t.treasure.Content.Uint8 != nil && *t.treasure.Content.Uint8 == content {
 		return
@@ -1639,6 +1722,8 @@ func (t *treasure) SetContentUint8(guardID guard.ID, content uint8) {
 }
 func (t *treasure) SetContentUint16(guardID guard.ID, content uint16) {
 	_ = t.Guard.CanExecute(guardID)
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	// if the content is not changed, do nothing
 	if t.treasure.Content != nil && t.treasure.Content.Uint16 != nil && *t.treasure.Content.Uint16 == content {
 		return
@@ -1650,6 +1735,8 @@ func (t *treasure) SetContentUint16(guardID guard.ID, content uint16) {
 }
 func (t *treasure) SetContentUint32(guardID guard.ID, content uint32) {
 	_ = t.Guard.CanExecute(guardID)
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	// if the content is not changed, do nothing
 	if t.treasure.Content != nil && t.treasure.Content.Uint32 != nil && *t.treasure.Content.Uint32 == content {
 		return
@@ -1661,6 +1748,8 @@ func (t *treasure) SetContentUint32(guardID guard.ID, content uint32) {
 }
 func (t *treasure) SetContentUint64(guardID guard.ID, content uint64) {
 	_ = t.Guard.CanExecute(guardID)
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	// if the content is not changed, do nothing
 	if t.treasure.Content != nil && t.treasure.Content.Uint64 != nil && *t.treasure.Content.Uint64 == content {
 		return
@@ -1672,6 +1761,8 @@ func (t *treasure) SetContentUint64(guardID guard.ID, content uint64) {
 }
 func (t *treasure) SetContentInt8(guardID guard.ID, content int8) {
 	_ = t.Guard.CanExecute(guardID)
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	// if the content is not changed, do nothing
 	if t.treasure.Content != nil && t.treasure.Content.Int8 != nil && *t.treasure.Content.Int8 == content {
 		return
@@ -1683,6 +1774,8 @@ func (t *treasure) SetContentInt8(guardID guard.ID, content int8) {
 }
 func (t *treasure) SetContentInt16(guardID guard.ID, content int16) {
 	_ = t.Guard.CanExecute(guardID)
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	// if the content is not changed, do nothing
 	if t.treasure.Content != nil && t.treasure.Content.Int16 != nil && *t.treasure.Content.Int16 == content {
 		return
@@ -1694,6 +1787,8 @@ func (t *treasure) SetContentInt16(guardID guard.ID, content int16) {
 }
 func (t *treasure) SetContentInt32(guardID guard.ID, content int32) {
 	_ = t.Guard.CanExecute(guardID)
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	// if the content is not changed, do nothing
 	if t.treasure.Content != nil && t.treasure.Content.Int32 != nil && *t.treasure.Content.Int32 == content {
 		return
@@ -1706,6 +1801,8 @@ func (t *treasure) SetContentInt32(guardID guard.ID, content int32) {
 func (t *treasure) SetContentInt64(guardID guard.ID, content int64) {
 
 	_ = t.Guard.CanExecute(guardID)
+	t.mu.Lock()
+	defer t.mu.Unlock()
 
 	// if the content is not changed, do nothing
 	if t.treasure.Content != nil && t.treasure.Content.Int64 != nil && *t.treasure.Content.Int64 == content {
@@ -1720,6 +1817,8 @@ func (t *treasure) SetContentInt64(guardID guard.ID, content int64) {
 
 func (t *treasure) SetContentFloat32(guardID guard.ID, content float32) {
 	_ = t.Guard.CanExecute(guardID)
+	t.mu.Lock()
+	defer t.mu.Unlock()
 
 	// if treasure content is not changed, do nothing
 	if t.treasure.Content != nil && t.treasure.Content.Float32 != nil && *t.treasure.Content.Float32 == content {
@@ -1734,6 +1833,8 @@ func (t *treasure) SetContentFloat32(guardID guard.ID, content float32) {
 
 func (t *treasure) SetContentFloat64(guardID guard.ID, content float64) {
 	_ = t.Guard.CanExecute(guardID)
+	t.mu.Lock()
+	defer t.mu.Unlock()
 
 	// if treasure content is not changed, do nothing
 	if t.treasure.Content != nil && t.treasure.Content.Float64 != nil && *t.treasure.Content.Float64 == content {
@@ -1748,6 +1849,8 @@ func (t *treasure) SetContentFloat64(guardID guard.ID, content float64) {
 
 func (t *treasure) SetContentBool(guardID guard.ID, content bool) {
 	_ = t.Guard.CanExecute(guardID)
+	t.mu.Lock()
+	defer t.mu.Unlock()
 
 	// if treasure content is not changed, do nothing
 	if t.treasure.Content != nil && t.treasure.Content.Boolean != nil && *t.treasure.Content.Boolean == content {
@@ -1763,6 +1866,8 @@ func (t *treasure) SetContentBool(guardID guard.ID, content bool) {
 
 func (t *treasure) SetContentByteArray(guardID guard.ID, content []byte) {
 	_ = t.Guard.CanExecute(guardID)
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	// if the content is not changed, do nothing
 	if t.treasure.Content != nil && t.treasure.Content.ByteArray != nil && bytes.Equal(t.treasure.Content.ByteArray, content) {
 		return
@@ -1776,6 +1881,8 @@ func (t *treasure) SetContentByteArray(guardID guard.ID, content []byte) {
 // SetCreatedAt set the created at of the treasure to the current time without locking the mutex
 func (t *treasure) SetCreatedAt(guardID guard.ID, createdAt time.Time) {
 	_ = t.Guard.CanExecute(guardID)
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	t.createdAtChanged = true
 	t.treasure.CreatedAt = createdAt.UTC().UnixNano()
 }
@@ -1915,204 +2022,223 @@ func (t *treasure) IsDifferentFrom(guardID guard.ID, otherTreasure Treasure) boo
 
 	_ = t.Guard.CanExecute(guardID)
 
-	if t.treasure.Key != otherTreasure.GetKey() {
+	// Snapshot our own model under t.mu and release it before calling any
+	// getter on otherTreasure. Holding t.mu while taking otherTreasure's lock
+	// could deadlock against a concurrent otherTreasure.IsDifferentFrom(t)
+	// once writers are queued, and would self-deadlock when otherTreasure == t.
+	t.mu.RLock()
+	self := t.treasure
+	if self.Content != nil {
+		contentCopy := *self.Content
+		// Uint32SlicePush / Uint32SliceDelete mutate the slice in place,
+		// so it needs a deep copy. Other content fields are replaced, not mutated.
+		if contentCopy.Uint32Slice != nil {
+			sliceCopy := make(Uint32Slice, len(*contentCopy.Uint32Slice))
+			copy(sliceCopy, *contentCopy.Uint32Slice)
+			contentCopy.Uint32Slice = &sliceCopy
+		}
+		self.Content = &contentCopy
+	}
+	t.mu.RUnlock()
+
+	if self.Key != otherTreasure.GetKey() {
 		return true
 	}
-	if t.treasure.ExpirationTime != otherTreasure.GetExpirationTime() {
+	if self.ExpirationTime != otherTreasure.GetExpirationTime() {
 		return true
 	}
 
 	cat := otherTreasure.GetCreatedAt()
 
-	if t.treasure.CreatedAt != cat {
+	if self.CreatedAt != cat {
 		return true
 	}
-	if t.treasure.CreatedBy != otherTreasure.GetCreatedBy() {
+	if self.CreatedBy != otherTreasure.GetCreatedBy() {
 		return true
 	}
-	if t.treasure.DeletedAt != otherTreasure.GetDeletedAt() {
+	if self.DeletedAt != otherTreasure.GetDeletedAt() {
 		return true
 	}
-	if t.treasure.DeletedBy != otherTreasure.GetDeletedBy() {
+	if self.DeletedBy != otherTreasure.GetDeletedBy() {
 		return true
 	}
-	if t.treasure.ModifiedAt != otherTreasure.GetModifiedAt() {
+	if self.ModifiedAt != otherTreasure.GetModifiedAt() {
 		return true
 	}
-	if t.treasure.ModifiedBy != otherTreasure.GetModifiedBy() {
+	if self.ModifiedBy != otherTreasure.GetModifiedBy() {
 		return true
 	}
 
 	switch otherTreasure.GetContentType() {
 	case ContentTypeVoid:
-		if t.treasure.Content == nil || (t.treasure.Content != nil && t.treasure.Content.Void) {
+		if self.Content == nil || (self.Content != nil && self.Content.Void) {
 			return true
 		}
 	case ContentTypeString:
-		if t.treasure.Content == nil {
+		if self.Content == nil {
 			return true
 		} else {
 			stringContent, err := otherTreasure.GetContentString()
 			if err != nil {
 				return true
 			}
-			if *t.treasure.Content.String != stringContent {
+			if *self.Content.String != stringContent {
 				return true
 			}
 		}
 	case ContentTypeUint8:
-		if t.treasure.Content == nil {
+		if self.Content == nil {
 			return true
 		} else {
 			uintContent, err := otherTreasure.GetContentUint8()
 			if err != nil {
 				return true
 			}
-			if *t.treasure.Content.Uint8 != uintContent {
+			if *self.Content.Uint8 != uintContent {
 				return true
 			}
 		}
 	case ContentTypeUint16:
-		if t.treasure.Content == nil {
+		if self.Content == nil {
 			return true
 		} else {
 			uintContent, err := otherTreasure.GetContentUint16()
 			if err != nil {
 				return true
 			}
-			if *t.treasure.Content.Uint16 != uintContent {
+			if *self.Content.Uint16 != uintContent {
 				return true
 			}
 		}
 	case ContentTypeUint32:
-		if t.treasure.Content == nil {
+		if self.Content == nil {
 			return true
 		} else {
 			uintContent, err := otherTreasure.GetContentUint32()
 			if err != nil {
 				return true
 			}
-			if *t.treasure.Content.Uint32 != uintContent {
+			if *self.Content.Uint32 != uintContent {
 				return true
 			}
 		}
 	case ContentTypeUint64:
-		if t.treasure.Content == nil {
+		if self.Content == nil {
 			return true
 		} else {
 			uintContent, err := otherTreasure.GetContentUint64()
 			if err != nil {
 				return true
 			}
-			if *t.treasure.Content.Uint64 != uintContent {
+			if *self.Content.Uint64 != uintContent {
 				return true
 			}
 		}
 	case ContentTypeInt8:
-		if t.treasure.Content == nil {
+		if self.Content == nil {
 			return true
 		} else {
 			intContent, err := otherTreasure.GetContentInt8()
 			if err != nil {
 				return true
 			}
-			if *t.treasure.Content.Int8 != intContent {
+			if *self.Content.Int8 != intContent {
 				return true
 			}
 		}
 	case ContentTypeInt16:
-		if t.treasure.Content == nil {
+		if self.Content == nil {
 			return true
 		} else {
 			intContent, err := otherTreasure.GetContentInt16()
 			if err != nil {
 				return true
 			}
-			if *t.treasure.Content.Int16 != intContent {
+			if *self.Content.Int16 != intContent {
 				return true
 			}
 		}
 	case ContentTypeInt32:
-		if t.treasure.Content == nil {
+		if self.Content == nil {
 			return true
 		} else {
 			intContent, err := otherTreasure.GetContentInt32()
 			if err != nil {
 				return true
 			}
-			if *t.treasure.Content.Int32 != intContent {
+			if *self.Content.Int32 != intContent {
 				return true
 			}
 		}
 	case ContentTypeInt64:
-		if t.treasure.Content == nil {
+		if self.Content == nil {
 			return true
 		} else {
 			intContent, err := otherTreasure.GetContentInt64()
 			if err != nil {
 				return true
 			}
-			if *t.treasure.Content.Int64 != intContent {
+			if *self.Content.Int64 != intContent {
 				return true
 			}
 		}
 	case ContentTypeFloat32:
-		if t.treasure.Content == nil {
+		if self.Content == nil {
 			return true
 		} else {
 			floatContent, err := otherTreasure.GetContentFloat32()
 			if err != nil {
 				return true
 			}
-			if *t.treasure.Content.Float32 != floatContent {
+			if *self.Content.Float32 != floatContent {
 				return true
 			}
 		}
 	case ContentTypeFloat64:
-		if t.treasure.Content == nil {
+		if self.Content == nil {
 			return true
 		} else {
 			floatContent, err := otherTreasure.GetContentFloat64()
 			if err != nil {
 				return true
 			}
-			if *t.treasure.Content.Float64 != floatContent {
+			if *self.Content.Float64 != floatContent {
 				return true
 			}
 		}
 	case ContentTypeBoolean:
-		if t.treasure.Content == nil {
+		if self.Content == nil {
 			return true
 		} else {
 			boolContent, err := otherTreasure.GetContentBool()
 			if err != nil {
 				return true
 			}
-			if *t.treasure.Content.Boolean != boolContent {
+			if *self.Content.Boolean != boolContent {
 				return true
 			}
 		}
 	case ContentTypeByteArray:
-		if t.treasure.Content == nil {
+		if self.Content == nil {
 			return true
 		} else {
 			byteArrayContent, err := otherTreasure.GetContentByteArray()
 			if err != nil {
 				return true
 			}
-			if !reflect.DeepEqual(t.treasure.Content.ByteArray, byteArrayContent) {
+			if !reflect.DeepEqual(self.Content.ByteArray, byteArrayContent) {
 				return true
 			}
 		}
 	case ContentTypeUint32Slice:
-		if t.treasure.Content == nil {
+		if self.Content == nil {
 			return true
 		} else {
 			uint32SliceContent, err := otherTreasure.Uint32SliceGetAll()
 			if err != nil {
 				return true
 			}
-			if !reflect.DeepEqual(t.treasure.Content.Uint32Slice, uint32SliceContent) {
+			if !reflect.DeepEqual(self.Content.Uint32Slice, uint32SliceContent) {
 				return true
 			}
 		}
