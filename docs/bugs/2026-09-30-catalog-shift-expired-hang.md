@@ -300,6 +300,20 @@ hung swamp's write buffer, because the write listener is blocked.
 
 ## Status
 
-Open. The regression gate is the four tests in
-`app/core/hydra/swamp/swamp_shift_guard_deadlock_test.go`. They must go green
-without weakening their watchdogs.
+Fixed in `server/v3.19.7` with fix direction 2 (try-lock inside the scan).
+`beacon.ShiftExpired` and `beacon.ShiftMatching` acquire the per-treasure
+guard with `StartTreasureGuard(false)` while holding `b.mu`. A row whose guard
+is busy stays in the beacon and is shifted by a later call, so `HowMany` can be
+under-filled while writes are in flight. `beacon.CloneUnorderedTreasures` now
+snapshots the rows under `b.mu` and clones them after releasing it, which
+removes the same inversion on `beaconKey`. `ShiftMany` still takes guards
+under `b.mu`, but it has no callers.
+
+The four tests in `app/core/hydra/swamp/swamp_shift_guard_deadlock_test.go`
+pass with their watchdogs unchanged.
+
+A guard-free pre-check (fix direction 3) was not applied. The treasure
+setters (`SetExpirationTime`, `BodySetForDeletion`, ...) do not take the
+treasure's `t.mu`, so a read without the guard is a data race. The same race
+already exists in `SortByExpirationTimeAsc` / `SortByExpirationTimeDesc` and
+the Cap pre-counts; `go test -race` on `ProductionPattern` reports it there.
