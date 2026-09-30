@@ -2140,6 +2140,17 @@ func (s *swamp) SaveFunction(t treasure.Treasure, guardID guard.ID) treasure.Tre
 		// treasure may still be sitting in the write buffer. We must remove it first,
 		// otherwise beacon.Add silently drops the new treasure (key already exists)
 		// and only the OpDelete gets flushed — causing data loss after swamp reopen.
+		//
+		// Removing it also drops its pending delete entry. When the old treasure
+		// is on disk, the new one takes over its file pointer: the next flush
+		// then writes it as an update over the old row, and a delete of the new
+		// one before that flush still writes the delete entry. Without this the
+		// old row stayed live on disk and came back on the next load.
+		if pending := s.treasuresWaitingForWriter.Get(t.GetKey()); pending != nil && pending != t {
+			if fileName := pending.GetFileName(); fileName != nil && t.GetFileName() == nil {
+				t.BodySetFileName(guardID, *fileName)
+			}
+		}
 		s.treasuresWaitingForWriter.Delete(t.GetKey())
 
 		// add the treasure to the treasuresWaitingForWriter index
@@ -2843,18 +2854,13 @@ func (s *swamp) fileWriterHandler(isCloseWrite bool) {
 		return
 	}
 
-	var treasuresToWrite []treasure.Treasure
-	s.treasuresWaitingForWriter.Iterate(func(t treasure.Treasure) bool {
-
-		treasuresToWrite = append(treasuresToWrite, t)
-		return true
-
-	}, beacon.IterationTypeKey)
-
-	// delete the treasures from the swamp and from the chroniclerInterface too
-	for _, t := range treasuresToWrite {
-		// delete the treasure from the treasuresWaitingForWriter index
-		s.treasuresWaitingForWriter.Delete(t.GetKey())
+	// Take the whole write buffer in one step. Collecting it and then
+	// deleting the collected keys one by one could drop a treasure that
+	// replaced one of those keys in between, and that write never reached
+	// the disk.
+	treasuresToWrite := s.treasuresWaitingForWriter.TakeAll()
+	if len(treasuresToWrite) == 0 {
+		return
 	}
 
 	// A Write funkció megvárja ameddig az előző write befejezi a munkáját, így nem kell
@@ -2941,15 +2947,18 @@ func (s *swamp) deleteGuardedTreasure(treasureObj treasure.Treasure, guardID gua
 	// adatával együtt vissza tudjuk adni.
 	clonedTreasure := treasureObj.Clone(guardID)
 
+	// Always mark the treasure as deleted, even when it has not been written
+	// yet: the file writer may already hold it in the batch it took from the
+	// write buffer, and without the marker it would persist the row as live.
+	// todo: itt meg kell oldani, hogy a törlésnél legyen kérhető a shadow delete is.
+	treasureObj.BodySetForDeletion(guardID, "system", shadowDelete)
+
 	// remove the treasure from the treasuresWaitingForWriter slice if the treasure does not have a loader pointer
 	// because it is meaning the treasure is not saved yet to the chroniclerInterface, but it is deleted from the swamp
 	if treasureObj.GetFileName() == nil {
 		// delete the treasure from the treasuresWaitingForWriter index
 		s.treasuresWaitingForWriter.Delete(key)
 	} else {
-		// set the treasure for deletion
-		// todo: itt meg kell oldani, hogy a törlésnél legyen kérhető a shadow delete is.
-		treasureObj.BodySetForDeletion(guardID, "system", shadowDelete)
 		s.treasuresWaitingForWriter.Add(treasureObj)
 		// beállítjuk az utolsó módosítás dátumát a metában
 		s.metadataInterface.SetUpdatedAt()

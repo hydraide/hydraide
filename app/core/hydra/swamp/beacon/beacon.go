@@ -43,6 +43,12 @@ type Beacon interface {
 	// operations or further processing.
 	GetAll() map[string]treasure.Treasure
 
+	// TakeAll removes every treasure from the beacon and returns them (the
+	// live objects, not clones) under one lock. The swamp's write buffer uses
+	// it: taking a snapshot and then deleting the snapshot's keys one by one
+	// could drop a treasure that replaced one of those keys in between.
+	TakeAll() []treasure.Treasure
+
 	// Count retrieves the total number of unique treasures (represented by their keys) in an ordered beacon object.
 	// The function is thread-safe, utilizing read locks to prevent race conditions.
 	//
@@ -703,6 +709,18 @@ func (b *beacon) GetAll() map[string]treasure.Treasure {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	return maps.Clone(b.treasuresByKeys)
+}
+
+func (b *beacon) TakeAll() []treasure.Treasure {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	taken := make([]treasure.Treasure, 0, len(b.treasuresByKeys))
+	for _, t := range b.treasuresByKeys {
+		taken = append(taken, t)
+	}
+	b.treasuresByKeys = make(map[string]treasure.Treasure)
+	b.treasuresByOrder = nil
+	return taken
 }
 
 type IterationType int
