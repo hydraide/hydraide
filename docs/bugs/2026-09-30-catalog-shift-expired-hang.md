@@ -325,6 +325,25 @@ fixing it.
   `DeletedAt`. The swamp accepted it as a new key, but the V2 writer persisted
   it as `OpDelete`, so the value was gone after the next load. `SaveFunction`
   now clears the delete marker (`BodyClearDeletion`) on that path.
+- **Deleted or shifted rows coming back after a restart.** Found by a live
+  smoke (shift + upsert + delete for 60 s, restart, compare the whole key
+  space of 129 keys): on `176a13d` 73 keys that were gone before the restart were live
+  again after it. Three causes, all older than this report:
+  - Re-creating a key whose previous treasure was on disk and pending delete
+    dropped that delete from the write buffer; deleting the new, unwritten
+    treasure then wrote nothing. The new treasure now takes over the old
+    one's file pointer.
+  - The V2 writer set `FileName` only in a callback after the whole batch; a
+    delete in between saw `FileName == nil` and wrote no delete entry. The
+    writer now sets it under the write guard.
+  - The writer collected the write buffer and then deleted it key by key, and
+    a delete of an unwritten row did not set the delete marker, so a row
+    deleted while the writer held it in its batch was persisted as live.
+    The buffer is now taken in one step (`beacon.TakeAll`) and every delete
+    sets the marker.
+  After the fixes the same smoke passes twice with identical key spaces
+  before and after the restart. The legacy V1 chronicler has the same
+  write-then-callback shape and is not fixed; `hydraidectl init` sets V2.
 - **Data race on treasure fields.** The setters wrote the model without
   `t.mu` while guard-free readers (beacon sorts, Cap pre-counts,
   `CountMatching`, predicates) read under `t.mu.RLock`. Every write now takes
@@ -333,6 +352,7 @@ fixing it.
 
 Regression gate: `app/core/hydra/swamp/swamp_shift_guard_deadlock_test.go`
 (the four original tests unchanged, plus lost-write, stale-delete, clone and
-delete-marker tests) and `TestConcurrentGuardedWritesAndUnguardedReads` /
+delete-marker tests), `swamp_delete_persist_test.go`,
+`chronicler_v2_filename_test.go` and `TestConcurrentGuardedWritesAndUnguardedReads` /
 `TestSetExpirationTimeChangeFlag` in the treasure package. All pass, also
 under `go test -race`.
