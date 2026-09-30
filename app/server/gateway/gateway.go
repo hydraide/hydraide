@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hydraide/hydraide/app/core/hydra"
 	"github.com/hydraide/hydraide/app/core/hydra/swamp"
 	"github.com/hydraide/hydraide/app/core/hydra/swamp/treasure"
 	"github.com/hydraide/hydraide/app/core/hydra/swamp/treasure/guard"
@@ -316,7 +317,7 @@ func (g Gateway) Set(ctx context.Context, in *hydrapb.SetRequest) (*hydrapb.SetR
 
 		if internalError != nil {
 			// return with grpc error message
-			return nil, status.Error(codes.Internal, fmt.Sprintf("internal server error in hydra: %s", internalError.Error()))
+			return nil, hydraErrorStatus(internalError)
 		}
 
 		swampResponses = append(swampResponses, swampResponse)
@@ -424,7 +425,7 @@ func (g Gateway) Get(ctx context.Context, in *hydrapb.GetRequest) (*hydrapb.GetR
 
 		if internalError != nil {
 			// return with grpc error message
-			return nil, status.Error(codes.Internal, fmt.Sprintf("internal server error in hydra: %s", internalError.Error()))
+			return nil, hydraErrorStatus(internalError)
 		}
 
 		swamps = append(swamps, swampResponse)
@@ -457,7 +458,7 @@ func (g Gateway) GetAll(ctx context.Context, in *hydrapb.GetAllRequest) (*hydrap
 	swampInterface, err := hydraInterface.SummonSwamp(ctx, in.GetIslandID(), swampName)
 	if err != nil {
 		// return with grpc error message
-		return nil, status.Error(codes.Internal, fmt.Sprintf("internal server error in hydra: %s", err.Error()))
+		return nil, hydraErrorStatus(err)
 	}
 
 	// begin the vigil, to prevent closing of the swamp
@@ -497,7 +498,7 @@ func (g Gateway) GetByIndex(ctx context.Context, in *hydrapb.GetByIndexRequest) 
 	swampInterface, err := hydraInterface.SummonSwamp(ctx, in.GetIslandID(), swampName)
 	if err != nil {
 		// return with grpc error message
-		return nil, status.Error(codes.Internal, fmt.Sprintf("internal server error in hydra: %s", err.Error()))
+		return nil, hydraErrorStatus(err)
 	}
 
 	// begin the vigil, to prevent closing of the swamp
@@ -582,7 +583,7 @@ func (g Gateway) GetByKeys(ctx context.Context, in *hydrapb.GetByKeysRequest) (*
 	swampInterface, err := hydraInterface.SummonSwamp(ctx, in.GetIslandID(), swampName)
 	if err != nil {
 		// Return with grpc error message
-		return nil, status.Error(codes.Internal, fmt.Sprintf("internal server error in hydra: %s", err.Error()))
+		return nil, hydraErrorStatus(err)
 	}
 
 	// Begin the vigil, to prevent closing of the swamp
@@ -642,7 +643,7 @@ func (g Gateway) GetByIndexStream(in *hydrapb.GetByIndexStreamRequest, stream hy
 
 	swampInterface, err := hydraInterface.SummonSwamp(stream.Context(), in.GetIslandID(), swampName)
 	if err != nil {
-		return status.Error(codes.Internal, fmt.Sprintf("internal server error in hydra: %s", err.Error()))
+		return hydraErrorStatus(err)
 	}
 
 	swampInterface.BeginVigil()
@@ -774,7 +775,7 @@ func (g Gateway) GetByIndexStreamFromMany(in *hydrapb.GetByIndexStreamFromManyRe
 
 		swampInterface, err := hydraInterface.SummonSwamp(stream.Context(), query.GetIslandID(), swampName)
 		if err != nil {
-			return status.Error(codes.Internal, fmt.Sprintf("internal server error in hydra: %s", err.Error()))
+			return hydraErrorStatus(err)
 		}
 
 		// Per-query processing is wrapped in a closure so that CeaseVigil() is
@@ -922,7 +923,7 @@ func (g Gateway) CompactSwamp(ctx context.Context, in *hydrapb.CompactSwampReque
 
 	swampInterface, err := hydraInterface.SummonSwamp(ctx, in.GetIslandID(), swampName)
 	if err != nil {
-		return nil, status.Error(codes.Internal, fmt.Sprintf("internal server error in hydra: %s", err.Error()))
+		return nil, hydraErrorStatus(err)
 	}
 
 	swampInterface.BeginVigil()
@@ -961,7 +962,7 @@ func (g Gateway) GetStream(in *hydrapb.GetStreamRequest, stream hydrapb.Hydraide
 
 		swampInterface, err := hydraInterface.SummonSwamp(stream.Context(), query.GetIslandID(), swampName)
 		if err != nil {
-			return status.Error(codes.Internal, fmt.Sprintf("internal server error in hydra: %s", err.Error()))
+			return hydraErrorStatus(err)
 		}
 
 		// Per-query processing is wrapped in a closure so that CeaseVigil() is
@@ -1211,7 +1212,7 @@ func (g Gateway) Destroy(ctx context.Context, in *hydrapb.DestroyRequest) (*hydr
 	swampInterface, err := hydraInterface.SummonSwamp(ctx, in.GetIslandID(), swampName)
 	if err != nil {
 		// return with grpc error message
-		return nil, status.Error(codes.Internal, fmt.Sprintf("internal server error in hydra: %s", err.Error()))
+		return nil, hydraErrorStatus(err)
 	}
 
 	// destroy the swamp
@@ -1446,7 +1447,7 @@ func (g Gateway) Count(ctx context.Context, in *hydrapb.CountRequest) (*hydrapb.
 		swampInterface, err := hydraInterface.SummonSwamp(ctx, swampIdentifier.IslandID, swampIdentifier.SwampName)
 		if err != nil {
 			// return with grpc error message
-			return nil, status.Error(codes.Internal, fmt.Sprintf("internal server error in hydra: %s", err.Error()))
+			return nil, hydraErrorStatus(err)
 		}
 		if swampInterface == nil {
 			// return with grpc error message
@@ -1526,7 +1527,7 @@ func (g Gateway) IsKeyExist(_ context.Context, in *hydrapb.IsKeyExistRequest) (*
 	swampInterface, err := hydraInterface.SummonSwamp(context.Background(), in.GetIslandID(), swampName)
 	if err != nil {
 		// return with grpc error message
-		return nil, status.Error(codes.Internal, fmt.Sprintf("internal server error in hydra: %s", err.Error()))
+		return nil, hydraErrorStatus(err)
 	}
 
 	// begin the vigil, to prevent closing of the swamp
@@ -1578,7 +1579,7 @@ func (g Gateway) AreKeysExist(_ context.Context, in *hydrapb.AreKeysExistRequest
 	// summon the swamp
 	swampInterface, err := hydraInterface.SummonSwamp(context.Background(), in.GetIslandID(), swampName)
 	if err != nil {
-		return nil, status.Error(codes.Internal, fmt.Sprintf("internal server error in hydra: %s", err.Error()))
+		return nil, hydraErrorStatus(err)
 	}
 
 	// begin the vigil, to prevent closing of the swamp
@@ -1678,7 +1679,7 @@ func (g Gateway) SubscribeToEvents(in *hydrapb.SubscribeToEventsRequest, eventSe
 	}
 
 	if err := hydraInterface.SubscribeToSwampEvents(subscriberUUID, swampName, eventCallbackFunction); err != nil {
-		return status.Error(codes.Internal, fmt.Sprintf("internal server error in hydra: %s", err.Error()))
+		return hydraErrorStatus(err)
 	}
 
 	// Resolve the shutdown channel exactly once. Nil ShutdownCtx is allowed
@@ -1765,7 +1766,7 @@ func (g Gateway) SubscribeToInfo(in *hydrapb.SubscribeToInfoRequest, infoServer 
 	// subscribe to the swamp for information
 	hydraInterface := g.ZeusInterface.GetHydra()
 	if err := hydraInterface.SubscribeToSwampInfo(subscriberUUID, swampName, infoSubscriptionCallbackFunction); err != nil {
-		return status.Error(codes.Internal, fmt.Sprintf("internal server error in hydra: %s", err.Error()))
+		return hydraErrorStatus(err)
 	}
 
 	defer func() {
@@ -1955,7 +1956,7 @@ func (g Gateway) Uint32SliceSize(ctx context.Context, in *hydrapb.Uint32SliceSiz
 	swampObj, err := hydraInterface.SummonSwamp(ctx, in.GetIslandID(), swampName)
 	if err != nil {
 		// return with grpc error message
-		return nil, status.Error(codes.Internal, fmt.Sprintf("internal server error in hydra: %s", err.Error()))
+		return nil, hydraErrorStatus(err)
 	}
 
 	// begin the vigil, to prevent closing of the swamp
@@ -2000,7 +2001,7 @@ func (g Gateway) Uint32SliceIsValueExist(ctx context.Context, in *hydrapb.Uint32
 	swampObj, err := hydraInterface.SummonSwamp(ctx, in.GetIslandID(), swampName)
 	if err != nil {
 		// return with grpc error message
-		return nil, status.Error(codes.Internal, fmt.Sprintf("internal server error in hydra: %s", err.Error()))
+		return nil, hydraErrorStatus(err)
 	}
 
 	// begin the vigil, to prevent closing of the swamp
@@ -2865,6 +2866,23 @@ func isValidTimestamp(ts *timestamppb.Timestamp) bool {
 		return false
 	}
 	return ts.GetSeconds() > 0 || ts.GetNanos() > 0
+}
+
+// hydraErrorStatus maps an error from the hydra layer to a gRPC status. A
+// shutdown in progress is codes.Unavailable, the same code the shutdown
+// interceptor uses, so clients retry instead of treating it as a server bug.
+// This covers the window where a call passed the interceptor just before the
+// shutdown flag flipped. An error that already carries a gRPC status (e.g.
+// from summonSwampForWrite) is returned as is. Everything else is
+// codes.Internal.
+func hydraErrorStatus(err error) error {
+	if _, ok := status.FromError(err); ok {
+		return err
+	}
+	if err.Error() == hydra.ErrorHydraIsShuttingDown {
+		return status.Error(codes.Unavailable, "server is shutting down")
+	}
+	return status.Error(codes.Internal, fmt.Sprintf("internal server error in hydra: %s", err.Error()))
 }
 
 // convertTreasureStatusToPbStatus converts the treasure status from the hydra to the protobuf status

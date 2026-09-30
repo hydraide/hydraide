@@ -54,7 +54,7 @@ func summonSwampForWrite(ctx context.Context, hydraInterface hydra.Hydra, island
 
 		swampInterface, err := hydraInterface.SummonSwamp(ctx, islandID, swampName)
 		if err != nil {
-			return nil, nil, status.Error(codes.Internal, fmt.Sprintf("internal server error in hydra: %s", err.Error()))
+			return nil, nil, hydraErrorStatus(err)
 		}
 
 		// Take the vigil FIRST, then verify. Doing it the other way round is
