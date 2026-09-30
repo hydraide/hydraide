@@ -986,12 +986,24 @@ func (b *beacon) ShiftExpired(howMany int) []treasure.Treasure {
 	counter := 0
 	now := time.Now().UTC().UnixNano()
 	for _, treasureObj := range b.treasuresByOrder {
-		lockerID := treasureObj.StartTreasureGuard(true)
+		if counter >= howMany {
+			remainingTreasures = append(remainingTreasures, treasureObj)
+			continue
+		}
+		// Never wait for a per-treasure guard while holding b.mu: Save and
+		// deleteHandler hold the guard and then want this mu, so a blocking
+		// acquire here deadlocks (docs/bugs/2026-09-30-catalog-shift-expired-hang.md).
+		// A busy row is being written right now; leave it for a later call.
+		lockerID := treasureObj.StartTreasureGuard(false)
+		if lockerID == 0 {
+			remainingTreasures = append(remainingTreasures, treasureObj)
+			continue
+		}
 		// ExpirationTime == 0 means "never expires" (matches IsExpired);
 		// guard against returning rows whose TTL was cleared after they
 		// were originally indexed.
 		exp := treasureObj.GetExpirationTime()
-		if counter < howMany && exp != 0 && exp < now {
+		if exp != 0 && exp < now {
 			clonedTreasure := treasureObj.Clone(lockerID)
 			shiftedTreasures = append(shiftedTreasures, clonedTreasure)
 			delete(b.treasuresByKeys, treasureObj.GetKey())
@@ -1056,7 +1068,14 @@ func (b *beacon) ShiftMatching(howMany int, predicate func(treasure.Treasure) bo
 	counter := 0
 	matchesBeyondBudget := 0
 	for _, treasureObj := range b.treasuresByOrder {
-		lockerID := treasureObj.StartTreasureGuard(true)
+		// Non-blocking acquire, same reason as in ShiftExpired: waiting for
+		// a guard under b.mu inverts the guard -> beacon mu order of Save
+		// and deleteHandler. A busy row stays for a later call.
+		lockerID := treasureObj.StartTreasureGuard(false)
+		if lockerID == 0 {
+			remainingTreasures = append(remainingTreasures, treasureObj)
+			continue
+		}
 		matched := predicate(treasureObj)
 		if matched && counter < effectiveHowMany {
 			clonedTreasure := treasureObj.Clone(lockerID)
@@ -1323,19 +1342,25 @@ func (b *beacon) CloneUnorderedTreasures(thenReset bool) map[string]treasure.Tre
 
 	atomic.StoreInt32(&b.initialized, 1)
 
+	// Snapshot the rows under b.mu, but clone them after releasing it: a
+	// blocking per-treasure guard acquire under b.mu deadlocks against
+	// SaveFunction, which holds the guard and then reads this beacon.
 	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	treasuresClone := make(map[string]treasure.Treasure)
+	snapshot := make(map[string]treasure.Treasure, len(b.treasuresByKeys))
 	for key, value := range b.treasuresByKeys {
-		guardID := value.StartTreasureGuard(true)
-		treasuresClone[key] = value.Clone(guardID)
-		value.ReleaseTreasureGuard(guardID)
+		snapshot[key] = value
 	}
-
 	if thenReset {
 		b.treasuresByOrder = nil
 		b.treasuresByKeys = make(map[string]treasure.Treasure)
+	}
+	b.mu.Unlock()
+
+	treasuresClone := make(map[string]treasure.Treasure, len(snapshot))
+	for key, value := range snapshot {
+		guardID := value.StartTreasureGuard(true)
+		treasuresClone[key] = value.Clone(guardID)
+		value.ReleaseTreasureGuard(guardID)
 	}
 
 	return treasuresClone
