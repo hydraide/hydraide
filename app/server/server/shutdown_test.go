@@ -20,6 +20,7 @@ import (
 
 	hydrapb "github.com/hydraide/hydraide/sdk/go/hydraidego/v3/hydraidepbgo"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/status"
@@ -89,17 +90,6 @@ func TestStopPhaseOrdering(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("RegisterSwamp: %v", err)
 	}
-	if _, err := client.Set(ctx, &hydrapb.SetRequest{
-		Swamps: []*hydrapb.SwampRequest{{
-			IslandID:         1,
-			SwampName:        "stoptest/realm/persist",
-			KeyValues:        []*hydrapb.KeyValuePair{{Key: "k1", StringVal: strPtrTest("v1")}},
-			CreateIfNotExist: true,
-			Overwrite:        true,
-		}},
-	}); err != nil {
-		t.Fatalf("pre-stop Set: %v", err)
-	}
 
 	// Open a Subscribe stream so we can check it terminates with Unavailable
 	// rather than blocking shutdown forever.
@@ -113,11 +103,43 @@ func TestStopPhaseOrdering(t *testing.T) {
 		t.Fatalf("SubscribeToEvents: %v", err)
 	}
 
-	subDone := make(chan error, 1)
+	// SubscribeToEvents returns as soon as the client side of the stream is
+	// open; the server handler may not have registered the subscriber yet.
+	// If Stop() ran in that window the handler would fail the registration
+	// itself instead of exercising the "active stream during shutdown" path.
+	// Receiving the event of the warm-up write proves the subscription is live.
+	subMsgs := make(chan error, 2)
 	go func() {
-		_, err := stream.Recv()
-		subDone <- err
+		for {
+			_, err := stream.Recv()
+			subMsgs <- err
+			if err != nil {
+				return
+			}
+		}
 	}()
+
+	if _, err := client.Set(ctx, &hydrapb.SetRequest{
+		Swamps: []*hydrapb.SwampRequest{{
+			IslandID:         1,
+			SwampName:        "stoptest/realm/persist",
+			KeyValues:        []*hydrapb.KeyValuePair{{Key: "k1", StringVal: strPtrTest("v1")}},
+			CreateIfNotExist: true,
+			Overwrite:        true,
+		}},
+	}); err != nil {
+		t.Fatalf("pre-stop Set: %v", err)
+	}
+
+	select {
+	case err := <-subMsgs:
+		if err != nil {
+			t.Fatalf("subscribe stream failed before Stop(): %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("subscribe stream did not deliver the pre-stop write event within 10s")
+	}
+	subDone := subMsgs
 
 	// Phase 1: trigger Stop() in a goroutine and capture timing.
 	stopReturned := make(chan struct{})
@@ -162,17 +184,24 @@ func TestStopPhaseOrdering(t *testing.T) {
 		t.Errorf("expected at least one Set call to be rejected with codes.Unavailable during shutdown")
 	}
 
-	// Phase 3: subscribe stream must terminate.
-	select {
-	case err := <-subDone:
-		if err == nil {
-			t.Fatalf("stream.Recv returned nil error during shutdown — expected codes.Unavailable")
+	// Phase 3: subscribe stream must terminate. Events from Set calls in
+	// phase 2 that landed before the shutdown flag flipped are legitimate
+	// and are skipped; the stream must end with codes.Unavailable.
+	subTimeout := time.After(15 * time.Second)
+waitSub:
+	for {
+		select {
+		case err := <-subDone:
+			if err == nil {
+				continue
+			}
+			if st, ok := status.FromError(err); !ok || st.Code() != codes.Unavailable {
+				t.Errorf("expected codes.Unavailable on stream during shutdown, got %v", err)
+			}
+			break waitSub
+		case <-subTimeout:
+			t.Fatal("subscribe stream did not terminate within 15s of Stop(), shutdown is blocked on streams")
 		}
-		if st, ok := status.FromError(err); !ok || st.Code() != codes.Unavailable {
-			t.Errorf("expected codes.Unavailable on stream during shutdown, got %v", err)
-		}
-	case <-time.After(15 * time.Second):
-		t.Fatal("subscribe stream did not terminate within 15s of Stop() — shutdown is blocked on streams")
 	}
 
 	// Phase 4: Stop() must return in well under the 180s SIGKILL budget.
@@ -230,17 +259,7 @@ func TestStopPhaseOrdering(t *testing.T) {
 func dialTestClient(t *testing.T, port int, root string) (hydrapb.HydraideServiceClient, *grpc.ClientConn) {
 	t.Helper()
 
-	// Wait briefly for the server's listener to come up. The Start() method
-	// spawns the listener in a goroutine and returns immediately.
 	addr := fmt.Sprintf("localhost:%d", port)
-	for i := 0; i < 50; i++ {
-		c, err := net.DialTimeout("tcp", addr, 100*time.Millisecond)
-		if err == nil {
-			c.Close()
-			break
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
 
 	cert, err := tls.LoadX509KeyPair(
 		filepath.Join(root, "certificate", "client.crt"),
@@ -265,11 +284,39 @@ func dialTestClient(t *testing.T, port int, root string) (hydrapb.HydraideServic
 			MinVersion:   tls.VersionTLS13,
 			ServerName:   "localhost",
 		})),
+		// Short reconnect backoff so the readiness wait below notices the
+		// listener quickly instead of sleeping through the default 1s+ backoff.
+		grpc.WithConnectParams(grpc.ConnectParams{
+			Backoff: backoff.Config{
+				BaseDelay:  20 * time.Millisecond,
+				Multiplier: 1.6,
+				Jitter:     0.2,
+				MaxDelay:   250 * time.Millisecond,
+			},
+			MinConnectTimeout: 2 * time.Second,
+		}),
 	)
 	if err != nil {
 		t.Fatalf("dial: %v", err)
 	}
-	return hydrapb.NewHydraideServiceClient(conn), conn
+	client := hydrapb.NewHydraideServiceClient(conn)
+
+	// Start() binds the listener and calls Serve() in a background goroutine
+	// and returns immediately, so the server may not be serving yet. A raw TCP
+	// connect is not a valid readiness signal: on some hosts (e.g. WSL2 with
+	// mirrored networking) a connect to an unbound loopback port completes and
+	// is then reset, which made the old TCP probe report "ready" too early and
+	// the first RPC fail with Unavailable. Wait for a full mTLS + gRPC round
+	// trip instead; WaitForReady makes the RPC ride out transient connection
+	// failures until the bounded deadline.
+	readyCtx, readyCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer readyCancel()
+	if _, err := client.Heartbeat(readyCtx, &hydrapb.HeartbeatRequest{Ping: "ready"}, grpc.WaitForReady(true)); err != nil {
+		conn.Close()
+		t.Fatalf("server on %s did not become ready: %v", addr, err)
+	}
+
+	return client, conn
 }
 
 // freePort asks the kernel for an unused TCP port.
