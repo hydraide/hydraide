@@ -471,6 +471,14 @@ func (c *chroniclerV2) Write(treasures []treasure.Treasure) {
 		}
 		writtenCount++
 
+		// Mark the treasure as on disk while we still hold its guard. The
+		// file pointer callback below runs after the whole batch; a delete
+		// that landed in between used to see FileName == nil, skip the delete
+		// entry, and the row came back on the next load.
+		if !isDeleted && t.GetFileName() == nil {
+			t.BodySetFileName(guardID, c.hydFilePath)
+		}
+
 		// Track for file pointer callback
 		if !c.dontSendFilePointer {
 			filePointerEvents = append(filePointerEvents, &FileNameEvent{
