@@ -91,3 +91,22 @@ func BenchmarkNew(b *testing.B) {
 		}
 	}
 }
+
+// TestCanExecuteWithEmptyQueue: calling CanExecute when no guard is held (a
+// released guardID, or one taken on another object) must return an error
+// instead of panicking on the empty queue.
+func TestCanExecuteWithEmptyQueue(t *testing.T) {
+	g := New()
+	if err := g.CanExecute(ID(1)); err == nil {
+		t.Fatal("CanExecute on an empty queue returned nil, want an error")
+	}
+
+	id := g.StartTreasureGuard(true)
+	if err := g.CanExecute(id); err != nil {
+		t.Fatalf("CanExecute with the held guard: %v", err)
+	}
+	g.ReleaseTreasureGuard(id)
+	if err := g.CanExecute(id); err == nil {
+		t.Fatal("CanExecute with a released guard returned nil, want an error")
+	}
+}

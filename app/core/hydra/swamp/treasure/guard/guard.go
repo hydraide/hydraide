@@ -195,7 +195,9 @@ func (g *guard) CanExecute(guardID ID, isBodyFunction ...bool) error {
 			return errors.New("can not execute body function, the bodyAuthID is not correct")
 		}
 	}
-	if g.waitForUnlock[0] != int64(guardID) {
+	// an empty queue means no guard is held at all (e.g. a guardID of another
+	// treasure, or one already released): an error, not an index panic
+	if len(g.waitForUnlock) == 0 || g.waitForUnlock[0] != int64(guardID) {
 		return errors.New("the given guardID is not the first in the queue - execution aborted")
 	}
 	return nil
