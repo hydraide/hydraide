@@ -71,9 +71,6 @@ func (g Gateway) Lock(ctx context.Context, in *hydrapb.LockRequest) (*hydrapb.Lo
 	// try to summon the swamp
 	lockerInterface := g.ZeusInterface.GetHydra().GetLocker()
 
-	// create a new context
-	ctxForLocker := context.WithoutCancel(ctx)
-
 	// Set the TTL to the required minimum value if it is less than or equal to 1000 milliseconds
 	if in.GetTTL() <= 1000 {
 		// set the TTL to 1000 milliseconds to prevent too short TTLs
@@ -86,11 +83,26 @@ func (g Gateway) Lock(ctx context.Context, in *hydrapb.LockRequest) (*hydrapb.Lo
 		return nil, status.Error(codes.InvalidArgument, "Lock key cannot be empty")
 	}
 
-	// lock the system
-	lockID, err := lockerInterface.Lock(ctxForLocker, in.GetKey(), time.Duration(in.GetTTL())*time.Millisecond)
+	// Wait for the lock on the client's own context. A client that gives up
+	// (deadline exceeded, cancelled, connection dropped) is removed from the
+	// queue and never acquires the lock; otherwise its abandoned request would
+	// take the lock once the current holder unlocks and keep it for the full
+	// TTL, because the client never learns the lockID and cannot Unlock it.
+	// The acquired lock's lifetime is bound to its TTL only (the locker's
+	// watchdog does not watch this ctx), so the handler returning, which
+	// cancels ctx, does not release a granted lock.
+	lockID, err := lockerInterface.Lock(ctx, in.GetKey(), time.Duration(in.GetTTL())*time.Millisecond)
 	if err != nil {
 		// return with grpc error message
 		return nil, status.Error(codes.DeadlineExceeded, fmt.Sprintf("lock deadline exceeded: %s", err.Error()))
+	}
+
+	// The client may have gone away between the grant and this point. It
+	// will never see the lockID, so release the lock now instead of letting
+	// it block the key until the TTL expires.
+	if ctx.Err() != nil {
+		_ = lockerInterface.Unlock(in.GetKey(), lockID)
+		return nil, status.Error(codes.DeadlineExceeded, fmt.Sprintf("lock deadline exceeded: %s", ctx.Err().Error()))
 	}
 
 	return &hydrapb.LockResponse{

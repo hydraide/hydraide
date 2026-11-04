@@ -130,6 +130,15 @@ func (l *lock) Lock(ctx context.Context, key string, ttl time.Duration) (lockID 
 	// or the caller's context is done.
 	select {
 	case <-c.ready:
+		// When ready and ctx.Done() fire at the same time, select picks one
+		// at random. A caller whose context is already gone must never be
+		// handed the lock: nobody would receive the lockID, so nobody could
+		// Unlock it and the key would stay blocked for the full TTL. Release
+		// the grant right away and wake the next waiter instead.
+		if ctx.Err() != nil {
+			q.remove(lockID)
+			return "", errors.New("lock timeout")
+		}
 		// We hold the lock now. Start the auto-release watchdog: if the caller
 		// forgets to Unlock or crashes, the TTL will release the lock and
 		// wake the next waiter. The watchdog uses a fresh background context
