@@ -209,13 +209,14 @@ func (fw *FileWriter) flushLocked() error {
 		return nil // Nothing to flush
 	}
 
-	// Write block header
-	if _, err := fw.file.Write(header.Serialize()); err != nil {
-		return err
-	}
-
-	// Write compressed data
-	if _, err := fw.file.Write(compressed); err != nil {
+	// Write block header and compressed data in a single Write call. Two
+	// separate writes left a window where a crash (or a failed second write)
+	// put an orphan block header at the end of the file, and the next session
+	// appended valid blocks after it.
+	blockBuf := make([]byte, 0, BlockHeaderSize+len(compressed))
+	blockBuf = append(blockBuf, header.Serialize()...)
+	blockBuf = append(blockBuf, compressed...)
+	if _, err := fw.file.Write(blockBuf); err != nil {
 		return err
 	}
 
