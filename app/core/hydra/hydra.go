@@ -753,11 +753,49 @@ func (h *hydra) MarkShuttingDown() {
 	h.infoSubscribers = sync.Map{}
 }
 
+const (
+	// gracefulStopBudget is how long GracefulStop waits for every open swamp
+	// to finish closing (flush + fsync + file close) before it gives up and
+	// returns. systemd sends SIGKILL after TimeoutStopSec=3min, and
+	// server.Stop() can spend up to 60 s on the gRPC GracefulStop before it
+	// reaches hydra, so 100 s keeps the whole shutdown inside that window with
+	// a margin. Returning earlier while closes are still running lets main()
+	// call os.Exit in the middle of block writes, which tears .hyd files.
+	gracefulStopBudget = 100 * time.Second
+
+	// gracefulStopForceCloseAfter is when GracefulStop starts the force-close
+	// pass over the swamps that are still open.
+	gracefulStopForceCloseAfter = 10 * time.Second
+
+	// gracefulStopPollInterval is how often GracefulStop checks progress.
+	gracefulStopPollInterval = 1 * time.Second
+
+	// swampCloseWorkers bounds how many swamps are closed in parallel during
+	// shutdown. Each swamp has its own file, so closes are independent; a
+	// sequential pass is too slow on instances with many open swamps.
+	swampCloseWorkers = 32
+
+	// maxSwampNamesInStopLog bounds the swamp name list logged when the
+	// budget runs out.
+	maxSwampNamesInStopLog = 50
+)
+
 // GracefulStop close function for the graceful stop package
 // DO NOT CALL THIS FUNCTION DIRECTLY
 // the graceful stop package calls this function when the server is shutting down
+//
+// It closes every open swamp in parallel and returns only when no swamp is
+// open and every close goroutine it started has finished, or when
+// gracefulStopBudget runs out. After gracefulStopForceCloseAfter a second
+// (force-close) pass calls Close on the swamps that are still open; Close is
+// idempotent, so a swamp whose close is already running is not touched twice.
 // mutexes: clean
 func (h *hydra) GracefulStop() {
+	h.gracefulStopWithin(gracefulStopBudget, gracefulStopForceCloseAfter, gracefulStopPollInterval)
+}
+
+// gracefulStopWithin is GracefulStop with injectable timings for tests.
+func (h *hydra) gracefulStopWithin(budget, forceCloseAfter, pollInterval time.Duration) {
 
 	slog.Info("Graceful stop of the hydra executed")
 
@@ -765,109 +803,147 @@ func (h *hydra) GracefulStop() {
 	// was already called from server.Stop().
 	h.MarkShuttingDown()
 
-	// start a new routine and close all swamps
+	start := time.Now()
+
+	// closersWG tracks every goroutine that closes or writes swamps, so we
+	// never return while one of them is still in the middle of a flush, even
+	// if its swamp has already left the swamps map.
+	var closersWG sync.WaitGroup
+	closersWG.Add(1)
 	panichandler.SafeGo("swamp-closing", func() {
+		defer closersWG.Done()
 		h.tryToCloseAllSwamps()
 	})
+	closersDone := make(chan struct{})
+	panichandler.SafeGo("swamp-closing-wait", func() {
+		closersWG.Wait()
+		close(closersDone)
+	})
 
-	slog.Info("waiting for graceful stop")
+	slog.Info("waiting for graceful stop", "budget", budget)
 
-	// wait until all swamps are closed then return
-	iterationCounter := 0
+	forceCloseStarted := false
 	for {
 
-		// check the opened swamps
 		openedSwamps := h.CountActiveSwamps()
+		closersFinished := false
+		select {
+		case <-closersDone:
+			closersFinished = true
+		default:
+		}
 
-		slog.Info("opened swamps", "count", openedSwamps)
-
-		// if there is no opened swamps and the there is no process that destroying swamps - kill the server
-		if openedSwamps == 0 {
-			slog.Info("all swamps are gracefully closed, hydra is shutting down")
+		if openedSwamps == 0 && closersFinished {
+			slog.Info("all swamps are gracefully closed, hydra is shutting down",
+				"elapsed", time.Since(start))
 			return
 		}
 
-		// if we can't close the swamp within 10 seconds....
-		if iterationCounter >= 10 {
+		elapsed := time.Since(start)
+		if elapsed >= budget {
+			names := h.ListActiveSwamps()
+			listed := names
+			if len(listed) > maxSwampNamesInStopLog {
+				listed = listed[:maxSwampNamesInStopLog]
+			}
+			slog.Error("graceful stop budget exhausted, returning with swamps still open",
+				"budget", budget,
+				"openSwamps", openedSwamps,
+				"closersFinished", closersFinished,
+				"swampNames", strings.Join(listed, ", "),
+				"swampNamesTruncated", len(names) > len(listed))
+			return
+		}
 
-			slog.Error("can not close all swamps within 10 seconds, Force close all swamps", "activeSwamps", strings.Join(h.ListActiveSwamps(), ", "))
+		slog.Info("opened swamps", "count", openedSwamps, "closersFinished", closersFinished, "elapsed", elapsed)
 
+		if !forceCloseStarted && elapsed >= forceCloseAfter && openedSwamps > 0 {
+			forceCloseStarted = true
+			slog.Error("can not close all swamps in time, force close the remaining swamps",
+				"after", forceCloseAfter,
+				"openSwamps", openedSwamps)
+			// Started before closersDone can fire: closersWG still holds the
+			// first closer, so Add here never races Wait reaching zero.
+			closersWG.Add(1)
 			panichandler.SafeGo("force-close-swamps", func() {
-				// iterating over the swamps and close them
-				h.swamps.Range(func(key, value interface{}) bool {
-
-					s := value.(swamp.Swamp)
-
-					s.StopSendingInformation()
-					s.StopSendingEvents()
-
-					// log the error, because we can't close the swamp
-					slog.Error("the swamp still opened and try to write all treasures to the filesystem again",
-						"swampName", s.GetName(),
-						"swampIsClosing", s.IsClosing(),
-						"allTreasures", s.CountTreasures(),
-						"treasuresWaitingForWriter", s.CountTreasuresWaitingForWriter(),
-						"isFileSystemInitiated", s.GetChronicler().IsFilesystemInitiated())
-
-					// Write treasures to the filesystem
-					s.WriteTreasuresToFilesystem()
-
-					slog.Info("the swamp still opened and all treasures are written to the filesystem again, and try to close it again",
-						"swampName", s.GetName(),
-						"swampIsClosing", s.IsClosing(),
-						"allTreasures", s.CountTreasures(),
-						"treasuresWaitingForWriter", s.CountTreasuresWaitingForWriter(),
-						"isFileSystemInitiated", s.GetChronicler().IsFilesystemInitiated())
-
-					// try to close it again
-					s.Close()
-
-					slog.Info("the swamp is closed successfully",
-						"swampName", s.GetName(),
-						"swampIsClosing", s.IsClosing(),
-						"allTreasures", s.CountTreasures(),
-						"treasuresWaitingForWriter", s.CountTreasuresWaitingForWriter(),
-						"isFileSystemInitiated", s.GetChronicler().IsFilesystemInitiated())
-
-					return true
-
-				})
-
+				defer closersWG.Done()
+				h.forceCloseRemainingSwamps()
 			})
-
-			// waiting for 30 seconds then force close the server
-			time.Sleep(30 * time.Second)
-
-			return
-
 		}
 
-		iterationCounter++
-
-		time.Sleep(1000 * time.Millisecond)
-
+		// Sleep until the next poll, but wake up as soon as the closers finish.
+		select {
+		case <-closersDone:
+		case <-time.After(pollInterval):
+		}
 	}
 
+}
+
+// forceCloseRemainingSwamps calls Close on every swamp that is still open.
+// It does not write treasures itself: Close flushes them, and a separate
+// write next to a close that is already running could reopen the chronicler
+// writer after the close released it. A swamp whose close is in progress
+// returns from Close immediately; GracefulStop keeps waiting until it leaves
+// the swamps map.
+func (h *hydra) forceCloseRemainingSwamps() {
+	h.closeSwampsInParallel(func(s swamp.Swamp) {
+		slog.Error("the swamp is still open, closing it again",
+			"swampName", s.GetName().Get(),
+			"swampIsClosing", s.IsClosing())
+		s.StopSendingInformation()
+		s.StopSendingEvents()
+		s.Close()
+	})
 }
 
 func (h *hydra) tryToCloseAllSwamps() {
 
 	slog.Info("try to closing all open swamps.....")
 
-	// iterating over the swamps and close them
-	h.swamps.Range(func(key, value interface{}) bool {
-
+	h.closeSwampsInParallel(func(s swamp.Swamp) {
 		// Stop it from sending any more information to the channel.
 		// This is important in case there are still active subscribers.
-		value.(swamp.Swamp).StopSendingInformation()
-		value.(swamp.Swamp).StopSendingEvents()
+		s.StopSendingInformation()
+		s.StopSendingEvents()
 		// close the swamp
-		value.(swamp.Swamp).Close()
-
-		return true
-
+		s.Close()
 	})
 
+}
+
+// closeSwampsInParallel runs closeFn on every swamp in the map with at most
+// swampCloseWorkers running at once, and returns when all of them finished.
+func (h *hydra) closeSwampsInParallel(closeFn func(s swamp.Swamp)) {
+	var swamps []swamp.Swamp
+	h.swamps.Range(func(_, value interface{}) bool {
+		swamps = append(swamps, value.(swamp.Swamp))
+		return true
+	})
+	if len(swamps) == 0 {
+		return
+	}
+
+	work := make(chan swamp.Swamp)
+	var wg sync.WaitGroup
+	workers := swampCloseWorkers
+	if len(swamps) < workers {
+		workers = len(swamps)
+	}
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		panichandler.SafeGo("swamp-close-worker", func() {
+			defer wg.Done()
+			for s := range work {
+				closeFn(s)
+			}
+		})
+	}
+	for _, s := range swamps {
+		work <- s
+	}
+	close(work)
+	wg.Wait()
 }
 
 // createNewSwamp creates a new swamp and adds it to the map
