@@ -300,6 +300,7 @@ func (c *chroniclerV2) Load(indexObj beacon.Beacon) {
 	if header != nil {
 		totalFromHeader = int64(header.EntryCount)
 	}
+	recovery := reader.RecoveryStats()
 	reader.Close()
 
 	// Update swamp name from file if not set
@@ -318,11 +319,19 @@ func (c *chroniclerV2) Load(indexObj beacon.Beacon) {
 		c.totalEntriesInFile = int64(liveEntries)
 	}
 
+	// Damage repair: the reader skipped invalid bytes (torn block writes).
+	// Rewrite the file from the recovered index so it is clean from now on
+	// and no later writer appends after garbage.
+	repaired := false
+	if recovery.Recovered() {
+		repaired = c.repairDamagedFileLocked(index, recovery)
+	}
+
 	// Self-heal: rewrite the file in place if it is heavily fragmented and
 	// small enough that the rewrite cost is bounded. Skipping the size check
 	// for very large files keeps summon latency predictable; those will be
 	// compacted incrementally by the Write() trigger or a manual sweep.
-	if c.compactionOnSave && totalFromHeader >= int64(c.minEntriesForCompact) && liveEntries < int(totalFromHeader) {
+	if !repaired && c.compactionOnSave && totalFromHeader >= int64(c.minEntriesForCompact) && liveEntries < int(totalFromHeader) {
 		dead := totalFromHeader - int64(liveEntries)
 		frag := float64(dead) / float64(totalFromHeader)
 		c.lastFragmentation = frag
@@ -384,6 +393,57 @@ func (c *chroniclerV2) Load(indexObj beacon.Beacon) {
 		"path", c.hydFilePath,
 		"live_entries", liveEntries,
 		"fragmentation", c.lastFragmentation)
+}
+
+// repairDamagedFileLocked rewrites a .hyd file whose block walk had to skip
+// invalid bytes, using the index recovered from the valid blocks. It runs
+// regardless of the compaction settings and the Load size cap, because a
+// damaged file must never keep growing. Returns true when the file was
+// rewritten. Must be called with c.mu held and no writer open.
+//
+// If the rewrite fails, a torn tail is truncated to the end of the last valid
+// block so the next writer does not append after it. Damage in the middle of
+// the file stays; the reader keeps skipping it on every load.
+func (c *chroniclerV2) repairDamagedFileLocked(index map[string][]byte, recovery v2.RecoveryStats) bool {
+	slog.Warn("swamp file damaged, recovered past invalid blocks",
+		"path", c.hydFilePath,
+		"swamp_name", c.swampName,
+		"skipped_regions", recovery.SkippedRegions,
+		"skipped_bytes", recovery.SkippedBytes,
+		"tail_bytes", recovery.TailBytes,
+		"valid_end", recovery.ValidEnd,
+		"live_entries", len(index))
+
+	total := c.totalEntriesInFile
+	if total < int64(len(index)) {
+		total = int64(len(index))
+	}
+	result, err := v2.CompactFromIndex(c.hydFilePath, c.maxBlockSize, c.swampName, index, int(total))
+	if err == nil && result != nil && result.Compacted {
+		c.totalEntriesInFile = int64(result.LiveEntries)
+		c.lastFragmentation = 0
+		slog.Info("damaged swamp file rewritten",
+			"path", c.hydFilePath,
+			"swamp_name", c.swampName,
+			"old_size", result.OldFileSize,
+			"new_size", result.NewFileSize,
+			"live_entries", result.LiveEntries)
+		return true
+	}
+
+	slog.Error("cannot rewrite damaged swamp file",
+		"path", c.hydFilePath,
+		"swamp_name", c.swampName,
+		"error", err)
+	if recovery.TailBytes > 0 {
+		if terr := os.Truncate(c.hydFilePath, recovery.ValidEnd); terr != nil {
+			slog.Error("cannot truncate torn tail of swamp file",
+				"path", c.hydFilePath,
+				"valid_end", recovery.ValidEnd,
+				"error", terr)
+		}
+	}
+	return false
 }
 
 // Write saves treasures to the .hyd file using append-only operations.
