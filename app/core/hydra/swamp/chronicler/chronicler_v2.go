@@ -267,8 +267,20 @@ func (c *chroniclerV2) Load(indexObj beacon.Beacon) {
 	}
 
 	// Check if file exists
-	if _, err := os.Stat(c.hydFilePath); os.IsNotExist(err) {
+	fileInfo, err := os.Stat(c.hydFilePath)
+	if os.IsNotExist(err) {
 		// No data file yet - empty swamp
+		return
+	}
+
+	// A file shorter than the file header never got its header written (the
+	// process died right after creating it). It holds no data; the writer
+	// recreates it on the first Write.
+	if err == nil && fileInfo.Size() < v2.FileHeaderSize {
+		slog.Warn("swamp file shorter than its header, treating it as empty",
+			"path", c.hydFilePath,
+			"swamp_name", c.swampName,
+			"file_size", fileInfo.Size())
 		return
 	}
 
@@ -584,7 +596,19 @@ func (c *chroniclerV2) ensureWriter() error {
 
 	// Check if this is a new file (doesn't exist yet)
 	isNewFile := false
-	if _, err := os.Stat(c.hydFilePath); os.IsNotExist(err) {
+	if fi, err := os.Stat(c.hydFilePath); os.IsNotExist(err) {
+		isNewFile = true
+	} else if err == nil && fi.Size() < v2.FileHeaderSize {
+		// Headerless leftover of a crash (see Load): opening it for append
+		// fails on the header read and every write would be dropped. It holds
+		// no data, so replace it with a fresh file.
+		slog.Warn("recreating swamp file shorter than its header",
+			"path", c.hydFilePath,
+			"swamp_name", c.swampName,
+			"file_size", fi.Size())
+		if rerr := os.Remove(c.hydFilePath); rerr != nil && !os.IsNotExist(rerr) {
+			return rerr
+		}
 		isNewFile = true
 	}
 

@@ -169,3 +169,56 @@ func TestRecovery_ChroniclerV2_TornTailOnly(t *testing.T) {
 		t.Fatalf("file damaged after append: %+v", st)
 	}
 }
+
+// TestRecovery_ChroniclerV2_HeaderlessFile covers .hyd files that were
+// created but never got their header (0 bytes or a partial header): Load
+// treats them as empty and the first Write recreates the file, so writes are
+// not dropped.
+func TestRecovery_ChroniclerV2_HeaderlessFile(t *testing.T) {
+	for _, size := range []int{0, 10} {
+		for _, named := range []bool{true, false} {
+			t.Run(fmt.Sprintf("size_%d_named_%v", size, named), func(t *testing.T) {
+				swampPath := filepath.Join(t.TempDir(), "headerless")
+				hydPath := swampPath + ".hyd"
+				if err := os.WriteFile(hydPath, make([]byte, size), 0o644); err != nil {
+					t.Fatalf("write: %v", err)
+				}
+				swampName := ""
+				if named {
+					swampName = "test/recovery/headerless"
+				}
+
+				chron := NewV2WithName(swampPath, 10, swampName)
+				chron.CreateDirectoryIfNotExists()
+				bc := beacon.New()
+				chron.Load(bc)
+				if bc.Count() != 0 {
+					t.Fatalf("expected empty swamp, got %d", bc.Count())
+				}
+				chron.RegisterLiveCountFunction(bc.Count)
+				var batch []treasure.Treasure
+				for i := 0; i < 10; i++ {
+					tr := makeTrendizzLikeTreasure(fmt.Sprintf("rec%05d.hu", i), i)
+					batch = append(batch, tr)
+					bc.Add(tr)
+				}
+				chron.Write(batch)
+				if err := chron.Close(); err != nil {
+					t.Fatalf("close: %v", err)
+				}
+
+				loadAndCheck(t, swampPath, swampName, 10)
+				if named {
+					reader, err := v2.NewFileReader(hydPath)
+					if err != nil {
+						t.Fatalf("open reader: %v", err)
+					}
+					defer reader.Close()
+					if got := reader.GetSwampName(); got != swampName {
+						t.Fatalf("expected V3 name %q, got %q", swampName, got)
+					}
+				}
+			})
+		}
+	}
+}
