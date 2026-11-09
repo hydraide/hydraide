@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -14,12 +15,14 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/hydraide/hydraide/app/core/hydra/swamp/flushlimit"
 	"github.com/hydraide/hydraide/app/panichandler"
 	"github.com/hydraide/hydraide/app/paniclogger"
 	"github.com/hydraide/hydraide/app/server/loghandlers/fallback"
 	"github.com/hydraide/hydraide/app/server/loghandlers/graylog"
 	"github.com/hydraide/hydraide/app/server/loghandlers/slogmulti"
 	"github.com/hydraide/hydraide/app/server/server"
+	"github.com/hydraide/hydraide/app/server/threadguard"
 
 	"github.com/joho/godotenv"
 )
@@ -42,6 +45,9 @@ var (
 	clientCaCrtPath       = ""
 	hydraServerPort       = 4444
 	healthCheckPort       = 4445
+	maxConcurrentFlush    = flushlimit.DefaultLimit
+	maxOSThreads          = threadguard.DefaultMaxThreads
+	threadWarnThreshold   = threadguard.DefaultWarnThreshold
 )
 
 const (
@@ -154,6 +160,16 @@ func init() {
 		defaultFileSize = int64(dfs)
 	}
 
+	// HYDRAIDE_MAX_CONCURRENT_FLUSH caps how many swamps write to disk at once
+	// (process-wide). Each flush blocked in write/fsync pins an OS thread.
+	maxConcurrentFlush = positiveIntEnv("HYDRAIDE_MAX_CONCURRENT_FLUSH", maxConcurrentFlush)
+
+	// HYDRAIDE_MAX_OS_THREADS is the Go runtime thread limit (safety net only).
+	maxOSThreads = positiveIntEnv("HYDRAIDE_MAX_OS_THREADS", maxOSThreads)
+
+	// HYDRAIDE_THREAD_WARN_THRESHOLD: OS thread count above which a warning is logged.
+	threadWarnThreshold = positiveIntEnv("HYDRAIDE_THREAD_WARN_THRESHOLD", threadWarnThreshold)
+
 	// Telemetry is enabled via environment variable or settings.json (set by hydraidectl)
 	if os.Getenv("HYDRAIDE_TELEMETRY_ENABLED") == "true" {
 		telemetryEnabled = true
@@ -261,6 +277,23 @@ func main() {
 
 	slog.Info("logger successfully initialized")
 
+	// Disk-write and OS thread limits. Set before the server starts so every
+	// swamp flush runs under the configured cap.
+	flushlimit.SetLimit(maxConcurrentFlush)
+	previousMaxThreads := threadguard.SetMaxThreads(maxOSThreads)
+	threadguard.StartWatchdog(context.Background(), threadWarnThreshold, 30*time.Second, func() []any {
+		return []any{
+			"flushInFlight", flushlimit.InFlight(),
+			"flushWaiting", flushlimit.Waiting(),
+			"flushLimit", flushlimit.Limit(),
+		}
+	})
+	slog.Info("disk flush and thread limits set",
+		"maxConcurrentFlush", flushlimit.Limit(),
+		"maxOSThreads", maxOSThreads,
+		"previousMaxOSThreads", previousMaxThreads,
+		"threadWarnThreshold", threadWarnThreshold)
+
 	// start the new Hydra server
 	serverInterface = server.New(&server.Configuration{
 		CertificateCrtFile:    serverCrtPath,
@@ -291,6 +324,22 @@ func main() {
 	// blocker for the main goroutine and waiting for kill signal
 	waitingForKillSignal()
 
+}
+
+// positiveIntEnv returns the value of the environment variable key as a
+// positive integer, or def when it is not set. Startup fails on a value that
+// is not a positive integer, like the other numeric settings.
+func positiveIntEnv(key string, def int) int {
+	raw := os.Getenv(key)
+	if raw == "" {
+		return def
+	}
+	v, err := strconv.Atoi(raw)
+	if err != nil || v <= 0 {
+		slog.Error(key+" must be a positive number without any string characters", "value", raw)
+		panic(key + " must be a positive number without any string characters")
+	}
+	return v
 }
 
 func parseLogLevel(level string) slog.Level {

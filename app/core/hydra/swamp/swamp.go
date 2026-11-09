@@ -11,6 +11,7 @@ import (
 	"github.com/hydraide/hydraide/app/core/hydra/swamp/beacon"
 	"github.com/hydraide/hydraide/app/core/hydra/swamp/bucket"
 	"github.com/hydraide/hydraide/app/core/hydra/swamp/chronicler"
+	"github.com/hydraide/hydraide/app/core/hydra/swamp/flushlimit"
 	"github.com/hydraide/hydraide/app/core/hydra/swamp/metadata"
 	"github.com/hydraide/hydraide/app/core/hydra/swamp/treasure"
 	"github.com/hydraide/hydraide/app/core/hydra/swamp/treasure/guard"
@@ -2260,7 +2261,13 @@ func (s *swamp) ForceCompaction() error {
 	if atomic.LoadInt32(&s.inMemorySwamp) == 1 {
 		return nil // in-memory swamps have no file to compact
 	}
-	return s.chroniclerInterface.ForceCompaction()
+	// Compaction rewrites the whole file: it counts as a flush for the
+	// process-wide disk-write cap.
+	var err error
+	flushlimit.Do(func() {
+		err = s.chroniclerInterface.ForceCompaction()
+	})
+	return err
 }
 
 // Close closes the swamp (write all waiting treasures to the chroniclerInterface) and stops all goroutines inside the swamp
@@ -2312,18 +2319,26 @@ func (s *swamp) finishClose() {
 	if atomic.LoadInt32(&s.inMemorySwamp) == 0 {
 		s.chroniclerInterface.DontSendFilePointer()
 		// write files to the filesystem that are waiting for the writer
+		// (takes and returns its own flush slot)
 		s.fileWriterHandler(true)
-		// save metadata to the filesystem if there is any changes
-		s.metadataInterface.SaveToFile()
 
-		// Close the chronicler to flush any remaining buffered data and close file handles.
-		// This is CRITICAL for V2 engine which uses a persistent writer.
-		// For V1 engine, this is a no-op.
-		if err := s.chroniclerInterface.Close(); err != nil {
-			slog.Error("failed to close chronicler",
-				"swamp", s.name.Get(),
-				"error", err)
-		}
+		// The metadata save and the chronicler close (final block flush,
+		// header rewrite, fsync, optional compaction) are disk writes too, so
+		// they run under a flush slot. The slot is taken only after
+		// fileWriterHandler returned its own: slots are never nested.
+		flushlimit.Do(func() {
+			// save metadata to the filesystem if there is any changes
+			s.metadataInterface.SaveToFile()
+
+			// Close the chronicler to flush any remaining buffered data and close file handles.
+			// This is CRITICAL for V2 engine which uses a persistent writer.
+			// For V1 engine, this is a no-op.
+			if err := s.chroniclerInterface.Close(); err != nil {
+				slog.Error("failed to close chronicler",
+					"swamp", s.name.Get(),
+					"error", err)
+			}
+		})
 	}
 
 	// megvárjuk a bezárás előtt, hogy a chronicler minden adatot kiírjon a filerendszerbe, különben lehet olyan, hogy
@@ -2416,7 +2431,10 @@ func (s *swamp) Destroy() {
 	// destroy the chroniclerInterface
 	if atomic.LoadInt32(&s.inMemorySwamp) == 0 {
 		// ez a filesystem-en keresztül törli a swampot és a meta filet is egyben
-		s.chroniclerInterface.Destroy()
+		// File removal blocks in syscalls like a flush does, so it shares the
+		// process-wide disk-write cap. Flush slot holders never take s.mu, so
+		// waiting for a slot while holding s.mu cannot deadlock.
+		flushlimit.Do(s.chroniclerInterface.Destroy)
 		slog.Debug("Destroy: chronicler destroyed", "swamp", swampName)
 	}
 
@@ -2853,6 +2871,16 @@ func (s *swamp) fileWriterHandler(isCloseWrite bool) {
 	if s.treasuresWaitingForWriter.Count() == 0 {
 		return
 	}
+
+	// The disk part (Write + Sync) runs under a process-wide flush slot so
+	// thousands of dirty swamps flushing at once cannot pin thousands of OS
+	// threads in write/fsync syscalls. The slot is taken with no treasure
+	// guard held and released before returning; see package flushlimit for
+	// the lock order. It is taken BEFORE the write buffer: a flush waiting
+	// for a slot must not sit on an already-taken batch, or a concurrent
+	// Close would find the buffer empty and close the writer under it.
+	release := flushlimit.Acquire()
+	defer release()
 
 	// Take the whole write buffer in one step. Collecting it and then
 	// deleting the collected keys one by one could drop a treasure that
